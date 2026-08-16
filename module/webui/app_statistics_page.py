@@ -23,9 +23,11 @@ class StatisticsPageMixin(WebUIMixinBase):
         put_scope("ap_chart", [])
         self._render_ap_chart()
         self.task_handler.add(self._render_ap_chart, 60, True)
-        put_scope("resource_chart", [])
-        self._render_resource_chart()
-        self.task_handler.add(self._render_resource_chart, 60, True)
+        # 隐藏全资源变化趋势图表（始终不渲染、不注册周期刷新）
+        # 确保页面加载、刷新、切换选项卡等任何交互后均保持隐藏状态
+        # put_scope("resource_chart", [])
+        # self._render_resource_chart()
+        # self.task_handler.add(self._render_resource_chart, 60, True)
         put_scope("opsi_stats", [])
         self._render_opsi_stats()
         self.task_handler.add(self._render_opsi_stats, 60, True)
