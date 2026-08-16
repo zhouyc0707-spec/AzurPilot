@@ -471,7 +471,10 @@ class UI(InfoHandler):
         if self.appear_then_click(GET_ITEMS_2, offset=True, interval=3):
             return True
         if get_ship:
-            if self.appear_then_click(GET_SHIP, interval=5):
+            # 使用模板匹配而非颜色匹配：GET_SHIP.button (1000,631,1055,689) 与
+            # MAIN_GOTO_BUILD (958,665,1113,714) 存在重叠区，颜色匹配易在主界面误判，
+            # 误点建造按钮进入 page_build 导致导航报错
+            if self.appear_then_click(GET_SHIP, offset=(20, 20), interval=5):
                 return True
         if self.appear_then_click(LOGIN_RETURN_SIGN, offset=(30, 30), interval=3):
             return True
