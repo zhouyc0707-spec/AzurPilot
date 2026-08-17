@@ -999,7 +999,15 @@ class RewardCommission(UI, InfoHandler):
                         break
 
                     for button in [EXP_INFO_S_REWARD, GET_ITEMS_1, GET_ITEMS_2, GET_ITEMS_3]:
-                        if self.appear(button, interval=1):
+                        # EXP_INFO_S_REWARD 单独使用模板匹配：
+                        # 颜色匹配容易在"委托成功 S"过渡动画页（金色光辉+S大标题）
+                        # 被误判为黄绿色 (233,241,127) 的 S 级经验信息条弹窗，
+                        # 导致反复点击 REWARD_SAVE_CLICK 累积超过阈值触发 GameTooManyClickError
+                        if button is EXP_INFO_S_REWARD:
+                            appeared = self.appear(button, offset=True, interval=1)
+                        else:
+                            appeared = self.appear(button, interval=1)
+                        if appeared:
                             self.ensure_no_info_bar(timeout=1)
 
                             if drop:
