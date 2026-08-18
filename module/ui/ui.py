@@ -471,10 +471,7 @@ class UI(InfoHandler):
         if self.appear_then_click(GET_ITEMS_2, offset=True, interval=3):
             return True
         if get_ship:
-            # 使用模板匹配而非颜色匹配：GET_SHIP.button (1000,631,1055,689) 与
-            # MAIN_GOTO_BUILD (958,665,1113,714) 存在重叠区，颜色匹配易在主界面误判，
-            # 误点建造按钮进入 page_build 导致导航报错
-            if self.appear_then_click(GET_SHIP, offset=(20, 20), interval=5):
+            if self.appear_then_click(GET_SHIP, interval=5):
                 return True
         if self.appear_then_click(LOGIN_RETURN_SIGN, offset=(30, 30), interval=3):
             return True
@@ -570,21 +567,10 @@ class UI(InfoHandler):
             return True
 
         # 主界面和奖励页面弹窗
-        # GET_SHIP 弹窗只在主界面出现（建造完成获得舰船）。
-        # 重要：ui_current 在 ui_goto 循环中不更新（只在 ui_get_current_page 中赋值），
-        # 不能基于 ui_current.name 判断当前页面，必须用 is_in_main() 实时检测。
-        # 在 page_dormmenu、page_private_quarters、page_island 等中转页面，
-        # GET_SHIP.png 模板会与装饰元素误匹配（相似度 ≥0.85），导致误点击：
-        # - page_dormmenu: 点击 GET_SHIP.button 实际进入私人休息室，
-        #   导致 dorm 任务陷入"主界面→宿舍菜单→误点GET_SHIP→私人休息室→返回"死循环
-        # - page_private_quarters: 装饰图标被误匹配，触发 GameTooManyClickError
-        # - page_island: 邮箱按钮与 GET_SHIP 检测区域重叠
-        if self.is_in_main():
+        # 仅在非岛屿页面时处理，避免岛屿页面的 UI 元素被误检测为 GET_SHIP/GET_ITEMS
+        # 例如岛屿管理界面的邮箱按钮与 GET_SHIP 检测区域 (1104,610,1110,630) 重叠
+        if not (hasattr(self, 'ui_current') and self.ui_current and 'island' in self.ui_current.name):
             if self.ui_page_main_popups(get_ship=get_ship):
-                return True
-        else:
-            # 非主界面：仍处理其他弹窗（公告、大舰队等），但跳过 GET_SHIP 检测
-            if self.ui_page_main_popups(get_ship=False):
                 return True
 
         # 剧情跳过
