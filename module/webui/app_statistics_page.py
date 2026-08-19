@@ -1,6 +1,6 @@
 """WebUI 统计页装配器。"""
 
-from module.webui.app_dependencies import put_scope, t, use_scope
+from module.webui.app_dependencies import put_scope
 
 
 from module.webui.app_types import WebUIMixinBase
@@ -9,11 +9,12 @@ from module.webui.app_types import WebUIMixinBase
 class StatisticsPageMixin(WebUIMixinBase):
     """注册统计子视图及其离页可取消的刷新任务。"""
 
-    @use_scope("content", clear=True)
-    def alas_set_stat(self) -> None:
-        """显示统计页并注册各统计视图的周期刷新。"""
-        self.init_menu(name="Stat")
-        self.set_title(t("Gui.Overview.Stat"))
+    def _mount_stat_panels(self) -> None:
+        """创建并渲染统计图表面板（含周期刷新），渲染到当前所在作用域。
+
+        统计图表既可整体铺满页面，也可内嵌到概览页的右侧区域，
+        因此单独抽出为面板装配方法，由调用方决定其渲染位置。
+        """
         if not hasattr(self, "_ap_chart_view"):
             self._ap_chart_view = "line"
         if not hasattr(self, "_commission_income_period"):

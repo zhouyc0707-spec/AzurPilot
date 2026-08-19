@@ -36,7 +36,7 @@ class OverviewMixin(WebUIMixinBase):
         self.set_title(t(f"Gui.MenuAlas.Overview"))
         self._overview_snapshot = None
 
-        put_scope("overview", [put_scope("schedulers"), put_scope("logs")])
+        put_scope("overview", [put_scope("schedulers"), put_scope("stat_panels")])
 
         with use_scope("schedulers"):
             put_scope(
@@ -51,12 +51,12 @@ class OverviewMixin(WebUIMixinBase):
             put_scope(
                 "stat-bar",
                 [
-                    put_text(t("Gui.Overview.Stat")).style(
+                    put_text(t("Gui.Overview.Log")).style(
                         "font-size: 1.25rem; margin: auto .5rem auto;"
                     ),
                     put_button(
                         label=t("Gui.Button.Open"),
-                        onclick=self.alas_set_stat,
+                        onclick=self.alas_set_log,
                         color="on",
                     ),
                 ],
@@ -147,6 +147,15 @@ class OverviewMixin(WebUIMixinBase):
 })();
 """)
 
+        # 右侧统计图表面板
+        with use_scope("stat_panels"):
+            self._mount_stat_panels()
+
+        self.task_handler.add(switch_scheduler.g(), 1, True)
+        self.task_handler.add(self.alas_update_overview_task, 10, True)
+
+    def _mount_log_panel(self) -> None:
+        """创建并渲染日志面板（log-bar、仪表盘、日志内容）及周期刷新任务。"""
         if (
             self._overview_log is None
             or self._overview_log_config_name != self.alas_name
@@ -236,16 +245,20 @@ class OverviewMixin(WebUIMixinBase):
             color_off="on",
             scope="dashboard_btn",
         )
-        self.task_handler.add(switch_scheduler.g(), 1, True)
         self.task_handler.add(switch_log_scroll.g(), 1, True)
         if "Maa" not in self.ALAS_ARGS:
             self.task_handler.add(switch_dashboard.g(), 1, True)
-        self.task_handler.add(self.alas_update_overview_task, 10, True)
-        if "Maa" not in self.ALAS_ARGS:
             self.task_handler.add(self.alas_update_dashboard, 10, True)
             self.alas_update_dashboard(True)
         if hasattr(self, "alas") and self.alas is not None:
             self.task_handler.add(log.put_log(self.alas), 0.25, True)
+
+    @use_scope("content", clear=True)
+    def alas_set_log(self) -> None:
+        """显示日志页（原统计图表页位置）。"""
+        self.init_menu(name="Stat")
+        self.set_title(t("Gui.Overview.Log"))
+        self._mount_log_panel()
 
     def set_dashboard_display(self, b):
         self._log.set_dashboard_display(b)
@@ -298,12 +311,12 @@ class OverviewMixin(WebUIMixinBase):
             put_scope("scheduler_btn")
 
         with use_scope("stat-bar"):
-            put_text(t("Gui.Overview.Stat")).style(
+            put_text(t("Gui.Overview.Log")).style(
                 "font-size: 1.25rem; margin: auto .5rem auto;"
             )
             put_button(
                 label=t("Gui.Button.Open"),
-                onclick=self.alas_set_stat,
+                onclick=self.alas_set_log,
                 color="on",
             )
 
