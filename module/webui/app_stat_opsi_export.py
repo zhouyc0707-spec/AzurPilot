@@ -5,7 +5,6 @@ from module.webui.app_dependencies import (
     current_time,
     datetime,
     logger,
-    put_button,
     put_html,
     t,
     toast,
@@ -24,12 +23,6 @@ from module.webui.app_types import WebUIMixinBase
 
 class OpsiExportMixin(WebUIMixinBase):
     """WebUI 短猫收益刷新和大世界统计导出。"""
-
-    def _refresh_meowofficer_farming(self):
-        from module.statistics.azurstats import AzurStats
-
-        AzurStats.get_meowofficer_farming()
-        self._render_meowofficer_farming()
 
     def _render_meowofficer_farming(self):
         from module.statistics.azurstats import AzurStats
@@ -60,12 +53,6 @@ class OpsiExportMixin(WebUIMixinBase):
                 )
             else:
                 put_html(build_muted_notice(t("Gui.Stat.NoMeowDataNotice")))
-
-            put_button(
-                t("Gui.Stat.Refresh"),
-                onclick=self._refresh_meowofficer_farming,
-                color="off",
-            )
 
     def _export_opsi_csv(self, save_to_desktop: bool = True):
         import io
