@@ -130,7 +130,7 @@
         var COIN_TICK_BASELINE = 4;
         var COIN_TICK_STACK_GAP = 11;
 
-        pad = { t: 20, r: showCoins ? 110 : 20, b: 52, l: 52 };
+        pad = { t: 20, r: showCoins ? 72 : 20, b: 52, l: 52 };
         gW = W - pad.l - pad.r;
         gH = H - pad.t - pad.b;
 
