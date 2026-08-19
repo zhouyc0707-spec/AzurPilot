@@ -784,6 +784,13 @@ pre.rich-traceback-code {
 
 }
 
+#pywebio-scope-stat_panels {
+    display: grid;
+    grid-auto-flow: row;
+    height: 100%;
+    overflow-y: auto;
+}
+
 [id^="pywebio-scope-overview-task_"] {
     display: grid;
     grid-auto-flow: column;
