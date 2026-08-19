@@ -239,19 +239,6 @@ class OpsiStatisticsMixin(WebUIMixinBase):
             avg_cl1_battle_time = exp_stats.get_average_battle_time()
             avg_cl1_round_time = exp_stats.get_average_round_time()
             exp_per_hour = exp_stats.get_exp_per_hour()
-            today_stats = exp_stats.get_today_stats()
-
-            # 今日统计
-            if today_stats:
-                today_battles = today_stats.get("battle_count", 0)
-                today_exp = today_stats.get("total_exp_gained", 0)
-                today_run_time = int(today_stats.get("total_run_time", 0) // 60)
-                today_exp_str = f"{today_exp:,}"
-                today_run_str = f"{today_run_time}{t('Gui.Stat.MinuteUnit')}"
-            else:
-                today_battles = 0
-                today_exp_str = "-"
-                today_run_str = "-"
 
             avg_cl1_battle_str = f"{avg_cl1_battle_time:.1f}{t('Gui.Stat.SecondUnit')}"
             avg_cl1_round_str = f"{avg_cl1_round_time:.1f}{t('Gui.Stat.SecondUnit')}"
@@ -260,9 +247,6 @@ class OpsiStatisticsMixin(WebUIMixinBase):
             avg_cl1_battle_str = "-"
             avg_cl1_round_str = "-"
             exp_per_hour_str = "-"
-            today_battles = 0
-            today_exp_str = "-"
-            today_run_str = "-"
 
         labels = [
             t("Gui.Stat.Month"),
@@ -279,9 +263,6 @@ class OpsiStatisticsMixin(WebUIMixinBase):
             t("Gui.Stat.ExpEfficiencyHeader"),
             t("Gui.Stat.AvgBattleTimeHeader"),
             t("Gui.Stat.AvgRoundTime"),
-            t("Gui.Stat.TodayBattlesHeader"),
-            t("Gui.Stat.TodayExpHeader"),
-            t("Gui.Stat.TodayRunHeader"),
         ]
 
         values = [
@@ -299,9 +280,6 @@ class OpsiStatisticsMixin(WebUIMixinBase):
             exp_per_hour_str,
             avg_cl1_battle_str,
             avg_cl1_round_str,
-            today_battles,
-            today_exp_str,
-            today_run_str,
         ]
 
         return labels, values, ap_bought
