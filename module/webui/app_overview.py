@@ -89,7 +89,7 @@ class OverviewMixin(WebUIMixinBase):
         switch_scheduler = BinarySwitchButton(
             label_on=t("Gui.Button.Stop"),
             label_off=t("Gui.Button.Start"),
-            onclick_on=lambda: self.alas.stop(),
+            onclick_on=lambda: self.alas.stop_by_user(),
             onclick_off=self._alas_start,
             get_state=lambda: self.alas.alive,
             color_on="off",
@@ -256,7 +256,7 @@ class OverviewMixin(WebUIMixinBase):
     @use_scope("content", clear=True)
     def alas_set_log(self) -> None:
         """显示日志页（原统计图表页位置）。"""
-        self.init_menu(name="Stat")
+        self.init_menu(name="Log")
         self.set_title(t("Gui.Overview.Log"))
         self._mount_log_panel()
 
@@ -323,7 +323,7 @@ class OverviewMixin(WebUIMixinBase):
         switch_scheduler = BinarySwitchButton(
             label_on=t("Gui.Button.Stop"),
             label_off=t("Gui.Button.Start"),
-            onclick_on=lambda: self.alas.stop(),
+            onclick_on=lambda: self.alas.stop_by_user(),
             onclick_off=lambda: self.alas.start(task),
             get_state=lambda: self.alas.alive,
             color_on="off",
