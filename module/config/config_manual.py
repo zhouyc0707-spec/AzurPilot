@@ -205,6 +205,9 @@ class ManualConfig:
     COMMON_CV_FILTER = 'bogue > ranger > langley > hermes'
     COMMON_DD_FILTER =  'z20 > z21 > aulick > foote > cassin > downes'
     GEMS_EMOTION_TRIGGERED = False
+    # 初始旗舰检查是否已完成（进程内持久化，避免任务被调度器切换后重启重复换旗舰）
+    GEMS_INITIAL_FLAGSHIP_CHECK_DONE = False
+    AMBUSH_INITIAL_FLAGSHIP_CHECK_DONE = False
 
     """
     module.handler

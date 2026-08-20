@@ -259,7 +259,6 @@ class GemsFarming(CampaignRun, FleetEquipment, GemsEquipmentHandler, Retirement)
     5. 通过装备码自动装卸旗舰/先锋装备
 
     Attributes:
-        _initial_flagship_check_done (bool): 是否已完成初始旗舰等级检查。
         _trigger_lv32 (bool): 是否触发了等级 32 限制。
         _trigger_emotion (bool): 是否触发了情绪限制。
         hard_mode (bool): 是否处于困难模式（影响舰队进入方式）。
@@ -269,7 +268,6 @@ class GemsFarming(CampaignRun, FleetEquipment, GemsEquipmentHandler, Retirement)
         fleet_enter_flagship (Button): 从船坞进入旗舰位的按钮。
         fleet_enter (Button): 从船坞进入先锋位的按钮。
     """
-    _initial_flagship_check_done = False
 
     def hard_mode_override(self):
         """根据当前战役模式切换舰队进入方式。
@@ -1088,9 +1086,9 @@ class GemsFarming(CampaignRun, FleetEquipment, GemsEquipmentHandler, Retirement)
         initial_check = (
             self.change_flagship
             and not self.config.GemsFarming_AllowHighFlagshipLevel
-            and not self._initial_flagship_check_done
+            and not self.config.GEMS_INITIAL_FLAGSHIP_CHECK_DONE
         )
-        self._initial_flagship_check_done = True
+        self.config.GEMS_INITIAL_FLAGSHIP_CHECK_DONE = True
         while 1:
             self._trigger_lv32 = initial_check
             initial_check = False
