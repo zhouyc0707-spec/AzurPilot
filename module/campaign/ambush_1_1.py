@@ -164,6 +164,8 @@ class Ambush11(CampaignRun, FleetEquipment, Retirement):
     """
     _trigger_lv32 = False
     _trigger_emotion = False
+    # 初始旗舰等级检查是否已完成（进程内持久化，说明见 GemsFarming 同名字段）。
+    _initial_flagship_check_done = False
 
     # ==================== 配置属性 ====================
 
@@ -998,9 +1000,9 @@ class Ambush11(CampaignRun, FleetEquipment, Retirement):
         initial_check = (
             self.change_flagship
             and not self.config.GemsFarming_AllowHighFlagshipLevel
-            and not self.config.AMBUSH_INITIAL_FLAGSHIP_CHECK_DONE
+            and not Ambush11._initial_flagship_check_done
         )
-        self.config.AMBUSH_INITIAL_FLAGSHIP_CHECK_DONE = True
+        Ambush11._initial_flagship_check_done = True
 
         while 1:
             self._trigger_lv32 = initial_check

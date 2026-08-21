@@ -1022,6 +1022,10 @@ class GemsFarming(CampaignRun, FleetEquipment, GemsEquipmentHandler, Retirement)
 
     _trigger_lv32 = False
     _trigger_emotion = False
+    # 初始旗舰等级检查是否已完成。
+    # 使用类属性做进程内持久化：任务实例与 config 实例会随调度器切换或配置重载而重建，
+    # 类属性在进程生命周期内保持不变，确保初始检查只在进程内执行一次。
+    _initial_flagship_check_done = False
 
     def triggered_stop_condition(self, oil_check=True):
         """检查钻石 farming 的停止条件。
@@ -1086,9 +1090,9 @@ class GemsFarming(CampaignRun, FleetEquipment, GemsEquipmentHandler, Retirement)
         initial_check = (
             self.change_flagship
             and not self.config.GemsFarming_AllowHighFlagshipLevel
-            and not self.config.GEMS_INITIAL_FLAGSHIP_CHECK_DONE
+            and not GemsFarming._initial_flagship_check_done
         )
-        self.config.GEMS_INITIAL_FLAGSHIP_CHECK_DONE = True
+        GemsFarming._initial_flagship_check_done = True
         while 1:
             self._trigger_lv32 = initial_check
             initial_check = False
