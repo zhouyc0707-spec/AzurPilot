@@ -126,33 +126,24 @@ class MeowfficerTargetZoneMixin:
 
 
 class OpsiMeowfficerFarming(MeowfficerTargetZoneMixin, CoinTaskMixin, OSMap):
-    def clear_question(self, drop=None):
-        """清理附近问号，必要时切换其他舰队检测。
+    def _clear_question_primary(self):
+        """只清主舰队周围问号。"""
+        self.fleet_set(self.config.OpsiFleet_Fleet)
+        self.device.screenshot()
+        return super().clear_question()
 
-        耄耋相接战略搜索后，配置的主舰队可能离明石问号过远（Issue #5656），
-        导致原 clear_question 只能检测主舰队附近固定位置而漏掉明石。
-        依次切换到其他舰队重新扫描，直到某个舰队能在雷达上检测到问号，
-        再由父类 clear_question 基于该舰队处理。
-        """
+    def _clear_question_other_fleets(self):
+        """依次切换到其他舰队清理问号。"""
         primary = self.config.OpsiFleet_Fleet
-        fleets = [primary] + [fleet for fleet in [1, 2, 3, 4] if fleet != primary]
-
-        for fleet in fleets:
+        for fleet in [1, 2, 3, 4]:
+            if fleet == primary:
+                continue
             self.fleet_set(fleet)
             self.device.screenshot()
-
-            grid = self.radar.predict_question(
-                self.device.image,
-                in_port=self.zone.is_port,
-            )
-
-            if grid is None:
-                logger.info(f"[大世界-耄耋相接] 舰队 {fleet} 附近无问号")
-                continue
-
-            logger.info(f"[大世界-耄耋相接] 使用舰队 {fleet} 检测到附近问号")
-            return super().clear_question(drop=drop)
-
+            if super().clear_question():
+                logger.info(f"[大世界-耄耋相接] 使用舰队 {fleet} 清理到问号")
+                return True
+            logger.info(f"[大世界-耄耋相接] 舰队 {fleet} 附近无问号")
         return False
 
     def _meow_ap_check(self, preserve, ap_checked):
@@ -209,8 +200,13 @@ class OpsiMeowfficerFarming(MeowfficerTargetZoneMixin, CoinTaskMixin, OSMap):
             if self.run_strategic_search():
                 self._solved_map_event = set()
                 self._solved_fleet_mechanism = False
-                self.clear_question()
-                self.map_rescan()
+                # 先清主舰队周围问号
+                if not self._clear_question_primary():
+                    # 主舰队没清到事件，重扫地图
+                    self.map_rescan()
+                    # 重扫也没发现事件，再切换其他舰队依次清问号
+                    if not self._solved_map_event:
+                        self._clear_question_other_fleets()
             self.handle_after_auto_search()
         finally:
             self.meow_search_metrics_end()
@@ -239,8 +235,13 @@ class OpsiMeowfficerFarming(MeowfficerTargetZoneMixin, CoinTaskMixin, OSMap):
             if search_completed:
                 self._solved_map_event = set()
                 self._solved_fleet_mechanism = False
-                self.clear_question()
-                self.map_rescan()
+                # 先清主舰队周围问号
+                if not self._clear_question_primary():
+                    # 主舰队没清到事件，重扫地图
+                    self.map_rescan()
+                    # 重扫也没发现事件，再切换其他舰队依次清问号
+                    if not self._solved_map_event:
+                        self._clear_question_other_fleets()
 
             try:
                 self.handle_after_auto_search()
