@@ -126,6 +126,35 @@ class MeowfficerTargetZoneMixin:
 
 
 class OpsiMeowfficerFarming(MeowfficerTargetZoneMixin, CoinTaskMixin, OSMap):
+    def clear_question(self, drop=None):
+        """清理附近问号，必要时切换其他舰队检测。
+
+        耄耋相接战略搜索后，配置的主舰队可能离明石问号过远（Issue #5656），
+        导致原 clear_question 只能检测主舰队附近固定位置而漏掉明石。
+        依次切换到其他舰队重新扫描，直到某个舰队能在雷达上检测到问号，
+        再由父类 clear_question 基于该舰队处理。
+        """
+        primary = self.config.OpsiFleet_Fleet
+        fleets = [primary] + [fleet for fleet in [1, 2, 3, 4] if fleet != primary]
+
+        for fleet in fleets:
+            self.fleet_set(fleet)
+            self.device.screenshot()
+
+            grid = self.radar.predict_question(
+                self.device.image,
+                in_port=self.zone.is_port,
+            )
+
+            if grid is None:
+                logger.info(f"[大世界-耄耋相接] 舰队 {fleet} 附近无问号")
+                continue
+
+            logger.info(f"[大世界-耄耋相接] 使用舰队 {fleet} 检测到附近问号")
+            return super().clear_question(drop=drop)
+
+        return False
+
     def _meow_ap_check(self, preserve, ap_checked):
         """
         行动力检查。
