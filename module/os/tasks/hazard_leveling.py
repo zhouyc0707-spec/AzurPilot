@@ -53,8 +53,13 @@ class OpsiHazard1Leveling(CoinTaskMixin, OSMap):
                 continue
 
             logger.info(f"[大世界-侵蚀1练级] 使用舰队 {fleet} 检测到附近问号")
-            return super().clear_question(drop=drop)
+            result = super().clear_question(drop=drop)
+            # 恢复主舰队，避免后续步骤在非主舰队状态下执行
+            self.fleet_set(primary)
+            return result
 
+        # 所有舰队都没检测到问号，恢复主舰队
+        self.fleet_set(primary)
         return False
 
     def _cl1_resource_check(self, yellow_coins):

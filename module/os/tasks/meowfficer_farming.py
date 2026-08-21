@@ -135,6 +135,7 @@ class OpsiMeowfficerFarming(MeowfficerTargetZoneMixin, CoinTaskMixin, OSMap):
     def _clear_question_other_fleets(self):
         """依次切换到其他舰队清理问号。"""
         primary = self.config.OpsiFleet_Fleet
+        cleared = False
         for fleet in [1, 2, 3, 4]:
             if fleet == primary:
                 continue
@@ -142,9 +143,12 @@ class OpsiMeowfficerFarming(MeowfficerTargetZoneMixin, CoinTaskMixin, OSMap):
             self.device.screenshot()
             if super().clear_question():
                 logger.info(f"[大世界-耄耋相接] 使用舰队 {fleet} 清理到问号")
-                return True
+                cleared = True
+                break
             logger.info(f"[大世界-耄耋相接] 舰队 {fleet} 附近无问号")
-        return False
+        # 恢复主舰队，避免后续步骤在非主舰队状态下执行
+        self.fleet_set(primary)
+        return cleared
 
     def _meow_ap_check(self, preserve, ap_checked):
         """
