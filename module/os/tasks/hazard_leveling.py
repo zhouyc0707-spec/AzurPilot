@@ -83,7 +83,15 @@ class OpsiHazard1Leveling(CoinTaskMixin, OSMap):
 
         # 强制移动逻辑
         if self.config.OpsiHazard1Leveling_ExecuteFixedPatrolScan:
-            if not self._solved_map_event:
+            # 记录第一次重扫结果，作为是否触发强制移动的依据
+            solved_after_rescan = set(self._solved_map_event)
+            # 在强制移动之前先清理雷达问号
+            self.clear_question()
+            # 是否强制移动仍只看第一次重扫结果，问号处理结果不应跳过强制移动
+            if not solved_after_rescan:
+                # 恢复为重扫结果，避免 clear_question 产生的彩蛋标记触发
+                # _execute_fixed_patrol_scan 内部的彩蛋跳过逻辑
+                self._solved_map_event = solved_after_rescan
                 self._execute_fixed_patrol_scan(ExecuteFixedPatrolScan=True)
                 # 第二次重扫：舰队移动后再次重扫
                 self._solved_map_event = set()
