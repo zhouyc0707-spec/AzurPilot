@@ -120,12 +120,16 @@ class OpsiHazard1Leveling(CoinTaskMixin, OSMap):
             # 第一次重扫未解决事件时才清理雷达问号
             if not self._solved_map_event:
                 question_cleared = self.clear_question()
-                # 清理到问号（成功处理事件）则跳过强制移动，否则执行强制移动
+                # 清理到问号（成功处理事件）则跳过后续，否则先重扫再决定是否强制移动
                 if not question_cleared:
-                    self._execute_fixed_patrol_scan(ExecuteFixedPatrolScan=True)
-                    # 第二次重扫：舰队移动后再次重扫
-                    self._solved_map_event = set()
+                    # 问号清理失败（可能是点错格子），先重扫地图尝试正确发现事件
                     self.map_rescan()
+                    # 重扫仍未解决事件，才执行强制移动保底
+                    if not self._solved_map_event:
+                        self._execute_fixed_patrol_scan(ExecuteFixedPatrolScan=True)
+                        # 强制移动后再次重扫
+                        self._solved_map_event = set()
+                        self.map_rescan()
 
         self.handle_after_auto_search()
 
