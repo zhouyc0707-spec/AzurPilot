@@ -122,10 +122,16 @@ class OpsiHazard1Leveling(CoinTaskMixin, OSMap):
                 question_cleared = self.clear_question()
                 # 清理到问号（成功处理事件）则跳过后续，否则先重扫再决定是否强制移动
                 if not question_cleared:
-                    # 问号清理失败（可能是点错格子），先重扫地图尝试正确发现事件
+                    # 问号清理失败（可能是点错格子），先重扫地图尝试正确发现并解决事件
                     self.map_rescan()
-                    # 重扫仍未解决事件，才执行强制移动保底
-                    if not self._solved_map_event:
+                    # 只有重扫确实发现并解决了事件才跳过强制移动；
+                    # 若仅发现事件但因卡位未解决（_solved_map_event 仍为空），仍需强制移动保底
+                    if self._solved_map_event:
+                        logger.info(
+                            f"[大世界-侵蚀1练级] 重扫已解决地图事件 "
+                            f"{self._solved_map_event}，跳过强制移动"
+                        )
+                    else:
                         self._execute_fixed_patrol_scan(ExecuteFixedPatrolScan=True)
                         # 强制移动后再次重扫
                         self._solved_map_event = set()
