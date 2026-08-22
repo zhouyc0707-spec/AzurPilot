@@ -28,6 +28,9 @@ from module.os_handler.assets import MISSION_ENTER, MISSION_CHECK, MISSION_QUIT
 
 
 class OpsiHazard1Leveling(CoinTaskMixin, OSMap):
+    # 本次清问号流程是否检测到了舰队周围的问号（用于区分「没问号」与「有问号但处理失败」）
+    _question_detected = False
+
     def clear_question(self, drop=None):
         """清理附近问号，必要时切换其他舰队检测。
 
@@ -53,6 +56,7 @@ class OpsiHazard1Leveling(CoinTaskMixin, OSMap):
                 continue
 
             logger.info(f"[大世界-侵蚀1练级] 使用舰队 {fleet} 检测到附近问号")
+            self._question_detected = True
             result = super().clear_question(drop=drop)
             # 恢复主舰队，避免后续步骤在非主舰队状态下执行
             self.fleet_set(primary)
@@ -119,19 +123,23 @@ class OpsiHazard1Leveling(CoinTaskMixin, OSMap):
         if self.config.OpsiHazard1Leveling_ExecuteFixedPatrolScan:
             # 第一次重扫未解决事件时才清理雷达问号
             if not self._solved_map_event:
+                self._question_detected = False
                 question_cleared = self.clear_question()
                 # 清理到问号（成功处理事件）则跳过后续，否则先重扫再决定是否强制移动
                 if not question_cleared:
-                    # 问号清理失败（可能是点错格子），先重扫地图尝试正确发现并解决事件
-                    self.map_rescan()
-                    # 只有重扫确实发现并解决了事件才跳过强制移动；
-                    # 若仅发现事件但因卡位未解决（_solved_map_event 仍为空），仍需强制移动保底
-                    if self._solved_map_event:
-                        logger.info(
-                            f"[大世界-侵蚀1练级] 重扫已解决地图事件 "
-                            f"{self._solved_map_event}，跳过强制移动"
-                        )
-                    else:
+                    # 只有确实发现舰队周围存在问号时，才先重扫地图尝试正确发现事件
+                    should_patrol = True
+                    if self._question_detected:
+                        self.map_rescan()
+                        # 重扫确实发现并解决了事件才跳过强制移动；
+                        # 若仅发现事件但因卡位未解决（_solved_map_event 仍为空），仍需强制移动保底
+                        if self._solved_map_event:
+                            logger.info(
+                                f"[大世界-侵蚀1练级] 重扫已解决地图事件 "
+                                f"{self._solved_map_event}，跳过强制移动"
+                            )
+                            should_patrol = False
+                    if should_patrol:
                         self._execute_fixed_patrol_scan(ExecuteFixedPatrolScan=True)
                         # 强制移动后再次重扫
                         self._solved_map_event = set()
