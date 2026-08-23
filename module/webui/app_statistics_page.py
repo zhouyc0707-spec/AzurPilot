@@ -24,7 +24,12 @@ class StatisticsPageMixin(WebUIMixinBase):
 
         # 独立 scope 使周期刷新不会清空其他统计区域。
         # 顶部资源概览（排除行动力/黄币/紫币，避免与下方行动力图表重复）
-        put_scope("stat_resources", [])
+        put_scope("stat_resources", []).style(
+            "display:flex;flex-wrap:wrap;gap:.4rem .8rem;align-items:center;"
+        )
+        # 重新挂载时重置去重状态，避免浏览器刷新后因增量去重导致资源不渲染
+        self._dashboard_last_display_time = {}
+        self._dashboard_first_display = True
         self.alas_update_stat_resources()
         self.task_handler.add(self.alas_update_stat_resources, 10, True)
         put_scope("ap_chart", [])
