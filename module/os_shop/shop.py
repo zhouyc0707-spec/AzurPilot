@@ -45,6 +45,9 @@ class OSShop(PortShop, AkashiShop):
         _shop_purple_coins (int): 当前紫币余额（由 os_shop_get_coins 设置）。
     """
 
+    # 本次战役是否已处理过明石商店（避免强制移动等后续环节重复进入商店）
+    _akashi_handled = False
+
     def os_shop_buy_execute(self, button, skip_first_screenshot=True) -> bool:
         """执行单个物品的购买操作。
 
@@ -369,10 +372,19 @@ class OSShop(PortShop, AkashiShop):
             in: is_in_map
             out: is_in_map
         """
+        if self._akashi_handled:
+            logger.info("[大世界-明石] 本次战役已处理过明石，跳过重复进入商店")
+            # 若明石商店已经弹出，关闭它，避免移动等待流程重复检测到商店而卡住
+            if self.appear(PORT_SUPPLY_CHECK, offset=(20, 20)):
+                self.ui_back(appear_button=PORT_SUPPLY_CHECK, check_button=self.is_in_map,
+                             skip_first_screenshot=True)
+            return
+
         self.ui_click(grid, appear_button=self.is_in_map, check_button=PORT_SUPPLY_CHECK,
                       additional=self.handle_story_skip, skip_first_screenshot=True)
         self.os_shop_buy(select_func=self.os_shop_get_item_to_buy_in_akashi)
         self.ui_back(appear_button=PORT_SUPPLY_CHECK, check_button=self.is_in_map, skip_first_screenshot=True)
+        self._akashi_handled = True
 
     @cached_property
     def yellow_coins_preserve(self):

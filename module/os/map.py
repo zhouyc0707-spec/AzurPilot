@@ -1427,6 +1427,8 @@ class OSMap(OSFleet, Map, GlobeCamera, StorageHandler, StrategicSearchHandler):
         Returns:
             bool: 正常完成返回 True，被中断返回 False（非 TaskEnd）。
         """
+        # 新的一轮计划作战开始，重置明石处理标志，允许本轮再次处理明石
+        self._akashi_handled = False
         self.handle_ash_beacon_attack()
 
         logger.hr("运行策略搜索", level=2)
