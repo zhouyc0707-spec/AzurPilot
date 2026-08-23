@@ -2,7 +2,6 @@
 
 from module.webui.app_dependencies import (
     BinarySwitchButton,
-    LogRes,
     RichLog,
     deep_iter,
     get_device_id,
@@ -170,7 +169,6 @@ class OverviewMixin(WebUIMixinBase):
         log.first_display = True
         log.last_display_time = {}
         self._log = log
-        self._log.dashboard_arg_group = LogRes(self.alas_config).groups
 
         with use_scope("logs"):
             if "Maa" in self.ALAS_ARGS:
@@ -209,11 +207,8 @@ class OverviewMixin(WebUIMixinBase):
                                         ),
                                         color="off",
                                     ),
-                                    put_scope("dashboard_btn"),
                                 ],
                             ),
-                            put_html('<hr class="hr-group">'),
-                            put_scope("dashboard"),
                         ],
                     ),
                 )
@@ -237,21 +232,7 @@ class OverviewMixin(WebUIMixinBase):
             color_off="off",
             scope="log_scroll_btn",
         )
-        switch_dashboard = BinarySwitchButton(
-            label_on=t("Gui.Button.DashboardON"),
-            label_off=t("Gui.Button.DashboardOFF"),
-            onclick_on=lambda: self.set_dashboard_display(False),
-            onclick_off=lambda: self.set_dashboard_display(True),
-            get_state=lambda: log.display_dashboard,
-            color_on="off",
-            color_off="on",
-            scope="dashboard_btn",
-        )
         self.task_handler.add(switch_log_scroll.g(), 1, True)
-        if "Maa" not in self.ALAS_ARGS:
-            self.task_handler.add(switch_dashboard.g(), 1, True)
-            self.task_handler.add(self.alas_update_dashboard, 10, True)
-            self.alas_update_dashboard(True)
         if hasattr(self, "alas") and self.alas is not None:
             self.task_handler.add(log.put_log(self.alas), 0.25, True)
 
@@ -261,10 +242,6 @@ class OverviewMixin(WebUIMixinBase):
         self.init_menu(name="Log")
         self.set_title(t("Gui.Overview.Log"))
         self._mount_log_panel()
-
-    def set_dashboard_display(self, b):
-        self._log.set_dashboard_display(b)
-        self.alas_update_dashboard(True)
 
     @use_scope("content", clear=True)
     def alas_daemon_overview(self, task: str) -> None:

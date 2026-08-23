@@ -23,6 +23,10 @@ class StatisticsPageMixin(WebUIMixinBase):
             self._commission_income_period = "month"
 
         # 独立 scope 使周期刷新不会清空其他统计区域。
+        # 顶部资源概览（排除行动力/黄币/紫币，避免与下方行动力图表重复）
+        put_scope("stat_resources", [])
+        self.alas_update_stat_resources()
+        self.task_handler.add(self.alas_update_stat_resources, 10, True)
         put_scope("ap_chart", [])
         self._render_ap_chart()
         self.task_handler.add(self._render_ap_chart, 60, True)
