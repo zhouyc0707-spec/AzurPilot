@@ -213,7 +213,7 @@ class DashboardMixin(WebUIMixinBase):
             self._dashboard_first_display = False
 
     def alas_update_stat_resources(self, _clear=False):
-        """刷新统计面板顶部的资源概览（排除行动力/黄币/紫币）。"""
+        """刷新统计面板顶部的资源概览（排除行动力/黄币/紫币/舰队币）。"""
         if not self.visible:
             return
         with use_scope("stat_resources", clear=_clear):
@@ -227,6 +227,5 @@ class DashboardMixin(WebUIMixinBase):
                     "Core",
                     "Medal",
                     "Merit",
-                    "GuildCoin",
                 ]
             )
