@@ -130,7 +130,10 @@ class OpsiMeowfficerFarming(MeowfficerTargetZoneMixin, CoinTaskMixin, OSMap):
         """只清主舰队周围问号。"""
         self.fleet_set(self.config.OpsiFleet_Fleet)
         self.device.screenshot()
-        return super().clear_question()
+        # 显式调用 OSMap 的单舰队实现：组合类 OperationSiren 的 MRO 中
+        # OpsiMeowfficerFarming 之后是 OpsiHazard1Leveling，super() 会错误解析到
+        # 侵蚀1的多舰队 override，导致耄耋相接误用侵蚀1的清问号逻辑。
+        return OSMap.clear_question(self)
 
     def _clear_question_other_fleets(self):
         """依次切换到其他舰队清理问号。"""
@@ -141,7 +144,7 @@ class OpsiMeowfficerFarming(MeowfficerTargetZoneMixin, CoinTaskMixin, OSMap):
                 continue
             self.fleet_set(fleet)
             self.device.screenshot()
-            if super().clear_question():
+            if OSMap.clear_question(self):
                 logger.info(f"[大世界-耄耋相接] 使用舰队 {fleet} 清理到问号")
                 cleared = True
                 break
