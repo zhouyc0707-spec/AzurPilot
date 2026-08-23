@@ -1346,6 +1346,13 @@ class OSMap(OSFleet, Map, GlobeCamera, StorageHandler, StrategicSearchHandler):
                 self._solved_map_event.add("is_scanning_device")
 
                 return True
+            elif "event" in result:
+                # 兜底：移动后触发了剧情事件（日志塔/探索奖励等），说明问号已被踩掉解决。
+                # 移动前的模板匹配可能因图标被遮挡或位于视野边缘而失败，
+                # 这里不再依赖具体类型，统一视为已解决，避免误触发强制移动。
+                logger.info("[大世界-搜索] 移动后触发剧情事件，视为问号已解决")
+                self._solved_map_event.add("is_logging_tower")
+                return True
 
         logger.warning(
             "[大世界-地图] 前往问号5次尝试失败, "
