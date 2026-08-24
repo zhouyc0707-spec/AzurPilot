@@ -26,7 +26,7 @@ class StatisticsPageMixin(WebUIMixinBase):
         # 顶部资源概览（排除行动力/黄币/紫币，避免与下方行动力图表重复）
         put_scope("stat_resources", []).style(
             "display:flex;flex-wrap:wrap;gap:.4rem .8rem;align-items:center;"
-            "border:1px solid var(--alas-entry-border,#dde0e5);border-radius:8px;"
+            "border:1px solid var(--alas-entry-border,#dde0e5);"
             "padding:.45rem .7rem;margin-bottom:.6rem;"
             "position:sticky;top:0;z-index:10;"
             "background:var(--alas-entry-surface,#fff);"
