@@ -34,10 +34,11 @@ class StatisticsPageMixin(WebUIMixinBase):
         # 重新挂载时重置去重状态，避免浏览器刷新后因增量去重导致资源不渲染
         self._dashboard_last_display_time = {}
         self._dashboard_first_display = True
-        self.alas_update_stat_resources()
+        # 不再同步渲染：后台任务注册后 next_run=now 会立即在任务线程执行，
+        # 页面切换只做轻量的空容器挂载，避免统计视图的数据库读取与图表构建
+        # 阻塞总览页/页面切换的响应。
         self.task_handler.add(self.alas_update_stat_resources, 10, True)
         put_scope("ap_chart", [])
-        self._render_ap_chart()
         self.task_handler.add(self._render_ap_chart, 60, True)
         # 隐藏全资源变化趋势图表（始终不渲染、不注册周期刷新）
         # 确保页面加载、刷新、切换选项卡等任何交互后均保持隐藏状态
@@ -45,13 +46,10 @@ class StatisticsPageMixin(WebUIMixinBase):
         # self._render_resource_chart()
         # self.task_handler.add(self._render_resource_chart, 60, True)
         put_scope("opsi_stats", [])
-        self._render_opsi_stats()
         self.task_handler.add(self._render_opsi_stats, 60, True)
         put_scope("ship_exp_table", [])
-        self._render_ship_exp()
         self.task_handler.add(self._render_ship_exp, 60, True)
         put_scope("commission_income", [])
-        self._render_commission_income()
         self.task_handler.add(self._render_commission_income, 60, True)
 
     def alas_set_stat(self) -> None:
