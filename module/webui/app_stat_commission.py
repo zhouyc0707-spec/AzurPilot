@@ -342,31 +342,43 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
         page = max(0, min(page, total_pages - 1))
         self._commission_recent_page = page
 
-        def on_page_click(delta):
-            new_page = getattr(self, "_commission_recent_page", 0) + delta
+        def on_pagination(value):
+            new_page = getattr(self, "_commission_recent_page", 0)
+            if value == "prev":
+                new_page -= 1
+            elif value == "next":
+                new_page += 1
+            else:
+                new_page = int(value)
             new_page = max(0, min(new_page, total_pages - 1))
             self._commission_recent_page = new_page
             self._render_commission_income()
 
+        pagination_buttons = [
+            {"label": "上一页", "value": "prev", "color": "secondary"},
+        ]
+        for index in range(1, min(5, total_pages) + 1):
+            pagination_buttons.append(
+                {
+                    "label": str(index),
+                    "value": index - 1,
+                    "color": "primary" if (index - 1) == page else "secondary",
+                }
+            )
+        pagination_buttons.append(
+            {"label": "下一页", "value": "next", "color": "secondary"}
+        )
+
         put_row(
             [
                 put_buttons(
-                    [
-                        {
-                            "label": "上一页",
-                            "value": -1,
-                            "color": "secondary",
-                        },
-                        {
-                            "label": "下一页",
-                            "value": 1,
-                            "color": "secondary",
-                        },
-                    ],
-                    onclick=on_page_click,
+                    pagination_buttons,
+                    onclick=on_pagination,
                     small=True,
+                ).style("font-size: 0.75rem; gap: 4px;"),
+                put_text(f"第 {page + 1} / {total_pages} 页").style(
+                    "font-size: 0.75rem; opacity: 0.7; margin-left: 8px;"
                 ),
-                put_text(f"第 {page + 1} / {total_pages} 页"),
             ],
             scope="commission_income",
         )
