@@ -375,9 +375,9 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
                     pagination_buttons,
                     onclick=on_pagination,
                     small=True,
-                ).style("font-size: 0.75rem; gap: 4px;"),
+                ).style("font-size: 0.65rem; gap: 4px;"),
                 put_text(f"第 {page + 1} / {total_pages} 页").style(
-                    "font-size: 0.75rem; opacity: 0.7; margin-left: 8px;"
+                    "font-size: 0.65rem; opacity: 0.7; margin-left: 8px;"
                 ),
             ],
             scope="commission_income",
