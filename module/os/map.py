@@ -1417,7 +1417,11 @@ class OSMap(OSFleet, Map, GlobeCamera, StorageHandler, StrategicSearchHandler):
             self._solved_map_event = set()
             self._solved_fleet_mechanism = False
             if question:
-                self.clear_question(drop=drop)
+                # 显式调用单舰队实现：组合类 OperationSiren 的 MRO 中
+                # OpsiHazard1Leveling 重写了多舰队版 clear_question，
+                # 若用 self.clear_question() 会把「清近距离问号」误解析成
+                # 侵蚀1的「切换主舰队+2/3/4」多舰队检测。
+                OSMap.clear_question(self, drop=drop)
             if rescan:
                 self.map_rescan(rescan_mode=rescan, drop=drop)
 
