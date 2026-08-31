@@ -1047,16 +1047,17 @@ class RewardCommission(UI, InfoHandler):
                         if self.appear(OIL_MAXED, offset=(20, 20), interval=3):
                             raise OilMaxed
 
-                    for button in [GET_SHIP]:
-                        if click_timer.reached() and self.appear(button, interval=1):
-                            self.ensure_no_info_bar(timeout=1)
-                            drop.add(self.device.image)
+                    if self.config.Commission_DetectShipDrop:
+                        for button in [GET_SHIP]:
+                            if click_timer.reached() and self.appear(button, interval=1):
+                                self.ensure_no_info_bar(timeout=1)
+                                drop.add(self.device.image)
 
-                            REWARD_SAVE_CLICK.name = button.name
-                            self.device.click(REWARD_SAVE_CLICK)
-                            click_timer.reset()
-                            reward = True
-                            continue
+                                REWARD_SAVE_CLICK.name = button.name
+                                self.device.click(REWARD_SAVE_CLICK)
+                                click_timer.reset()
+                                reward = True
+                                continue
                     if click_timer.reached() and self.ui_additional():
                         click_timer.reset()
                         continue

@@ -2044,6 +2044,12 @@
     "CommissionNotifyRewardStatistics": {
       "name": "Include Statistics in Push",
       "help": "Display today/week/month cumulative gem count in notification"
+    },
+    "DetectShipDrop": {
+      "name": "Detect ship drop",
+      "help": "Detect and close the ship obtained popup after claiming commission rewards. Disable if you do not run ship-dropping commissions to avoid detection errors.",
+      "True": "True",
+      "False": "False"
     }
   },
   "Tactical": {

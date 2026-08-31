@@ -2044,6 +2044,12 @@
     "CommissionNotifyRewardStatistics": {
       "name": "推送包含统计信息",
       "help": "在通知中显示今日/本周/本月累计钻石数量"
+    },
+    "DetectShipDrop": {
+      "name": "检测舰船掉落",
+      "help": "领取委托奖励后检测「获得舰船」画面并关闭。若不做会掉落舰船的委托，可关闭以避免识别错误。",
+      "True": "True",
+      "False": "False"
     }
   },
   "Tactical": {
