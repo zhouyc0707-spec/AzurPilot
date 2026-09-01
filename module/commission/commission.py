@@ -838,6 +838,8 @@ class RewardCommission(UI, InfoHandler):
 
             merged_items = {}
             item_count = 0
+            # 通过「获取物品」页面校验的截图，结算后落盘存档供 WebUI 查看
+            reward_images = []
 
             images = getattr(self, '_commission_reward_images', None)
             if not images:
@@ -870,6 +872,7 @@ class RewardCommission(UI, InfoHandler):
                     else:
                         logger.info(f'[委托-收入] 截图[{idx}] 不是获取物品页面，跳过')
                         continue
+                    reward_images.append(image)
                     grid.predict(image)
                     recognized = []
                     for item in grid.items:
@@ -891,7 +894,10 @@ class RewardCommission(UI, InfoHandler):
 
             if merged_items:
                 instance = self.config.config_name
-                cl1_db.add_commission_income(instance, merged_items, commission_count=1)
+                screenshots = self._save_commission_reward_screenshots(reward_images, instance)
+                cl1_db.add_commission_income(
+                    instance, merged_items, commission_count=1, screenshots=screenshots
+                )
                 item_str = ', '.join([f'{k}x{v}' for k, v in merged_items.items()])
                 logger.info(f'[委托-收入] 委托收入记录: {item_str} (实例={instance})')
                 if self.config.Commission_CommissionNotifyReward:
@@ -939,6 +945,78 @@ class RewardCommission(UI, InfoHandler):
 
         except Exception as e:
             logger.warning(f'[委托-收入] 委托收入记录失败: {e}')
+
+    def _save_commission_reward_screenshots(self, images, instance):
+        """保存本次结算的委托收益截图。
+
+        截图落盘到 ``./log/commission_rewards/<instance>/<YYYY-MM>/`` 目录，
+        文件名使用毫秒时间戳避免冲突。返回相对 ``log/commission_rewards``
+        根目录的路径列表（POSIX 风格），写入数据库供 WebUI 查看截图使用。
+
+        Args:
+            images: 通过「获取物品」页面校验的截图列表（RGB numpy 数组）。
+            instance: 配置实例名称。
+
+        Returns:
+            list[str]: 保存成功的截图相对路径列表，失败时返回空列表。
+        """
+        import os
+
+        if not images:
+            return []
+
+        month_str = current_time().strftime('%Y-%m')
+        folder = os.path.join('.', 'log', 'commission_rewards', instance, month_str)
+        try:
+            os.makedirs(folder, exist_ok=True)
+        except OSError as e:
+            logger.warning(f'[委托-收入] 创建截图目录失败: {e}')
+            return []
+
+        stamp = current_time().strftime('%Y%m%d_%H%M%S_%f')
+        paths = []
+        for idx, image in enumerate(images):
+            filename = f'{stamp}_{idx}.png'
+            try:
+                save_image(image, os.path.join(folder, filename))
+            except Exception as e:
+                logger.warning(f'[委托-收入] 保存截图失败 {filename}: {e}')
+                continue
+            paths.append(f'{instance}/{month_str}/{filename}')
+            logger.info(f'[委托-收入] 已保存收益截图: log/commission_rewards/{instance}/{month_str}/{filename}')
+
+        self._prune_old_commission_reward_screenshots(instance)
+        return paths
+
+    @staticmethod
+    def _prune_old_commission_reward_screenshots(instance, retention_days=90):
+        """清理实例目录下超过保留期的委托收益截图。
+
+        委托截图按天累计占用磁盘，默认保留 90 天；清理在每次保存截图后
+        顺带执行，并移除清空后的空月份目录。
+
+        Args:
+            instance: 配置实例名称。
+            retention_days: 保留天数，默认 90。
+        """
+        import os
+
+        base = os.path.join('.', 'log', 'commission_rewards', instance)
+        if not os.path.isdir(base):
+            return
+        cutoff = current_time().timestamp() - retention_days * 86400
+        for folder, _, files in os.walk(base, topdown=False):
+            for name in files:
+                file = os.path.join(folder, name)
+                try:
+                    if os.path.getmtime(file) < cutoff:
+                        os.remove(file)
+                except OSError:
+                    continue
+            try:
+                os.rmdir(folder)
+            except OSError:
+                pass
 
     def _handle_research_genre_t_update(self, completed_commission_count):
         """更新 T 类科研任务的剩余委托计数。
