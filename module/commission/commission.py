@@ -814,7 +814,7 @@ class RewardCommission(UI, InfoHandler):
                 GetItemsStatistics, ITEM_GRIDS_1_ODD, ITEM_GRIDS_1_EVEN,
                 ITEM_GRIDS_2, ITEM_GRIDS_3
             )
-            from module.statistics.item import ItemGrid, Item
+            from module.statistics.item import ItemGrid, Item, AmountOcr
             from module.statistics.cl1_database import db as cl1_db
             from module.combat.assets import GET_ITEMS_1, GET_ITEMS_2, GET_ITEMS_3
             from module.handler.assets import INFO_BAR_1
@@ -828,6 +828,9 @@ class RewardCommission(UI, InfoHandler):
             grid = ItemGrid(None, {}, template_area=(40, 21, 89, 70), amount_area=(50, 71, 91, 92))
             grid.item_class = Item
             grid.similarity = 0.92
+            # 过滤图标底部伸入数量区域的白色碎块，避免被 OCR 误读为数字（如 11 → 211）
+            grid.amount_ocr = AmountOcr([], threshold=96, name='Amount_ocr')
+            grid.amount_ocr.remove_fragments = True
             grid.load_template_folder(template_folder)
 
             if not grid.templates:
@@ -873,7 +876,9 @@ class RewardCommission(UI, InfoHandler):
                         logger.info(f'[委托-收入] 截图[{idx}] 不是获取物品页面，跳过')
                         continue
                     reward_images.append(image)
-                    grid.predict(image)
+                    # 关闭 crop_to_text 裁剪：碎片过滤后数字右对齐在原图中，
+                    # 裁剪会改变文字位置导致 OCR 误读（如 71 → 2）
+                    grid.predict(image, amount_trim=False)
                     recognized = []
                     for item in grid.items:
                         if item.is_known_item() and item.name not in ('DefaultItem',):

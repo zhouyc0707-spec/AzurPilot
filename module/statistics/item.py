@@ -16,16 +16,52 @@ from module.statistics.utils import *
 
 ITEM_AMOUNT_MAX = {
     'Chip': 50,
+    'CognitiveChips': 50,
     'Gem': 100,
+    'Gems': 100,
     'Cube': 20,
+    'Cubes': 20,
     'Oil': 1000,
     'Coin': 5000,
+    'Coins': 5000,
 }
 DEFAULT_AMOUNT_MAX = 2147483645
 
 
+def remove_small_fragments(image, min_height=6, min_area=10):
+    """移除高度过低的小连通域，保留完整的数字笔画。
+
+    专为 ``extract_white_letters`` 的输出设计（深色文字 + 白色背景）。
+    获取物品截图中物品图标底部会伸入数量区域，其白色纹理被提取后
+    形成高度 1~3px 的碎块，可能被 OCR 误读为数字（例如 11 被读成 211）。
+    数字笔画高度 11px 以上，按高度与面积过滤可安全剔除碎块。
+
+    Args:
+        image (np.ndarray): extract_white_letters 输出的灰度图。
+        min_height: 保留组件的最小高度。
+        min_area: 保留组件的最小面积。
+
+    Returns:
+        np.ndarray: 移除碎块后的灰度图。
+    """
+    import cv2
+
+    binary = (image < 120).astype(np.uint8)
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
+    keep = np.zeros_like(binary)
+    for i in range(1, n):
+        _, _, _, h, area = stats[i]
+        if h >= min_height and area >= min_area:
+            keep[labels == i] = 1
+    image = image.copy()
+    image[keep == 0] = 255
+    return image
+
+
 class AmountOcr(Digit):
     MAX_RETRY = 3
+    # 是否过滤图标边缘碎块。委托收入场景开启，战斗掉落统计保持原行为。
+    remove_fragments = False
 
     def pre_process(self, image):
         """预处理图像，提取白色文字。
@@ -37,15 +73,20 @@ class AmountOcr(Digit):
             np.ndarray: 处理后的二值图像，形状为 (width, height)。
         """
         image = extract_white_letters(image, threshold=self.threshold)
+        if self.remove_fragments:
+            image = remove_small_fragments(image)
         return image.astype(np.uint8)
 
-    def ocr_with_validation(self, image, item_name=None, direct_ocr=False):
+    def ocr_with_validation(self, image, item_name=None, direct_ocr=False, trim=True):
         """带验证的 OCR 识别，超过最大值时重试最多 3 次，仍无效则截断末位数字。
 
         Args:
             image: 单张图像或图像列表。
             item_name: 物品名称，用于查找最大值。
             direct_ocr: 为 True 时跳过裁剪。
+            trim: 是否调用 crop_to_text 裁剪空白边框。委托收入场景关闭：
+                图标碎片过滤后数字右对齐在原图中，裁剪会改变文字位置，
+                导致 OCR 结果变差（例如 71 被读成 2）。
 
         Returns:
             int: 验证后的数量。
@@ -56,7 +97,8 @@ class AmountOcr(Digit):
             images = [self.pre_process(image)]
         else:
             images = [self.pre_process(crop(image, area)) for area in self.buttons]
-        images = [crop_to_text(i) for i in images]
+        if trim:
+            images = [crop_to_text(i) for i in images]
 
         result_str = self.cnocr.atomic_ocr_for_single_lines(images, self.alphabet)[0]
         amount = self.after_process(result_str)
@@ -80,12 +122,13 @@ class AmountOcr(Digit):
 
         return amount
 
-    def ocr_batch_with_validation(self, image_list, item_names=None, direct_ocr=True):
+    def ocr_batch_with_validation(self, image_list, item_names=None, direct_ocr=True, trim=True):
         """批量带验证的 OCR 识别，逐个物品进行校验。
 
         Args:
             item_names: 物品名称列表，与图像列表一一对应。
             direct_ocr: 为 True 时跳过裁剪。
+            trim: 是否调用 crop_to_text 裁剪空白边框。
 
         Returns:
             list[int]: 验证后的数量列表。
@@ -95,7 +138,7 @@ class AmountOcr(Digit):
 
         results = []
         for image, item_name in zip(image_list, item_names):
-            amount = self.ocr_with_validation(image, item_name=item_name, direct_ocr=direct_ocr)
+            amount = self.ocr_with_validation(image, item_name=item_name, direct_ocr=direct_ocr, trim=trim)
             results.append(amount)
         return results
 
@@ -420,7 +463,7 @@ class ItemGrid:
         else:
             return None
 
-    def predict(self, image, name=True, amount=True, cost=False, price=False, tag=False):
+    def predict(self, image, name=True, amount=True, cost=False, price=False, tag=False, amount_trim=True):
         """预测截图中所有物品的属性。
 
         Args:
@@ -430,6 +473,8 @@ class ItemGrid:
             cost (bool): 是否预测购买消耗类型。
             price (bool): 是否预测物品价格。
             tag (bool): 是否预测物品标签（如 'catchup'、'bonus'）。
+            amount_trim (bool): 数量 OCR 前是否调用 crop_to_text 裁剪。
+                委托收入场景配合碎片过滤关闭裁剪，避免文字位置变化导致误读。
 
         Returns:
             list[Item]: 物品列表。
@@ -443,7 +488,7 @@ class ItemGrid:
             amount_images = [item.crop(self.amount_area) for item in self.items]
             item_names = [item.name for item in self.items]
             amount_list = self.amount_ocr.ocr_batch_with_validation(
-                amount_images, item_names=item_names, direct_ocr=True
+                amount_images, item_names=item_names, direct_ocr=True, trim=amount_trim
             )
             for item, a in zip(self.items, amount_list):
                 item.amount = a
