@@ -60,6 +60,9 @@ COMMISSION_SWITCH.add_state('daily', COMMISSION_DAILY)
 COMMISSION_SWITCH.add_state('urgent', COMMISSION_URGENT)
 COMMISSION_SCROLL = Scroll(COMMISSION_SCROLL_AREA, color=(247, 211, 66), name='COMMISSION_SCROLL')
 
+# 委托收益截图保留张数：与统计页「最近委托记录」的 50 条上限保持一致
+COMMISSION_REWARD_SCREENSHOT_KEEP = 50
+
 
 def lines_detect(image):
     """检测委托列表中各委托条目底部的白色分割线位置。
@@ -990,34 +993,47 @@ class RewardCommission(UI, InfoHandler):
             paths.append(f'{instance}/{month_str}/{filename}')
             logger.info(f'[委托-收入] 已保存收益截图: log/commission_rewards/{instance}/{month_str}/{filename}')
 
-        self._prune_old_commission_reward_screenshots(instance)
+        self._prune_commission_reward_screenshots(instance)
         return paths
 
     @staticmethod
-    def _prune_old_commission_reward_screenshots(instance, retention_days=90):
-        """清理实例目录下超过保留期的委托收益截图。
+    def _prune_commission_reward_screenshots(instance, max_keep=None):
+        """清理实例目录下超量的委托收益截图，仅保留最近 max_keep 张。
 
-        委托截图按天累计占用磁盘，默认保留 90 天；清理在每次保存截图后
-        顺带执行，并移除清空后的空月份目录。
+        截图保留张数与统计页「最近委托记录」的 50 条上限对应：
+        超过保留数量的旧截图按修改时间排序删除，并移除清空后的
+        空月份目录。清理在每次保存截图后顺带执行。
 
         Args:
             instance: 配置实例名称。
-            retention_days: 保留天数，默认 90。
+            max_keep: 保留的截图张数上限，默认使用模块级常量
+                COMMISSION_REWARD_SCREENSHOT_KEEP。
         """
         import os
+
+        if max_keep is None:
+            max_keep = COMMISSION_REWARD_SCREENSHOT_KEEP
 
         base = os.path.join('.', 'log', 'commission_rewards', instance)
         if not os.path.isdir(base):
             return
-        cutoff = current_time().timestamp() - retention_days * 86400
-        for folder, _, files in os.walk(base, topdown=False):
-            for name in files:
+        files = []
+        for folder, _, names in os.walk(base):
+            for name in names:
+                if not name.endswith('.png'):
+                    continue
                 file = os.path.join(folder, name)
                 try:
-                    if os.path.getmtime(file) < cutoff:
-                        os.remove(file)
+                    files.append((os.path.getmtime(file), file))
                 except OSError:
                     continue
+        files.sort(reverse=True)
+        for _, file in files[max_keep:]:
+            try:
+                os.remove(file)
+            except OSError:
+                continue
+        for folder, _, _ in os.walk(base, topdown=False):
             try:
                 os.rmdir(folder)
             except OSError:
