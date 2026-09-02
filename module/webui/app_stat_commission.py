@@ -136,16 +136,6 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
                         margin: 0 !important;
                         padding: 0 !important;
                     }
-                    .commission-income-recent-shot summary::-webkit-details-marker {
-                        display: none;
-                    }
-                    .commission-income-recent-shot summary {
-                        list-style: none;
-                    }
-                    .commission-income-recent-shot img {
-                        border: 1px solid rgba(128, 128, 128, 0.25) !important;
-                        margin: 4px 0 !important;
-                    }
                 </style>
                 <div id="commission_income_container" class="commission-income-summary" style="padding: 0; width: 100%; box-sizing: border-box;">
                 """
@@ -290,37 +280,27 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
                     else '<span style="opacity: 0.6;">--</span>'
                 )
 
-                # 查看截图按钮：使用原生 details/summary 折叠组件，
-                # 不依赖 JS 与 PyWebIO 回调，避免被 sanitize 影响。
+                # 查看截图按钮：跟随在记录行内，点击在新标签页单独打开截图
                 shots = entry.get("screenshots") or []
-                shot_html = ""
-                if shots:
-                    shot_label = (
-                        f"查看截图 ×{len(shots)}" if len(shots) > 1 else "查看截图"
-                    )
-                    images_html = "".join(
-                        f'<a href="/static/commission_rewards/{escape(shot, quote=True)}" target="_blank" rel="noopener">'
-                        f'<img loading="lazy" src="/static/commission_rewards/{escape(shot, quote=True)}" alt="委托收益截图" '
-                        f'style="max-width: 100%; height: auto; display: block; margin: 4px 0; border-radius: 4px; '
-                        f'border: 1px solid rgba(128, 128, 128, 0.25);"></a>'
-                        for shot in shots
-                    )
-                    shot_html = (
-                        f'<details class="commission-income-recent-shot" style="margin: 2px 0 6px 86px;">'
-                        f'<summary style="cursor: pointer; display: inline-block; font-size: 0.7rem; '
-                        f'padding: 2px 10px; border: 1px solid rgba(128, 128, 128, 0.35); border-radius: 4px; '
-                        f'background: rgba(128, 128, 128, 0.08); color: inherit; user-select: none;">{shot_label}</summary>'
-                        f'<div style="margin-top: 6px; max-width: 480px;">{images_html}</div>'
-                        f"</details>"
+                shot_links = ""
+                for shot_index, shot in enumerate(shots):
+                    label = "查看截图" if shot_index == 0 else f"查看截图{shot_index + 1}"
+                    shot_links += (
+                        f'<a href="/static/commission_rewards/{escape(shot, quote=True)}" '
+                        f'target="_blank" rel="noopener" '
+                        f'style="flex-shrink: 0; margin-left: 8px; font-size: 0.7rem; padding: 2px 10px; '
+                        f'border: 1px solid rgba(128, 128, 128, 0.35); border-radius: 4px; '
+                        f'background: rgba(128, 128, 128, 0.08); color: inherit; text-decoration: none; '
+                        f'cursor: pointer;">{label}</a>'
                     )
 
                 html += (
                     f'<div class="commission-income-recent-row" style="display: flex; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(128, 128, 128, 0.1);">'
                     f'<span style="opacity: 0.65; min-width: 80px; font-size: 12px;">{time_str}</span>'
                     f'<span style="flex: 1;">{items_str}</span>'
+                    f"{shot_links}"
                     f"</div>"
                 )
-                html += shot_html
             html += "</div>"
 
         html += f'<p style="font-size: 0.75rem; opacity: 0.5; margin-top: 10px;">{t("Gui.Stat.CommissionIncomeTotalCommissions", value=summary["total_commissions"])}</p>'
