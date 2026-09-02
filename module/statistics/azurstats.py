@@ -307,6 +307,59 @@ class AzurStats:
         logger.info('[Statistics] 本地统计数据更新成功: azurstat_meowofficer_farming.csv')
 
     @staticmethod
+    def get_meow_loot_monthly_totals(device_id=None):
+        """按侵蚀等级汇总本月耄耋相接掉落总数（金菜、深渊坐标、隐秘坐标）。
+
+        从本地掉落明细库 opsi_items 按当前月份汇总，供统计页
+        「本月金菜/深渊/隐秘」列使用。物品前缀与
+        meowofficer_farming_map 保持一致：Plate 为金菜，
+        CoordinateAbyssal 为深渊坐标，CoordinateObscure 为隐秘坐标。
+
+        Args:
+            device_id: 设备标识，默认当前设备。
+
+        Returns:
+            dict[int, dict[str, int]]: 侵蚀等级(1-6) →
+                {'Plate': int, 'CoordinateAbyssal': int, 'CoordinateObscure': int}
+        """
+        now = datetime.now()
+        month_start = int(datetime(now.year, now.month, 1).timestamp())
+        if device_id is None:
+            device_id = get_device_id()
+        AzurStats._ensure_local_db()
+
+        tracked = {"Plate", "CoordinateAbyssal", "CoordinateObscure"}
+        totals = {
+            h: {"Plate": 0, "CoordinateAbyssal": 0, "CoordinateObscure": 0}
+            for h in range(1, 7)
+        }
+        try:
+            with sqlite3.connect(AzurStats.LOCAL_DB) as conn:
+                rows = conn.execute(
+                    "SELECT hazard_level, item, SUM(amount) FROM opsi_items "
+                    "WHERE genre='opsi_meowfficer_farming' AND created_at >= ? AND device_id = ? "
+                    "GROUP BY hazard_level, item",
+                    (month_start, device_id),
+                ).fetchall()
+            for h_raw, item, total in rows:
+                try:
+                    h = int(h_raw)
+                except (TypeError, ValueError):
+                    continue
+                if h not in totals or not total:
+                    continue
+                for prefix in tracked:
+                    if str(item or "").startswith(prefix):
+                        try:
+                            totals[h][prefix] += int(total)
+                        except (TypeError, ValueError):
+                            pass
+                        break
+        except Exception:
+            logger.warning('[Statistics] 查询本月耄耋相接掉落总数失败', exc_info=True)
+        return totals
+
+    @staticmethod
     def _ensure_local_parser():
         from module.azur_stats.scene.operation_siren import SceneOperationSiren
         return SceneOperationSiren
