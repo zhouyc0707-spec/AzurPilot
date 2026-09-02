@@ -54,6 +54,26 @@ class TestRemoveSmallFragments(unittest.TestCase):
         result = remove_small_fragments(image)
         self.assertEqual((result == 255).all(), True)
 
+    def test_small_pieces_near_digit_are_kept(self):
+        """靠近大组件的小组件视为字形部件保留（如 7 的顶横）。"""
+        image = self._make_image()
+        image[4:18, 25:38] = 0  # 数字主体
+        image[0:3, 33:39] = 0  # 顶部小横（距主体 1px）
+        image[11:19, 38:41] = 0  # 右侧小竖（紧贴主体）
+        result = remove_small_fragments(image)
+        self.assertEqual((result[0:3, 33:39] == 0).all(), True)
+        self.assertEqual((result[11:19, 38:41] == 0).all(), True)
+
+    def test_far_fragments_still_removed_even_near_digit(self):
+        """远离主体的碎片仍被删除，靠近主体的保留，两者互不干扰。"""
+        image = self._make_image()
+        image[4:18, 25:38] = 0  # 数字主体
+        image[2:5, 4:9] = 0  # 远处碎片（x 距离 > keep_margin）
+        image[0:3, 33:39] = 0  # 近处部件
+        result = remove_small_fragments(image)
+        self.assertEqual((result[2:5, 4:9] == 255).all(), True)
+        self.assertEqual((result[0:3, 33:39] == 0).all(), True)
+
     def test_input_is_not_mutated(self):
         """不应修改输入图像。"""
         image = self._make_image()

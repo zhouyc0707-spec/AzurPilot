@@ -28,31 +28,55 @@ ITEM_AMOUNT_MAX = {
 DEFAULT_AMOUNT_MAX = 2147483645
 
 
-def remove_small_fragments(image, min_height=6, min_area=10):
-    """移除高度过低的小连通域，保留完整的数字笔画。
+def remove_small_fragments(image, min_height=6, min_area=10, keep_margin=3):
+    """移除远离数字主体的孤立小连通域（图标碎块），保留字形部件。
 
     专为 ``extract_white_letters`` 的输出设计（深色文字 + 白色背景）。
     获取物品截图中物品图标底部会伸入数量区域，其白色纹理被提取后
-    形成高度 1~3px 的碎块，可能被 OCR 误读为数字（例如 11 被读成 211）。
-    数字笔画高度 11px 以上，按高度与面积过滤可安全剔除碎块。
+    形成远离数字的碎块，可能被 OCR 误读为数字（例如 11 被读成 211）。
+
+    数字笔画高度 11px 以上，但部分字形（如 7 的顶横、笔画的衬线）
+    会被拆分成高度不足 6px 的小组件。因此只有「远离」所有大组件
+    的小组件才按碎片删除；靠近大组件的小组件视为字形部件保留，
+    避免误删导致 77 被读成 27。
 
     Args:
         image (np.ndarray): extract_white_letters 输出的灰度图。
-        min_height: 保留组件的最小高度。
-        min_area: 保留组件的最小面积。
+        min_height: 大组件的最小高度。
+        min_area: 大组件的最小面积。
+        keep_margin: 小组件与大组件包围盒的间距容差（px）。
 
     Returns:
-        np.ndarray: 移除碎块后的灰度图。
+        np.ndarray: 移除孤立碎块后的灰度图。
     """
     import cv2
 
     binary = (image < 120).astype(np.uint8)
     n, labels, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
-    keep = np.zeros_like(binary)
+    big = []
+    small = []
     for i in range(1, n):
-        _, _, _, h, area = stats[i]
+        x, y, w, h, area = stats[i]
+        bbox = (int(x), int(y), int(x + w), int(y + h))
         if h >= min_height and area >= min_area:
-            keep[labels == i] = 1
+            big.append((i, bbox))
+        else:
+            small.append((i, bbox))
+
+    keep = np.zeros_like(binary)
+    for label, _ in big:
+        keep[labels == label] = 1
+    for label, (x1, y1, x2, y2) in small:
+        for _, (bx1, by1, bx2, by2) in big:
+            # 小组件包围盒外扩 keep_margin 后与大组件相交，视为字形部件
+            if (
+                x1 - keep_margin < bx2
+                and x2 + keep_margin > bx1
+                and y1 - keep_margin < by2
+                and y2 + keep_margin > by1
+            ):
+                keep[labels == label] = 1
+                break
     image = image.copy()
     image[keep == 0] = 255
     return image
