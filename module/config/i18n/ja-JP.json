@@ -6528,7 +6528,7 @@
       "MonthlyPurchasedAP": "今月購入AP: {value}",
       "MeowDataCollectionTitle": "短猫データ収集",
       "MeowRounds": "短猫ラウンド数",
-      "AvgMeowRoundTime": "平均短猫ラウンド時間",
+      "AvgMeowRoundTime": "平均ラウンド時間",
       "MeowLootTitle": "短猫収穫",
       "NoMeowDataNotice": "短猫収穫データがありません。1回実行後に自動生成されます",
       "RoundUnit": " ラウンド",

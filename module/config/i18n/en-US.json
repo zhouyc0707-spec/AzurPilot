@@ -6528,7 +6528,7 @@
       "MonthlyPurchasedAP": "Monthly purchased AP: {value}",
       "MeowDataCollectionTitle": "Meow Session Data",
       "MeowRounds": "Meow Rounds",
-      "AvgMeowRoundTime": "Avg Meow Round Time",
+      "AvgMeowRoundTime": "Avg Round Time",
       "MeowLootTitle": "Meow Session Loot",
       "NoMeowDataNotice": "No local Meowfficer farming loot data yet. It will be generated automatically after a run.",
       "RoundUnit": " rounds",
