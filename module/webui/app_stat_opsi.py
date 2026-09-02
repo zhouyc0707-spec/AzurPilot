@@ -354,16 +354,16 @@ class OpsiStatisticsMixin(WebUIMixinBase):
                         hazard_level,
                         int(meow_data.get("battle_count", 0) or 0),
                         meow_rounds,
-                        avg_battle_time_str,
-                        avg_time_str,
+                        plate_total,
+                        abyssal_total,
+                        obscure_total,
                         siren_count,
                         siren_rate_str,
                         akashi_encounters,
                         akashi_rate_str,
                         avg_ap_str,
-                        plate_total,
-                        abyssal_total,
-                        obscure_total,
+                        avg_battle_time_str,
+                        avg_time_str,
                     ]
                 )
         except Exception:
@@ -384,16 +384,16 @@ class OpsiStatisticsMixin(WebUIMixinBase):
                 t("Gui.Stat.HazardLevel"),
                 t("Gui.Stat.BattleCount"),
                 t("Gui.Stat.MeowRounds"),
-                t("Gui.Stat.AvgBattleTimeHeader"),
-                t("Gui.Stat.AvgMeowRoundTime"),
+                "本月金菜",
+                "本月深渊",
+                "本月隐秘",
                 t("Gui.Stat.SirenResearchDevices"),
                 t("Gui.Stat.SirenResearchRate"),
                 t("Gui.Stat.AkashiEncounters"),
                 t("Gui.Stat.AkashiRate"),
                 t("Gui.Stat.AverageAP"),
-                "本月金菜",
-                "本月深渊",
-                "本月隐秘",
+                t("Gui.Stat.AvgBattleTimeHeader"),
+                t("Gui.Stat.AvgMeowRoundTime"),
             ]
 
             put_html(
