@@ -295,9 +295,9 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
                     )
 
                 html += (
-                    f'<div class="commission-income-recent-row" style="display: flex; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(128, 128, 128, 0.1);">'
-                    f'<span style="opacity: 0.65; min-width: 80px; font-size: 12px;">{time_str}</span>'
-                    f'<span style="flex: 1;">{items_str}</span>'
+                    f'<div class="commission-income-recent-row" style="display: flex; align-items: center; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid rgba(128, 128, 128, 0.1);">'
+                    f'<span style="opacity: 0.65; min-width: 80px; font-size: 12px; flex-shrink: 0;">{time_str}</span>'
+                    f'<span>{items_str}</span>'
                     f"{shot_links}"
                     f"</div>"
                 )
