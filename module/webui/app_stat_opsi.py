@@ -287,6 +287,9 @@ class OpsiStatisticsMixin(WebUIMixinBase):
     def _build_meow_rows(self, cl1_db, instance_name):
         meow_rows = []
         try:
+            from module.statistics.azurstats import AzurStats
+
+            loot_totals = AzurStats.get_meow_loot_monthly_totals()
             now = current_time()
             for hazard_level in (3, 5):
                 meow_data = cl1_db.get_meow_stats(
@@ -323,6 +326,28 @@ class OpsiStatisticsMixin(WebUIMixinBase):
                     f"{siren_rate * 100:.2f}%" if meow_effective_rounds > 0 else "-"
                 )
 
+                # 明石统计（按侵蚀等级，与侵蚀一表格口径一致）
+                akashi_encounters = int(
+                    meow_data.get("akashi_encounters", 0) or 0
+                )
+                akashi_ap = int(meow_data.get("akashi_ap", 0) or 0)
+                akashi_rate_str = (
+                    f"{akashi_encounters / meow_rounds * 100:.2f}%"
+                    if meow_rounds > 0
+                    else "-"
+                )
+                avg_ap_str = (
+                    str(int(akashi_ap / akashi_encounters + 0.5))
+                    if akashi_encounters > 0
+                    else "-"
+                )
+
+                # 本月掉落总数（金菜、深渊坐标、隐秘坐标）
+                loot = loot_totals.get(hazard_level, {})
+                plate_total = int(loot.get("Plate", 0) or 0)
+                abyssal_total = int(loot.get("CoordinateAbyssal", 0) or 0)
+                obscure_total = int(loot.get("CoordinateObscure", 0) or 0)
+
                 meow_rows.append(
                     [
                         meow_data.get("month", "-"),
@@ -333,6 +358,12 @@ class OpsiStatisticsMixin(WebUIMixinBase):
                         avg_time_str,
                         siren_count,
                         siren_rate_str,
+                        akashi_encounters,
+                        akashi_rate_str,
+                        avg_ap_str,
+                        plate_total,
+                        abyssal_total,
+                        obscure_total,
                     ]
                 )
         except Exception:
@@ -357,6 +388,12 @@ class OpsiStatisticsMixin(WebUIMixinBase):
                 t("Gui.Stat.AvgMeowRoundTime"),
                 t("Gui.Stat.SirenResearchDevices"),
                 t("Gui.Stat.SirenResearchRate"),
+                t("Gui.Stat.AkashiEncounters"),
+                t("Gui.Stat.AkashiRate"),
+                t("Gui.Stat.AverageAP"),
+                "本月金菜",
+                "本月深渊",
+                "本月隐秘",
             ]
 
             put_html(
