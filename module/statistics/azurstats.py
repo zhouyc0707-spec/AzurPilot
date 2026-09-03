@@ -307,25 +307,33 @@ class AzurStats:
         logger.info('[Statistics] 本地统计数据更新成功: azurstat_meowofficer_farming.csv')
 
     @staticmethod
-    def get_meow_loot_monthly_totals(device_id=None):
-        """按侵蚀等级汇总本月耄耋相接掉落总数。
+    def get_meow_loot_monthly_totals(device_id=None, year=None, month=None):
+        """按侵蚀等级汇总指定月份（默认本月）的耄耋相接掉落总数。
 
-        从本地掉落明细库 opsi_items 按当前月份汇总，供统计页
-        「本月耄耋相接收获」表格使用。分类口径：
+        从本地掉落明细库 opsi_items 汇总，供统计页
+        「本月/历史耄耋相接收获」表格使用。分类口径：
         Plate 为金菜（装备强化板）、GearDesignPlan*T5 为彩图纸、
         OrdnanceTestingReport*T4 为金机密、CoordinateObscure 为隐秘、
         CoordinateAbyssal 为深渊、CatT3 为金猫箱。
 
         Args:
             device_id: 设备标识，默认当前设备。
+            year: 年份，默认当前年。
+            month: 月份（1-12），默认当前月。
 
         Returns:
             dict[int, dict[str, int]]: 侵蚀等级(1-6) → 分类计数字典，
                 键为 Plate / GearDesignPlanT5 / OrdnanceTestingReportT4 /
                 CoordinateObscure / CoordinateAbyssal / CatT3。
         """
-        now = datetime.now()
-        month_start = int(datetime(now.year, now.month, 1).timestamp())
+        if year is None or month is None:
+            now = datetime.now()
+            year, month = now.year, now.month
+        month_start = int(datetime(year, month, 1).timestamp())
+        if month == 12:
+            month_end = int(datetime(year + 1, 1, 1).timestamp())
+        else:
+            month_end = int(datetime(year, month + 1, 1).timestamp())
         if device_id is None:
             device_id = get_device_id()
         AzurStats._ensure_local_db()
@@ -359,9 +367,9 @@ class AzurStats:
             with sqlite3.connect(AzurStats.LOCAL_DB) as conn:
                 rows = conn.execute(
                     "SELECT hazard_level, item, SUM(amount) FROM opsi_items "
-                    "WHERE genre='opsi_meowfficer_farming' AND created_at >= ? AND device_id = ? "
-                    "GROUP BY hazard_level, item",
-                    (month_start, device_id),
+                    "WHERE genre='opsi_meowfficer_farming' AND created_at >= ? AND created_at < ? "
+                    "AND device_id = ? GROUP BY hazard_level, item",
+                    (month_start, month_end, device_id),
                 ).fetchall()
             for h_raw, item, total in rows:
                 try:
@@ -378,8 +386,42 @@ class AzurStats:
                 except (TypeError, ValueError):
                     pass
         except Exception:
-            logger.warning('[Statistics] 查询本月耄耋相接掉落总数失败', exc_info=True)
+            logger.warning('[Statistics] 查询耄耋相接掉落总数失败', exc_info=True)
         return totals
+
+    @staticmethod
+    def get_meow_loot_available_months(device_id=None, limit=24):
+        """返回掉落明细库中存在耄耋相接数据的月份列表（从新到旧）。
+
+        Args:
+            device_id: 设备标识，默认当前设备。
+            limit: 最多返回的月份数。
+
+        Returns:
+            list[tuple[int, int]]: [(year, month), ...] 从新到旧。
+        """
+        if device_id is None:
+            device_id = get_device_id()
+        AzurStats._ensure_local_db()
+        try:
+            with sqlite3.connect(AzurStats.LOCAL_DB) as conn:
+                rows = conn.execute(
+                    "SELECT DISTINCT strftime('%Y-%m', created_at, 'unixepoch') AS ym "
+                    "FROM opsi_items WHERE genre='opsi_meowfficer_farming' AND device_id = ? "
+                    "ORDER BY ym DESC LIMIT ?",
+                    (device_id, limit),
+                ).fetchall()
+        except Exception:
+            logger.warning('[Statistics] 查询耄耋相接掉落月份列表失败', exc_info=True)
+            return []
+        months = []
+        for (ym,) in rows:
+            try:
+                y_str, m_str = ym.split("-")
+                months.append((int(y_str), int(m_str)))
+            except (ValueError, AttributeError):
+                continue
+        return months
 
     @staticmethod
     def _ensure_local_parser():

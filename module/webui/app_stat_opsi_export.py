@@ -2,10 +2,15 @@
 
 from module.webui.app_dependencies import (
     Path,
+    close_popup,
     current_time,
     datetime,
     logger,
+    popup,
+    put_button,
+    put_buttons,
     put_html,
+    put_row,
     t,
     toast,
     use_scope,
@@ -57,9 +62,18 @@ class OpsiExportMixin(WebUIMixinBase):
                 put_html(build_muted_notice(t("Gui.Stat.NoMeowDataNotice")))
 
     def _render_monthly_meow_loot(self, AzurStats):
-        """渲染「本月耄耋相接收获」表格（按侵蚀等级分列的月度掉落总数）。"""
-        loot_totals = AzurStats.get_meow_loot_monthly_totals()
-        month_str = current_time().strftime("%Y-%m")
+        """渲染「本月/历史耄耋相接收获」表格（按侵蚀等级分列的月度掉落总数）。"""
+        view_month = getattr(self, "_meow_loot_month", None)
+        if view_month is None:
+            now = current_time()
+            year, month = now.year, now.month
+            title = "本月耄耋相接收获"
+        else:
+            year, month = view_month
+            title = f"历史耄耋相接收获（{year:04d}-{month:02d}）"
+        month_str = f"{year:04d}-{month:02d}"
+
+        loot_totals = AzurStats.get_meow_loot_monthly_totals(year=year, month=month)
         rows = []
         for hazard_level in (3, 5):
             loot = loot_totals.get(hazard_level, {})
@@ -78,7 +92,7 @@ class OpsiExportMixin(WebUIMixinBase):
 
         put_html(
             build_title_block(
-                "本月耄耋相接收获",
+                title,
                 margin_top=20,
                 margin_bottom=8,
             )
@@ -98,6 +112,56 @@ class OpsiExportMixin(WebUIMixinBase):
                 rows,
             )
         )
+        put_row(
+            [
+                put_button(
+                    "查看历史月份",
+                    onclick=self._show_meow_loot_month_picker,
+                    small=True,
+                ),
+                put_button(
+                    "回到本月",
+                    onclick=self._reset_meow_loot_month,
+                    small=True,
+                ),
+            ]
+        )
+
+    def _show_meow_loot_month_picker(self):
+        """弹出历史月份选择器。"""
+        from module.statistics.azurstats import AzurStats
+
+        now = current_time()
+        months = AzurStats.get_meow_loot_available_months()
+        buttons = [
+            {
+                "label": f"本月（{now.year:04d}-{now.month:02d}）",
+                "value": None,
+                "color": "primary",
+            }
+        ]
+        buttons += [
+            {"label": f"{y:04d}-{m:02d}", "value": (y, m), "color": "secondary"}
+            for y, m in months
+            if (y, m) != (now.year, now.month)
+        ]
+        if len(buttons) == 1:
+            toast("暂无历史月份数据")
+            return
+
+        with popup("选择查看月份"):
+            put_buttons(buttons, onclick=lambda v: self._set_meow_loot_month(v))
+
+    def _set_meow_loot_month(self, value):
+        """设置要查看的月份并重绘收获表格。value 为 None 表示本月。"""
+        close_popup()
+        self._meow_loot_month = value
+        self._render_meowofficer_farming()
+
+    def _reset_meow_loot_month(self):
+        """回到本月视图。"""
+        self._meow_loot_month = None
+        self._render_meowofficer_farming()
 
     def _export_opsi_csv(self, save_to_desktop: bool = True):
         import io
