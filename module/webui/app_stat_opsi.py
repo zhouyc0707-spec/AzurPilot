@@ -287,9 +287,6 @@ class OpsiStatisticsMixin(WebUIMixinBase):
     def _build_meow_rows(self, cl1_db, instance_name):
         meow_rows = []
         try:
-            from module.statistics.azurstats import AzurStats
-
-            loot_totals = AzurStats.get_meow_loot_monthly_totals()
             now = current_time()
             for hazard_level in (3, 5):
                 meow_data = cl1_db.get_meow_stats(
@@ -342,21 +339,12 @@ class OpsiStatisticsMixin(WebUIMixinBase):
                     else "-"
                 )
 
-                # 本月掉落总数（金菜、深渊坐标、隐秘坐标）
-                loot = loot_totals.get(hazard_level, {})
-                plate_total = int(loot.get("Plate", 0) or 0)
-                abyssal_total = int(loot.get("CoordinateAbyssal", 0) or 0)
-                obscure_total = int(loot.get("CoordinateObscure", 0) or 0)
-
                 meow_rows.append(
                     [
                         meow_data.get("month", "-"),
                         hazard_level,
                         int(meow_data.get("battle_count", 0) or 0),
                         meow_rounds,
-                        plate_total,
-                        abyssal_total,
-                        obscure_total,
                         siren_count,
                         siren_rate_str,
                         akashi_encounters,
@@ -384,9 +372,6 @@ class OpsiStatisticsMixin(WebUIMixinBase):
                 t("Gui.Stat.HazardLevel"),
                 t("Gui.Stat.BattleCount"),
                 t("Gui.Stat.MeowRounds"),
-                "本月金菜",
-                "本月深渊",
-                "本月隐秘",
                 t("Gui.Stat.SirenResearchDevices"),
                 t("Gui.Stat.SirenResearchRate"),
                 t("Gui.Stat.AkashiEncounters"),

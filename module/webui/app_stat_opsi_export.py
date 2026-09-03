@@ -28,6 +28,8 @@ class OpsiExportMixin(WebUIMixinBase):
         from module.statistics.azurstats import AzurStats
 
         with use_scope("meow_loot_scope", clear=True):
+            self._render_monthly_meow_loot(AzurStats)
+
             all_data = AzurStats.load_meowofficer_farming()
             meow_rows = []
             for row in all_data:
@@ -53,6 +55,49 @@ class OpsiExportMixin(WebUIMixinBase):
                 )
             else:
                 put_html(build_muted_notice(t("Gui.Stat.NoMeowDataNotice")))
+
+    def _render_monthly_meow_loot(self, AzurStats):
+        """渲染「本月耄耋相接收获」表格（按侵蚀等级分列的月度掉落总数）。"""
+        loot_totals = AzurStats.get_meow_loot_monthly_totals()
+        month_str = current_time().strftime("%Y-%m")
+        rows = []
+        for hazard_level in (3, 5):
+            loot = loot_totals.get(hazard_level, {})
+            rows.append(
+                [
+                    month_str,
+                    hazard_level,
+                    int(loot.get("Plate", 0) or 0),
+                    int(loot.get("GearDesignPlanT5", 0) or 0),
+                    int(loot.get("OrdnanceTestingReportT4", 0) or 0),
+                    int(loot.get("CoordinateObscure", 0) or 0),
+                    int(loot.get("CoordinateAbyssal", 0) or 0),
+                    int(loot.get("CatT3", 0) or 0),
+                ]
+            )
+
+        put_html(
+            build_title_block(
+                "本月耄耋相接收获",
+                margin_top=20,
+                margin_bottom=8,
+            )
+        )
+        put_html(
+            build_simple_table(
+                [
+                    t("Gui.Stat.Month"),
+                    t("Gui.Stat.HazardLevel"),
+                    "金菜",
+                    "彩图纸",
+                    "金机密",
+                    "隐秘",
+                    "深渊",
+                    "金猫箱",
+                ],
+                rows,
+            )
+        )
 
     def _export_opsi_csv(self, save_to_desktop: bool = True):
         import io

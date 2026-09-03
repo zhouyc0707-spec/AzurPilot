@@ -308,19 +308,21 @@ class AzurStats:
 
     @staticmethod
     def get_meow_loot_monthly_totals(device_id=None):
-        """按侵蚀等级汇总本月耄耋相接掉落总数（金菜、深渊坐标、隐秘坐标）。
+        """按侵蚀等级汇总本月耄耋相接掉落总数。
 
         从本地掉落明细库 opsi_items 按当前月份汇总，供统计页
-        「本月金菜/深渊/隐秘」列使用。物品前缀与
-        meowofficer_farming_map 保持一致：Plate 为金菜，
-        CoordinateAbyssal 为深渊坐标，CoordinateObscure 为隐秘坐标。
+        「本月耄耋相接收获」表格使用。分类口径：
+        Plate 为金菜（装备强化板）、GearDesignPlan*T5 为彩图纸、
+        OrdnanceTestingReport*T4 为金机密、CoordinateObscure 为隐秘、
+        CoordinateAbyssal 为深渊、CatT3 为金猫箱。
 
         Args:
             device_id: 设备标识，默认当前设备。
 
         Returns:
-            dict[int, dict[str, int]]: 侵蚀等级(1-6) →
-                {'Plate': int, 'CoordinateAbyssal': int, 'CoordinateObscure': int}
+            dict[int, dict[str, int]]: 侵蚀等级(1-6) → 分类计数字典，
+                键为 Plate / GearDesignPlanT5 / OrdnanceTestingReportT4 /
+                CoordinateObscure / CoordinateAbyssal / CatT3。
         """
         now = datetime.now()
         month_start = int(datetime(now.year, now.month, 1).timestamp())
@@ -328,11 +330,31 @@ class AzurStats:
             device_id = get_device_id()
         AzurStats._ensure_local_db()
 
-        tracked = {"Plate", "CoordinateAbyssal", "CoordinateObscure"}
-        totals = {
-            h: {"Plate": 0, "CoordinateAbyssal": 0, "CoordinateObscure": 0}
-            for h in range(1, 7)
-        }
+        # 分类规则：前缀 + 可选等级后缀（彩图纸只取 T5、金机密只取 T4）
+        def classify(name: str):
+            if name.startswith("CatT3"):
+                return "CatT3"
+            if name.startswith("GearDesignPlan") and name.endswith("T5"):
+                return "GearDesignPlanT5"
+            if name.startswith("OrdnanceTestingReport") and name.endswith("T4"):
+                return "OrdnanceTestingReportT4"
+            if name.startswith("CoordinateObscure"):
+                return "CoordinateObscure"
+            if name.startswith("CoordinateAbyssal"):
+                return "CoordinateAbyssal"
+            if name.startswith("Plate"):
+                return "Plate"
+            return None
+
+        keys = (
+            "Plate",
+            "GearDesignPlanT5",
+            "OrdnanceTestingReportT4",
+            "CoordinateObscure",
+            "CoordinateAbyssal",
+            "CatT3",
+        )
+        totals = {h: {k: 0 for k in keys} for h in range(1, 7)}
         try:
             with sqlite3.connect(AzurStats.LOCAL_DB) as conn:
                 rows = conn.execute(
@@ -348,13 +370,13 @@ class AzurStats:
                     continue
                 if h not in totals or not total:
                     continue
-                for prefix in tracked:
-                    if str(item or "").startswith(prefix):
-                        try:
-                            totals[h][prefix] += int(total)
-                        except (TypeError, ValueError):
-                            pass
-                        break
+                key = classify(str(item or ""))
+                if key is None:
+                    continue
+                try:
+                    totals[h][key] += int(total)
+                except (TypeError, ValueError):
+                    pass
         except Exception:
             logger.warning('[Statistics] 查询本月耄耋相接掉落总数失败', exc_info=True)
         return totals
