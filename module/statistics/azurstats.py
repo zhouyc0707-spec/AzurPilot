@@ -17,6 +17,7 @@ import uuid
 from datetime import datetime
 from dataclasses import asdict
 
+import inflection
 import numpy as np
 
 from module.base.utils import save_image
@@ -553,3 +554,23 @@ class AzurStats:
             else:
                 local = 'upload' in method_value and genre in self.LOCAL_GENRES
         return DropImage(stat=self, genre=genre, save=save, local=local, info=info)
+
+    @staticmethod
+    def opsi_save_method(task_command, method):
+        """大世界掉落记录方式定制：仅耄耋相接任务允许本地保存截图。
+
+        侵蚀1练级、每日、隐秘、深渊等任务频率高、截图量大，
+        本地保存会占用大量磁盘。这些任务即使配置了保存模式，
+        也保留其上传等行为、仅去掉本地保存。
+
+        Args:
+            task_command: 任务名（如 'OpsiMeowfficerFarming'）。
+            method: DropRecord_OpsiRecord 配置值。
+
+        Returns:
+            str: 过滤后的记录方式。
+        """
+        genre = inflection.underscore(task_command)
+        if genre != 'opsi_meowfficer_farming' and method and 'save' in str(method):
+            return str(method).replace('save_and_upload', 'upload').replace('save', 'do_not')
+        return method

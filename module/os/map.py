@@ -1389,7 +1389,10 @@ class OSMap(OSFleet, Map, GlobeCamera, StorageHandler, StrategicSearchHandler):
         finished_combat = 0
         with self.stat.new(
             genre=inflection.underscore(self.config.task.command),
-            method=self.config.DropRecord_OpsiRecord,
+            method=self.stat.opsi_save_method(
+                self.config.task.command,
+                self.config.DropRecord_OpsiRecord,
+            ),
         ) as drop:
             while 1:
                 combat = self.os_auto_search_run(drop, interrupt=interrupt)
@@ -1446,7 +1449,10 @@ class OSMap(OSFleet, Map, GlobeCamera, StorageHandler, StrategicSearchHandler):
 
         with self.stat.new(
             genre=inflection.underscore(self.config.task.command),
-            method=self.config.DropRecord_OpsiRecord,
+            method=self.stat.opsi_save_method(
+                self.config.task.command,
+                self.config.DropRecord_OpsiRecord,
+            ),
         ) as drop:
             try:
                 combat = self.os_auto_search_run(drop, strategic=True)
