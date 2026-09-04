@@ -74,6 +74,23 @@ class TestRemoveSmallFragments(unittest.TestCase):
         self.assertEqual((result[2:5, 4:9] == 255).all(), True)
         self.assertEqual((result[0:3, 33:39] == 0).all(), True)
 
+    def test_gray_pixels_preserved_by_default(self):
+        """默认只删除碎片像素，中灰像素（字形抗锯齿边缘）保留。"""
+        image = self._make_image()
+        image[4:18, 25:38] = 0  # 数字主体
+        image[10:15, 4:9] = 180  # 中灰像素，不属于任何组件
+        result = remove_small_fragments(image)
+        self.assertEqual(result[10:15, 4:9].tolist(), image[10:15, 4:9].tolist())
+
+    def test_fill_background_erases_gray(self):
+        """fill_background=True 时非保留像素全部置为背景。"""
+        image = self._make_image()
+        image[4:18, 25:38] = 0
+        image[10:15, 4:9] = 180
+        result = remove_small_fragments(image, fill_background=True)
+        self.assertEqual((result[10:15, 4:9] == 255).all(), True)
+        self.assertEqual((result[4:18, 25:38] == 0).all(), True)
+
     def test_input_is_not_mutated(self):
         """不应修改输入图像。"""
         image = self._make_image()

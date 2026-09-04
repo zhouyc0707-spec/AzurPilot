@@ -28,7 +28,7 @@ ITEM_AMOUNT_MAX = {
 DEFAULT_AMOUNT_MAX = 2147483645
 
 
-def remove_small_fragments(image, min_height=6, min_area=10, keep_margin=3):
+def remove_small_fragments(image, min_height=6, min_area=10, keep_margin=3, fill_background=False):
     """移除远离数字主体的孤立小连通域（图标碎块），保留字形部件。
 
     专为 ``extract_white_letters`` 的输出设计（深色文字 + 白色背景）。
@@ -40,11 +40,18 @@ def remove_small_fragments(image, min_height=6, min_area=10, keep_margin=3):
     的小组件才按碎片删除；靠近大组件的小组件视为字形部件保留，
     避免误删导致 77 被读成 27。
 
+    默认只删除被判定为碎片组件的像素，其余像素（包括字形抗锯齿
+    边缘的中灰像素）原样保留；若把非组件像素一并置为背景，会抹掉
+    7 等字形的边缘细节导致 72 被读成 2。fill_background=True 时恢复
+    旧行为（非保留像素全部置白），用于首轮读数超上限后的兜底重试：
+    抹灰能消除部分图标残影（如残影被读成 S 使 18 变成 518）。
+
     Args:
         image (np.ndarray): extract_white_letters 输出的灰度图。
         min_height: 大组件的最小高度。
         min_area: 大组件的最小面积。
         keep_margin: 小组件与大组件包围盒的间距容差（px）。
+        fill_background: 是否将非保留像素全部置为背景。
 
     Returns:
         np.ndarray: 移除孤立碎块后的灰度图。
@@ -66,7 +73,9 @@ def remove_small_fragments(image, min_height=6, min_area=10, keep_margin=3):
     keep = np.zeros_like(binary)
     for label, _ in big:
         keep[labels == label] = 1
+    remove = np.zeros_like(binary)
     for label, (x1, y1, x2, y2) in small:
+        near_big = False
         for _, (bx1, by1, bx2, by2) in big:
             # 小组件包围盒外扩 keep_margin 后与大组件相交，视为字形部件
             if (
@@ -75,10 +84,17 @@ def remove_small_fragments(image, min_height=6, min_area=10, keep_margin=3):
                 and y1 - keep_margin < by2
                 and y2 + keep_margin > by1
             ):
-                keep[labels == label] = 1
+                near_big = True
                 break
+        if near_big:
+            keep[labels == label] = 1
+        else:
+            remove[labels == label] = 1
+
     image = image.copy()
-    image[keep == 0] = 255
+    image[remove == 1] = 255
+    if fill_background:
+        image[keep == 0] = 255
     return image
 
 
@@ -104,6 +120,11 @@ class AmountOcr(Digit):
     def ocr_with_validation(self, image, item_name=None, direct_ocr=False, trim=True):
         """带验证的 OCR 识别，超过最大值时重试最多 3 次，仍无效则截断末位数字。
 
+        首轮读数超过上限时，若启用了碎片过滤（remove_fragments），
+        改用「抹灰版」图像（fill_background=True）重试：抹灰能消除
+        靠近数字的图标残影（残影被误读成 S 会使 18 变成 518），
+        而首轮保留灰像素的读法可以保住 7 等字形的边缘细节。
+
         Args:
             image: 单张图像或图像列表。
             item_name: 物品名称，用于查找最大值。
@@ -119,8 +140,17 @@ class AmountOcr(Digit):
 
         if direct_ocr:
             images = [self.pre_process(image)]
+            alt_images = None
+            if self.remove_fragments:
+                alt_images = [
+                    remove_small_fragments(
+                        extract_white_letters(image, threshold=self.threshold),
+                        fill_background=True,
+                    )
+                ]
         else:
             images = [self.pre_process(crop(image, area)) for area in self.buttons]
+            alt_images = None
         if trim:
             images = [crop_to_text(i) for i in images]
 
@@ -132,7 +162,10 @@ class AmountOcr(Digit):
 
         for retry in range(self.MAX_RETRY):
             logger.warning(f'{item_name} amount {amount} 超过最大值 {max_val}, retry {retry + 1}/{self.MAX_RETRY}')
-            result_str = self.cnocr.atomic_ocr_for_single_lines(images, self.alphabet)[0]
+            if alt_images is not None:
+                result_str = self.cnocr.atomic_ocr_for_single_lines(alt_images, self.alphabet)[0]
+            else:
+                result_str = self.cnocr.atomic_ocr_for_single_lines(images, self.alphabet)[0]
             amount = self.after_process(result_str)
             if amount <= max_val:
                 logger.info(f'{item_name} amount validated after {retry + 1} retries: {amount}')
