@@ -74,13 +74,33 @@ class OpsiExportMixin(WebUIMixinBase):
         month_str = f"{year:04d}-{month:02d}"
 
         loot_totals = AzurStats.get_meow_loot_monthly_totals(year=year, month=month)
+        from module.statistics.cl1_database import db as cl1_db
+
+        instance_name = getattr(self, "alas_name", None)
+        if not instance_name:
+            from module.config.utils import alas_instance
+
+            all_instances = alas_instance()
+            instance_name = all_instances[0] if all_instances else "default"
+
         rows = []
         for hazard_level in (3, 5):
             loot = loot_totals.get(hazard_level, {})
+            # 战斗轮次：与数据收集表一致的有效轮次口径
+            try:
+                meow_data = cl1_db.get_meow_stats(
+                    instance_name, year, month, hazard_level=hazard_level
+                )
+                rounds = round(float(meow_data.get("effective_rounds", 0) or 0), 1)
+                if abs(rounds - int(rounds)) < 1e-6:
+                    rounds = int(rounds)
+            except Exception:
+                rounds = 0
             rows.append(
                 [
                     month_str,
                     hazard_level,
+                    rounds,
                     int(loot.get("Plate", 0) or 0),
                     int(loot.get("GearDesignPlanT5", 0) or 0),
                     int(loot.get("OrdnanceTestingReportT4", 0) or 0),
@@ -102,6 +122,7 @@ class OpsiExportMixin(WebUIMixinBase):
                 [
                     t("Gui.Stat.Month"),
                     t("Gui.Stat.HazardLevel"),
+                    t("Gui.Stat.BattleRounds"),
                     "金菜",
                     "彩图纸",
                     "金机密",
