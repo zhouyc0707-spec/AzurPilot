@@ -100,8 +100,13 @@ def remove_small_fragments(image, min_height=6, min_area=10, keep_margin=3, fill
 
 class AmountOcr(Digit):
     MAX_RETRY = 3
-    # 是否过滤图标边缘碎块。委托收入场景开启，战斗掉落统计保持原行为。
+    # 是否过滤图标边缘碎块。委托收入与自律寻敌奖励场景开启，
+    # 战斗掉落统计保持原行为。
     remove_fragments = False
+    # 碎片过滤的组件阈值，子类可按图像的缩放域覆盖
+    # （如自律寻敌奖励页的数量区域先放大 2.67 倍）。
+    fragment_min_height = 6
+    fragment_min_area = 10
 
     def pre_process(self, image):
         """预处理图像，提取白色文字。
@@ -114,7 +119,11 @@ class AmountOcr(Digit):
         """
         image = extract_white_letters(image, threshold=self.threshold)
         if self.remove_fragments:
-            image = remove_small_fragments(image)
+            image = remove_small_fragments(
+                image,
+                min_height=self.fragment_min_height,
+                min_area=self.fragment_min_area,
+            )
         return image.astype(np.uint8)
 
     def ocr_with_validation(self, image, item_name=None, direct_ocr=False, trim=True):
@@ -145,6 +154,8 @@ class AmountOcr(Digit):
                 alt_images = [
                     remove_small_fragments(
                         extract_white_letters(image, threshold=self.threshold),
+                        min_height=self.fragment_min_height,
+                        min_area=self.fragment_min_area,
                         fill_background=True,
                     )
                 ]

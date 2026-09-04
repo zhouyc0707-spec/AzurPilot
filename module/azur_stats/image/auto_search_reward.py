@@ -41,6 +41,13 @@ class AutoSearchItem(Item):
 
 
 class AutoSearchAmount(AmountOcr):
+    # 奖励页数量区域先放大 2.67 倍再提取文字：
+    # 数字组件高度 24~27px，图标边缘碎片 ≤8px。
+    # 开启碎片过滤避免碎片被误读为数字（如特别兑换券 3 被读成 23）。
+    remove_fragments = True
+    fragment_min_height = 15
+    fragment_min_area = 30
+
     def pre_process(self, image):
         # group.amount_area = (35, 51, 63, 63)
         # Target height: 32
