@@ -24,6 +24,9 @@ ITEM_AMOUNT_MAX = {
     'Oil': 1000,
     'Coin': 5000,
     'Coins': 5000,
+    # 军械测试报告 T4 单次掉落 1~5，超上限读数（如 1 被读成 51）
+    # 会触发抹灰版兜底重试修正
+    'OrdnanceTestingReportT4': 50,
 }
 DEFAULT_AMOUNT_MAX = 2147483645
 
@@ -148,12 +151,15 @@ class AmountOcr(Digit):
         max_val = ITEM_AMOUNT_MAX.get(item_name, DEFAULT_AMOUNT_MAX)
 
         if direct_ocr:
-            images = [self.pre_process(image)]
+            pre_image = self.pre_process(image)
+            images = [pre_image]
             alt_images = None
             if self.remove_fragments:
+                # 兜底图必须基于 pre_process 的结果（含子类可能的缩放）构建，
+                # 直接对原始图像提取会绕过缩放导致识别失效
                 alt_images = [
                     remove_small_fragments(
-                        extract_white_letters(image, threshold=self.threshold),
+                        pre_image,
                         min_height=self.fragment_min_height,
                         min_area=self.fragment_min_area,
                         fill_background=True,
