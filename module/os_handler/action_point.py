@@ -434,10 +434,10 @@ class ActionPointHandler(UI, MapEventHandler):
             cost (int): 自定义行动力消耗值。
             keep_current_ap (bool): 是否先检查行动力，避免在不足时使用剩余行动力。
             check_rest_ap (bool): 如果当前行动力与今天可获得的剩余行动力之和超过 200，则跳过 keep_current_ap 检查。
-            avoid_ap_overflow (bool): 防溢出模式（侵蚀1练级专用）。开箱后行动力
-                达到或超过 200 满值的箱子不开启，改为等待行动力自然恢复
-                （每 10 分钟 1 点），避免 100 行动力箱等大箱在接近满值时
-                造成溢出浪费（当前行动力 100 时也不开 100 箱）。
+            avoid_ap_overflow (bool): 防溢出模式（侵蚀1练级专用）。
+                当前行动力达到 100 即直接开工、不开启行动力箱（100-119 区间
+                不再等待自然恢复，也不开 100 箱造成溢出）；低于 100 时开箱后
+                达到或超过 200 满值的箱子不开启。
 
         Returns:
             bool: 是否处理成功。
@@ -481,6 +481,13 @@ class ActionPointHandler(UI, MapEventHandler):
             # 拥有足够的行动力
             if self._action_point_current >= cost:
                 logger.info('[大世界-行动点] 行动点充足')
+                self.action_point_quit()
+                return True
+
+            # 防溢出模式下，行动力达到 100 即直接开工，不开启行动力箱。
+            # 100-119 区间不再等待自然恢复，也不会开启 100 箱造成溢出。
+            if avoid_ap_overflow and self._action_point_current >= 100:
+                logger.info('[大世界-行动点] 当前行动力达到100，直接开工不开启行动力箱')
                 self.action_point_quit()
                 return True
 
