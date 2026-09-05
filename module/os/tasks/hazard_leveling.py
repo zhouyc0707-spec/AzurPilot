@@ -265,8 +265,8 @@ class OpsiHazard1Leveling(CoinTaskMixin, OSMap):
             raise
 
         # 侵蚀 1 练级时，行动力优先用于此任务，而非耄耋相接。
-        # 防溢出：开箱后超过 200 满值的箱子不开启（如仅剩 100 箱且当前
-        # 行动力 > 100 时），改为等待行动力自然恢复，避免溢出浪费。
+        # 防溢出：开箱后达到或超过 200 满值的箱子不开启（如仅剩 100 箱
+        # 且当前行动力 ≥100 时），改为等待行动力自然恢复，避免溢出浪费。
         self.action_point_set(
             cost=120, keep_current_ap=True, check_rest_ap=True,
             avoid_ap_overflow=True,
