@@ -424,7 +424,7 @@ class ActionPointHandler(UI, MapEventHandler):
             if self.handle_map_event():
                 continue
 
-    def handle_action_point(self, zone, pinned, cost=None, keep_current_ap=True, check_rest_ap=False):
+    def handle_action_point(self, zone, pinned, cost=None, keep_current_ap=True, check_rest_ap=False, avoid_ap_overflow=False):
         """
         处理行动力，包括购买和使用药剂。
 
@@ -434,6 +434,9 @@ class ActionPointHandler(UI, MapEventHandler):
             cost (int): 自定义行动力消耗值。
             keep_current_ap (bool): 是否先检查行动力，避免在不足时使用剩余行动力。
             check_rest_ap (bool): 如果当前行动力与今天可获得的剩余行动力之和超过 200，则跳过 keep_current_ap 检查。
+            avoid_ap_overflow (bool): 防溢出模式（侵蚀1练级专用）。开箱后行动力
+                超过 200 满值的箱子不开启，改为等待行动力自然恢复（每 10 分钟 1 点），
+                避免 100 行动力箱等大箱在接近满值时造成溢出浪费。
 
         Returns:
             bool: 是否处理成功。
@@ -501,8 +504,13 @@ class ActionPointHandler(UI, MapEventHandler):
 
             # 排序行动力药剂
             box = []
+            overflow_skipped = False
             for index in [3, 2, 1]:
                 if self._action_point_box[index] > 0:
+                    # 防溢出：开箱后行动力超过 200 满值的箱子跳过，等自然恢复
+                    if avoid_ap_overflow and self._action_point_current + ACTION_POINT_BOX[index] > 200:
+                        overflow_skipped = True
+                        continue
                     if self._action_point_current + ACTION_POINT_BOX[index] >= 200:
                         box.append(index)
                     else:
@@ -522,6 +530,14 @@ class ActionPointHandler(UI, MapEventHandler):
                         total=self._action_point_total,
                         preserve=self.config.OS_ACTION_POINT_PRESERVE,
                     )
+            elif overflow_skipped:
+                logger.info('[大世界-行动点] 开箱会超出200满值，跳过开箱等待行动力自然恢复')
+                self.action_point_quit()
+                raise ActionPointLimit(
+                    current=self._action_point_current,
+                    total=self._action_point_total,
+                    cost=cost,
+                )
             else:
                 logger.info('[大世界-行动点] 没有更多行动点箱子')
                 self.action_point_quit()
@@ -556,7 +572,7 @@ class ActionPointHandler(UI, MapEventHandler):
             if self.appear_then_click(AUTO_SEARCH_REWARD, offset=(50, 50)):
                 continue
 
-    def action_point_set(self, zone=None, pinned=None, cost=None, keep_current_ap=True, check_rest_ap=False):
+    def action_point_set(self, zone=None, pinned=None, cost=None, keep_current_ap=True, check_rest_ap=False, avoid_ap_overflow=False):
         """
         设置行动力，进入行动力弹窗并处理。
 
@@ -566,6 +582,7 @@ class ActionPointHandler(UI, MapEventHandler):
             cost (int): 自定义行动力消耗值。
             keep_current_ap (bool): 是否先检查行动力，避免在不足时使用剩余行动力。
             check_rest_ap (bool): 如果当前行动力与今天可获得的剩余行动力之和超过 200，则跳过 keep_current_ap 检查。
+            avoid_ap_overflow (bool): 防溢出模式，见 handle_action_point。
 
         Returns:
             bool: 是否处理成功。
@@ -574,7 +591,7 @@ class ActionPointHandler(UI, MapEventHandler):
             ActionPointLimit: 行动力不足时抛出。
         """
         self.action_point_enter()
-        if not self.handle_action_point(zone, pinned, cost, keep_current_ap, check_rest_ap):
+        if not self.handle_action_point(zone, pinned, cost, keep_current_ap, check_rest_ap, avoid_ap_overflow):
             return False
 
         # 等待行动力弹窗关闭
