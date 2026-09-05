@@ -47,6 +47,9 @@ class AutoSearchAmount(AmountOcr):
     remove_fragments = True
     fragment_min_height = 15
     fragment_min_area = 30
+    # 数字间水平间隙 ≤4px，图标竖笔触与数字间隙 ≥19px，
+    # 用右侧数字簇规则排除图标笔触（如 2 被读成 12）。
+    fragment_max_digit_gap = 10
 
     def pre_process(self, image):
         # group.amount_area = (35, 51, 63, 63)

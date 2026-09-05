@@ -27,12 +27,16 @@ ITEM_AMOUNT_MAX = {
     # 军械测试报告 T4 单次掉落 1~5，超上限读数（如 1 被读成 51）
     # 会触发抹灰版兜底重试修正
     'OrdnanceTestingReportT4': 50,
+    # 民用电子元件单次掉落 1~10，超上限读数（如 3 被读成 73）
+    # 会触发抹灰版兜底重试修正
+    'Consumer_Grade_Electronic_Components': 50,
 }
 DEFAULT_AMOUNT_MAX = 2147483645
 
 
-def remove_small_fragments(image, min_height=6, min_area=10, keep_margin=3, fill_background=False):
-    """移除远离数字主体的孤立小连通域（图标碎块），保留字形部件。
+def remove_small_fragments(image, min_height=6, min_area=10, keep_margin=3,
+                           fill_background=False, max_digit_gap=None):
+    """移除远离数字主体的孤立连通域（图标碎块），保留字形部件。
 
     专为 ``extract_white_letters`` 的输出设计（深色文字 + 白色背景）。
     获取物品截图中物品图标底部会伸入数量区域，其白色纹理被提取后
@@ -46,8 +50,11 @@ def remove_small_fragments(image, min_height=6, min_area=10, keep_margin=3, fill
     默认只删除被判定为碎片组件的像素，其余像素（包括字形抗锯齿
     边缘的中灰像素）原样保留；若把非组件像素一并置为背景，会抹掉
     7 等字形的边缘细节导致 72 被读成 2。fill_background=True 时恢复
-    旧行为（非保留像素全部置白），用于首轮读数超上限后的兜底重试：
-    抹灰能消除部分图标残影（如残影被读成 S 使 18 变成 518）。
+    旧行为（非保留像素全部置白），用于首轮读数超上限后的兜底重试。
+
+    max_digit_gap 非空时启用「右侧数字簇」规则：从最右侧的大组件
+    出发，水平间隙不超过阈值的组件串成数字簇，其余大组件视为
+    图标笔触删除（如图标中的竖笔画被误读成 1 使 2 变 12）。
 
     Args:
         image (np.ndarray): extract_white_letters 输出的灰度图。
@@ -55,6 +62,7 @@ def remove_small_fragments(image, min_height=6, min_area=10, keep_margin=3, fill
         min_area: 大组件的最小面积。
         keep_margin: 小组件与大组件包围盒的间距容差（px）。
         fill_background: 是否将非保留像素全部置为背景。
+        max_digit_gap: 右侧数字簇的最大水平间隙（px），None 表示关闭。
 
     Returns:
         np.ndarray: 移除孤立碎块后的灰度图。
@@ -73,10 +81,33 @@ def remove_small_fragments(image, min_height=6, min_area=10, keep_margin=3, fill
         else:
             small.append((i, bbox))
 
+    remove = np.zeros_like(binary)
+
+    # 右侧数字簇：从最右大组件出发按间隙阈值传递聚类，簇外的大组件
+    # 视为图标笔触删除（数字间水平间隙小，图标笔触与数字间间隙大）
+    if big and max_digit_gap is not None:
+        cluster = [max(big, key=lambda t: t[1][2])]
+        changed = True
+        while changed:
+            changed = False
+            for i, bbox in big:
+                if (i, bbox) in cluster:
+                    continue
+                x1, _, x2, _ = bbox
+                for _, (cx1, _, cx2, _) in cluster:
+                    gap = max(cx1 - x2, x1 - cx2)
+                    if gap <= max_digit_gap:
+                        cluster.append((i, bbox))
+                        changed = True
+                        break
+        for i, bbox in big:
+            if (i, bbox) not in cluster:
+                remove[labels == i] = 1
+        big = cluster
+
     keep = np.zeros_like(binary)
     for label, _ in big:
         keep[labels == label] = 1
-    remove = np.zeros_like(binary)
     for label, (x1, y1, x2, y2) in small:
         near_big = False
         for _, (bx1, by1, bx2, by2) in big:
@@ -110,6 +141,9 @@ class AmountOcr(Digit):
     # （如自律寻敌奖励页的数量区域先放大 2.67 倍）。
     fragment_min_height = 6
     fragment_min_area = 10
+    # 右侧数字簇的最大水平间隙（None 关闭）。奖励页图标中的竖笔画
+    # 会被误读成数字（如 2 变 12），按间隙阈值把它排除在数字簇外。
+    fragment_max_digit_gap = None
 
     def pre_process(self, image):
         """预处理图像，提取白色文字。
@@ -126,6 +160,7 @@ class AmountOcr(Digit):
                 image,
                 min_height=self.fragment_min_height,
                 min_area=self.fragment_min_area,
+                max_digit_gap=self.fragment_max_digit_gap,
             )
         return image.astype(np.uint8)
 
@@ -162,6 +197,7 @@ class AmountOcr(Digit):
                         pre_image,
                         min_height=self.fragment_min_height,
                         min_area=self.fragment_min_area,
+                        max_digit_gap=self.fragment_max_digit_gap,
                         fill_background=True,
                     )
                 ]
