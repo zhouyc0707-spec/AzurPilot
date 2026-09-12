@@ -59,7 +59,8 @@ _DARK_PALETTE: dict[str, str] = {
     "text": "#666666",
     "panel_border": "#3a3a55",
     "panel_shadow": "none",
-    "ap_line": "#64b5f6",
+    # 行动力主曲线按涨跌分段着色（涨红跌绿），主色与 inc 保持一致
+    "ap_line": "#ef5350",
     "ap_soft": "rgba(100, 181, 246, 0.09)",
     "ap_point": "#64b5f6",
     "purple": "#ce93d8",
@@ -90,14 +91,15 @@ _DARK_PALETTE: dict[str, str] = {
     "flat": "#888888",
 }
 
-# 浅色主题族：文字与曲线使用更深一档的颜色，保证浅底上的对比度。
+# 浅色主题族：涨跌色在浅底上要更深一档，保证对比度。
 _LIGHT_PALETTE: dict[str, str] = {
     "bg": "#ffffff",
     "grid": "#eceef3",
     "text": "#8b8f98",
     "panel_border": "#dde0e5",
     "panel_shadow": "0 1px 2px rgba(0, 0, 0, 0.06)",
-    "ap_line": "#3f51b5",
+    # 行动力主曲线按涨跌分段着色（涨红跌绿），因此主色取与 inc 一致的深红
+    "ap_line": "#d32f2f",
     "ap_soft": "rgba(63, 81, 181, 0.10)",
     "ap_point": "#5c6bc0",
     "purple": "#8e24aa",

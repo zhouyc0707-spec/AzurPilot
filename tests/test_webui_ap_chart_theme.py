@@ -58,9 +58,9 @@ class TestApChartPalette(unittest.TestCase):
 
         self.assertEqual("#1a1a2e", palette["bg"])
         self.assertEqual("#2a2a3e", palette["grid"])
-        self.assertEqual("#64b5f6", palette["ap_point"])
         self.assertEqual("#ce93d8", series_colors("dark")[1])
         self.assertEqual("#ef5350", palette["inc"])
+        self.assertEqual("#26a69a", palette["dec"])
 
     def test_series_colors_match_canvas_line_colors(self):
         """图例/概览颜色必须与画布上的曲线颜色一致，避免同一条序列两种颜色。"""
@@ -77,11 +77,18 @@ class TestApChartPalette(unittest.TestCase):
 
         self.assertEqual("#ffffff", palette["bg"])
         self.assertEqual("#dde0e5", palette["panel_border"])
-        # 曲线使用页面主色系，与 Light 主题的侧边栏/按钮色协调
-        self.assertEqual("#3f51b5", palette["ap_line"])
+        # 主曲线按涨跌着色，主色与 inc 一致
+        self.assertEqual(palette["inc"], palette["ap_line"])
         # 浅底上不能用深色主题的浅色辅助序列（黄/紫），需换成深一档
         self.assertNotEqual(palette_for_theme("dark")["yellow"], palette["yellow"])
         self.assertNotEqual(palette_for_theme("dark")["purple"], palette["purple"])
+
+    def test_ap_line_is_the_rising_color_in_both_families(self):
+        """曲线按涨跌分段着色，主色必须等于上升色，避免图例与曲线对不上。"""
+        for theme in ("default", "dark", "advanced_material"):
+            palette = palette_for_theme(theme)
+            self.assertEqual(palette["inc"], palette["ap_line"], theme)
+            self.assertNotEqual(palette["inc"], palette["dec"], theme)
 
     def test_high_contrast_series_colors_on_light_background(self):
         palette = palette_for_theme("default")
@@ -114,7 +121,15 @@ class TestApChartPalette(unittest.TestCase):
         self.assertNotIn("#1a1a2e", js)
         self.assertNotIn("#64b5f6", js)
         self.assertIn("var C = __PALETTE__;", js)
-        self.assertIn("var smoothLine = __SMOOTH_LINE__;", js)
+
+    def test_javascript_draws_rising_and_falling_segments(self):
+        """主曲线必须按涨跌逐段取色，不能退化成单色线。"""
+        js = (PROJECT_ROOT / "webapp" / "ap_chart.js").read_text(encoding="utf-8")
+
+        self.assertIn("ap[i] >= ap[i - 1] ? C.inc : C.dec", js)
+        self.assertNotIn("smoothLine", js)
+        # 单色曲线用的是 C.ap_line，出现即说明还有单色分支
+        self.assertNotIn("strokeStyle = C.ap_line", js)
 
     def test_panel_template_has_no_dark_only_colors(self):
         panel = (PROJECT_ROOT / "webapp" / "ap_chart_panel.html").read_text(
@@ -190,7 +205,7 @@ def _auxiliary_data():
 
 
 class TestApChartThemeRendering(unittest.TestCase):
-    def test_light_theme_renders_white_panel_and_smooth_line(self):
+    def test_light_theme_renders_white_panel(self):
         harness = _ChartRenderHarness()
         harness.theme = "default"
 
@@ -198,18 +213,23 @@ class TestApChartThemeRendering(unittest.TestCase):
 
         self.assertIn("background:#ffffff", html)
         self.assertNotIn("#1a1a2e", html)
-        self.assertIn("var smoothLine = true", js)
         self.assertIn('"bg": "#ffffff"', js)
+        # 浅色主题也用红绿涨跌色，只是色号更深
+        self.assertIn(f'"inc": "{palette_for_theme("default")["inc"]}"', js)
+        self.assertIn(f'"dec": "{palette_for_theme("default")["dec"]}"', js)
+        self.assertNotIn("smoothLine", js)
 
-    def test_dark_theme_renders_dark_panel_and_segmented_line(self):
+    def test_dark_theme_renders_dark_panel(self):
         harness = _ChartRenderHarness()
         harness.theme = "dark"
 
         html, js = harness.render(_chart_data(), _auxiliary_data())
 
         self.assertIn("background:#1a1a2e", html)
-        self.assertIn("var smoothLine = false", js)
         self.assertIn('"bg": "#1a1a2e"', js)
+        self.assertIn(f'"inc": "{palette_for_theme("dark")["inc"]}"', js)
+        self.assertIn(f'"dec": "{palette_for_theme("dark")["dec"]}"', js)
+        self.assertNotIn("smoothLine", js)
 
     def test_all_placeholders_are_substituted(self):
         harness = _ChartRenderHarness()

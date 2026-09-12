@@ -63,8 +63,6 @@
     var hasDistanceSeries = lineDistance && lineDistance.length > 0;
     // 调色板由 Python 侧按当前 WebUI 主题注入，画布无法读取 CSS 变量
     var C = __PALETTE__;
-    // 浅色主题用单色平滑曲线，深色主题保留红绿分段线
-    var smoothLine = __SMOOTH_LINE__;
 
     // 默认只显示行动力曲线，黄币/紫币/资产/海里数由用户点击图例按需显示
     var seriesVisible = [true, false, false, false, false];
@@ -310,64 +308,28 @@
         function xCenter(i) { return pad.l + candleSpace * (i + 0.5); }
 
         // ---- 行动力主曲线 ----
-        // 深色主题沿用原有红绿分段线（涨红跌绿）；浅色主题改用主题色单线 + 面积渐变，
-        // 避免深色底的配色贴到浅色卡片上显得突兀。
+        // 按涨跌逐段着色：上升段红色、下降段绿色，一眼能看出体力是在涨还是在掉。
+        // 折线视图与缩放明细视图共用，点稀疏时补画数据点（颜色同样跟随涨跌）。
         function drawApLine(xOf, yFn, start, end, opts) {
             var last = Math.min(end, nn) - 1;
             if (last < start) return;
             ctx.save();
-            ctx.lineWidth = smoothLine ? 1.8 : 1;
+            ctx.lineWidth = 1.8;
             ctx.lineJoin = "round";
             ctx.lineCap = "round";
-            if (smoothLine) {
-                // 面积渐变：自曲线向下淡出到画布底色
-                var baseY = pad.t + gH;
-                var gradient = ctx.createLinearGradient(0, pad.t, 0, baseY);
-                gradient.addColorStop(0, C.ap_soft);
-                gradient.addColorStop(1, "rgba(0,0,0,0)");
+            for (var i = start + 1; i <= last; i++) {
                 ctx.beginPath();
-                ctx.moveTo(xOf(start), yFn(ap[start]));
-                for (var i = start + 1; i <= last; i++) {
-                    ctx.lineTo(xOf(i), yFn(ap[i]));
-                }
-                ctx.lineTo(xOf(last), baseY);
-                ctx.lineTo(xOf(start), baseY);
-                ctx.closePath();
-                ctx.fillStyle = gradient;
-                ctx.fill();
-
-                // 单色主曲线
-                ctx.beginPath();
-                ctx.moveTo(xOf(start), yFn(ap[start]));
-                for (var i = start + 1; i <= last; i++) {
-                    ctx.lineTo(xOf(i), yFn(ap[i]));
-                }
-                ctx.strokeStyle = C.ap_line;
+                ctx.moveTo(xOf(i - 1), yFn(ap[i - 1]));
+                ctx.strokeStyle = ap[i] >= ap[i - 1] ? C.inc : C.dec;
+                ctx.lineTo(xOf(i), yFn(ap[i]));
                 ctx.stroke();
-
-                // 数据点：点多时按间隔抽样，避免糊成一片
-                var dotStep = opts && opts.dotStep ? opts.dotStep : 1;
-                for (var i = start; i <= last; i += dotStep) {
+            }
+            if (opts && opts.showDots) {
+                for (var i = start; i <= last; i++) {
                     ctx.beginPath();
-                    ctx.arc(xOf(i), yFn(ap[i]), 2, 0, Math.PI * 2);
-                    ctx.fillStyle = C.ap_point;
+                    ctx.arc(xOf(i), yFn(ap[i]), 1.5, 0, Math.PI * 2);
+                    ctx.fillStyle = (i > start && ap[i] < ap[i - 1]) ? C.dec : C.inc;
                     ctx.fill();
-                }
-            } else {
-                for (var i = start + 1; i <= last; i++) {
-                    ctx.beginPath();
-                    ctx.moveTo(xOf(i - 1), yFn(ap[i - 1]));
-                    ctx.strokeStyle = ap[i] >= ap[i - 1] ? C.inc : C.dec;
-                    ctx.lineTo(xOf(i), yFn(ap[i]));
-                    ctx.stroke();
-                }
-                if (opts && opts.showDots) {
-                    for (var i = start; i <= last; i++) {
-                        ctx.beginPath();
-                        ctx.arc(xOf(i), yFn(ap[i]), 1.5, 0, Math.PI * 2);
-                        ctx.fillStyle = (i > start && ap[i] < ap[i - 1]) ? C.dec : C.inc;
-                        ctx.fill();
-                    }
                 }
             }
             ctx.restore();
@@ -581,7 +543,7 @@
                     { style: { color: C.tip_muted, marginBottom: "4px", fontWeight: "600" }, parts: [{ type: 'text', value: labels[idx] }] },
                 ];
                 if (seriesVisible[0]) {
-                tooltipRows.push({ parts: [{ type: 'text', value: "体力: " }, { type: 'bold', value: String(ap[idx]), style: { color: C.ap_point } }] },
+                tooltipRows.push({ parts: [{ type: 'text', value: "体力: " }, { type: 'bold', value: String(ap[idx]), style: { color: C.tip_text } }] },
                     { parts: [{ type: 'text', value: "单次变化: " }, { type: 'bold', value: ds, style: { color: dc } }] });
                 }
 

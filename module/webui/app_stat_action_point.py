@@ -16,7 +16,6 @@ from module.webui.app_helpers import (
     read_webapp_template,
 )
 from module.webui.ap_chart_theme import (
-    is_light_theme,
     palette_for_theme,
     series_colors,
 )
@@ -723,10 +722,6 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
             )
             .replace("__PALETTE__", json.dumps(palette))
             .replace("__SERIES_COLORS__", json.dumps(series_colors(theme)))
-            .replace(
-                "__SMOOTH_LINE__",
-                "true" if is_light_theme(theme) else "false",
-            )
         )
         from pywebio.session import run_js
 
