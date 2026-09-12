@@ -801,12 +801,12 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
 /* --- 统计页两区域布局结束 --- */
 
 /* --- 统计页统一按钮样式开始 --- */
-/* 统计界面里的按钮全部沿用「刷新」那种白底描边：形状、高度、圆角、字号
-   完全一致，选中项也不换形状，只把底色换成浅主色、文字换主色加粗，
-   因此任意两个按钮并排都不会一高一低。
+/* 统计界面的按钮统一为「轻量胶囊」：中性态是白底细边，选中态用主题主色实心
+   填充，形成明确的主次层次——一眼能看出当前视图/区间/页码，其余按钮保持安静。
+   形状全部一致（30px 高、10px 圆角、12px 字号），并排时不会一高一低。
    配色走 --alas-entry-* 变量，四个主题自动跟随，不需要按主题各写一份。
    规则放在样式表里而不是运行时注入，页面一加载就生效。
-   选择器带作用域 id 前缀以压过高级材质主题里无前缀的带 !important 按钮规则。 */
+   选择器带作用域 id 前缀，以压过高级材质主题里无前缀且带 !important 的按钮规则。 */
 :is(#pywebio-scope-stat_panels_charts,
     #pywebio-scope-ap_chart,
     #pywebio-scope-statistics-toolbar,
@@ -819,15 +819,17 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
     height: 30px !important;
     padding: 0 14px !important;
     border: 1px solid var(--alas-entry-border) !important;
-    border-radius: 12px !important;
+    border-radius: 10px !important;
     background: var(--alas-entry-surface) !important;
     color: var(--alas-entry-text) !important;
     font-size: 12px !important;
     font-weight: 600 !important;
     line-height: 1 !important;
-    box-shadow: none !important;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, .03) !important;
     text-shadow: none !important;
-    transition: background-color .15s ease, color .15s ease, border-color .15s ease !important;
+    transition: background-color .15s ease, color .15s ease,
+                border-color .15s ease, box-shadow .15s ease,
+                transform .15s ease !important;
 }
 
 :is(#pywebio-scope-stat_panels_charts,
@@ -836,22 +838,11 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
     #pywebio-scope-opsi_stats,
     #pywebio-scope-meow_loot_scope,
     #pywebio-scope-commission_income) .btn:hover {
-    background: var(--alas-entry-accent-soft) !important;
-    border-color: var(--alas-entry-accent) !important;
-    color: var(--alas-entry-text) !important;
-}
-
-/* 选中态：当前视图、当前区间、分页当前页、弹窗里的「本月」 */
-:is(#pywebio-scope-stat_panels_charts,
-    #pywebio-scope-ap_chart,
-    #pywebio-scope-statistics-toolbar,
-    #pywebio-scope-opsi_stats,
-    #pywebio-scope-meow_loot_scope,
-    #pywebio-scope-commission_income) .btn-primary {
     border-color: var(--alas-entry-accent) !important;
     background: var(--alas-entry-accent-soft) !important;
     color: var(--alas-entry-accent) !important;
-    font-weight: 700 !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .08) !important;
+    transform: translateY(-1px);
 }
 
 :is(#pywebio-scope-stat_panels_charts,
@@ -859,15 +850,25 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
     #pywebio-scope-statistics-toolbar,
     #pywebio-scope-opsi_stats,
     #pywebio-scope-meow_loot_scope,
-    #pywebio-scope-commission_income) .btn-primary:hover {
-    border-color: var(--alas-entry-accent) !important;
-    background: var(--alas-entry-accent-soft) !important;
-    color: var(--alas-entry-accent) !important;
+    #pywebio-scope-commission_income) .btn:active {
+    box-shadow: none !important;
+    transform: translateY(0) scale(.97);
 }
 
-/* 分段控件（今日/本周/本月、图表视图）：外框由容器出，组内按钮只留分隔线。
-   组内按钮保留与普通按钮相同的底色，选中项填浅主色，因此任何主题下都看得出
-   分段边界。圆角由容器 overflow:hidden 裁掉外侧两角，无需 :first-child 例外。 */
+/* 键盘可达性：聚焦时给出主色描边环 */
+:is(#pywebio-scope-stat_panels_charts,
+    #pywebio-scope-ap_chart,
+    #pywebio-scope-statistics-toolbar,
+    #pywebio-scope-opsi_stats,
+    #pywebio-scope-meow_loot_scope,
+    #pywebio-scope-commission_income) .btn:focus-visible {
+    outline: none !important;
+    box-shadow: 0 0 0 3px var(--alas-entry-accent-soft) !important;
+}
+
+/* 分段控件（今日/本周/本月、图表视图）：外框由容器出，组内只留分隔线，
+   未选中保持白底，分段边界在任何主题下都清晰。
+   圆角由容器 overflow:hidden 裁掉外侧两角，无需 :first-child 例外。 */
 :is(#pywebio-scope-stat_panels_charts,
     #pywebio-scope-ap_chart,
     #pywebio-scope-statistics-toolbar,
@@ -877,9 +878,9 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
     display: inline-flex !important;
     overflow: hidden !important;
     border: 1px solid var(--alas-entry-border) !important;
-    border-radius: 12px !important;
+    border-radius: 10px !important;
     background: var(--alas-entry-surface) !important;
-    box-shadow: none !important;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, .03) !important;
 }
 
 :is(#pywebio-scope-stat_panels_charts,
@@ -890,8 +891,58 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
     #pywebio-scope-commission_income) .btn-group .btn {
     border: 0 !important;
     border-left: 1px solid var(--alas-entry-border) !important;
+    border-radius: 0 !important;
     background: var(--alas-entry-surface) !important;
     color: var(--alas-entry-text) !important;
+    box-shadow: none !important;
+}
+
+:is(#pywebio-scope-stat_panels_charts,
+    #pywebio-scope-ap_chart,
+    #pywebio-scope-statistics-toolbar,
+    #pywebio-scope-opsi_stats,
+    #pywebio-scope-meow_loot_scope,
+    #pywebio-scope-commission_income) .btn-group .btn:hover {
+    border-color: var(--alas-entry-border) !important;
+    background: var(--alas-entry-accent-soft) !important;
+    color: var(--alas-entry-accent) !important;
+    box-shadow: none !important;
+    transform: none;
+}
+
+/* 选中态必须写在分段控件规则之后：`:is(...) .btn-group .btn` 比
+   `:is(...) .btn-primary` 多一个类，特异性更高，否则组内选中项会被刷成白底。
+   当前视图、当前区间、分页当前页、弹窗里的「本月」都用这个状态：
+   主色实心 + 反色文字，形状与中性态完全一致。 */
+:is(#pywebio-scope-stat_panels_charts,
+    #pywebio-scope-ap_chart,
+    #pywebio-scope-statistics-toolbar,
+    #pywebio-scope-opsi_stats,
+    #pywebio-scope-meow_loot_scope,
+    #pywebio-scope-commission_income) .btn-group .btn-primary,
+:is(#pywebio-scope-stat_panels_charts,
+    #pywebio-scope-ap_chart,
+    #pywebio-scope-statistics-toolbar,
+    #pywebio-scope-opsi_stats,
+    #pywebio-scope-meow_loot_scope,
+    #pywebio-scope-commission_income) .btn-primary {
+    border-color: var(--alas-entry-accent) !important;
+    background: var(--alas-entry-accent) !important;
+    color: var(--alas-entry-on-accent) !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .14) !important;
+}
+
+:is(#pywebio-scope-stat_panels_charts,
+    #pywebio-scope-ap_chart,
+    #pywebio-scope-statistics-toolbar,
+    #pywebio-scope-opsi_stats,
+    #pywebio-scope-meow_loot_scope,
+    #pywebio-scope-commission_income) .btn-primary:hover {
+    border-color: var(--alas-entry-action-hover) !important;
+    background: var(--alas-entry-action-hover) !important;
+    color: var(--alas-entry-on-action) !important;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, .18) !important;
+    transform: translateY(-1px);
 }
 
 /* 首项不画自己的左分隔线，避免在外框内侧再压一条线 */
@@ -902,5 +953,15 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
     #pywebio-scope-meow_loot_scope,
     #pywebio-scope-commission_income) .btn-group .btn:first-child {
     border-left: 0 !important;
+}
+
+/* 与按钮同排的标题：用与按钮相同的固定高度居中，避免标题行盒比按钮高、
+   视觉上按钮被顶得偏上。 */
+#pywebio-scope-opsi_stats .stat-row-title {
+    display: flex !important;
+    align-items: center !important;
+    height: 30px !important;
+    margin: 0 !important;
+    line-height: 1 !important;
 }
 /* --- 统计页统一按钮样式结束 --- */

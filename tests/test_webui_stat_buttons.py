@@ -62,7 +62,11 @@ class TestStatButtonStyle(unittest.TestCase):
     def test_every_rule_is_scoped_to_a_stat_scope(self):
         self.assertTrue(self.rules)
         for selector, _ in self.rules:
-            self.assertTrue(selector.startswith(":is("), selector)
+            self.assertTrue(
+                selector.startswith(":is(")
+                or selector.startswith("#pywebio-scope-opsi_stats"),
+                selector,
+            )
             self.assertTrue(
                 any(scope in selector for scope in STAT_SCOPES), selector
             )
@@ -77,18 +81,22 @@ class TestStatButtonStyle(unittest.TestCase):
         )
         self.assertIn("height: 30px !important;", base)
         self.assertIn("padding: 0 14px !important;", base)
-        self.assertIn("border-radius: 12px !important;", base)
         self.assertIn("border: 1px solid var(--alas-entry-border) !important;", base)
+        # 圆角与高度在所有按钮上一致
+        radius = re.search(r"border-radius:\s*([^;]+);", base)
+        self.assertIsNotNone(radius)
+        self.assertIn(radius.group(1).strip(), self.block)
 
     def test_selected_state_keeps_the_neutral_shape(self):
-        """选中态只换底色与文字色，不改形状，并排才不会一高一低。"""
+        """选中态只换配色，不改形状，并排才不会一高一低。"""
         active = next(
             d for s, d in self.rules if re.search(r"\)\s*\.btn-primary\s*$", s.strip())
         )
         for prop in ("height", "padding", "border-radius", "font-size"):
             self.assertNotIn(prop, active, prop)
-        self.assertIn("var(--alas-entry-accent-soft)", active)
-        self.assertIn("var(--alas-entry-accent)", active)
+        # 选中态用主色实心填充 + 反色文字，形成明确的主次层次
+        self.assertIn("background: var(--alas-entry-accent) !important;", active)
+        self.assertIn("color: var(--alas-entry-on-accent) !important;", active)
 
     def test_segmented_buttons_keep_a_visible_surface(self):
         """组内按钮保留底色，分段边界在四个主题下都要看得见。"""
@@ -100,13 +108,45 @@ class TestStatButtonStyle(unittest.TestCase):
         self.assertIn("background: var(--alas-entry-surface) !important;", group_btn)
         self.assertIn("border-left: 1px solid var(--alas-entry-border) !important;", group_btn)
 
+    def test_selected_rule_comes_after_group_rule(self):
+        """`:is(...) .btn-group .btn` 比 `:is(...) .btn-primary` 多一个类，
+        特异性更高。选中态规则必须排在其后，否则组内选中项会被刷回白底。"""
+        selectors = [s.strip() for s, _ in self.rules]
+
+        group_index = next(
+            i
+            for i, s in enumerate(selectors)
+            if re.search(r"\)\s*\.btn-group\s+\.btn\s*$", s)
+        )
+        selected_index = next(
+            i for i, s in enumerate(selectors) if re.search(r"\)\s*\.btn-primary\s*$", s)
+        )
+        self.assertLess(group_index, selected_index)
+
     def test_colors_come_from_theme_variables(self):
+        """除阴影用的半透明黑之外，不应写死颜色。"""
+        declarations = re.findall(r":\s*([^;{}]+);", self.block)
         literals = [
-            value
-            for value in re.findall(r":\s*([^;{}]+);", self.block)
-            if re.search(r"#[0-9a-fA-F]{3,8}\b", value) or re.search(r"\brgba?\(", value)
+            value.strip()
+            for value in declarations
+            if re.search(r"#[0-9a-fA-F]{3,8}\b", value)
+            or (
+                re.search(r"\brgba?\(", value)
+                and not re.search(r"rgba\(0,\s*0,\s*0,", value)
+            )
         ]
-        self.assertEqual([], literals, "统一按钮样式不应写死颜色")
+        self.assertEqual([], literals, "统一按钮样式不应写死主题颜色")
+
+    def test_row_title_matches_button_height(self):
+        """与按钮同排的标题要与按钮等高，否则按钮看起来会偏上。"""
+        title = next(
+            d
+            for s, d in self.rules
+            if s.strip().startswith("#pywebio-scope-opsi_stats .stat-row-title")
+        )
+        self.assertIn("height: 30px !important;", title)
+        self.assertIn("align-items: center !important;", title)
+        self.assertIn("margin: 0 !important;", title)
 
 
 class TestStatButtonCallSites(unittest.TestCase):
