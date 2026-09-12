@@ -148,6 +148,10 @@ uv run python gui.py
 AzurPilot 提供 MCP 服务，可供支持 MCP 的客户端或工具调用，方便使用 Agent 管理 AzurPilot。
 
 > MCP 服务默认随 WebUI 启动并挂载于 `/mcp` 路径下（WebUI 默认端口 25548），也可通过 `uv run python mcp_server_sse.py` 独立运行（独立端口 22268）。
+>
+> 注意：22268 并非 MCP 专用端口，OCR 服务（`OcrServerPort`）默认也使用该端口。与 WebUI 同机运行独立 MCP 时请留意端口占用冲突。
+
+MCP 复用 WebUI 的密码（`--key` / `config/deploy.yaml` 的 `Password`），未设置密码且监听公网时 WebUI 会自动生成密码，可在根目录 `password.txt` 查看。调用 MCP 时必须携带该密码，否则返回 401。
 
 ### 本地连接配置
 
@@ -155,7 +159,10 @@ AzurPilot 提供 MCP 服务，可供支持 MCP 的客户端或工具调用，方
 {
   "mcpServers": {
     "alas": {
-      "url": "http://127.0.0.1:25548/mcp/sse"
+      "url": "http://127.0.0.1:25548/mcp/sse",
+      "headers": {
+        "Authorization": "Bearer <WebUI 密码>"
+      }
     }
   }
 }
@@ -167,13 +174,20 @@ AzurPilot 提供 MCP 服务，可供支持 MCP 的客户端或工具调用，方
 {
   "mcpServers": {
     "alas": {
-      "url": "http://[IP_ADDRESS]:25548/mcp/sse"
+      "url": "http://[IP_ADDRESS]:25548/mcp/sse",
+      "headers": {
+        "Authorization": "Bearer <WebUI 密码>"
+      }
     }
   }
 }
 ```
 
 请将 `[IP_ADDRESS]` 替换为实际服务器地址或内网地址；若 WebUI 端口被修改，请同步替换 URL 中的端口。
+
+只能填写 URL、无法自定义请求头的客户端，可以把密码放在查询参数里：`http://[IP_ADDRESS]:25548/mcp/sse?key=<WebUI 密码>`。此时 URL 本身就是凭据，请勿截图外贴或分享；有条件时优先使用请求头。也可用 `X-API-Key: <WebUI 密码>` 请求头代替 `Authorization`。
+
+修改密码后需要重启 WebUI，MCP 才会使用新密码。
 
 ### MCP 工具列表
 
