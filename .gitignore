@@ -325,3 +325,16 @@ RTK.md
 # 于是在工作目录建出真实文件，并在 StrictHostKeyChecking=no 下往里追加主机密钥。
 # 触发点：module/webui/remote_access.py、alas.py、module/device/platform/platform_base.py
 /nul
+
+# ==================== 本地个人文件（禁止上传） ====================
+# 以下均为本机专用产物，不属于脚本代码，不得提交到仓库
+# （本仓库会同步到 Gitee / GitCode 公开镜像，误传即等于公开个人数据）
+
+# 本地启动器二进制
+/alas-launcher.exe
+
+# 定制文件的历史备份目录
+/backup_original/
+
+# 生成的物品代号对照表（含本地掉落库中的物品名称）
+/物品代号对照表.html
