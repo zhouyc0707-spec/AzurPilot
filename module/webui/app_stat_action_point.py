@@ -15,6 +15,11 @@ from module.webui.app_helpers import (
     build_muted_notice,
     read_webapp_template,
 )
+from module.webui.ap_chart_theme import (
+    is_light_theme,
+    palette_for_theme,
+    series_colors,
+)
 
 
 from module.webui.app_types import WebUIMixinBase
@@ -65,7 +70,9 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
                 put_html(build_muted_notice(t("Gui.Stat.NoValidApData")))
             return
 
-        chart_data = self._build_ap_chart_series(raw_points)
+        # 画布不能读取 CSS 变量，配色统一由当前主题在渲染时确定
+        theme = getattr(self, "theme", None)
+        chart_data = self._build_ap_chart_series(raw_points, theme)
         if chart_data is None:
             with use_scope("ap_chart", clear=True):
                 put_html(build_muted_notice(t("Gui.Stat.CannotAggregateKline")))
@@ -85,8 +92,9 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
             asset_timeline=asset_timeline,
             chart_points=chart_data["chart_points"],
             current_view=chart_data["current_view"],
+            theme=theme,
         )
-        self._render_ap_chart_content(chart_data, auxiliary_data)
+        self._render_ap_chart_content(chart_data, auxiliary_data, theme)
 
     @staticmethod
     def _normalize_ap_chart_points(timeline):
@@ -112,8 +120,13 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
         raw_points.sort(key=lambda p: p["dt"])
         return raw_points
 
-    def _build_ap_chart_series(self, raw_points):
-        """按当前视图构造折线或 K 线主序列及其摘要。"""
+    def _build_ap_chart_series(self, raw_points, theme):
+        """按当前视图构造折线或 K 线主序列及其摘要。
+
+        Args:
+            raw_points: 已排序的行动力快照点。
+            theme: 当前 WebUI 主题，用于选取涨跌配色。
+        """
         current_view = getattr(self, "_ap_chart_view", "line")
 
         labels = []
@@ -221,11 +234,8 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
         ap_now_cur = raw_points[-1].get("ap_now", 0)
         if current_view in ("line", "detail"):
             ap_change = ap_list[-1] - ap_list[0] if len(ap_list) >= 2 else 0
-            data_points_text = t("Gui.Stat.DataPointsCount", count=len(labels))
         else:
             ap_change = closes[-1] - opens[0] if len(closes) > 0 else 0
-            data_points_text = t("Gui.Stat.CandlesCount", count=len(labels))
-        change_color = "#ef5350" if ap_change >= 0 else "#26a69a"
         change_sign = "+" if ap_change >= 0 else ""
 
         return {
@@ -248,8 +258,6 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
             "ap_max": ap_max,
             "ap_min": ap_min,
             "ap_avg": ap_avg,
-            "data_points_text": data_points_text,
-            "change_color": change_color,
             "change_sign": change_sign,
         }
 
@@ -277,16 +285,39 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
         return aligned_points
 
     def _build_ap_chart_auxiliary_data(
-        self, timeline, coins_timeline, asset_timeline, chart_points, current_view
+        self,
+        timeline,
+        coins_timeline,
+        asset_timeline,
+        chart_points,
+        current_view,
+        theme,
     ):
-        """分别装配辅助序列，并按既有顺序组合图表载荷。"""
+        """分别装配辅助序列，并按既有顺序组合图表载荷。
+
+        Args:
+            timeline: 行动力时间线原始点（含海里数）。
+            coins_timeline: 黄币/紫币时间线原始点。
+            asset_timeline: 资产时间线原始点。
+            chart_points: 当前图表点，用于时间对齐。
+            current_view: 当前视图（line/detail 才装配辅助序列）。
+            theme: 当前 WebUI 主题，用于选取序列配色。
+        """
+        # 序列顺序与 ap_chart.js 的 seriesVisible 一致：体力/紫币/黄币/资产/海里数
+        _, purple_color, yellow_color, asset_color, distance_color = series_colors(theme)
         distance_data = self._build_ap_chart_distance_data(
-            timeline, chart_points, current_view
+            timeline, chart_points, current_view, distance_color
         )
         coins_data = self._build_ap_chart_coins_data(
-            coins_timeline, chart_points, current_view
+            coins_timeline,
+            chart_points,
+            current_view,
+            purple_color=purple_color,
+            yellow_color=yellow_color,
         )
-        asset_data = self._build_ap_chart_asset_data(asset_timeline, current_view)
+        asset_data = self._build_ap_chart_asset_data(
+            asset_timeline, current_view, asset_color
+        )
         return self._combine_ap_chart_auxiliary_data(
             coins_data, distance_data, asset_data
         )
@@ -314,8 +345,44 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
             f'{label}: <b style="color:{color}">{value_text}</b></span>'
         )
 
-    def _build_ap_chart_coins_data(self, coins_timeline, chart_points, current_view):
-        """解析并对齐黄币、紫币时间线，构造对应统计和图例。"""
+    @staticmethod
+    def _ap_legend_item(label, series_index, color, dash=False):
+        """构造图例项，颜色跟随当前主题，与画布中的曲线保持一致。
+
+        Args:
+            label: 序列名。
+            series_index: 序列索引，对应 ap_chart.js 中的 seriesVisible。
+            color: 图例色块颜色。
+            dash: 是否为虚线序列（黄币/紫币）。
+
+        Returns:
+            str: 图例项 HTML。
+        """
+        dash_style = f" border-top:1px dashed {color};" if dash else ""
+        return (
+            f'<span class="ap-legend-item" data-series="{series_index}" '
+            'style="display:flex; align-items:center; gap:4px;cursor:pointer;opacity:1;">'
+            f'<span style="width:12px; height:2px; background:{color}; '
+            f'border-radius:1px;{dash_style}"></span>{label}</span>'
+        )
+
+    def _build_ap_chart_coins_data(
+        self,
+        coins_timeline,
+        chart_points,
+        current_view,
+        purple_color,
+        yellow_color,
+    ):
+        """解析并对齐黄币、紫币时间线，构造对应统计和图例。
+
+        Args:
+            coins_timeline: 黄币/紫币时间线原始点。
+            chart_points: 当前图表点，用于时间对齐。
+            current_view: 当前视图（line/detail 才装配辅助序列）。
+            purple_color: 紫币序列颜色，由当前主题决定。
+            yellow_color: 黄币序列颜色，由当前主题决定。
+        """
         yellow_coins_list = []
         purple_coins_list = []
         coins_sources_list = []
@@ -370,12 +437,14 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
                     stats_html += self._ap_series_item(
                         "黄币",
                         f"{yc_cur:,}",
-                        "#ffd54f",
+                        yellow_color,
                         f"{yc_change_sign}{yc_change:,}",
                         f"{yc_max:,}",
                         f"{yc_min:,}",
                     )
-                    legend_html += '<span class="ap-legend-item" data-series="2" style="display:flex; align-items:center; gap:4px;cursor:pointer;opacity:1;"><span style="width:12px; height:2px; background:#ffd54f; border-radius:1px; border-top:1px dashed #ffd54f;"></span>黄币</span>'
+                    legend_html += self._ap_legend_item(
+                        "黄币", 2, yellow_color, dash=True
+                    )
 
                 if valid_purple_coins:
                     pc_cur = valid_purple_coins[-1]
@@ -391,12 +460,14 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
                     stats_html += self._ap_series_item(
                         "紫币",
                         f"{pc_cur:,}",
-                        "#ce93d8",
+                        purple_color,
                         f"{pc_change_sign}{pc_change:,}",
                         f"{pc_max:,}",
                         f"{pc_min:,}",
                     )
-                    legend_html += '<span class="ap-legend-item" data-series="1" style="display:flex; align-items:center; gap:4px;cursor:pointer;opacity:1;"><span style="width:12px; height:2px; background:#ce93d8; border-radius:1px; border-top:1px dashed #ce93d8;"></span>紫币</span>'
+                    legend_html += self._ap_legend_item(
+                        "紫币", 1, purple_color, dash=True
+                    )
 
         return {
             "yellow_coins_list": yellow_coins_list,
@@ -407,8 +478,17 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
             "legend_html": legend_html,
         }
 
-    def _build_ap_chart_distance_data(self, timeline, chart_points, current_view):
-        """解析并对齐海里数时间线，构造对应统计和图例。"""
+    def _build_ap_chart_distance_data(
+        self, timeline, chart_points, current_view, color
+    ):
+        """解析并对齐海里数时间线，构造对应统计和图例。
+
+        Args:
+            timeline: 行动力时间线原始点（含 distance 字段）。
+            chart_points: 当前图表点，用于时间对齐。
+            current_view: 当前视图（line/detail 才装配辅助序列）。
+            color: 海里数序列颜色，由当前主题决定。
+        """
         distance_raw_points = []
         if current_view in ("line", "detail"):
             for pt in timeline:
@@ -451,12 +531,12 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
                     stats_html += self._ap_series_item(
                         "海里数",
                         f"{d_cur:,}",
-                        "#1565c0",
+                        color,
                         f"{d_change_sign}{d_change:,}",
                         f"{d_max:,}",
                         f"{d_min:,}",
                     )
-                    legend_html += '<span class="ap-legend-item" data-series="4" style="display:flex; align-items:center; gap:4px;cursor:pointer;opacity:1;"><span style="width:12px; height:2px; background:#1565c0; border-radius:1px;"></span>海里数</span>'
+                    legend_html += self._ap_legend_item("海里数", 4, color)
 
         return {
             "distance_list": distance_list,
@@ -464,8 +544,14 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
             "legend_html": legend_html,
         }
 
-    def _build_ap_chart_asset_data(self, asset_timeline, current_view):
-        """解析资产时间线，构造对应统计和图例。"""
+    def _build_ap_chart_asset_data(self, asset_timeline, current_view, color):
+        """解析资产时间线，构造对应统计和图例。
+
+        Args:
+            asset_timeline: 资产时间线原始点。
+            current_view: 当前视图（line/detail 才装配辅助序列）。
+            color: 资产序列颜色，由当前主题决定。
+        """
         asset_list = []
         asset_ts_list = []
         if asset_timeline and current_view in ("line", "detail"):
@@ -498,12 +584,12 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
                 stats_html += self._ap_series_item(
                     "资产",
                     f"{a_cur:,.1f}",
-                    "#22d3ee",
+                    color,
                     f"{a_change_sign}{a_change:,.1f}",
                     f"{a_max:,.1f}",
                     f"{a_min:,.1f}",
                 )
-                legend_html += '<span class="ap-legend-item" data-series="3" style="display:flex; align-items:center; gap:4px;cursor:pointer;opacity:1;"><span style="width:12px; height:2px; background:#22d3ee; border-radius:1px;"></span>资产</span>'
+                legend_html += self._ap_legend_item("资产", 3, color)
 
         return {
             "asset_list": asset_list,
@@ -552,13 +638,20 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
             return None
         return float(value)
 
-    def _render_ap_chart_content(self, chart_data, auxiliary_data):
-        """将已装配的数据填充到 HTML 和 JavaScript 模板。"""
+    def _render_ap_chart_content(self, chart_data, auxiliary_data, theme):
+        """将已装配的数据填充到 HTML 和 JavaScript 模板。
+
+        Args:
+            chart_data: 主序列与摘要数据。
+            auxiliary_data: 黄币/紫币/资产/海里数等辅助序列数据。
+            theme: 当前 WebUI 主题，画布配色在渲染时按此确定。
+        """
         current_view = chart_data["current_view"]
         chart_id = f"ap_cv_{id(self)}"
         detail_controls_display = (
             "display:flex;" if current_view in ("line", "detail") else "display:none;"
         )
+        palette = palette_for_theme(theme)
 
         html_tpl = read_webapp_template("ap_chart_panel.html")
         html = html_tpl.format(
@@ -566,16 +659,28 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
             view_title=chart_data["view_title"],
             ap_cur=chart_data["ap_cur"],
             ap_now_cur=chart_data["ap_now_cur"],
-            change_color=chart_data["change_color"],
+            ap_color=palette["ap_point"],
             change_sign=chart_data["change_sign"],
             ap_change=chart_data["ap_change"],
             ap_max=chart_data["ap_max"],
             ap_min=chart_data["ap_min"],
             ap_avg=chart_data["ap_avg"],
-            data_points_text=chart_data["data_points_text"],
             detail_controls_display=detail_controls_display,
             coins_stats_html=auxiliary_data["coins_stats_html"],
             coins_legend_html=auxiliary_data["coins_legend_html"],
+            chart_bg=palette["bg"],
+            panel_border=palette["panel_border"],
+            panel_shadow=palette["panel_shadow"],
+            tip_bg=palette["tip_bg"],
+            tip_border=palette["tip_border"],
+            tip_text=palette["tip_text"],
+            tip_shadow=palette["tip_shadow"],
+            zoom_bg=palette["zoom_bg"],
+            zoom_border=palette["zoom_border"],
+            zoom_text=palette["zoom_text"],
+            legend_text=palette["legend_text"],
+            series_text=palette["series_text"],
+            series_shadow=palette["series_shadow"],
         )
 
         js_tpl = read_webapp_template("ap_chart.js")
@@ -615,6 +720,12 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
             .replace(
                 "__SHOW_COINS__",
                 "true" if auxiliary_data["show_coins"] else "false",
+            )
+            .replace("__PALETTE__", json.dumps(palette))
+            .replace("__SERIES_COLORS__", json.dumps(series_colors(theme)))
+            .replace(
+                "__SMOOTH_LINE__",
+                "true" if is_light_theme(theme) else "false",
             )
         )
         from pywebio.session import run_js

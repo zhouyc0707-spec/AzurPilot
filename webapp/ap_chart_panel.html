@@ -7,7 +7,8 @@
   gap: 2px 20px;
   margin-bottom: 8px;
   font-size: 14px;
-  color: #aaa;
+  color: {series_text};
+  text-shadow: {series_shadow};
 }}
 .ap-series-item {{
   position: relative;
@@ -22,35 +23,35 @@
   z-index: 40;
   padding: 6px 10px;
   border-radius: 10px;
-  border: 1px solid #555;
-  background: #39394ef2;
-  color: #ddd;
+  border: 1px solid {tip_border};
+  background: {tip_bg};
+  color: {tip_text};
   font-size: 12px;
   line-height: 1.6;
   white-space: pre-line;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, .3);
+  box-shadow: {tip_shadow};
   pointer-events: none;
 }}
 </style>
 <div style="margin-top:16px; margin-bottom:8px;">
   <div style="font-weight:600; font-size:1rem; margin-bottom:8px;">体力变化 - {view_title}</div>
   <div class="ap-series-row">
-    <span class="ap-series-item" data-tip="变化: {change_sign}{ap_change:,}（总行动力）&#10;最高: {ap_max:,}&#10;最低: {ap_min:,}&#10;均值: {ap_avg:,}">行动力: <b style="color:#64b5f6">({ap_now_cur:,}) {ap_cur:,}</b></span>
+    <span class="ap-series-item" data-tip="变化: {change_sign}{ap_change:,}（总行动力）&#10;最高: {ap_max:,}&#10;最低: {ap_min:,}&#10;均值: {ap_avg:,}">行动力: <b style="color:{ap_color}">({ap_now_cur:,}) {ap_cur:,}</b></span>
     {coins_stats_html}
   </div>
 </div>
-<div id="{chart_id}_legend" style="display:flex; flex-wrap:wrap; gap:12px; margin-bottom:8px; font-size:12px; color:#888;">
-  <span class="ap-legend-item" data-series="0" style="display:flex; align-items:center; gap:4px;cursor:pointer;opacity:1;"><span style="width:12px; height:3px; background:#64b5f6; border-radius:1px;"></span>体力</span>
+<div id="{chart_id}_legend" style="display:flex; flex-wrap:wrap; gap:12px; margin-bottom:8px; font-size:12px; color:{legend_text};">
+  <span class="ap-legend-item" data-series="0" style="display:flex; align-items:center; gap:4px;cursor:pointer;opacity:1;"><span style="width:12px; height:3px; background:{ap_color}; border-radius:1px;"></span>体力</span>
   {coins_legend_html}
 </div>
-<div id="{chart_id}_container" style="position:relative;background:#1a1a2e;border-radius:16px;border:1px solid #333;padding:6px;transition:opacity 0.3s ease;">
+<div id="{chart_id}_container" style="position:relative;background:{chart_bg};border-radius:16px;border:1px solid {panel_border};box-shadow:{panel_shadow};padding:6px;transition:opacity 0.3s ease;">
   <canvas id="{chart_id}" style="width:100%;height:clamp(220px, 25vh, 300px);display:block;cursor:crosshair;"></canvas>
   <canvas id="{chart_id}_ov"
     style="position:absolute;top:6px;left:6px;width:calc(100% - 12px);height:clamp(220px, 25vh, 300px);pointer-events:none;"></canvas>
   <div id="{chart_id}_tip"
-    style="display:none;position:absolute;pointer-events:none;background:#39394ef2;border:1px solid #555;border-radius:12px;padding:8px 12px;font-size:12px;color:#ddd;z-index:10;white-space:nowrap;">
+    style="display:none;position:absolute;pointer-events:none;background:{tip_bg};border:1px solid {tip_border};border-radius:12px;padding:8px 12px;font-size:12px;color:{tip_text};box-shadow:{tip_shadow};z-index:10;white-space:nowrap;">
   </div>
   <div id="{chart_id}_controls" style="position:absolute;bottom:2px;right:12px;display:flex;gap:4px;{detail_controls_display}">
-    <button id="{chart_id}_reset" style="background:#333;border:1px solid #555;border-radius:10px;padding:2px 8px;font-size:11px;color:#aaa;cursor:pointer;">重置</button>
+    <button id="{chart_id}_reset" style="background:{zoom_bg};border:1px solid {zoom_border};border-radius:10px;padding:2px 8px;font-size:11px;color:{zoom_text};cursor:pointer;">重置</button>
   </div>
 </div>

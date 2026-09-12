@@ -61,12 +61,16 @@
     var hasAssetSeries = lineAsset && lineAsset.length > 0;
     var lineDistance = __DISTANCE__;
     var hasDistanceSeries = lineDistance && lineDistance.length > 0;
+    // 调色板由 Python 侧按当前 WebUI 主题注入，画布无法读取 CSS 变量
+    var C = __PALETTE__;
+    // 浅色主题用单色平滑曲线，深色主题保留红绿分段线
+    var smoothLine = __SMOOTH_LINE__;
 
     // 默认只显示行动力曲线，黄币/紫币/资产/海里数由用户点击图例按需显示
     var seriesVisible = [true, false, false, false, false];
     var seriesVisibleDefault = seriesVisible.slice();
     var _isSelecting = false;
-    var seriesColors = ["#64b5f6", "#ce93d8", "#ffd54f", "#22d3ee", "#1565c0"];
+    var seriesColors = __SERIES_COLORS__;
     var seriesNames = ["体力", "紫币", "黄币", "资产", "海里数"];
 
     var chartId = "__CHART_ID__";
@@ -230,10 +234,10 @@
             EXTRA_SERIES_CONFIGS.push({ color: color, dataMin: dataMin, dataMax: dataMax, offsetY: cfgOffset });
             cfgOffset += COIN_TICK_STACK_GAP;
         }
-        addCfg(hasPurpleCoins && seriesVisible[1], "#ce93d8", purpleMin, purpleMax);
+        addCfg(hasPurpleCoins && seriesVisible[1], C.purple, purpleMin, purpleMax);
         addCfg(
             hasCombined && (seriesVisible[2] || seriesVisible[3] || seriesVisible[4]),
-            "#ffd54f",
+            C.yellow,
             combinedMin,
             combinedMax
         );
@@ -276,6 +280,7 @@
         }
 
         // ---- 绘制系列线（紫币独立 Y 轴，黄币/资产共用组合 Y 轴） ----
+        var SERIES_DRAW_COLORS = [C.purple, C.yellow, C.asset, C.distance];
         function drawSeriesLine(xOf, start, end) {
             for (var ci = 0; ci < SERIES_DRAW.length; ci++) {
                 var sd = SERIES_DRAW[ci];
@@ -285,7 +290,7 @@
                 ctx.lineWidth = 1;
                 ctx.lineJoin = "round";
                 ctx.setLineDash(sd.dash);
-                ctx.strokeStyle = ["#ce93d8", "#ffd54f", "#81c784", "#1565c0"][ci];
+                ctx.strokeStyle = SERIES_DRAW_COLORS[ci];
                 ctx.beginPath();
                 var started = false;
 
@@ -304,13 +309,82 @@
         var candleW = Math.max(3, Math.min(candleSpace * 0.6, 30));
         function xCenter(i) { return pad.l + candleSpace * (i + 0.5); }
 
+        // ---- 行动力主曲线 ----
+        // 深色主题沿用原有红绿分段线（涨红跌绿）；浅色主题改用主题色单线 + 面积渐变，
+        // 避免深色底的配色贴到浅色卡片上显得突兀。
+        function drawApLine(xOf, yFn, start, end, opts) {
+            var last = Math.min(end, nn) - 1;
+            if (last < start) return;
+            ctx.save();
+            ctx.lineWidth = smoothLine ? 1.8 : 1;
+            ctx.lineJoin = "round";
+            ctx.lineCap = "round";
+            if (smoothLine) {
+                // 面积渐变：自曲线向下淡出到画布底色
+                var baseY = pad.t + gH;
+                var gradient = ctx.createLinearGradient(0, pad.t, 0, baseY);
+                gradient.addColorStop(0, C.ap_soft);
+                gradient.addColorStop(1, "rgba(0,0,0,0)");
+                ctx.beginPath();
+                ctx.moveTo(xOf(start), yFn(ap[start]));
+                for (var i = start + 1; i <= last; i++) {
+                    ctx.lineTo(xOf(i), yFn(ap[i]));
+                }
+                ctx.lineTo(xOf(last), baseY);
+                ctx.lineTo(xOf(start), baseY);
+                ctx.closePath();
+                ctx.fillStyle = gradient;
+                ctx.fill();
+
+                // 单色主曲线
+                ctx.beginPath();
+                ctx.moveTo(xOf(start), yFn(ap[start]));
+                for (var i = start + 1; i <= last; i++) {
+                    ctx.lineTo(xOf(i), yFn(ap[i]));
+                }
+                ctx.strokeStyle = C.ap_line;
+                ctx.stroke();
+
+                // 数据点：点多时按间隔抽样，避免糊成一片
+                var dotStep = opts && opts.dotStep ? opts.dotStep : 1;
+                for (var i = start; i <= last; i += dotStep) {
+                    ctx.beginPath();
+                    ctx.arc(xOf(i), yFn(ap[i]), 2, 0, Math.PI * 2);
+                    ctx.fillStyle = C.ap_point;
+                    ctx.fill();
+                }
+            } else {
+                for (var i = start + 1; i <= last; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(xOf(i - 1), yFn(ap[i - 1]));
+                    ctx.strokeStyle = ap[i] >= ap[i - 1] ? C.inc : C.dec;
+                    ctx.lineTo(xOf(i), yFn(ap[i]));
+                    ctx.stroke();
+                }
+                if (opts && opts.showDots) {
+                    for (var i = start; i <= last; i++) {
+                        ctx.beginPath();
+                        ctx.arc(xOf(i), yFn(ap[i]), 1.5, 0, Math.PI * 2);
+                        ctx.fillStyle = (i > start && ap[i] < ap[i - 1]) ? C.dec : C.inc;
+                        ctx.fill();
+                    }
+                }
+            }
+            ctx.restore();
+        }
+
+        // 全量视图：点数不多时补画数据点，密集时抽样
+        function _fullViewOptions() {
+            return { showDots: nn < 60, dotStep: Math.max(1, Math.floor(nn / 80)) };
+        }
+
         // ======== 初始绘制（非缩放全量视图） ========
-        ctx.fillStyle = "#1a1a2e";
+        ctx.fillStyle = C.bg;
         ctx.fillRect(0, 0, W, H);
 
-        ctx.strokeStyle = "#2a2a3e";
+        ctx.strokeStyle = C.grid;
         ctx.lineWidth = 1;
-        ctx.fillStyle = "#666";
+        ctx.fillStyle = C.text;
         ctx.font = "11px -apple-system, sans-serif";
         ctx.textAlign = "right";
         ctx.textBaseline = "middle";
@@ -325,17 +399,17 @@
 
         var avgY = yOf(avg);
         ctx.save();
-        ctx.strokeStyle = "#ff9800";
+        ctx.strokeStyle = C.avg_line;
         ctx.lineWidth = 1;
         ctx.setLineDash([6, 4]);
         ctx.beginPath(); ctx.moveTo(pad.l, avgY); ctx.lineTo(W - pad.r, avgY); ctx.stroke();
         ctx.restore();
-        ctx.fillStyle = "#ff9800";
+        ctx.fillStyle = C.avg_line;
         ctx.font = "10px -apple-system, sans-serif";
         ctx.textAlign = "right";
         ctx.fillText("均值:" + avg, W - pad.r - 4, avgY - 8);
 
-        ctx.fillStyle = "#666";
+        ctx.fillStyle = C.text;
         ctx.font = "10px -apple-system, sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
@@ -356,24 +430,7 @@
         }
 
         if (chartType === 'line' && seriesVisible[0]) {
-            ctx.lineWidth = 1;
-            ctx.lineJoin = "round";
-            for (var i = 1; i < nn; i++) {
-                ctx.beginPath();
-                ctx.moveTo(xOfLine(i - 1), yOf(ap[i - 1]));
-                ctx.strokeStyle = ap[i] >= ap[i - 1] ? "#ef5350" : "#26a69a";
-                ctx.lineTo(xOfLine(i), yOf(ap[i]));
-                ctx.stroke();
-            }
-            if (nn < 60) {
-                for (var i = 0; i < nn; i++) {
-                    ctx.beginPath();
-                    ctx.arc(xOfLine(i), yOf(ap[i]), 1.5, 0, Math.PI * 2);
-                    var dotColor = (i > 0 && ap[i] < ap[i - 1]) ? "#26a69a" : "#ef5350";
-                    ctx.fillStyle = dotColor;
-                    ctx.fill();
-                }
-            }
+            drawApLine(xOfLine, yOf, 0, nn, _fullViewOptions());
         } else if (seriesVisible[0]) {
             for (var i = 0; i < nn; i++) {
                 var cx = xCenter(i);
@@ -381,7 +438,7 @@
                 var isUp = c > o;
                 var isDown = c < o;
                 var isFlat = c === o;
-                var color = isFlat ? "#888" : (isUp ? "#ef5350" : "#26a69a");
+                var color = isFlat ? C.flat : (isUp ? C.inc : C.dec);
 
                 ctx.strokeStyle = color;
                 ctx.lineWidth = 1.5;
@@ -421,8 +478,8 @@
                 }
                 ctx.stroke();
             }
-            drawMA(5, "#ffeb3b");
-            drawMA(10, "#e91e63");
+            drawMA(5, C.ma5);
+            drawMA(10, C.ma10);
         }
 
         // 绘制额外系列线（黄币/紫币/资产）
@@ -470,7 +527,7 @@
                 if (seriesVisible[0]) {
                 var py = yScale(ap[idx], dMin, dMax);
 
-                oc.strokeStyle = "rgba(255,255,255,0.18)";
+                oc.strokeStyle = C.crosshair;
                 oc.lineWidth = 1;
                 oc.setLineDash([4, 3]);
                 oc.beginPath(); oc.moveTo(px, pad.t); oc.lineTo(px, pad.t + gH); oc.stroke();
@@ -478,31 +535,27 @@
                 oc.setLineDash([]);
 
                 oc.beginPath(); oc.arc(px, py, 6, 0, Math.PI * 2);
-                oc.fillStyle = "rgba(100,181,246,0.3)"; oc.fill();
+                oc.fillStyle = C.ap_point; oc.globalAlpha = 0.3; oc.fill();
+                oc.globalAlpha = 1;
                 oc.beginPath(); oc.arc(px, py, 4, 0, Math.PI * 2);
-                oc.fillStyle = "#64b5f6"; oc.fill();
-                oc.strokeStyle = "#fff"; oc.lineWidth = 2; oc.stroke();
+                oc.fillStyle = C.ap_point; oc.fill();
+                oc.strokeStyle = C.bead_ring; oc.lineWidth = 2; oc.stroke();
                 }
 
                 // ---- 滚珠：紫币（独立轴）+ 黄币/资产（共用轴） ----
-                function hexToRgba(hex, alpha) {
-                    var r = parseInt(hex.slice(1, 3), 16);
-                    var g = parseInt(hex.slice(3, 5), 16);
-                    var b = parseInt(hex.slice(5, 7), 16);
-                    return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
-                }
                 function drawBead(val, color, yFn) {
                     var by = yFn(val);
                     oc.beginPath(); oc.arc(px, by, 5, 0, Math.PI * 2);
-                    oc.fillStyle = hexToRgba(color, 0.3); oc.fill();
+                    oc.fillStyle = color; oc.globalAlpha = 0.3; oc.fill();
+                    oc.globalAlpha = 1;
                     oc.beginPath(); oc.arc(px, by, 3, 0, Math.PI * 2);
                     oc.fillStyle = color; oc.fill();
-                    oc.strokeStyle = "#fff"; oc.lineWidth = 1.5; oc.stroke();
+                    oc.strokeStyle = C.bead_ring; oc.lineWidth = 1.5; oc.stroke();
                 }
                 if (hasPurpleCoins && idx < purpleCoinsLen && purpleCoins[idx] !== null && purpleCoins[idx] !== undefined && seriesVisible[1])
-                    drawBead(purpleCoins[idx], "#ce93d8", yOfPurple);
+                    drawBead(purpleCoins[idx], C.purple, yOfPurple);
                 if (hasYellowCoins && idx < yellowCoinsLen && yellowCoins[idx] !== null && yellowCoins[idx] !== undefined && seriesVisible[2])
-                    drawBead(yellowCoins[idx], "#ffd54f", yOfCombined);
+                    drawBead(yellowCoins[idx], C.yellow, yOfCombined);
 
                 if (seriesVisible[3] && hasAssetSeries) {
                     var closestIdx_a = -1, closestDist_a = 600000;
@@ -511,30 +564,30 @@
                         if (dist < closestDist_a) { closestDist_a = dist; closestIdx_a = j; }
                     }
                     if (closestIdx_a !== -1 && closestDist_a < 5)
-                        drawBead(lineAsset[closestIdx_a], "#81c784", yOfCombined);
+                        drawBead(lineAsset[closestIdx_a], C.asset, yOfCombined);
                 }
 
                 // 海里数 bead
                 if (hasDistanceSeries && idx < lineDistance.length && lineDistance[idx] !== null && lineDistance[idx] !== undefined && seriesVisible[4])
-                    drawBead(lineDistance[idx], "#1565c0", yOfCombined);
+                    drawBead(lineDistance[idx], C.distance, yOfCombined);
 
                 oc.setTransform(1, 0, 0, 1, 0, 0);
 
                 var diff = idx > 0 ? (ap[idx] - ap[idx - 1]) : 0;
                 var isUp = diff >= 0;
-                var dc = isUp ? "#ef5350" : "#26a69a";
+                var dc = isUp ? C.inc : C.dec;
                 var ds = (isUp ? "+" : "") + diff;
                 var tooltipRows = [
-                    { style: { color: "#888", marginBottom: "4px", fontWeight: "600" }, parts: [{ type: 'text', value: labels[idx] }] },
+                    { style: { color: C.tip_muted, marginBottom: "4px", fontWeight: "600" }, parts: [{ type: 'text', value: labels[idx] }] },
                 ];
                 if (seriesVisible[0]) {
-                tooltipRows.push({ parts: [{ type: 'text', value: "体力: " }, { type: 'bold', value: String(ap[idx]), style: { color: "#64b5f6" } }] },
+                tooltipRows.push({ parts: [{ type: 'text', value: "体力: " }, { type: 'bold', value: String(ap[idx]), style: { color: C.ap_point } }] },
                     { parts: [{ type: 'text', value: "单次变化: " }, { type: 'bold', value: ds, style: { color: dc } }] });
                 }
 
                 if (isDetailMode) {
                     var source = sources && sources[idx] ? sources[idx] : '-';
-                    var sourceColor = source === 'cl1' ? '#64b5f6' : (source === 'meow' ? '#ff9800' : '#888');
+                    var sourceColor = source === 'cl1' ? C.ap_point : (source === 'meow' ? C.avg_line : C.tip_muted);
                     tooltipRows.push({ parts: [{ type: 'text', value: "来源: " }, { type: 'bold', value: source, style: { color: sourceColor } }] });
                 }
 
@@ -542,18 +595,18 @@
                 if (seriesVisible[2] && hasYellowCoins && idx < yellowCoinsLen && yellowCoins[idx] !== null && yellowCoins[idx] !== undefined) {
                     var yc = yellowCoins[idx];
                     var ycDiff = idx > 0 && yellowCoins[idx - 1] !== null && yellowCoins[idx - 1] !== undefined ? (yc - yellowCoins[idx - 1]) : 0;
-                    var ycColor = ycDiff >= 0 ? "#ef5350" : "#26a69a";
+                    var ycColor = ycDiff >= 0 ? C.inc : C.dec;
                     var ycDiffStr = (ycDiff >= 0 ? "+" : "") + ycDiff;
-                    tooltipRows.push({ parts: [{ type: 'text', value: "黄币: " }, { type: 'bold', value: String(yc), style: { color: "#ffd54f" } }, { type: 'text', value: " (" + ycDiffStr + ")", style: { color: ycColor } }] });
+                    tooltipRows.push({ parts: [{ type: 'text', value: "黄币: " }, { type: 'bold', value: String(yc), style: { color: C.yellow } }, { type: 'text', value: " (" + ycDiffStr + ")", style: { color: ycColor } }] });
                 }
 
                 // 紫币 tooltip
                 if (seriesVisible[1] && hasPurpleCoins && idx < purpleCoinsLen && purpleCoins[idx] !== null && purpleCoins[idx] !== undefined) {
                     var pc = purpleCoins[idx];
                     var pcDiff = idx > 0 && purpleCoins[idx - 1] !== null && purpleCoins[idx - 1] !== undefined ? (pc - purpleCoins[idx - 1]) : 0;
-                    var pcColor = pcDiff >= 0 ? "#ef5350" : "#26a69a";
+                    var pcColor = pcDiff >= 0 ? C.inc : C.dec;
                     var pcDiffStr = (pcDiff >= 0 ? "+" : "") + pcDiff;
-                    tooltipRows.push({ parts: [{ type: 'text', value: "紫币: " }, { type: 'bold', value: String(pc), style: { color: "#ce93d8" } }, { type: 'text', value: " (" + pcDiffStr + ")", style: { color: pcColor } }] });
+                    tooltipRows.push({ parts: [{ type: 'text', value: "紫币: " }, { type: 'bold', value: String(pc), style: { color: C.purple } }, { type: 'text', value: " (" + pcDiffStr + ")", style: { color: pcColor } }] });
                 }
 
                 // 资产 tooltip
@@ -564,7 +617,7 @@
                         if (dist < closestDist) { closestDist = dist; closestIdx = j; }
                     }
                     if (closestIdx !== -1 && closestDist < 5) {
-                        tooltipRows.push({ parts: [{ type: 'text', value: "资产: " }, { type: 'bold', value: lineAsset[closestIdx].toFixed(1), style: { color: "#81c784" } }] });
+                        tooltipRows.push({ parts: [{ type: 'text', value: "资产: " }, { type: 'bold', value: lineAsset[closestIdx].toFixed(1), style: { color: C.asset } }] });
                     }
                 }
 
@@ -572,9 +625,9 @@
                 if (seriesVisible[4] && hasDistanceSeries && idx < lineDistance.length && lineDistance[idx] !== null && lineDistance[idx] !== undefined) {
                     var d = lineDistance[idx];
                     var dDiff = idx > 0 && lineDistance[idx - 1] !== null && lineDistance[idx - 1] !== undefined ? (d - lineDistance[idx - 1]) : 0;
-                    var dColor = dDiff >= 0 ? "#ef5350" : "#26a69a";
+                    var dColor = dDiff >= 0 ? C.inc : C.dec;
                     var dDiffStr = (dDiff >= 0 ? "+" : "") + dDiff;
-                    tooltipRows.push({ parts: [{ type: 'text', value: "海里数: " }, { type: 'bold', value: String(d), style: { color: "#1565c0" } }, { type: 'text', value: " (" + dDiffStr + ")", style: { color: dColor } }] });
+                    tooltipRows.push({ parts: [{ type: 'text', value: "海里数: " }, { type: 'bold', value: String(d), style: { color: C.distance } }, { type: 'text', value: " (" + dDiffStr + ")", style: { color: dColor } }] });
                 }
 
                 setTooltipContent(tipEl, tooltipRows);
@@ -584,17 +637,17 @@
                 idx = Math.max(0, Math.min(nn - 1, idx));
                 var cx = xCenter(idx);
 
-                oc.strokeStyle = "rgba(255,255,255,0.18)";
+                oc.strokeStyle = C.crosshair;
                 oc.lineWidth = 1;
                 oc.setLineDash([4, 3]);
                 oc.beginPath(); oc.moveTo(cx, pad.t); oc.lineTo(cx, pad.t + gH); oc.stroke();
                 oc.beginPath(); oc.moveTo(pad.l, my_); oc.lineTo(W - pad.r, my_); oc.stroke();
                 oc.setLineDash([]);
 
-                oc.strokeStyle = "#fff";
+                oc.strokeStyle = C.bead_ring;
                 oc.lineWidth = 1;
                 oc.globalAlpha = 0.15;
-                oc.fillStyle = "#fff";
+                oc.fillStyle = C.bead_ring;
                 oc.fillRect(cx - candleW / 2 - 2, pad.t, candleW + 4, gH);
                 oc.globalAlpha = 1.0;
                 oc.setTransform(1, 0, 0, 1, 0, 0);
@@ -603,7 +656,7 @@
                 var chg = c_ - o;
                 var chgPct = o !== 0 ? ((chg / o) * 100).toFixed(1) : "0.0";
                 var isUp = c_ >= o;
-                var dc = isUp ? "#ef5350" : "#26a69a";
+                var dc = isUp ? C.inc : C.dec;
                 var chgSign = chg >= 0 ? "+" : "";
 
                 var ma5Val = "-";
@@ -618,25 +671,25 @@
                 }
 
                 setTooltipContent(tipEl, [
-                    { style: { color: "#888", marginBottom: "4px", fontWeight: "600" }, parts: [{ type: 'text', value: labels[idx] }] },
+                    { style: { color: C.tip_muted, marginBottom: "4px", fontWeight: "600" }, parts: [{ type: 'text', value: labels[idx] }] },
                     {
                         parts: [
                             { type: 'text', value: "开盘: " },
                             { type: 'bold', value: String(o) },
-                            { type: 'text', value: "  MA5(5期平均): " + ma5Val, style: { marginLeft: "8px", color: "#ffeb3b" } }
+                            { type: 'text', value: "  MA5(5期平均): " + ma5Val, style: { marginLeft: "8px", color: C.ma5 } }
                         ]
                     },
                     {
                         parts: [
                             { type: 'text', value: "收盘: " },
                             { type: 'bold', value: String(c_), style: { color: dc } },
-                            { type: 'text', value: "  MA10(10期平均): " + ma10Val, style: { marginLeft: "8px", color: "#e91e63" } }
+                            { type: 'text', value: "  MA10(10期平均): " + ma10Val, style: { marginLeft: "8px", color: C.ma10 } }
                         ]
                     },
-                    { parts: [{ type: 'text', value: "最高: " }, { type: 'bold', value: String(h), style: { color: "#ef5350" } }] },
-                    { parts: [{ type: 'text', value: "最低: " }, { type: 'bold', value: String(l), style: { color: "#26a69a" } }] },
+                    { parts: [{ type: 'text', value: "最高: " }, { type: 'bold', value: String(h), style: { color: C.inc } }] },
+                    { parts: [{ type: 'text', value: "最低: " }, { type: 'bold', value: String(l), style: { color: C.dec } }] },
                     { parts: [{ type: 'text', value: "涨跌: " }, { type: 'bold', value: chgSign + chg + " (" + chgSign + chgPct + "%)", style: { color: dc } }] },
-                    { style: { color: "#666", marginTop: "4px" }, parts: [{ type: 'text', value: "数据点密度: " + counts[idx] }] }
+                    { style: { color: C.tip_subtle, marginTop: "4px" }, parts: [{ type: 'text', value: "数据点密度: " + counts[idx] }] }
                 ]);
             }
 
@@ -708,12 +761,12 @@
                 var drng = dMax - dMin || 1;
                 dMax += drng * 0.1;
 
-                ctx.fillStyle = "#1a1a2e";
+                ctx.fillStyle = C.bg;
                 ctx.fillRect(0, 0, W, H);
 
-                ctx.strokeStyle = "#2a2a3e";
+                ctx.strokeStyle = C.grid;
                 ctx.lineWidth = 1;
-                ctx.fillStyle = "#666";
+                ctx.fillStyle = C.text;
                 ctx.font = "11px -apple-system, sans-serif";
                 ctx.textAlign = "right";
                 ctx.textBaseline = "middle";
@@ -732,27 +785,11 @@
 
                 drawAssetTicks(ctx, dyOf, dMin, dMax);
 
-                // Ap 线
+                // Ap 线（缩放视图始终画数据点，便于定位单次变化）
                 if (seriesVisible[0]) {
-                ctx.lineWidth = 1;
-                ctx.lineJoin = "round";
-                for (var i = visibleStart + 1; i < visibleEnd; i++) {
-                    ctx.beginPath();
-                    ctx.moveTo(dxOf(i - 1), dyOf(ap[i - 1]));
-                    ctx.strokeStyle = ap[i] >= ap[i - 1] ? "#ef5350" : "#26a69a";
-                    ctx.lineTo(dxOf(i), dyOf(ap[i]));
-                    ctx.stroke();
-                }
-
-                // Ap 数据点
-                var dotInterval = Math.max(1, Math.floor(visibleNn / 50));
-                for (var i = visibleStart; i < visibleEnd; i += dotInterval) {
-                    ctx.beginPath();
-                    ctx.arc(dxOf(i), dyOf(ap[i]), 1.5, 0, Math.PI * 2);
-                    var dotColor = (i > visibleStart && ap[i] < ap[i - 1]) ? "#26a69a" : "#ef5350";
-                    ctx.fillStyle = dotColor;
-                    ctx.fill();
-                }
+                    drawApLine(dxOf, dyOf, visibleStart, visibleEnd, {
+                        dotStep: Math.max(1, Math.floor(visibleNn / 50)),
+                    });
                 }
 
                 // 绘制额外系列线
@@ -811,9 +848,9 @@
                     var rx = Math.min(sx, mx);
                     var rw = Math.abs(mx - sx);
 
-                    oc.fillStyle = "rgba(100, 181, 246, 0.08)";
+                    oc.fillStyle = C.select_fill;
                     oc.fillRect(rx, pad.t, rw, gH);
-                    oc.strokeStyle = "rgba(100, 181, 246, 0.5)";
+                    oc.strokeStyle = C.select_stroke;
                     oc.lineWidth = 1.5;
                     oc.setLineDash([4, 3]);
                     oc.strokeRect(rx, pad.t, rw, gH);
