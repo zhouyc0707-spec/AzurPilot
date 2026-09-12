@@ -54,16 +54,29 @@ class TestStatButtonStyle(unittest.TestCase):
     def test_theme_classes_are_overridden_with_important(self):
         """必须压过 Bootstrap 与高级材质主题里带 !important 的按钮规则。"""
         css = BUTTON_STYLE
-        primary_rule = re.search(
-            r"\.btn-primary\s*\{([^}]*)\}", css, flags=re.S
+        active_rule = re.search(
+            r"\)\s*\.btn-primary\s*\{([^}]*)\}", css, flags=re.S
         )
 
-        self.assertIsNotNone(primary_rule)
-        body = primary_rule.group(1)
+        self.assertIsNotNone(active_rule)
+        body = active_rule.group(1)
+        self.assertIn("var(--alas-entry-accent-soft)", body)
         self.assertIn("var(--alas-entry-accent)", body)
-        self.assertIn("var(--alas-entry-on-accent)", body)
         for declaration in ("background", "border-color", "color"):
             self.assertRegex(body, rf"{declaration}: [^;]*!important")
+
+    def test_selected_state_keeps_the_neutral_button_shape(self):
+        """选中态只换底色与文字色，形状与中性态一致，并排才不会一高一低。"""
+        css = BUTTON_STYLE
+        neutral = re.search(r"\)\s*\.btn\s*\{([^}]*)\}", css, flags=re.S)
+        active = re.search(r"\)\s*\.btn-primary\s*\{([^}]*)\}", css, flags=re.S)
+
+        self.assertIsNotNone(neutral)
+        self.assertIsNotNone(active)
+        # 选中态不覆写尺寸类属性，形状完全继承中性态
+        for prop in ("height", "padding", "border-radius", "font-size"):
+            self.assertNotIn(prop, active.group(1), prop)
+        self.assertIn("border-radius: 12px !important;", neutral.group(1))
 
     def test_colors_come_from_theme_variables(self):
         """不写死颜色，四个主题才能自动跟随。"""

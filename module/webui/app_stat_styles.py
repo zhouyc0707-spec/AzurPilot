@@ -4,8 +4,9 @@
 Bootstrap 的深灰 ``secondary`` 与蓝色 ``primary``（委托周期、查看历史月份）。
 三者的高度、圆角、字号都不一致，横向排布时也不与标题对齐。
 
-这里用主题变量 ``--alas-entry-*`` 定义一套统一的操作按钮与分段控件，
-在统计面板挂载时注入一次；四个主题自动跟随，不需要按主题各写一份。
+这里统一成「刷新」按钮那套白底描边：中性态与选中态只在底色和文字颜色上
+区分，形状、字号、边框宽度完全一致，因此并排时不会一高一低。配色走主题
+变量 ``--alas-entry-*``，四个主题自动跟随，不需要按主题各写一份。
 
 样式选择器都带 ``!important``：注入的 ``<style>`` 位于主题样式表之后，
 需要盖掉 Bootstrap 的 ``.btn-primary/.btn-secondary`` 以及高级材质主题里
@@ -26,23 +27,22 @@ BUTTON_SCOPES = (
 # 用 :is() 汇总作用域：:is() 取参数中最高的特异性（这里都是 id 选择器），
 # 因此可以压过高级材质主题里不带作用域前缀的 .btn-primary/.btn-secondary。
 _SCOPE = ":is(" + ", ".join(BUTTON_SCOPES) + ")"
-# 单元素选择器：普通按钮
-_SIMPLE = f"{_SCOPE} .btn"
-_SIMPLE_HOVER = _SIMPLE.replace(".btn", ".btn:hover")
-_SIMPLE_PRIMARY = _SIMPLE.replace(".btn", ".btn-primary")
-_SIMPLE_PRIMARY_HOVER = _SIMPLE.replace(".btn", ".btn-primary:hover")
+# 按钮本体与选中态（Bootstrap 用 .btn-primary 表示当前项）
+_BUTTON = f"{_SCOPE} .btn"
+_BUTTON_HOVER = _BUTTON.replace(".btn", ".btn:hover")
+_BUTTON_ACTIVE = _BUTTON.replace(".btn", ".btn-primary")
+_BUTTON_ACTIVE_HOVER = _BUTTON.replace(".btn", ".btn-primary:hover")
 # 分段控件：容器与组内按钮
 _GROUP = f"{_SCOPE} .btn-group"
 _GROUP_BTN = f"{_SCOPE} .btn-group .btn"
 _GROUP_BTN_HOVER = f"{_SCOPE} .btn-group .btn:hover"
-_GROUP_PRIMARY = f"{_SCOPE} .btn-group .btn-primary"
-_GROUP_PRIMARY_HOVER = f"{_SCOPE} .btn-group .btn-primary:hover"
 
 # 注入的样式只作用于上列作用域，不波及其它页面的按钮。
 BUTTON_STYLE = f"""
 <style>
 /* --- 统计页统一按钮样式开始 --- */
-{_SIMPLE} {{
+/* 中性态：与「刷新」按钮一致的白底描边 */
+{_BUTTON} {{
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -60,23 +60,25 @@ BUTTON_STYLE = f"""
     transition: background-color .15s ease, color .15s ease, border-color .15s ease !important;
 }}
 
-{_SIMPLE_HOVER} {{
+{_BUTTON_HOVER} {{
     background: var(--alas-entry-accent-soft) !important;
     border-color: var(--alas-entry-accent) !important;
     color: var(--alas-entry-text) !important;
 }}
 
-/* 选中态：图表视图、委托周期、分页当前页、弹窗里的“本月” */
-{_SIMPLE_PRIMARY} {{
-    background: var(--alas-entry-accent) !important;
+/* 选中态：保持同样的白底描边形状，只把底色换成浅主色、文字换主色。
+   图表视图、委托周期、分页当前页、弹窗里的“本月”都用这个状态。 */
+{_BUTTON_ACTIVE} {{
     border-color: var(--alas-entry-accent) !important;
-    color: var(--alas-entry-on-accent) !important;
+    background: var(--alas-entry-accent-soft) !important;
+    color: var(--alas-entry-accent) !important;
+    font-weight: 700 !important;
 }}
 
-{_SIMPLE_PRIMARY_HOVER} {{
-    background: var(--alas-entry-action-hover) !important;
-    border-color: var(--alas-entry-action-hover) !important;
-    color: var(--alas-entry-on-accent) !important;
+{_BUTTON_ACTIVE_HOVER} {{
+    border-color: var(--alas-entry-accent) !important;
+    background: var(--alas-entry-accent-soft) !important;
+    color: var(--alas-entry-accent) !important;
 }}
 
 /* 分段控件：外框由容器负责，组内按钮只保留分隔线。
@@ -103,15 +105,16 @@ BUTTON_STYLE = f"""
     color: var(--alas-entry-text) !important;
 }}
 
-{_GROUP_PRIMARY} {{
-    border-color: var(--alas-entry-accent) !important;
-    background: var(--alas-entry-accent) !important;
-    color: var(--alas-entry-on-accent) !important;
+/* 分段控件里的选中项：容器已占用外框与圆角，这里只填底色 */
+{_SCOPE} .btn-group .btn-primary {{
+    background: var(--alas-entry-accent-soft) !important;
+    color: var(--alas-entry-accent) !important;
+    font-weight: 700 !important;
 }}
 
-{_GROUP_PRIMARY_HOVER} {{
-    background: var(--alas-entry-action-hover) !important;
-    color: var(--alas-entry-on-accent) !important;
+{_SCOPE} .btn-group .btn-primary:hover {{
+    background: var(--alas-entry-accent-soft) !important;
+    color: var(--alas-entry-accent) !important;
 }}
 
 /* 标题与按钮同排：固定行高与按钮一致，按内容居中，避免按钮被标题行高顶高 */
