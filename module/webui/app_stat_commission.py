@@ -25,6 +25,9 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
     """WebUI 委托收益统计视图。"""
 
     def _render_commission_income(self):
+        # 统一样式是幂等注入：即使本次会话没有走面板装配分支，
+        # 这里也会补上，避免按钮退回 Bootstrap 配色。
+        self._ensure_stat_button_style()
         try:
             income_data = self._load_commission_income_data()
             if income_data is None:

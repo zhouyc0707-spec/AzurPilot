@@ -26,6 +26,8 @@ class OpsiStatisticsMixin(WebUIMixinBase):
     """WebUI 大世界统计视图。"""
 
     def _render_opsi_stats(self):
+        # 统一样式是幂等注入，任何渲染路径都能保证按钮配色一致
+        self._ensure_stat_button_style()
         dependencies = self._load_opsi_stats_dependencies()
         if dependencies is None:
             return

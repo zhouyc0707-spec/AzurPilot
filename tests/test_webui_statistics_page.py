@@ -86,6 +86,15 @@ class _StatisticsHarness(StatisticsPageMixin):
         self.rendered = []
         self.cleaned = []
         self.task_handler = _TaskHandlerStub()
+        # 统计统一按钮样式是幂等注入，这里记录实际注入次数
+        self._stat_button_style_count = 0
+        self._injected_styles = []
+
+    def _count_button_style(self, html):
+        """记录一次 put_html，仅统计样式块。"""
+        if "统计页统一按钮样式" in html:
+            self._stat_button_style_count += 1
+            self._injected_styles.append(html)
 
     def init_menu(self, name=None):
         self.page = name
@@ -226,6 +235,10 @@ class TestStatisticsPanelRegions(unittest.TestCase):
                 "module.webui.app_statistics_page.put_button",
                 return_value=_OutputStub(),
             ),
+            patch(
+                "module.webui.app_statistics_page.put_html",
+                side_effect=self.gui._count_button_style,
+            ),
             patch("module.webui.app_statistics_page.t", side_effect=lambda key: key),
         )
         for active_patch in self.patches:
@@ -257,27 +270,22 @@ class TestStatisticsPanelRegions(unittest.TestCase):
     def test_charts_region_holds_every_scrolling_view(self):
         self.gui._mount_stat_panels()
 
-        # 首个子项是注入的统一按钮样式（put_html），其余才是图表 scope
         charts_children = [
-            child._name
-            for child in self.recorder.content_of("stat_panels_charts")
-            if hasattr(child, "_name")
+            child._name for child in self.recorder.content_of("stat_panels_charts")
         ]
         self.assertEqual(
             ["ap_chart", "opsi_stats", "ship_exp_table", "commission_income"],
             charts_children,
         )
 
-    def test_charts_region_injects_shared_button_style_once(self):
+    def test_button_style_is_injected_once_per_session(self):
+        """样式是幂等注入：多次装配/渲染只补一次，不会重复堆积 <style>。"""
         self.gui._mount_stat_panels()
+        self.assertEqual(1, self.gui._stat_button_style_count)
 
-        charts_children = self.recorder.content_of("stat_panels_charts")
-        injected = [
-            child
-            for child in charts_children
-            if not hasattr(child, "_name")
-        ]
-        self.assertEqual(1, len(injected), "统一按钮样式应只注入一次")
+        self.gui._ensure_stat_button_style()
+        self.gui._ensure_stat_button_style()
+        self.assertEqual(1, self.gui._stat_button_style_count)
 
     def test_mount_keeps_dashboard_first_and_charts_second(self):
         self.gui._mount_stat_panels()
