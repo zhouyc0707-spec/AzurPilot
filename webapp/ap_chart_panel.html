@@ -1,13 +1,43 @@
+<style>
+/* 序列概览：五个序列一行显示，明细（变化/最高/最低/均值）放到悬停提示里 */
+.ap-series-row {{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 20px;
+  margin-bottom: 8px;
+  font-size: 14px;
+  color: #aaa;
+}}
+.ap-series-item {{
+  position: relative;
+  white-space: nowrap;
+  cursor: default;
+}}
+.ap-series-item:hover::after {{
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid #555;
+  background: #39394ef2;
+  color: #ddd;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-line;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, .3);
+  pointer-events: none;
+}}
+</style>
 <div style="margin-top:16px; margin-bottom:8px;">
   <div style="font-weight:600; font-size:1rem; margin-bottom:8px;">体力变化 - {view_title}</div>
-  <div style="display:grid; grid-template-columns:150px 140px 120px 120px 90px; gap:14px; margin-bottom:2px; font-size:14px; color:#aaa;">
-    <span>行动力: <b style="color:#64b5f6">{ap_cur}</b></span>
-    <span>变化: <b style="color:{change_color}">{change_sign}{ap_change}</b></span>
-    <span>最高: <b style="color:#ef5350">{ap_max}</b></span>
-    <span>最低: <b style="color:#26a69a">{ap_min}</b></span>
-    <span>均值: <b style="color:#ff9800">{ap_avg}</b></span>
+  <div class="ap-series-row">
+    <span class="ap-series-item" data-tip="变化: {change_sign}{ap_change:,}（总行动力）&#10;最高: {ap_max:,}&#10;最低: {ap_min:,}&#10;均值: {ap_avg:,}">行动力: <b style="color:#64b5f6">{ap_now_cur:,} / {ap_cur:,}</b></span>
+    {coins_stats_html}
   </div>
-  {coins_stats_html}
 </div>
 <div id="{chart_id}_legend" style="display:flex; flex-wrap:wrap; gap:12px; margin-bottom:8px; font-size:12px; color:#888;">
   <span class="ap-legend-item" data-series="0" style="display:flex; align-items:center; gap:4px;cursor:pointer;opacity:1;"><span style="width:12px; height:3px; background:#64b5f6; border-radius:1px;"></span>体力</span>

@@ -13,7 +13,6 @@ from module.webui.app_dependencies import (
 )
 
 from module.webui.app_helpers import (
-    build_muted_notice,
     build_simple_table,
     build_title_block,
 )
@@ -37,18 +36,8 @@ class OpsiStatisticsMixin(WebUIMixinBase):
             compute_monthly_cl1_akashi_ap,
             get_ship_exp_stats,
         ) = dependencies
-        exp_data = self._load_ship_exp_data(get_ship_exp_stats, instance_name)
-        if exp_data is None:
-            return
-
-        exp_stats, ships_data, target_level, last_check_time = exp_data
-        self._render_daily_exp_stats(
-            instance_name,
-            exp_stats,
-            ships_data,
-            target_level,
-            last_check_time,
-        )
+        # 舰娘经验进度不在本卡片重复渲染：它由独立的「舰船经验」区块展示，
+        # 且不再因为经验数据缺失而中断整个大世界统计。
         labels, values, ap_bought = self._build_cl1_summary(
             instance_name,
             summary,
@@ -86,75 +75,6 @@ class OpsiStatisticsMixin(WebUIMixinBase):
             compute_monthly_cl1_akashi_ap,
             get_ship_exp_stats,
         )
-
-    def _load_ship_exp_data(self, get_ship_exp_stats, instance_name):
-        try:
-            exp_stats = get_ship_exp_stats(instance_name=instance_name)
-            exp_data = exp_stats.data
-            ships_data = exp_data.get("ships", []) if exp_data else []
-            target_level = exp_data.get("target_level", 125) if exp_data else 125
-            last_check_time = exp_data.get("last_check_time", "-") if exp_data else "-"
-        except Exception as e:
-            with use_scope("opsi_stats", clear=True):
-                put_text(t("Gui.Stat.LoadExpStatsFailed", e=e))
-            return None
-
-        return exp_stats, ships_data, target_level, last_check_time
-
-    def _render_daily_exp_stats(
-        self, instance_name, exp_stats, ships_data, target_level, last_check_time
-    ):
-        with use_scope("opsi_stats", clear=True):
-            put_html(build_title_block(t("Gui.Stat.DailyExpCheckTitle")))
-            put_row(
-                [
-                    put_text(t("Gui.Stat.CheckTime", value=last_check_time)),
-                    put_text(t("Gui.Stat.TargetLevel", value=target_level)),
-                ]
-            )
-            if ships_data:
-                exp_labels = [
-                    t("Gui.Stat.ShipSlot"),
-                    t("Gui.Stat.Level"),
-                    t("Gui.Stat.CurrentExpThisLevel"),
-                    t("Gui.Stat.TotalExp"),
-                    t("Gui.Stat.ExpToTarget"),
-                    t("Gui.Stat.SortiesNeeded"),
-                    t("Gui.Stat.EstimatedTime"),
-                ]
-                exp_rows = []
-                from module.statistics.opsi_month import (
-                    get_opsi_stats as get_opsi_stats_inner,
-                )
-
-                current_battles = (
-                    get_opsi_stats_inner(instance_name=instance_name)
-                    .summary()
-                    .get("total_battles", 0)
-                )
-                for ship in ships_data:
-                    progress = exp_stats.calculate_progress(
-                        ship, target_level, current_battles
-                    )
-                    exp_rows.append(
-                        [
-                            progress["position"],
-                            progress["level"],
-                            progress["current_exp"],
-                            progress["total_exp"],
-                            progress["exp_needed"]
-                            if progress["exp_needed"] > 0
-                            else "-",
-                            progress["battles_needed"]
-                            if progress["battles_needed"] > 0
-                            else "-",
-                            progress["time_needed"],
-                        ]
-                    )
-
-                put_html(build_simple_table(exp_labels, exp_rows))
-            else:
-                put_html(build_muted_notice(t("Gui.Stat.NoExpData")))
 
     def _build_cl1_summary(
         self,

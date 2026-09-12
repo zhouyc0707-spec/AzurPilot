@@ -506,6 +506,9 @@ def load_webui_styles(theme=None, is_mobile=None, preloaded_styles=()):
         "alas",
         "alas-mobile" if is_mobile else "alas-pc",
         "entry-alas",
+        # 统计页 Apple 风格设计系统：作用域限定在统计页内容区，
+        # 其他页面注入后不生效（见 stat-apple.css 选择器）。
+        "stat-apple",
     ]
     theme_styles = {
         "dark": ("dark-alas",),

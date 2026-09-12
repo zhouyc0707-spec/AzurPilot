@@ -4,26 +4,24 @@ from datetime import date
 from pathlib import Path
 
 import module.webui.lang as lang
-from module.webui.app_dependencies import put_button, put_scope, run_js, t, use_scope
+from module.webui.app_dependencies import (
+    put_scope,
+    run_js,
+    t,
+    use_scope,
+)
 from module.webui.app_types import WebUIMixinBase
 
 
 class StatisticsPageMixin(WebUIMixinBase):
     """惰性装配并复用统计子视图，同时支持概览页内嵌与独立统计页。"""
 
-    def _mount_stat_panels(self) -> None:
-        """创建并渲染统计图表面板（含周期刷新），渲染到当前所在作用域。
+    def _mount_resource_strip(self) -> None:
+        """挂载顶部资源概览条（统计页与总览页共用同一实现）。
 
-        统计图表既可整体铺满页面，也可内嵌到概览页的右侧区域，
-        因此单独抽出为面板装配方法，由调用方决定其渲染位置。
+        资源数值由 ``alas_update_stat_resources`` 周期渲染到该作用域，
+        因此这里只做空容器挂载与去重状态复位。
         """
-        if not hasattr(self, "_ap_chart_view"):
-            self._ap_chart_view = "line"
-        if not hasattr(self, "_commission_income_period"):
-            self._commission_income_period = "month"
-
-        # 独立 scope 使周期刷新不会清空其他统计区域。
-        # 顶部资源概览（排除行动力/黄币/紫币，避免与下方行动力图表重复）
         put_scope("stat_resources", []).style(
             "display:flex;flex-wrap:wrap;gap:.4rem .8rem;align-items:center;"
             "border:1px solid var(--alas-entry-border,#dde0e5);"
@@ -38,6 +36,21 @@ class StatisticsPageMixin(WebUIMixinBase):
         # 页面切换只做轻量的空容器挂载，避免统计视图的数据库读取与图表构建
         # 阻塞总览页/页面切换的响应。
         self.task_handler.add(self.alas_update_stat_resources, 10, True)
+
+    def _mount_stat_panels(self) -> None:
+        """创建并渲染统计图表面板（含周期刷新），渲染到当前所在作用域。
+
+        统计图表既可整体铺满页面，也可内嵌到概览页的右侧区域，
+        因此单独抽出为面板装配方法，由调用方决定其渲染位置。
+        """
+        if not hasattr(self, "_ap_chart_view"):
+            self._ap_chart_view = "line"
+        if not hasattr(self, "_commission_income_period"):
+            self._commission_income_period = "month"
+
+        # 独立 scope 使周期刷新不会清空其他统计区域。
+        # 顶部资源概览（排除行动力/黄币/紫币，避免与下方行动力图表重复）
+        self._mount_resource_strip()
         put_scope("ap_chart", [])
         self.task_handler.add(self._render_ap_chart, 60, True)
         # 隐藏全资源变化趋势图表（始终不渲染、不注册周期刷新）
@@ -85,20 +98,11 @@ class StatisticsPageMixin(WebUIMixinBase):
                 )
 
             with use_scope("statistics-content", clear=True):
-                put_scope(
-                    "statistics-toolbar",
-                    [
-                        put_button(
-                            t("Gui.Stat.Refresh"),
-                            onclick=self._refresh_statistics_page,
-                            color="off",
-                        )
-                    ],
-                ).style(
-                    "display:flex;justify-content:flex-end;margin-bottom:.5rem;"
-                )
+                # 顶部不再放工具栏：刷新按钮由各区块自带，
+                # 资源仪表盘直接作为页面第一个区块，配合 sticky 常驻上方。
+                self._mount_resource_strip()
                 put_scope("ap_chart", [])
-                put_scope("resource_chart", [])
+                # 全资源变化趋势图已下线：不挂载作用域、不渲染、不注册周期刷新
                 put_scope("opsi_stats", [])
                 put_scope("ship_exp_table", [])
                 put_scope("commission_income", [])
@@ -141,24 +145,19 @@ class StatisticsPageMixin(WebUIMixinBase):
         )
 
     def _set_statistics_refresh_pending(self, pending: bool) -> None:
-        """只更新刷新提示，不替换用户正在查看的统计 DOM。"""
+        """只在冻结的资源仪表盘上标记「有新数据」，不替换用户正在查看的 DOM。"""
         if pending == getattr(self, "_statistics_refresh_pending", False):
             return
         self._statistics_refresh_pending = pending
         run_js(
             """
             (function () {
-                var toolbar = document.getElementById(
-                    "pywebio-scope-statistics-toolbar"
+                var strip = document.getElementById(
+                    "pywebio-scope-stat_resources"
                 );
-                var button = toolbar && toolbar.querySelector("button");
-                if (!button) return;
-                button.classList.toggle("statistics-refresh-pending", pending);
-                button.title = pending ? refreshHint : "";
-                button.setAttribute(
-                    "aria-label",
-                    pending ? refreshHint : button.textContent.trim()
-                );
+                if (!strip) return;
+                strip.classList.toggle("stat-has-new-data", pending);
+                strip.title = pending ? refreshHint : "";
             })();
             """,
             pending=pending,
@@ -166,9 +165,8 @@ class StatisticsPageMixin(WebUIMixinBase):
         )
 
     def _render_statistics_sections(self) -> None:
-        """统一刷新各统计子视图。"""
+        """统一刷新各统计子视图（不含已下线的全资源变化趋势图）。"""
         self._render_ap_chart()
-        self._render_resource_chart()
         self._render_opsi_stats()
         self._render_ship_exp()
         self._render_commission_income()
