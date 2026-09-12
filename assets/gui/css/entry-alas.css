@@ -816,6 +816,8 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
+    /* 内联级按钮同样按基线对齐，统一降到中线，避免行内多出一段下沉 */
+    vertical-align: middle !important;
     height: 30px !important;
     padding: 0 14px !important;
     border: 1px solid var(--alas-entry-border) !important;
@@ -868,7 +870,11 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
 
 /* 分段控件（今日/本周/本月、图表视图）：外框由容器出，组内只留分隔线，
    未选中保持白底，分段边界在任何主题下都清晰。
-   圆角由容器 overflow:hidden 裁掉外侧两角，无需 :first-child 例外。 */
+   圆角由容器 overflow:hidden 裁掉外侧两角，无需 :first-child 例外。
+   两处对齐细节都必须显式声明，否则下方会多出一段空白：
+   - vertical-align:middle：容器是 inline-flex，默认按基线对齐，而按钮内部
+     没有可用的文字基线，浏览器会退回用底边当基线，把整组往下顶。
+   - align-items:center：容器默认按伸缩行定位，按钮会被压到偏下而非居中。 */
 :is(#pywebio-scope-stat_panels_charts,
     #pywebio-scope-ap_chart,
     #pywebio-scope-statistics-toolbar,
@@ -876,6 +882,8 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
     #pywebio-scope-meow_loot_scope,
     #pywebio-scope-commission_income) .btn-group {
     display: inline-flex !important;
+    align-items: center !important;
+    vertical-align: middle !important;
     overflow: hidden !important;
     border: 1px solid var(--alas-entry-border) !important;
     border-radius: 10px !important;
@@ -889,6 +897,8 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
     #pywebio-scope-opsi_stats,
     #pywebio-scope-meow_loot_scope,
     #pywebio-scope-commission_income) .btn-group .btn {
+    /* 主题的 .btn-off 带 .125rem 上下外边距，会撑高整组并让按钮偏下 */
+    margin: 0 !important;
     border: 0 !important;
     border-left: 1px solid var(--alas-entry-border) !important;
     border-radius: 0 !important;
@@ -910,10 +920,9 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
     transform: none;
 }
 
-/* 选中态必须写在分段控件规则之后：`:is(...) .btn-group .btn` 比
-   `:is(...) .btn-primary` 多一个类，特异性更高，否则组内选中项会被刷成白底。
-   当前视图、当前区间、分页当前页、弹窗里的「本月」都用这个状态：
-   主色实心 + 反色文字，形状与中性态完全一致。 */
+/* 选中态必须写在分段控件规则之后，并且组内要单独写一条：
+   `:is(...) .btn-group .btn` 比 `:is(...) .btn-primary` 多一个类，特异性更高，
+   只写后者的话组内选中项会被刷回白底。 */
 :is(#pywebio-scope-stat_panels_charts,
     #pywebio-scope-ap_chart,
     #pywebio-scope-statistics-toolbar,

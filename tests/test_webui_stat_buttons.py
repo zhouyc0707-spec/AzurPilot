@@ -108,9 +108,37 @@ class TestStatButtonStyle(unittest.TestCase):
         self.assertIn("background: var(--alas-entry-surface) !important;", group_btn)
         self.assertIn("border-left: 1px solid var(--alas-entry-border) !important;", group_btn)
 
+    def test_segmented_group_has_no_extra_space_below(self):
+        """组容器必须显式居中并清掉主题边距。
+
+        否则：inline-flex 默认按基线对齐，按钮内没有文字基线可用，浏览器用底边
+        当基线把整组往下顶；主题的 .btn-off 还带 .125rem 上下外边距。两者都会让
+        按钮下方多出一段空白。
+        """
+        group = next(
+            d for s, d in self.rules if re.search(r"\)\s*\.btn-group\s*$", s.strip())
+        )
+        self.assertIn("align-items: center !important;", group)
+        self.assertIn("vertical-align: middle !important;", group)
+
+        group_btn = next(
+            d
+            for s, d in self.rules
+            if re.search(r"\)\s*\.btn-group\s+\.btn\s*$", s.strip())
+        )
+        self.assertIn("margin: 0 !important;", group_btn)
+
+    def test_standalone_buttons_are_baseline_safe(self):
+        """普通按钮也是 inline-flex，同样要降到中线，避免行内下沉。"""
+        base = next(
+            d for s, d in self.rules if re.search(r"\)\s*\.btn\s*$", s.strip())
+        )
+        self.assertIn("vertical-align: middle !important;", base)
+
     def test_selected_rule_comes_after_group_rule(self):
         """`:is(...) .btn-group .btn` 比 `:is(...) .btn-primary` 多一个类，
-        特异性更高。选中态规则必须排在其后，否则组内选中项会被刷回白底。"""
+        特异性更高。选中态必须额外写一条组内版本，且两条都排在分段规则之后，
+        否则组内选中项会被刷回白底。"""
         selectors = [s.strip() for s, _ in self.rules]
 
         group_index = next(
@@ -118,10 +146,12 @@ class TestStatButtonStyle(unittest.TestCase):
             for i, s in enumerate(selectors)
             if re.search(r"\)\s*\.btn-group\s+\.btn\s*$", s)
         )
-        selected_index = next(
-            i for i, s in enumerate(selectors) if re.search(r"\)\s*\.btn-primary\s*$", s)
+        grouped_selected_index = next(
+            i
+            for i, s in enumerate(selectors)
+            if re.search(r"\)\s*\.btn-group\s+\.btn-primary", s)
         )
-        self.assertLess(group_index, selected_index)
+        self.assertLess(group_index, grouped_selected_index)
 
     def test_colors_come_from_theme_variables(self):
         """除阴影用的半透明黑之外，不应写死颜色。"""
