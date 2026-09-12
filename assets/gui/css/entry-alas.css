@@ -818,6 +818,10 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
     justify-content: center !important;
     /* 内联级按钮同样按基线对齐，统一降到中线，避免行内多出一段下沉 */
     vertical-align: middle !important;
+    /* 明确按内容取宽：alas-mobile.css 会给这些作用域里的按钮加
+       width:100%!important，窄屏下会把周期与分页按钮拉满整行 */
+    width: auto !important;
+    min-width: 0 !important;
     height: 30px !important;
     padding: 0 14px !important;
     border: 1px solid var(--alas-entry-border) !important;
@@ -884,6 +888,9 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
     display: inline-flex !important;
     align-items: center !important;
     vertical-align: middle !important;
+    /* 同样要压过 alas-mobile.css 的 width:100%!important，保持按内容取宽 */
+    width: auto !important;
+    max-width: 100% !important;
     overflow: hidden !important;
     border: 1px solid var(--alas-entry-border) !important;
     border-radius: 10px !important;
@@ -897,8 +904,17 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
     #pywebio-scope-opsi_stats,
     #pywebio-scope-meow_loot_scope,
     #pywebio-scope-commission_income) .btn-group .btn {
-    /* 主题的 .btn-off 带 .125rem 上下外边距，会撑高整组并让按钮偏下 */
+    /* 主题的 .btn-off 带 .125rem 上下外边距，会撑高整组并让按钮偏下；
+       alas-mobile.css 还会把按钮拉成整行宽、并用更大的内边距顶高，
+       这里把宽度、内边距、行高一起钉住，保证与普通按钮同尺寸 */
     margin: 0 !important;
+    width: auto !important;
+    min-width: 0 !important;
+    flex: 0 0 auto !important;
+    height: 30px !important;
+    padding: 0 14px !important;
+    font-size: 12px !important;
+    line-height: 1 !important;
     border: 0 !important;
     border-left: 1px solid var(--alas-entry-border) !important;
     border-radius: 0 !important;
@@ -997,8 +1013,10 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
     align-items: center !important;
     justify-content: center !important;
     vertical-align: middle !important;
+    flex: 0 0 auto !important;
     width: 30px !important;
     min-width: 30px !important;
+    max-width: 30px !important;
     height: 30px !important;
     padding: 0 !important;
     margin: 0 !important;

@@ -86,6 +86,29 @@ class TestStatButtonStyle(unittest.TestCase):
         self.assertIsNotNone(radius)
         self.assertIn(radius.group(1).strip(), self.block)
 
+    def test_buttons_do_not_stretch_across_the_row(self):
+        """alas-mobile.css 会给这些作用域里的按钮加 width:100%!important，
+        而它排在 entry-alas.css 之后；按钮与分段容器必须显式按内容取宽，
+        否则窄屏下今日/本周/本月与分页会被拉满整行。"""
+        base = next(
+            d for s, d in self.rules if re.search(r"\)\s*\.btn\s*$", s.strip())
+        )
+        group = next(
+            d for s, d in self.rules if re.search(r"\)\s*\.btn-group\s*$", s.strip())
+        )
+        group_btn = next(
+            d
+            for s, d in self.rules
+            if re.search(r"\)\s*\.btn-group\s+\.btn\s*$", s.strip())
+        )
+
+        for name, body in (("按钮", base), ("分段容器", group), ("组内按钮", group_btn)):
+            self.assertIn("width: auto !important;", body, name)
+        # 组内按钮还要钉住尺寸，抵消移动端更大的内边距把整组顶高
+        self.assertIn("height: 30px !important;", group_btn)
+        self.assertIn("padding: 0 14px !important;", group_btn)
+        self.assertIn("line-height: 1 !important;", group_btn)
+
     def test_selected_state_keeps_the_neutral_shape(self):
         """选中态只换配色，不改形状，并排才不会一高一低。"""
         active = next(
