@@ -62,7 +62,9 @@
     var lineDistance = __DISTANCE__;
     var hasDistanceSeries = lineDistance && lineDistance.length > 0;
 
-    var seriesVisible = [true, true, true, true, true];
+    // 默认只显示行动力曲线，黄币/紫币/资产/海里数由用户点击图例按需显示
+    var seriesVisible = [true, false, false, false, false];
+    var seriesVisibleDefault = seriesVisible.slice();
     var _isSelecting = false;
     var seriesColors = ["#64b5f6", "#ce93d8", "#ffd54f", "#22d3ee", "#1565c0"];
     var seriesNames = ["体力", "紫币", "黄币", "资产", "海里数"];
@@ -146,7 +148,9 @@
         var COIN_TICK_BASELINE = 4;
         var COIN_TICK_STACK_GAP = 11;
 
-        pad = { t: 20, r: showCoins ? 72 : 20, b: 52, l: 52 };
+        // 右侧刻度仅在确有可见的辅助序列时才留白，避免默认视图出现空白
+        var anyExtraVisible = seriesVisible[1] || seriesVisible[2] || seriesVisible[3] || seriesVisible[4];
+        pad = { t: 20, r: showCoins && anyExtraVisible ? 72 : 20, b: 52, l: 52 };
         gW = W - pad.l - pad.r;
         gH = H - pad.t - pad.b;
 
@@ -217,7 +221,8 @@
             combinedMax += combinedRng * 0.08;
         }
 
-        // 刻度配置（右侧标签）：第1行紫币独立，第2行黄币代表合并轴
+        // 刻度配置（右侧标签）：第1行紫币独立，第2行黄币代表合并轴；
+        // 对应曲线被隐藏时不显示刻度，避免只画行动力却留着其他轴的数字
         var EXTRA_SERIES_CONFIGS = [];
         var cfgOffset = 0;
         function addCfg(has, color, dataMin, dataMax) {
@@ -225,8 +230,13 @@
             EXTRA_SERIES_CONFIGS.push({ color: color, dataMin: dataMin, dataMax: dataMax, offsetY: cfgOffset });
             cfgOffset += COIN_TICK_STACK_GAP;
         }
-        addCfg(hasPurpleCoins, "#ce93d8", purpleMin, purpleMax);
-        addCfg(hasCombined, "#ffd54f", combinedMin, combinedMax);
+        addCfg(hasPurpleCoins && seriesVisible[1], "#ce93d8", purpleMin, purpleMax);
+        addCfg(
+            hasCombined && (seriesVisible[2] || seriesVisible[3] || seriesVisible[4]),
+            "#ffd54f",
+            combinedMin,
+            combinedMax
+        );
 
         // 系列绘制配置（所有线都要画，资产用时间戳）
         var SERIES_DRAW = [
@@ -659,13 +669,15 @@
                 if (isNaN(idx) || idx < 0 || idx >= seriesVisible.length) return;
                 // 独立切换：只开关当前点中的序列，不影响其他
                 seriesVisible[idx] = !seriesVisible[idx];
-                // 确保至少一条序列可见
+                // 全部关闭时回到默认视图（仅行动力），避免出现空图
                 var anyVisible = false;
                 for (var si = 0; si < seriesVisible.length; si++) {
                     if (seriesVisible[si]) { anyVisible = true; break; }
                 }
                 if (!anyVisible) {
-                    for (var si = 0; si < seriesVisible.length; si++) seriesVisible[si] = true;
+                    for (var si = 0; si < seriesVisible.length; si++) {
+                        seriesVisible[si] = seriesVisibleDefault[si];
+                    }
                 }
                 legendEl.querySelectorAll(".ap-legend-item").forEach(function (li, i) {
                     var si = parseInt(li.getAttribute("data-series"), 10);
