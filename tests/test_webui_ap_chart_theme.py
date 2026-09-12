@@ -132,6 +132,19 @@ class TestApChartPalette(unittest.TestCase):
         # 单色曲线用的是 C.ap_line，出现即说明还有单色分支
         self.assertNotIn("strokeStyle = C.ap_line", js)
 
+    def test_javascript_moves_period_buttons_into_the_legend_row(self):
+        """put_html 生成的 div 不是 PyWebIO scope，按钮只能渲染到面板末尾；
+        必须由前端把它搬进图例行，否则会掉到图表下方。"""
+        js = (PROJECT_ROOT / "webapp" / "ap_chart.js").read_text(encoding="utf-8")
+        source = (PROJECT_ROOT / "module/webui/app_stat_action_point.py").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("movePeriodSelectorToLegend", js)
+        self.assertIn(".ap-legend-row", js)
+        # 容器必须是 put_scope 建的（put_html 的 div 不作为 scope 目标）
+        self.assertIn("put_scope(period_scope, [])", source)
+
     def test_panel_template_has_no_dark_only_colors(self):
         panel = (PROJECT_ROOT / "webapp" / "ap_chart_panel.html").read_text(
             encoding="utf-8"
@@ -252,10 +265,11 @@ class TestApChartThemeRendering(unittest.TestCase):
 
         html, _ = harness.render(_chart_data(), _auxiliary_data())
 
+        self.assertIn('class="ap-chart-panel"', html)
         self.assertIn('class="ap-legend-row"', html)
-        # 时间范围按钮渲染进图例行左侧预留的 scope
-        self.assertIn('id="ap_cv_', html)
-        self.assertIn('_period"></div>', html)
+        # 图例行左侧留给时间范围按钮（scope 由 put_scope 创建、渲染后由 JS 搬入）
+        self.assertIn('.ap-legend-row > [id^="pywebio-scope-"]', html)
+        self.assertIn("order: -1", html)
         # 标题与图例的上下留白收紧，避免标题到图表之间出现过大空白
         self.assertIn("margin-top:10px", html)
         self.assertNotIn("margin-top:16px", html)

@@ -9,6 +9,7 @@ from module.webui.app_dependencies import (
     put_button,
     put_buttons,
     put_html,
+    put_scope,
     put_text,
     t,
     use_scope,
@@ -684,10 +685,10 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
         return float(value)
 
     def _put_ap_period_selector(self, scope_id, period):
-        """把「今日/本周/本月」渲染到面板图例行预留的 scope 里。
+        """把「今日/本周/本月」渲染进图例行左侧的 scope。
 
         Args:
-            scope_id: 图例行里的 scope 名。
+            scope_id: 由 ``put_scope`` 创建的作用域名。
             period: 当前时间范围（day/week/month），用于高亮。
         """
 
@@ -762,7 +763,6 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
             legend_text=palette["legend_text"],
             series_text=palette["series_text"],
             series_shadow=palette["series_shadow"],
-            period_scope=period_scope,
         )
 
         js_tpl = read_webapp_template("ap_chart.js")
@@ -810,7 +810,9 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
 
         with use_scope("ap_chart", clear=True):
             put_html(html)
-            # 时间范围按钮渲染进图例行左侧预留的 scope；按钮必须在图表 HTML
-            # 之后渲染，scope 才有对应节点
+            # 时间范围按钮：必须由 put_scope 建容器（put_html 生成的 div
+            # 不算 PyWebIO scope，put_buttons 的 scope 目标会落到空处），
+            # 再用 CSS order 排到图例行左侧。
+            put_scope(period_scope, [])
             self._put_ap_period_selector(period_scope, self._ap_chart_period())
             run_js(js_code)

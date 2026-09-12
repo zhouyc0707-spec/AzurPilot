@@ -85,6 +85,17 @@
     var tipEl = document.getElementById(chartId + "_tip");
     var ovCv = document.getElementById(chartId + "_ov");
 
+    // 时间范围按钮由 PyWebIO 渲染在面板末尾，插入图例行左侧（就地搬移，
+    // 节点不重建，因此按钮上的点击回调仍然有效）
+    (function movePeriodSelectorToLegend() {
+        var scope = document.getElementById("pywebio-scope-" + chartId + "_period");
+        var legendRow = cv.closest(".ap-chart-panel");
+        var row = legendRow && legendRow.querySelector(".ap-legend-row");
+        if (scope && row && scope.parentElement !== row) {
+            row.appendChild(scope);
+        }
+    })();
+
     var dpr = window.devicePixelRatio || 1;
     var W, H, pad, gW, gH;
     var cleanupHandlers = [];
