@@ -14,42 +14,54 @@ class StatisticsPageMixin(WebUIMixinBase):
     def _mount_stat_panels(self) -> None:
         """创建并渲染统计图表面板（含周期刷新），渲染到当前所在作用域。
 
-        统计图表既可整体铺满页面，也可内嵌到概览页的右侧区域，
-        因此单独抽出为面板装配方法，由调用方决定其渲染位置。
+        统计内容分为两个区域：上方是固定不动的资源仪表盘，下方是自带滚动的
+        图表卡片，滚动只发生在图表区域内，仪表盘始终可见。统计图表既可整体
+        铺满页面，也可内嵌到概览页的右侧区域，因此单独抽出为面板装配方法，
+        由调用方决定其渲染位置。
         """
         if not hasattr(self, "_ap_chart_view"):
             self._ap_chart_view = "line"
         if not hasattr(self, "_commission_income_period"):
             self._commission_income_period = "month"
 
-        # 独立 scope 使周期刷新不会清空其他统计区域。
-        # 顶部资源概览（排除行动力/黄币/紫币，避免与下方行动力图表重复）
-        put_scope("stat_resources", []).style(
-            "display:flex;flex-wrap:wrap;gap:.4rem .8rem;align-items:center;"
-            "border:1px solid var(--alas-entry-border,#dde0e5);"
-            "padding:.45rem .7rem;margin-bottom:.6rem;"
-            "position:sticky;top:0;z-index:10;"
-            "background:var(--alas-entry-surface,#fff);"
+        # 区域一：资源概览（排除行动力/黄币/紫币，避免与下方行动力图表重复）。
+        # 吸顶与卡片外观见 entry-alas.css 的两区域布局规则。
+        put_scope(
+            "stat_panels_dashboard",
+            [
+                put_scope("stat_resources", []).style(
+                    "display:flex;flex-wrap:wrap;gap:.4rem .8rem;align-items:center;"
+                )
+            ],
         )
         # 重新挂载时重置去重状态，避免浏览器刷新后因增量去重导致资源不渲染
         self._dashboard_last_display_time = {}
         self._dashboard_first_display = True
+
+        # 区域二：其余统计内容，独立 scope 使周期刷新不会清空其他统计区域。
+        put_scope(
+            "stat_panels_charts",
+            [
+                put_scope("ap_chart", []),
+                # 隐藏全资源变化趋势图表（始终不渲染、不注册周期刷新）
+                # 确保页面加载、刷新、切换选项卡等任何交互后均保持隐藏状态
+                # put_scope("resource_chart", []),
+                put_scope("opsi_stats", []),
+                put_scope("ship_exp_table", []),
+                put_scope("commission_income", []),
+            ],
+        )
+
         # 不再同步渲染：后台任务注册后 next_run=now 会立即在任务线程执行，
         # 页面切换只做轻量的空容器挂载，避免统计视图的数据库读取与图表构建
-        # 阻塞总览页/页面切换的响应。
+        # 阻塞总览页/页面切换的响应。任务统一在全部 scope 就绪后注册，避免
+        # 刷新任务先于容器落地而写不进目标 scope。
         self.task_handler.add(self.alas_update_stat_resources, 10, True)
-        put_scope("ap_chart", [])
         self.task_handler.add(self._render_ap_chart, 60, True)
-        # 隐藏全资源变化趋势图表（始终不渲染、不注册周期刷新）
-        # 确保页面加载、刷新、切换选项卡等任何交互后均保持隐藏状态
-        # put_scope("resource_chart", [])
         # self._render_resource_chart()
         # self.task_handler.add(self._render_resource_chart, 60, True)
-        put_scope("opsi_stats", [])
         self.task_handler.add(self._render_opsi_stats, 60, True)
-        put_scope("ship_exp_table", [])
         self.task_handler.add(self._render_ship_exp, 60, True)
-        put_scope("commission_income", [])
         self.task_handler.add(self._render_commission_income, 60, True)
 
     def alas_set_stat(self) -> None:
@@ -84,7 +96,9 @@ class StatisticsPageMixin(WebUIMixinBase):
                     "__resourceChartCleanups",
                 )
 
-            with use_scope("statistics-content", clear=True):
+            # 面板（仪表盘 + 图表区）由总览页装配一次后被统计页复用，
+            # 这里只把统计页专属的工具栏放进图表区，不重建已有的图表 scope。
+            with use_scope("stat_panels_charts"):
                 put_scope(
                     "statistics-toolbar",
                     [
@@ -97,11 +111,6 @@ class StatisticsPageMixin(WebUIMixinBase):
                 ).style(
                     "display:flex;justify-content:flex-end;margin-bottom:.5rem;"
                 )
-                put_scope("ap_chart", [])
-                put_scope("resource_chart", [])
-                put_scope("opsi_stats", [])
-                put_scope("ship_exp_table", [])
-                put_scope("commission_income", [])
 
             self._statistics_cache_key = cache_key
             self._render_statistics_sections()

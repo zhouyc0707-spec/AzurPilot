@@ -740,3 +740,62 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
         max-height: calc(100dvh - 24px);
     }
 }
+
+/* --- 统计页两区域布局开始 --- */
+/* 资源仪表盘固定在上方，其余统计内容在下方卡片内自行滚动。
+   配色统一走 --alas-entry-* 变量，四个主题自动跟随，无需按主题另写规则。 */
+#pywebio-scope-stat_panels {
+    display: grid;
+    /* 第一行按仪表盘内容取高，第二行吃掉剩余高度并自行滚动 */
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-auto-flow: row;
+    height: 100%;
+    min-width: 0;
+    overflow: hidden;
+}
+
+#pywebio-scope-stat_panels_dashboard {
+    min-width: 0;
+    margin-bottom: .6rem;
+    padding: .55rem .7rem;
+    border: 1px solid var(--alas-entry-border);
+    border-radius: 16px;
+    background: var(--alas-entry-surface);
+    box-shadow: var(--alas-entry-panel-shadow);
+}
+
+/* 仪表盘内部自己排布条目，外层只负责卡片外观 */
+#pywebio-scope-stat_resources {
+    margin: 0;
+}
+
+#pywebio-scope-stat_panels_charts {
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: .7rem;
+    border: 1px solid var(--alas-entry-border);
+    border-radius: 16px;
+    background: var(--alas-entry-surface);
+    box-shadow: var(--alas-entry-panel-shadow);
+}
+
+#pywebio-scope-stat_panels_charts > *:last-child {
+    margin-bottom: 0;
+}
+
+/* 独立统计页：图表区撑满内容区剩余高度（总览页的高度由 stat_panels 提供） */
+#pywebio-scope-statistics-content > #pywebio-scope-stat_panels_charts {
+    align-self: stretch;
+}
+
+/* 窄屏下总览页是单列布局，仪表盘改为整页滚动时吸顶 */
+@media (max-width: 768px) {
+    #pywebio-scope-stat_panels_dashboard {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+}
+/* --- 统计页两区域布局结束 --- */
