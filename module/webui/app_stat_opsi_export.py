@@ -110,7 +110,9 @@ class OpsiExportMixin(WebUIMixinBase):
             )
 
         # 月份切换按钮紧跟在标题右侧（标题列自适应内容宽度，按钮列吃掉剩余空间，
-        # 因此按钮不会被推到最右边）；已经在本月时不再显示「回到本月」。
+        # 因此按钮不会被推到最右边）；标题自身不再带上下外边距，改由整行承担，
+        # 这样按钮与标题文字在同一水平线上（否则会被标题的上外边距顶高）。
+        # 已经在本月时不再显示「回到本月」。
         buttons = [{"label": "查看历史月份", "value": "history", "color": "secondary"}]
         if view_month is not None:
             buttons.append({"label": "回到本月", "value": "current", "color": "primary"})
@@ -119,8 +121,8 @@ class OpsiExportMixin(WebUIMixinBase):
                 put_html(
                     build_title_block(
                         title,
-                        margin_top=20,
-                        margin_bottom=8,
+                        margin_top=0,
+                        margin_bottom=0,
                     )
                 ),
                 put_buttons(
@@ -130,7 +132,9 @@ class OpsiExportMixin(WebUIMixinBase):
                 ),
             ],
             size="auto 1fr",
-        ).style("align-items:center; gap:10px")
+        ).style(
+            "align-items:center; gap:10px; margin-top:20px; margin-bottom:8px"
+        )
         put_html(
             build_simple_table(
                 [
