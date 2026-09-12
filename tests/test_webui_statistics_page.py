@@ -257,13 +257,34 @@ class TestStatisticsPanelRegions(unittest.TestCase):
     def test_charts_region_holds_every_scrolling_view(self):
         self.gui._mount_stat_panels()
 
+        # 首个子项是注入的统一按钮样式（put_html），其余才是图表 scope
         charts_children = [
-            child._name for child in self.recorder.content_of("stat_panels_charts")
+            child._name
+            for child in self.recorder.content_of("stat_panels_charts")
+            if hasattr(child, "_name")
         ]
         self.assertEqual(
             ["ap_chart", "opsi_stats", "ship_exp_table", "commission_income"],
             charts_children,
         )
+
+    def test_charts_region_injects_shared_button_style_once(self):
+        self.gui._mount_stat_panels()
+
+        charts_children = self.recorder.content_of("stat_panels_charts")
+        injected = [
+            child
+            for child in charts_children
+            if not hasattr(child, "_name")
+        ]
+        self.assertEqual(1, len(injected), "统一按钮样式应只注入一次")
+
+    def test_mount_keeps_dashboard_first_and_charts_second(self):
+        self.gui._mount_stat_panels()
+
+        names = self.recorder.names()
+        self.assertEqual("stat_panels_dashboard", names[1])
+        self.assertEqual("stat_panels_charts", names[-1])
 
     def test_dashboard_scope_is_not_recreated_when_mounting_stat_page(self):
         """统计页复用总览页装配的面板，只补一个工具栏，不重建图表 scope。"""
