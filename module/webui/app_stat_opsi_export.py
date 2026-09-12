@@ -110,12 +110,12 @@ class OpsiExportMixin(WebUIMixinBase):
             )
 
         # 月份切换按钮紧跟在标题右侧（标题列自适应内容宽度，按钮列吃掉剩余空间，
-        # 因此按钮不会被推到最右边）；标题自身不再带上下外边距，改由整行承担，
-        # 这样按钮与标题文字在同一水平线上（否则会被标题的上外边距顶高）。
+        # 因此按钮不会被推到最右边）；按钮统一用 color="off"，
+        # 外观与其它统计按钮一致，由 entry-alas.css 的统一样式收口。
         # 已经在本月时不再显示「回到本月」。
-        buttons = [{"label": "查看历史月份", "value": "history", "color": "secondary"}]
+        buttons = [{"label": "查看历史月份", "value": "history", "color": "off"}]
         if view_month is not None:
-            buttons.append({"label": "回到本月", "value": "current", "color": "primary"})
+            buttons.append({"label": "回到本月", "value": "current", "color": "off"})
         put_row(
             [
                 put_html(
@@ -128,7 +128,6 @@ class OpsiExportMixin(WebUIMixinBase):
                 put_buttons(
                     buttons,
                     onclick=self._on_meow_loot_month_click,
-                    small=True,
                 ),
             ],
             size="auto 1fr",
@@ -173,7 +172,7 @@ class OpsiExportMixin(WebUIMixinBase):
             }
         ]
         buttons += [
-            {"label": f"{y:04d}-{m:02d}", "value": (y, m), "color": "secondary"}
+            {"label": f"{y:04d}-{m:02d}", "value": (y, m), "color": "off"}
             for y, m in months
             if (y, m) != (now.year, now.month)
         ]

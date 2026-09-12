@@ -271,35 +271,41 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
                 self._commission_recent_page = 0
                 self._render_commission_income()
 
-            put_buttons(
+            # 周期与刷新按钮统一用 color="off"，外观由 entry-alas.css 的
+            # 「统计页统一按钮样式」收口，选中区间用 primary 标记。
+            put_row(
                 [
-                    {
-                        "label": t("Gui.Stat.CommissionIncomeDay"),
-                        "value": "day",
-                        "color": "primary" if period == "day" else "secondary",
-                    },
-                    {
-                        "label": t("Gui.Stat.CommissionIncomeWeek"),
-                        "value": "week",
-                        "color": "primary" if period == "week" else "secondary",
-                    },
-                    {
-                        "label": t("Gui.Stat.CommissionIncomeMonth"),
-                        "value": "month",
-                        "color": "primary" if period == "month" else "secondary",
-                    },
+                    put_buttons(
+                        [
+                            {
+                                "label": t("Gui.Stat.CommissionIncomeDay"),
+                                "value": "day",
+                                "color": "primary" if period == "day" else "off",
+                            },
+                            {
+                                "label": t("Gui.Stat.CommissionIncomeWeek"),
+                                "value": "week",
+                                "color": "primary" if period == "week" else "off",
+                            },
+                            {
+                                "label": t("Gui.Stat.CommissionIncomeMonth"),
+                                "value": "month",
+                                "color": "primary" if period == "month" else "off",
+                            },
+                        ],
+                        onclick=on_period_click,
+                        group=True,
+                        scope="commission_income",
+                    ),
+                    put_button(
+                        t("Gui.Stat.Refresh"),
+                        onclick=self._render_commission_income,
+                        color="off",
+                        scope="commission_income",
+                    ),
                 ],
-                onclick=on_period_click,
-                small=True,
-                scope="commission_income",
-            )
-            put_button(
-                t("Gui.Stat.Refresh"),
-                onclick=self._render_commission_income,
-                color="secondary",
-                small=True,
-                scope="commission_income",
-            )
+                size="auto auto 1fr",
+            ).style("align-items:center; gap:10px; margin-bottom:10px")
             put_html(recent_html, scope="commission_income")
             if recent_count > _COMMISSION_RECENT_PAGE_SIZE:
                 self._output_recent_pagination(recent_count)
@@ -326,18 +332,18 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
             self._render_commission_income()
 
         pagination_buttons = [
-            {"label": "上一页", "value": "prev", "color": "secondary"},
+            {"label": "上一页", "value": "prev", "color": "off"},
         ]
         for index in range(1, min(5, total_pages) + 1):
             pagination_buttons.append(
                 {
                     "label": str(index),
                     "value": index - 1,
-                    "color": "primary" if (index - 1) == page else "secondary",
+                    "color": "primary" if (index - 1) == page else "off",
                 }
             )
         pagination_buttons.append(
-            {"label": "下一页", "value": "next", "color": "secondary"}
+            {"label": "下一页", "value": "next", "color": "off"}
         )
 
         put_row(
@@ -345,14 +351,15 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
                 put_buttons(
                     pagination_buttons,
                     onclick=on_pagination,
-                    small=True,
-                ).style("font-size: 0.65rem; gap: 4px;"),
+                    group=True,
+                ),
                 put_text(f"第 {page + 1} / {total_pages} 页").style(
-                    "font-size: 0.65rem; opacity: 0.7; margin-left: 8px;"
+                    "font-size: 0.7rem; color: var(--alas-entry-muted); margin-left: 2px;"
                 ),
             ],
+            size="auto auto 1fr",
             scope="commission_income",
-        )
+        ).style("align-items:center; gap:10px; margin-top:10px")
 
     @staticmethod
     def _show_commission_income_no_data():

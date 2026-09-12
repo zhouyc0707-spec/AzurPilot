@@ -409,5 +409,5 @@ class OpsiStatisticsMixin(WebUIMixinBase):
                         color="off",
                     ),
                 ],
-                size="auto",
-            )
+                size="auto auto 1fr",
+            ).style("align-items:center; gap:10px; margin-top:16px")
