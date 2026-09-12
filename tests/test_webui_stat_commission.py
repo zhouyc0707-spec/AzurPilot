@@ -1,8 +1,22 @@
 import re
 import unittest
+from contextlib import nullcontext
+from unittest.mock import patch
 
 import module.webui.lang as lang
-from module.webui.app_stat_commission import CommissionIncomeStatisticsMixin
+from module.webui.app_stat_commission import (
+    CommissionIncomeStatisticsMixin,
+    _ICON_COLOR_DARK,
+    _ICON_COLOR_LIGHT,
+    _refresh_icon_data_uri,
+)
+
+
+class _Stub:
+    """占位输出对象，只实现链式 style()。"""
+
+    def style(self, _value):
+        return self
 
 
 class _CardHarness(CommissionIncomeStatisticsMixin):
@@ -111,6 +125,72 @@ class TestCommissionIncomeCards(unittest.TestCase):
             _income_data(rows=[])
         )
         self.assertEqual([], self._cards(summary_html))
+
+
+class TestCommissionTitleRefreshIcon(unittest.TestCase):
+    """刷新改成标题旁的图标按钮，并去掉重复的页码文字。"""
+
+    @classmethod
+    def setUpClass(cls):
+        lang.reload()
+
+    def setUp(self):
+        self.harness = _CardHarness()
+        self.summary_html, _ = self.harness._build_commission_income_html(
+            _income_data()
+        )
+
+    def test_title_row_reserves_a_slot_for_the_icon(self):
+        self.assertIn('class="stat-title-row"', self.summary_html)
+        self.assertIn('class="stat-title-text"', self.summary_html)
+        self.assertIn(
+            'id="pywebio-scope-commission_income_refresh"', self.summary_html
+        )
+        # 标题行只保留一个容器，图标按钮由 PyWebIO 渲染进去
+        self.assertNotIn("<button", self.summary_html)
+
+    def test_icon_is_a_valid_svg_with_ring_and_arrowhead(self):
+        svg = _refresh_icon_data_uri(_ICON_COLOR_LIGHT)
+
+        self.assertTrue(svg.startswith('url("data:image/svg+xml,'))
+        # 圆环 + 箭头两条 path
+        self.assertEqual(2, svg.count("%3Cpath"))
+        # 圆环必须用三段三次贝塞尔：折线写法会超出 SVG 坐标上限被浏览器截断
+        self.assertEqual(3, len(re.findall(r"C\d", svg)))
+        self.assertIn("%23", svg, "颜色未转义")
+        # 引号外的空格必须转义，否则 CSS 解析会截断 URL
+        self.assertNotIn(" ", svg.replace('url("', "").replace('")', ""))
+
+    def test_icon_has_light_and_dark_variants(self):
+        light = _refresh_icon_data_uri(_ICON_COLOR_LIGHT)
+        dark = _refresh_icon_data_uri(_ICON_COLOR_DARK)
+
+        self.assertNotEqual(light, dark)
+
+    def test_pagination_no_longer_prints_the_page_number(self):
+        """按钮组已高亮当前页，再写一遍“第 x / y 页”是重复信息。"""
+        captured = []
+        with patch(
+            "module.webui.app_stat_commission.put_buttons",
+            side_effect=lambda *a, **k: captured.append(("buttons", a[0], k)) or _Stub(),
+        ), patch(
+            "module.webui.app_stat_commission.put_text",
+            side_effect=lambda *a, **k: captured.append(("text", a, k)) or _Stub(),
+        ), patch(
+            "module.webui.app_stat_commission.use_scope",
+            side_effect=lambda *a, **k: nullcontext(),
+        ):
+            self.harness._output_recent_pagination(25)
+
+        self.assertEqual(
+            ["buttons"], [item[0] for item in captured], "不应再输出页码文字"
+        )
+        labels = [b["label"] for b in captured[0][1]]
+        self.assertEqual(
+            ["上一页", "1", "2", "3", "下一页"],
+            labels,
+        )
+        self.assertEqual("primary", captured[0][1][1]["color"], "当前页应高亮")
 
 
 if __name__ == "__main__":

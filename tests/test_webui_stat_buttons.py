@@ -63,8 +63,7 @@ class TestStatButtonStyle(unittest.TestCase):
         self.assertTrue(self.rules)
         for selector, _ in self.rules:
             self.assertTrue(
-                selector.startswith(":is(")
-                or selector.startswith("#pywebio-scope-opsi_stats"),
+                selector.startswith(":is(") or selector.startswith("#pywebio-scope-"),
                 selector,
             )
             self.assertTrue(
