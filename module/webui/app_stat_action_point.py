@@ -101,10 +101,7 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
             raw_points.append(
                 {
                     "dt": dt,
-                    # ap_total 为含全部体力箱的总行动力（图表主序列），
-                    # ap_now 为当前行动力（不含体力箱），仅用于数值展示。
                     "ap": int(pt.get("ap_total", pt.get("ap", 0))),
-                    "ap_now": int(pt.get("ap", 0)),
                     "source": pt.get("source", "-"),
                 }
             )
@@ -217,8 +214,6 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
         ap_min = min(all_ap)
         ap_avg = int(sum(all_ap) / len(all_ap))
         ap_cur = all_ap[-1]
-        # 当前行动力（不含体力箱），展示为「当前 / 总计」
-        ap_now_cur = raw_points[-1].get("ap_now", 0)
         if current_view in ("line", "detail"):
             ap_change = ap_list[-1] - ap_list[0] if len(ap_list) >= 2 else 0
             data_points_text = t("Gui.Stat.DataPointsCount", count=len(labels))
@@ -243,7 +238,6 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
             "is_detail_mode": is_detail_mode,
             "view_title": view_title,
             "ap_cur": ap_cur,
-            "ap_now_cur": ap_now_cur,
             "ap_change": ap_change,
             "ap_max": ap_max,
             "ap_min": ap_min,
@@ -289,29 +283,6 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
         asset_data = self._build_ap_chart_asset_data(asset_timeline, current_view)
         return self._combine_ap_chart_auxiliary_data(
             coins_data, distance_data, asset_data
-        )
-
-    @staticmethod
-    def _ap_series_item(label, value_text, color, change_text, max_text, min_text):
-        """构造序列概览项：当前值一行展示，明细放进鼠标悬停提示。
-
-        Args:
-            label: 序列名（行动力/黄币/紫币/海里数/资产）。
-            value_text: 已格式化好的当前值文本。
-            color: 当前值的颜色。
-            change_text: 已带正负号的变化量文本。
-            max_text: 最大值文本。
-            min_text: 最小值文本。
-
-        Returns:
-            str: 概览项 HTML，悬停时用 CSS 显示 data-tip 内容。
-        """
-        tip = "\n".join(
-            (f"变化: {change_text}", f"最高: {max_text}", f"最低: {min_text}")
-        )
-        return (
-            f'<span class="ap-series-item" data-tip="{tip}">'
-            f'{label}: <b style="color:{color}">{value_text}</b></span>'
         )
 
     def _build_ap_chart_coins_data(self, coins_timeline, chart_points, current_view):
@@ -363,18 +334,12 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
                         if len(valid_yellow_coins) >= 2
                         else 0
                     )
+                    yc_change_color = "#ef5350" if yc_change >= 0 else "#26a69a"
                     yc_change_sign = "+" if yc_change >= 0 else ""
                     yc_max = max(valid_yellow_coins)
                     yc_min = min(valid_yellow_coins)
 
-                    stats_html += self._ap_series_item(
-                        "黄币",
-                        f"{yc_cur:,}",
-                        "#ffd54f",
-                        f"{yc_change_sign}{yc_change:,}",
-                        f"{yc_max:,}",
-                        f"{yc_min:,}",
-                    )
+                    stats_html += f'<div style="display:grid; grid-template-columns:150px 140px 120px 120px 90px; gap:14px; margin-bottom:2px; font-size:14px; color:#aaa;"><span>黄币: <b style="color:#ffd54f">{yc_cur}</b></span><span>变化: <b style="color:{yc_change_color}">{yc_change_sign}{yc_change}</b></span><span>最高: <b style="color:#ef5350">{yc_max}</b></span><span>最低: <b style="color:#26a69a">{yc_min}</b></span><span></span></div>'
                     legend_html += '<span class="ap-legend-item" data-series="2" style="display:flex; align-items:center; gap:4px;cursor:pointer;opacity:1;"><span style="width:12px; height:2px; background:#ffd54f; border-radius:1px; border-top:1px dashed #ffd54f;"></span>黄币</span>'
 
                 if valid_purple_coins:
@@ -384,18 +349,12 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
                         if len(valid_purple_coins) >= 2
                         else 0
                     )
+                    pc_change_color = "#ef5350" if pc_change >= 0 else "#26a69a"
                     pc_change_sign = "+" if pc_change >= 0 else ""
                     pc_max = max(valid_purple_coins)
                     pc_min = min(valid_purple_coins)
 
-                    stats_html += self._ap_series_item(
-                        "紫币",
-                        f"{pc_cur:,}",
-                        "#ce93d8",
-                        f"{pc_change_sign}{pc_change:,}",
-                        f"{pc_max:,}",
-                        f"{pc_min:,}",
-                    )
+                    stats_html += f'<div style="display:grid; grid-template-columns:150px 140px 120px 120px 90px; gap:14px; margin-bottom:2px; font-size:14px; color:#aaa;"><span>紫币: <b style="color:#ce93d8">{pc_cur}</b></span><span>变化: <b style="color:{pc_change_color}">{pc_change_sign}{pc_change}</b></span><span>最高: <b style="color:#ef5350">{pc_max}</b></span><span>最低: <b style="color:#26a69a">{pc_min}</b></span><span></span></div>'
                     legend_html += '<span class="ap-legend-item" data-series="1" style="display:flex; align-items:center; gap:4px;cursor:pointer;opacity:1;"><span style="width:12px; height:2px; background:#ce93d8; border-radius:1px; border-top:1px dashed #ce93d8;"></span>紫币</span>'
 
         return {
@@ -444,18 +403,12 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
                         if len(valid_distance) >= 2
                         else 0
                     )
+                    d_change_color = "#ef5350" if d_change >= 0 else "#26a69a"
                     d_change_sign = "+" if d_change >= 0 else ""
                     d_max = max(valid_distance)
                     d_min = min(valid_distance)
 
-                    stats_html += self._ap_series_item(
-                        "海里数",
-                        f"{d_cur:,}",
-                        "#1565c0",
-                        f"{d_change_sign}{d_change:,}",
-                        f"{d_max:,}",
-                        f"{d_min:,}",
-                    )
+                    stats_html += f'<div style="display:grid; grid-template-columns:150px 140px 120px 120px 90px; gap:14px; margin-bottom:2px; font-size:14px; color:#aaa;"><span>海里数: <b style="color:#1565c0">{d_cur}</b></span><span>变化: <b style="color:{d_change_color}">{d_change_sign}{d_change}</b></span><span>最高: <b style="color:#ef5350">{d_max}</b></span><span>最低: <b style="color:#26a69a">{d_min}</b></span><span></span></div>'
                     legend_html += '<span class="ap-legend-item" data-series="4" style="display:flex; align-items:center; gap:4px;cursor:pointer;opacity:1;"><span style="width:12px; height:2px; background:#1565c0; border-radius:1px;"></span>海里数</span>'
 
         return {
@@ -491,18 +444,12 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
                 a_change = (
                     valid_asset[-1] - valid_asset[0] if len(valid_asset) >= 2 else 0
                 )
+                a_change_color = "#ef5350" if a_change >= 0 else "#26a69a"
                 a_change_sign = "+" if a_change >= 0 else ""
                 a_max = max(valid_asset)
                 a_min = min(valid_asset)
 
-                stats_html += self._ap_series_item(
-                    "资产",
-                    f"{a_cur:,.1f}",
-                    "#22d3ee",
-                    f"{a_change_sign}{a_change:,.1f}",
-                    f"{a_max:,.1f}",
-                    f"{a_min:,.1f}",
-                )
+                stats_html += f'<div style="display:grid; grid-template-columns:150px 140px 120px 120px 90px; gap:14px; margin-bottom:2px; font-size:14px; color:#aaa;"><span>资产: <b style="color:#22d3ee">{a_cur:.1f}</b></span><span>变化: <b style="color:{a_change_color}">{a_change_sign}{a_change:.1f}</b></span><span>最高: <b style="color:#ef5350">{a_max:.1f}</b></span><span>最低: <b style="color:#26a69a">{a_min:.1f}</b></span><span></span></div>'
                 legend_html += '<span class="ap-legend-item" data-series="3" style="display:flex; align-items:center; gap:4px;cursor:pointer;opacity:1;"><span style="width:12px; height:2px; background:#22d3ee; border-radius:1px;"></span>资产</span>'
 
         return {
@@ -565,7 +512,6 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
             chart_id=chart_id,
             view_title=chart_data["view_title"],
             ap_cur=chart_data["ap_cur"],
-            ap_now_cur=chart_data["ap_now_cur"],
             change_color=chart_data["change_color"],
             change_sign=chart_data["change_sign"],
             ap_change=chart_data["ap_change"],

@@ -7,6 +7,7 @@ from module.webui.app_dependencies import (
     datetime,
     logger,
     popup,
+    put_button,
     put_buttons,
     put_html,
     put_row,
@@ -109,28 +110,13 @@ class OpsiExportMixin(WebUIMixinBase):
                 ]
             )
 
-        # 月份切换按钮与标题同行，明确作用对象就是下面这张「本月/历史」收获表；
-        # 已经在本月时不再显示「回到本月」，避免出现无意义的按钮。
-        buttons = [{"label": "查看历史月份", "value": "history", "color": "secondary"}]
-        if view_month is not None:
-            buttons.append({"label": "回到本月", "value": "current", "color": "primary"})
-        put_row(
-            [
-                put_html(
-                    build_title_block(
-                        title,
-                        margin_top=20,
-                        margin_bottom=8,
-                    )
-                ),
-                put_buttons(
-                    buttons,
-                    onclick=self._on_meow_loot_month_click,
-                    small=True,
-                ),
-            ],
-            size="1fr auto",
-        ).style("align-items:center")
+        put_html(
+            build_title_block(
+                title,
+                margin_top=20,
+                margin_bottom=8,
+            )
+        )
         put_html(
             build_simple_table(
                 [
@@ -147,13 +133,20 @@ class OpsiExportMixin(WebUIMixinBase):
                 rows,
             )
         )
-
-    def _on_meow_loot_month_click(self, value):
-        """月份切换按钮回调：history 打开历史月份选择器，current 回到本月。"""
-        if value == "history":
-            self._show_meow_loot_month_picker()
-        else:
-            self._reset_meow_loot_month()
+        put_row(
+            [
+                put_button(
+                    "查看历史月份",
+                    onclick=self._show_meow_loot_month_picker,
+                    small=True,
+                ),
+                put_button(
+                    "回到本月",
+                    onclick=self._reset_meow_loot_month,
+                    small=True,
+                ),
+            ]
+        )
 
     def _show_meow_loot_month_picker(self):
         """弹出历史月份选择器。"""

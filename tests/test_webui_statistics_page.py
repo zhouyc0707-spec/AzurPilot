@@ -41,10 +41,6 @@ class _StatisticsHarness(StatisticsPageMixin):
     def cleanup_client_resources(self, *names):
         self.cleaned.append(names)
 
-    def alas_update_stat_resources(self, _clear=False):
-        """资源概览条刷新任务：真实实现来自 Dashboard mixin，这里只记录注册行为。"""
-        self.rendered.append("stat_resources")
-
     def _get_statistics_source_signature(self):
         return self.signature
 
@@ -76,12 +72,15 @@ class TestStatisticsPageCache(unittest.TestCase):
                 "module.webui.app_statistics_page.put_scope",
                 return_value=_OutputStub(),
             ),
+            patch(
+                "module.webui.app_statistics_page.put_button",
+                return_value=_OutputStub(),
+            ),
             patch("module.webui.app_statistics_page.t", side_effect=lambda key: key),
             patch("module.webui.app_statistics_page.run_js"),
         )
-        self.started = {}
         for active_patch in self.patches:
-            self.started[active_patch.attribute] = active_patch.start()
+            active_patch.start()
 
     def tearDown(self):
         for active_patch in reversed(self.patches):
@@ -90,7 +89,7 @@ class TestStatisticsPageCache(unittest.TestCase):
     def test_reopening_unchanged_page_reuses_existing_render(self):
         self.gui.alas_set_stat()
         self.assertEqual(
-            ["ap", "opsi", "ship", "commission"],
+            ["ap", "resource", "opsi", "ship", "commission"],
             self.gui.rendered,
         )
 
@@ -98,12 +97,8 @@ class TestStatisticsPageCache(unittest.TestCase):
         self.gui.alas_set_stat()
 
         self.assertEqual([], self.gui.rendered)
-        # 首次挂载会额外注册资源概览条的周期刷新，重新进页只追加轻量轮询任务
-        self.assertEqual(3, len(self.gui.task_handler.added))
-        mount_task, *refresh_tasks = self.gui.task_handler.added
-        self.assertEqual("alas_update_stat_resources", mount_task[0].__name__)
-        self.assertEqual(10, mount_task[1])
-        for callback, delay, pending_delete in refresh_tasks:
+        self.assertEqual(2, len(self.gui.task_handler.added))
+        for callback, delay, pending_delete in self.gui.task_handler.added:
             self.assertEqual("_refresh_statistics_if_changed", callback.__name__)
             self.assertEqual(15, delay)
             self.assertTrue(pending_delete)
@@ -121,7 +116,7 @@ class TestStatisticsPageCache(unittest.TestCase):
         self.gui._refresh_statistics_page()
 
         self.assertEqual(
-            ["ap", "opsi", "ship", "commission"],
+            ["ap", "resource", "opsi", "ship", "commission"],
             self.gui.rendered,
         )
         self.assertEqual("v2", self.gui._statistics_source_signature)
@@ -135,7 +130,7 @@ class TestStatisticsPageCache(unittest.TestCase):
         self.gui.alas_set_stat()
 
         self.assertEqual(
-            ["ap", "opsi", "ship", "commission"],
+            ["ap", "resource", "opsi", "ship", "commission"],
             self.gui.rendered,
         )
         self.assertEqual(
@@ -152,20 +147,6 @@ class TestStatisticsPageCache(unittest.TestCase):
         self.gui._refresh_statistics_if_changed()
 
         self.assertEqual([], self.gui.rendered)
-
-    def test_resource_strip_is_mounted_first(self):
-        """资源仪表盘必须是页面第一个区块（配合 sticky 常驻上方），且趋势图不再挂载。"""
-        self.gui.alas_set_stat()
-
-        scopes = [
-            call.args[0]
-            for call in self.started["put_scope"].call_args_list
-            if call.args
-        ]
-
-        self.assertEqual("stat_resources", scopes[0])
-        self.assertNotIn("statistics-toolbar", scopes)
-        self.assertNotIn("resource_chart", scopes)
 
 
 if __name__ == "__main__":

@@ -140,21 +140,27 @@ def build_muted_notice(text: str) -> str:
 
 
 def build_simple_table(headers, rows, extra_style: str = "") -> str:
-    """构造统计用的简洁表格（Apple 风格分组列表，样式见 stat-apple.css）。
+    """构造统计用的简洁表格。
 
     Args:
         headers: 表头列表。
         rows: 表格行数据。
-        extra_style: 附加 CSS 样式（作用于卡片容器）。
+        extra_style: 附加 CSS 样式。
 
     Returns:
         str: 表格 HTML。
     """
     tpl = read_webapp_template("simple_table.html")
-    thead_cells = "".join([f"<th>{h}</th>" for h in headers])
+    thead_cells = "".join(
+        [f'<th style="text-align:left;padding:6px">{h}</th>' for h in headers]
+    )
     tbody_rows = "".join(
         [
-            "<tr>" + "".join([f"<td>{v}</td>" for v in row]) + "</tr>"
+            "<tr>"
+            + "".join(
+                [f'<td style="text-align:center;padding:6px">{v}</td>' for v in row]
+            )
+            + "</tr>"
             for row in rows
         ]
     )
