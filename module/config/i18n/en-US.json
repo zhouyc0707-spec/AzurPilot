@@ -6679,6 +6679,7 @@
       "CommissionIncomeHeaderTotal": "Total",
       "CommissionIncomeHeaderCount": "Commissions",
       "CommissionIncomeHeaderAvg": "Avg/Run",
+      "CommissionIncomeCardStat": "{count} runs · Avg/Run {avg}",
       "CommissionIncomeTotalCommissions": "Total commissions: {value}",
       "CommissionIncomeRecentTitle": "Recent Commissions",
       "ResourceChartTitle": "All Resources Trend",

@@ -6679,6 +6679,7 @@
       "CommissionIncomeHeaderTotal": "合計",
       "CommissionIncomeHeaderCount": "委託回数",
       "CommissionIncomeHeaderAvg": "平均/回",
+      "CommissionIncomeCardStat": "{count}回 · 平均/回 {avg}",
       "CommissionIncomeTotalCommissions": "委託総回数: {value}",
       "CommissionIncomeRecentTitle": "最近の委託記録",
       "ResourceChartTitle": "全リソース推移",

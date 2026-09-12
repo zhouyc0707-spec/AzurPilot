@@ -6679,6 +6679,7 @@
       "CommissionIncomeHeaderTotal": "數量",
       "CommissionIncomeHeaderCount": "委託次數",
       "CommissionIncomeHeaderAvg": "平均/次",
+      "CommissionIncomeCardStat": "{count}次 · 平均/次 {avg}",
       "CommissionIncomeTotalCommissions": "委託總次數: {value}",
       "CommissionIncomeRecentTitle": "最近委託記錄",
       "ResourceChartTitle": "全資源變化趨勢",

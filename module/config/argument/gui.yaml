@@ -441,6 +441,7 @@ Stat:
   CommissionIncomeHeaderTotal:
   CommissionIncomeHeaderCount:
   CommissionIncomeHeaderAvg:
+  CommissionIncomeCardStat:
   CommissionIncomeTotalCommissions:
   CommissionIncomeRecentTitle:
   ResourceChartTitle:

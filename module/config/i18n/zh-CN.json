@@ -6679,6 +6679,7 @@
       "CommissionIncomeHeaderTotal": "数量",
       "CommissionIncomeHeaderCount": "委托次数",
       "CommissionIncomeHeaderAvg": "平均/次",
+      "CommissionIncomeCardStat": "{count}次 · 平均/次 {avg}",
       "CommissionIncomeTotalCommissions": "委托总次数: {value}",
       "CommissionIncomeRecentTitle": "最近委托记录",
       "ResourceChartTitle": "全资源变化趋势",
