@@ -4,32 +4,12 @@ from datetime import date
 from pathlib import Path
 
 import module.webui.lang as lang
-from module.webui.app_dependencies import (
-    put_button,
-    put_html,
-    put_scope,
-    run_js,
-    t,
-    use_scope,
-)
-from module.webui.app_stat_styles import BUTTON_STYLE
+from module.webui.app_dependencies import put_button, put_scope, run_js, t, use_scope
 from module.webui.app_types import WebUIMixinBase
 
 
 class StatisticsPageMixin(WebUIMixinBase):
     """惰性装配并复用统计子视图，同时支持概览页内嵌与独立统计页。"""
-
-    def _ensure_stat_button_style(self) -> None:
-        """确保本次会话已注入统计页统一按钮样式。
-
-        原先只在装配面板时注入一次，若某个会话没有走到装配分支（例如面板
-        由更早的会话留下、或渲染顺序不同），按钮就会退回 Bootstrap 配色。
-        这里改成幂等注入：谁先渲染谁负责补上，且每个会话只补一次。
-        """
-        if getattr(self, "_stat_button_style_injected", False):
-            return
-        self._stat_button_style_injected = True
-        put_html(BUTTON_STYLE)
 
     def _mount_stat_panels(self) -> None:
         """创建并渲染统计图表面板（含周期刷新），渲染到当前所在作用域。
@@ -71,8 +51,6 @@ class StatisticsPageMixin(WebUIMixinBase):
                 put_scope("commission_income", []),
             ],
         )
-        # 统一按钮样式随面板注入，四个主题通过 --alas-entry-* 自动跟随
-        self._ensure_stat_button_style()
 
         # 不再同步渲染：后台任务注册后 next_run=now 会立即在任务线程执行，
         # 页面切换只做轻量的空容器挂载，避免统计视图的数据库读取与图表构建
@@ -121,7 +99,6 @@ class StatisticsPageMixin(WebUIMixinBase):
             # 面板（仪表盘 + 图表区）由总览页装配一次后被统计页复用，
             # 这里只把统计页专属的工具栏放进图表区，不重建已有的图表 scope。
             with use_scope("stat_panels_charts"):
-                self._ensure_stat_button_style()
                 put_scope(
                     "statistics-toolbar",
                     [

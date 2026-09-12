@@ -25,9 +25,6 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
     """WebUI 委托收益统计视图。"""
 
     def _render_commission_income(self):
-        # 统一样式是幂等注入：即使本次会话没有走面板装配分支，
-        # 这里也会补上，避免按钮退回 Bootstrap 配色。
-        self._ensure_stat_button_style()
         try:
             income_data = self._load_commission_income_data()
             if income_data is None:
@@ -274,41 +271,35 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
                 self._commission_recent_page = 0
                 self._render_commission_income()
 
-            # 周期与刷新按钮都走统计页统一的按钮样式，不再用 Bootstrap 的
-            # primary/secondary 配色，避免出现蓝色/深灰与页面主色系冲突。
-            put_row(
+            put_buttons(
                 [
-                    put_buttons(
-                        [
-                            {
-                                "label": t("Gui.Stat.CommissionIncomeDay"),
-                                "value": "day",
-                                "color": "primary" if period == "day" else "secondary",
-                            },
-                            {
-                                "label": t("Gui.Stat.CommissionIncomeWeek"),
-                                "value": "week",
-                                "color": "primary" if period == "week" else "secondary",
-                            },
-                            {
-                                "label": t("Gui.Stat.CommissionIncomeMonth"),
-                                "value": "month",
-                                "color": "primary" if period == "month" else "secondary",
-                            },
-                        ],
-                        onclick=on_period_click,
-                        group=True,
-                        scope="commission_income",
-                    ),
-                    put_button(
-                        t("Gui.Stat.Refresh"),
-                        onclick=self._render_commission_income,
-                        color="off",
-                        scope="commission_income",
-                    ),
+                    {
+                        "label": t("Gui.Stat.CommissionIncomeDay"),
+                        "value": "day",
+                        "color": "primary" if period == "day" else "secondary",
+                    },
+                    {
+                        "label": t("Gui.Stat.CommissionIncomeWeek"),
+                        "value": "week",
+                        "color": "primary" if period == "week" else "secondary",
+                    },
+                    {
+                        "label": t("Gui.Stat.CommissionIncomeMonth"),
+                        "value": "month",
+                        "color": "primary" if period == "month" else "secondary",
+                    },
                 ],
-                size="auto auto 1fr",
-            ).style("align-items:center; gap:10px; margin-bottom:10px")
+                onclick=on_period_click,
+                small=True,
+                scope="commission_income",
+            )
+            put_button(
+                t("Gui.Stat.Refresh"),
+                onclick=self._render_commission_income,
+                color="secondary",
+                small=True,
+                scope="commission_income",
+            )
             put_html(recent_html, scope="commission_income")
             if recent_count > _COMMISSION_RECENT_PAGE_SIZE:
                 self._output_recent_pagination(recent_count)
@@ -354,15 +345,14 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
                 put_buttons(
                     pagination_buttons,
                     onclick=on_pagination,
-                    group=True,
-                ),
+                    small=True,
+                ).style("font-size: 0.65rem; gap: 4px;"),
                 put_text(f"第 {page + 1} / {total_pages} 页").style(
-                    "font-size: 0.7rem; color: var(--alas-entry-muted); margin-left: 2px;"
+                    "font-size: 0.65rem; opacity: 0.7; margin-left: 8px;"
                 ),
             ],
-            size="auto auto 1fr",
             scope="commission_income",
-        ).style("align-items:center; gap:10px; margin-top:10px")
+        )
 
     @staticmethod
     def _show_commission_income_no_data():

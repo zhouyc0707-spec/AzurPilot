@@ -104,11 +104,7 @@ def read_webapp_template(filename: str) -> str:
 
 
 def build_title_block(
-    title: str,
-    margin_top: int = 12,
-    margin_bottom: int = 8,
-    font_weight: int = 600,
-    class_name: str = "",
+    title: str, margin_top: int = 12, margin_bottom: int = 8, font_weight: int = 600
 ) -> str:
     """构造统一标题块。
 
@@ -117,7 +113,6 @@ def build_title_block(
         margin_top: 顶部间距。
         margin_bottom: 底部间距。
         font_weight: 标题字重。
-        class_name: 附加的 CSS 类名，供调用方按所在位置定制样式。
 
     Returns:
         str: 标题块 HTML。
@@ -128,7 +123,6 @@ def build_title_block(
         margin_top=margin_top,
         margin_bottom=margin_bottom,
         font_weight=font_weight,
-        class_name=class_name,
     )
 
 
