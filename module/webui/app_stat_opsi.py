@@ -339,13 +339,7 @@ class OpsiStatisticsMixin(WebUIMixinBase):
                     else "-"
                 )
 
-                # 净赚体力 = 该侵蚀等级购买体力 - 每轮消耗体力 × 出击轮次
-                # 侵蚀3 每轮消耗 15，侵蚀5 每轮消耗 30
-                cost_per_round = {3: 15, 5: 30}.get(hazard_level, 0)
-                net_ap = int(
-                    round(akashi_ap - meow_effective_rounds * cost_per_round)
-                )
-
+                # 净赚体力列已按要求取消，不再计算（原口径：购买体力 - 每轮消耗 × 出击轮次）
                 meow_rows.append(
                     [
                         meow_data.get("month", "-"),
@@ -357,7 +351,6 @@ class OpsiStatisticsMixin(WebUIMixinBase):
                         akashi_encounters,
                         akashi_rate_str,
                         avg_ap_str,
-                        net_ap,
                         avg_battle_time_str,
                         avg_time_str,
                     ]
@@ -385,7 +378,6 @@ class OpsiStatisticsMixin(WebUIMixinBase):
                 t("Gui.Stat.AkashiEncounters"),
                 t("Gui.Stat.AkashiRate"),
                 t("Gui.Stat.AverageAP"),
-                t("Gui.Stat.NetAP"),
                 t("Gui.Stat.AvgBattleTimeHeader"),
                 t("Gui.Stat.AvgMeowRoundTime"),
             ]
