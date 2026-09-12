@@ -1,6 +1,7 @@
 import contextlib
 import re
 import unittest
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -244,6 +245,80 @@ class TestApChartThemeRendering(unittest.TestCase):
                 if "__" in line and "apChartCleanups" not in line
             ]
             self.assertEqual([], leftovers)
+
+    def test_legend_row_reserves_a_slot_for_the_period_buttons(self):
+        harness = _ChartRenderHarness()
+        harness.theme = "default"
+
+        html, _ = harness.render(_chart_data(), _auxiliary_data())
+
+        self.assertIn('class="ap-legend-row"', html)
+        # 时间范围按钮渲染进图例行左侧预留的 scope
+        self.assertIn('id="ap_cv_', html)
+        self.assertIn('_period"></div>', html)
+        # 标题与图例的上下留白收紧，避免标题到图表之间出现过大空白
+        self.assertIn("margin-top:10px", html)
+        self.assertNotIn("margin-top:16px", html)
+
+
+class TestApChartPeriodFilter(unittest.TestCase):
+    """图表时间范围：今日 / 本周（近 7 天）/ 本月（不裁剪）。"""
+
+    @staticmethod
+    def _points(days_ago_list, now):
+        return [
+            {"ts": (now - timedelta(days=days_ago)).isoformat(), "ap": 100}
+            for days_ago in days_ago_list
+        ]
+
+    def test_month_keeps_every_point(self):
+        now = datetime(2026, 9, 13, 12, 0, 0)
+        points = self._points([0, 1, 3, 8, 20], now)
+
+        kept = ActionPointStatisticsMixin._filter_points_by_period(
+            points, "month", now
+        )
+
+        self.assertEqual(points, kept)
+
+    def test_day_keeps_only_today(self):
+        now = datetime(2026, 9, 13, 12, 0, 0)
+        points = self._points([0, 1, 3, 8, 20], now)
+
+        kept = ActionPointStatisticsMixin._filter_points_by_period(points, "day", now)
+
+        self.assertEqual(1, len(kept))
+        self.assertTrue(kept[0]["ts"].startswith("2026-09-13"))
+
+    def test_week_keeps_last_seven_days(self):
+        now = datetime(2026, 9, 13, 12, 0, 0)
+        points = self._points([0, 1, 3, 6, 7, 8, 20], now)
+
+        kept = ActionPointStatisticsMixin._filter_points_by_period(points, "week", now)
+
+        # 近 7 天含今天，窗口从 09-07 00:00 起：0/1/3/6 天前（09-13/12/10/07）在内，
+        # 7 天前的 09-06 12:00 已早于窗口起点，与 8/20 天前一起被裁掉
+        self.assertEqual(4, len(kept))
+        for point in kept:
+            self.assertGreaterEqual(
+                datetime.fromisoformat(point["ts"]), datetime(2026, 9, 7)
+            )
+
+    def test_broken_timestamps_are_dropped_not_crashing(self):
+        now = datetime(2026, 9, 13, 12, 0, 0)
+        points = [{"ts": "not-a-time", "ap": 1}, *self._points([0], now)]
+
+        kept = ActionPointStatisticsMixin._filter_points_by_period(points, "day", now)
+
+        self.assertEqual(1, len(kept))
+
+    def test_unknown_period_falls_back_to_month(self):
+        harness = ActionPointStatisticsMixin()
+        harness._ap_chart_period_value = "fortnight"
+
+        self.assertEqual("month", harness._ap_chart_period())
+        harness._ap_chart_period_value = "day"
+        self.assertEqual("day", harness._ap_chart_period())
 
 
 if __name__ == "__main__":

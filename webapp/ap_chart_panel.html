@@ -32,17 +32,35 @@
   box-shadow: {tip_shadow};
   pointer-events: none;
 }}
+/* 图例行：左侧是时间范围按钮，右侧是序列图例；按钮不参与收缩，图例可换行 */
+.ap-legend-row {{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}}
+.ap-legend-row > [id^="pywebio-scope-"] {{
+  flex: 0 0 auto;
+}}
+.ap-legend-row > [id$="_legend"] {{
+  flex: 1 1 auto;
+  min-width: 0;
+}}
 </style>
-<div style="margin-top:16px; margin-bottom:8px;">
-  <div style="font-weight:600; font-size:1rem; margin-bottom:8px;">体力变化 - {view_title}</div>
+<div style="margin-top:10px; margin-bottom:6px;">
+  <div style="font-weight:600; font-size:1rem; margin-bottom:6px;">体力变化 - {view_title}</div>
   <div class="ap-series-row">
     <span class="ap-series-item" data-tip="变化: {change_sign}{ap_change:,}（总行动力）&#10;最高: {ap_max:,}&#10;最低: {ap_min:,}&#10;均值: {ap_avg:,}">行动力: <b style="color:{ap_color}">({ap_now_cur:,}) {ap_cur:,}</b></span>
     {coins_stats_html}
   </div>
 </div>
-<div id="{chart_id}_legend" style="display:flex; flex-wrap:wrap; gap:12px; margin-bottom:8px; font-size:12px; color:{legend_text};">
-  <span class="ap-legend-item" data-series="0" style="display:flex; align-items:center; gap:4px;cursor:pointer;opacity:1;"><span style="width:12px; height:3px; background:{ap_color}; border-radius:1px;"></span>体力</span>
-  {coins_legend_html}
+<div class="ap-legend-row">
+  <div id="{period_scope}"></div>
+  <div id="{chart_id}_legend" style="display:flex; flex-wrap:wrap; align-items:center; gap:12px; font-size:12px; color:{legend_text};">
+    <span class="ap-legend-item" data-series="0" style="display:flex; align-items:center; gap:4px;cursor:pointer;opacity:1;"><span style="width:12px; height:3px; background:{ap_color}; border-radius:1px;"></span>体力</span>
+    {coins_legend_html}
+  </div>
 </div>
 <div id="{chart_id}_container" style="position:relative;background:{chart_bg};border-radius:16px;border:1px solid {panel_border};box-shadow:{panel_shadow};padding:6px;transition:opacity 0.3s ease;">
   <canvas id="{chart_id}" style="width:100%;height:clamp(220px, 25vh, 300px);display:block;cursor:crosshair;"></canvas>

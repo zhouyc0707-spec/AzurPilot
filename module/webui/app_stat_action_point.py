@@ -1,10 +1,13 @@
 """WebUI 体力趋势图的数据装配和图表渲染。"""
 
+from datetime import timedelta
+
 from module.webui.app_dependencies import (
     current_time,
     datetime,
     json,
     put_button,
+    put_buttons,
     put_html,
     put_text,
     t,
@@ -27,8 +30,44 @@ from module.webui.app_types import WebUIMixinBase
 class ActionPointStatisticsMixin(WebUIMixinBase):
     """WebUI 体力趋势图的数据装配和图表渲染。"""
 
+    # 图表时间范围：今日 / 本周（近 7 天）/ 本月（当月全部）
+    _AP_PERIODS = ("day", "week", "month")
+
+    def _ap_chart_period(self) -> str:
+        """返回当前图表时间范围，非法值回退为「本月」。"""
+        period = getattr(self, "_ap_chart_period_value", "month")
+        return period if period in self._AP_PERIODS else "month"
+
+    @staticmethod
+    def _filter_points_by_period(points, period, now):
+        """按时间范围过滤时间线原始点。
+
+        数据源本身只覆盖当月，所以「本月」等价于不裁剪；「今日」与「本周」
+        在这里裁掉更早的点，辅助序列随后按同样的图表点对齐。
+        """
+        if period == "day":
+            start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            days = 1
+        elif period == "week":
+            days = 7
+            start = now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(
+                days=days - 1
+            )
+        else:
+            return list(points)
+
+        filtered = []
+        for point in points:
+            try:
+                moment = datetime.fromisoformat(point.get("ts", ""))
+            except Exception:
+                continue
+            if start <= moment <= now:
+                filtered.append(point)
+        return filtered
+
     def _load_ap_chart_timelines(self):
-        """读取当前实例的行动力、凭证和资产时间线。"""
+        """读取当前实例的行动力、凭证和资产时间线，并按所选范围裁剪。"""
         from module.statistics.opsi_month import (
             get_ap_timeline,
             get_asset_timeline,
@@ -44,6 +83,13 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
         timeline = get_ap_timeline(instance_name=instance_name)
         coins_timeline = get_coins_timeline(instance_name=instance_name)
         asset_timeline = get_asset_timeline(instance_name=instance_name)
+
+        period = self._ap_chart_period()
+        if period != "month":
+            now = current_time()
+            timeline = self._filter_points_by_period(timeline, period, now)
+            coins_timeline = self._filter_points_by_period(coins_timeline, period, now)
+            asset_timeline = self._filter_points_by_period(asset_timeline, period, now)
         return timeline, coins_timeline, asset_timeline
 
     def _render_ap_chart(self):
@@ -637,6 +683,41 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
             return None
         return float(value)
 
+    def _put_ap_period_selector(self, scope_id, period):
+        """把「今日/本周/本月」渲染到面板图例行预留的 scope 里。
+
+        Args:
+            scope_id: 图例行里的 scope 名。
+            period: 当前时间范围（day/week/month），用于高亮。
+        """
+
+        def on_period_click(selected_period):
+            self._ap_chart_period_value = selected_period
+            self._render_ap_chart()
+
+        put_buttons(
+            [
+                {
+                    "label": t("Gui.Stat.CommissionIncomeDay"),
+                    "value": "day",
+                    "color": "primary" if period == "day" else "off",
+                },
+                {
+                    "label": t("Gui.Stat.CommissionIncomeWeek"),
+                    "value": "week",
+                    "color": "primary" if period == "week" else "off",
+                },
+                {
+                    "label": t("Gui.Stat.CommissionIncomeMonth"),
+                    "value": "month",
+                    "color": "primary" if period == "month" else "off",
+                },
+            ],
+            onclick=on_period_click,
+            group=True,
+            scope=scope_id,
+        )
+
     def _render_ap_chart_content(self, chart_data, auxiliary_data, theme):
         """将已装配的数据填充到 HTML 和 JavaScript 模板。
 
@@ -651,6 +732,7 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
             "display:flex;" if current_view in ("line", "detail") else "display:none;"
         )
         palette = palette_for_theme(theme)
+        period_scope = f"{chart_id}_period"
 
         html_tpl = read_webapp_template("ap_chart_panel.html")
         html = html_tpl.format(
@@ -680,6 +762,7 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
             legend_text=palette["legend_text"],
             series_text=palette["series_text"],
             series_shadow=palette["series_shadow"],
+            period_scope=period_scope,
         )
 
         js_tpl = read_webapp_template("ap_chart.js")
@@ -727,4 +810,7 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
 
         with use_scope("ap_chart", clear=True):
             put_html(html)
+            # 时间范围按钮渲染进图例行左侧预留的 scope；按钮必须在图表 HTML
+            # 之后渲染，scope 才有对应节点
+            self._put_ap_period_selector(period_scope, self._ap_chart_period())
             run_js(js_code)
