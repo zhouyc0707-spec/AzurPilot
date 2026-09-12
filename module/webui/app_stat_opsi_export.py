@@ -109,8 +109,8 @@ class OpsiExportMixin(WebUIMixinBase):
                 ]
             )
 
-        # 月份切换按钮与标题同行，明确作用对象就是下面这张「本月/历史」收获表；
-        # 已经在本月时不再显示「回到本月」，避免出现无意义的按钮。
+        # 月份切换按钮紧跟在标题右侧（标题列自适应内容宽度，按钮列吃掉剩余空间，
+        # 因此按钮不会被推到最右边）；已经在本月时不再显示「回到本月」。
         buttons = [{"label": "查看历史月份", "value": "history", "color": "secondary"}]
         if view_month is not None:
             buttons.append({"label": "回到本月", "value": "current", "color": "primary"})
@@ -129,8 +129,8 @@ class OpsiExportMixin(WebUIMixinBase):
                     small=True,
                 ),
             ],
-            size="1fr auto",
-        ).style("align-items:center")
+            size="auto 1fr",
+        ).style("align-items:center; gap:10px")
         put_html(
             build_simple_table(
                 [
