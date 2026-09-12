@@ -13,11 +13,18 @@ from module.webui.app_dependencies import (
 from module.webui.app_helpers import (
     build_muted_notice,
     build_simple_table,
-    build_title_block,
+)
+from module.webui.stat_icon import (
+    build_title_icon_row,
+    refresh_icon_button_css,
 )
 
 
 from module.webui.app_types import WebUIMixinBase
+
+
+# 标题旁的刷新图标按钮作用域名，与 entry-alas.css 的规则配套
+_SHIP_EXP_REFRESH_SCOPE = "ship_exp_refresh"
 
 
 class ShipExperienceStatisticsMixin(WebUIMixinBase):
@@ -87,13 +94,20 @@ class ShipExperienceStatisticsMixin(WebUIMixinBase):
                 )
 
             with use_scope("ship_exp_table", clear=True):
+                # 标题行：标题在左、刷新图标紧邻其右；图标按钮渲染进预留的 scope
                 put_html(
-                    build_title_block(
+                    build_title_icon_row(
                         t("Gui.Stat.ShipExpProgressTitle"),
-                        margin_top=16,
-                        margin_bottom=8,
+                        _SHIP_EXP_REFRESH_SCOPE,
                     )
                 )
+                put_button(
+                    "",
+                    onclick=self._render_ship_exp,
+                    color="off",
+                    scope=_SHIP_EXP_REFRESH_SCOPE,
+                )
+                put_html(refresh_icon_button_css(_SHIP_EXP_REFRESH_SCOPE))
                 put_text(
                     t(
                         "Gui.Stat.LastCheckTime",
@@ -140,10 +154,6 @@ class ShipExperienceStatisticsMixin(WebUIMixinBase):
 
                 put_html(
                     build_simple_table(labels, rows, extra_style=" margin-top:8px;")
-                )
-
-                put_button(
-                    t("Gui.Stat.Refresh"), onclick=self._render_ship_exp, color="off"
                 )
         except Exception as e:
             with use_scope("ship_exp_table", clear=True):

@@ -989,26 +989,44 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
     line-height: 1 !important;
 }
 
-/* 标题 + 图标按钮同排：图标紧随标题文字，不推到最右侧 */
-#pywebio-scope-commission_income .stat-title-row {
+/* 标题 + 图标按钮同排：图标紧随标题文字，不推到最右侧。
+   标题过长时省略，避免把图标挤到第二行；图标本身不参与收缩。 */
+#pywebio-scope-commission_income .stat-title-row,
+#pywebio-scope-ship_exp_table .stat-title-row {
     display: flex !important;
     align-items: center !important;
+    flex-wrap: nowrap !important;
     gap: 8px !important;
+}
+
+#pywebio-scope-commission_income .stat-title-row {
     margin-bottom: 14px !important;
     padding-bottom: 8px !important;
     border-bottom: 1px solid var(--alas-entry-divider) !important;
 }
 
-#pywebio-scope-commission_income .stat-title-row .stat-title-text {
+#pywebio-scope-commission_income .stat-title-row .stat-title-text,
+#pywebio-scope-ship_exp_table .stat-title-row .stat-title-text {
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
     font-size: 1rem !important;
     font-weight: 600 !important;
     line-height: 1.4 !important;
 }
 
+#pywebio-scope-commission_income .stat-title-row [id^="pywebio-scope-"],
+#pywebio-scope-ship_exp_table .stat-title-row [id^="pywebio-scope-"] {
+    flex: 0 0 auto !important;
+}
+
 /* 纯图标按钮：正方形、无边框、悬停时露出浅主色底。
    图标本体由 Python 以 data URI 背景图注入（深浅两套按主题切换），
    这里只负责外框：空 label 会把字号撑出多余行盒，一并压成 0。 */
-#pywebio-scope-commission_income_refresh .btn {
+#pywebio-scope-commission_income_refresh .btn,
+#pywebio-scope-ship_exp_refresh .btn {
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -1034,19 +1052,22 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
                 box-shadow .15s ease, transform .15s ease !important;
 }
 
-#pywebio-scope-commission_income_refresh .btn:hover {
+#pywebio-scope-commission_income_refresh .btn:hover,
+#pywebio-scope-ship_exp_refresh .btn:hover {
     border-color: var(--alas-entry-accent) !important;
     background-color: var(--alas-entry-accent-soft) !important;
     box-shadow: 0 2px 6px rgba(0, 0, 0, .08) !important;
     transform: translateY(-1px);
 }
 
-#pywebio-scope-commission_income_refresh .btn:active {
+#pywebio-scope-commission_income_refresh .btn:active,
+#pywebio-scope-ship_exp_refresh .btn:active {
     box-shadow: none !important;
     transform: translateY(0) scale(.97);
 }
 
-#pywebio-scope-commission_income_refresh .btn:focus-visible {
+#pywebio-scope-commission_income_refresh .btn:focus-visible,
+#pywebio-scope-ship_exp_refresh .btn:focus-visible {
     outline: none !important;
     box-shadow: 0 0 0 3px var(--alas-entry-accent-soft) !important;
 }

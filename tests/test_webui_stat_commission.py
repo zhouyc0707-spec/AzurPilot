@@ -1,15 +1,20 @@
 import re
 import unittest
 from contextlib import nullcontext
+from pathlib import Path
 from unittest.mock import patch
 
 import module.webui.lang as lang
-from module.webui.app_stat_commission import (
-    CommissionIncomeStatisticsMixin,
-    _ICON_COLOR_DARK,
-    _ICON_COLOR_LIGHT,
-    _refresh_icon_data_uri,
+from module.webui.app_stat_commission import CommissionIncomeStatisticsMixin
+from module.webui.app_stat_ship import ShipExperienceStatisticsMixin
+from module.webui.stat_icon import (
+    ICON_COLOR_DARK,
+    ICON_COLOR_LIGHT,
+    refresh_icon_data_uri,
 )
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 class _Stub:
@@ -129,7 +134,6 @@ class TestCommissionIncomeCards(unittest.TestCase):
 
 class TestCommissionTitleRefreshIcon(unittest.TestCase):
     """刷新改成标题旁的图标按钮，并去掉重复的页码文字。"""
-
     @classmethod
     def setUpClass(cls):
         lang.reload()
@@ -150,7 +154,7 @@ class TestCommissionTitleRefreshIcon(unittest.TestCase):
         self.assertNotIn("<button", self.summary_html)
 
     def test_icon_is_a_valid_svg_with_ring_and_arrowhead(self):
-        svg = _refresh_icon_data_uri(_ICON_COLOR_LIGHT)
+        svg = refresh_icon_data_uri(ICON_COLOR_LIGHT)
 
         self.assertTrue(svg.startswith('url("data:image/svg+xml,'))
         # 圆环 + 箭头两条 path
@@ -162,8 +166,8 @@ class TestCommissionTitleRefreshIcon(unittest.TestCase):
         self.assertNotIn(" ", svg.replace('url("', "").replace('")', ""))
 
     def test_icon_has_light_and_dark_variants(self):
-        light = _refresh_icon_data_uri(_ICON_COLOR_LIGHT)
-        dark = _refresh_icon_data_uri(_ICON_COLOR_DARK)
+        light = refresh_icon_data_uri(ICON_COLOR_LIGHT)
+        dark = refresh_icon_data_uri(ICON_COLOR_DARK)
 
         self.assertNotEqual(light, dark)
 
@@ -191,6 +195,70 @@ class TestCommissionTitleRefreshIcon(unittest.TestCase):
             labels,
         )
         self.assertEqual("primary", captured[0][1][1]["color"], "当前页应高亮")
+
+
+class TestShipExpTitleRefreshIcon(unittest.TestCase):
+    """每日经验检测的刷新同样收进标题旁的图标按钮。"""
+
+    @classmethod
+    def setUpClass(cls):
+        lang.reload()
+
+    def _source(self):
+        return (PROJECT_ROOT / "module/webui/app_stat_ship.py").read_text(
+            encoding="utf-8"
+        )
+
+    def test_title_row_reserves_a_slot_for_the_icon(self):
+        src = self._source()
+
+        self.assertIn("build_title_icon_row(", src)
+        self.assertIn("_SHIP_EXP_REFRESH_SCOPE", src)
+        self.assertIn('"ship_exp_refresh"', src)
+        self.assertIn("refresh_icon_button_css(", src)
+
+    def test_button_is_scoped_into_the_title_row(self):
+        src = self._source()
+
+        # 图标按钮必须渲染进标题行预留的 scope，而不是排在表格下方
+        self.assertIn("scope=_SHIP_EXP_REFRESH_SCOPE", src)
+        self.assertNotIn('put_button(\n                    t("Gui.Stat.Refresh")', src)
+
+    def test_render_output_puts_the_button_in_the_title_row(self):
+        captured = []
+        harness = ShipExperienceStatisticsMixin()
+
+        with patch(
+            "module.webui.app_stat_ship.build_simple_table",
+            return_value="<table></table>",
+        ), patch(
+            "module.webui.app_stat_ship.put_html",
+            side_effect=lambda *a, **k: captured.append(("html", a)) or _Stub(),
+        ), patch(
+            "module.webui.app_stat_ship.put_text",
+            side_effect=lambda *a, **k: _Stub(),
+        ), patch(
+            "module.webui.app_stat_ship.put_row",
+            side_effect=lambda *a, **k: _Stub(),
+        ), patch(
+            "module.webui.app_stat_ship.put_button",
+            side_effect=lambda *a, **k: captured.append(("button", a, k)) or _Stub(),
+        ), patch(
+            "module.webui.app_stat_ship.use_scope",
+            side_effect=lambda *a, **k: nullcontext(),
+        ):
+            harness._render_ship_exp()
+
+        title_html = next(
+            payload
+            for payload in (item[1][0] for item in captured if item[0] == "html")
+            if isinstance(payload, str) and "stat-title-row" in payload
+        )
+        self.assertIn('id="pywebio-scope-ship_exp_refresh"', title_html)
+
+        _, args, kwargs = next(item for item in captured if item[0] == "button")
+        self.assertEqual("", args[0], "图标按钮不应带文字 label")
+        self.assertEqual("ship_exp_refresh", kwargs["scope"])
 
 
 if __name__ == "__main__":
