@@ -319,6 +319,12 @@ class UI(InfoHandler):
                 logger.info(f'[UI] 到达页面: {destination}')
                 break
 
+            # 大舰队弹窗是模态弹窗，会吃掉导航点击（表现为反复点击却毫无反应），
+            # 因此必须优先关闭，而不是等页面分支都没命中后才走 ui_additional
+            if self.handle_guild_popup_cancel():
+                nav_timeout.reset()
+                continue
+
             # 其他页面：按 A* 路径点击导航
             clicked = False
             for page in Page.iter_pages():
