@@ -1,15 +1,16 @@
 /* ==========================================================================
    统计页 Apple 风格设计系统 (stat-apple.css)
    --------------------------------------------------------------------------
-   - 作用域：仅统计页内容区 #pywebio-scope-statistics-content，
-     不影响总览页、配置页等其他界面。
+   - 作用域：统计页内容区（#pywebio-scope-statistics-content）与总览页
+     统计面板（#pywebio-scope-stat_panels）——两处挂载的是同一批面板，
+     因此样式同时覆盖；不影响配置页、日志页等其他界面。
    - 配色全部取自现有主题变量 --alas-entry-*，因此浅色/深色/
      advanced_material 主题自动适配。
    - 设计语言参考 Apple HIG：大标题 + 分组卡片 + 分段控件 +
      发丝分隔线 + 系统字体 + 克制的阴影与动效。
    ========================================================================== */
 
-#pywebio-scope-statistics-content {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) {
     /* ---- 设计令牌 ---- */
     --stat-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
         "PingFang SC", "Hiragino Sans GB", "Helvetica Neue", "Microsoft YaHei",
@@ -43,10 +44,10 @@
 }
 
 /* ---- 分组卡片：各统计子视图容器 ---- */
-#pywebio-scope-statistics-content #pywebio-scope-ap_chart,
-#pywebio-scope-statistics-content #pywebio-scope-opsi_stats,
-#pywebio-scope-statistics-content #pywebio-scope-ship_exp_table,
-#pywebio-scope-statistics-content #pywebio-scope-commission_income {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-ap_chart,
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-opsi_stats,
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-ship_exp_table,
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-commission_income {
     background: var(--stat-surface);
     border: var(--stat-hairline) solid var(--stat-divider);
     border-radius: var(--stat-radius-card);
@@ -56,14 +57,14 @@
 }
 
 /* ---- 区块标题 ---- */
-#pywebio-scope-statistics-content .stat-section-header {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .stat-section-header {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
     gap: 10px;
 }
 
-#pywebio-scope-statistics-content .stat-section-title {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .stat-section-title {
     font-size: 17px;
     font-weight: 600;
     letter-spacing: -0.015em;
@@ -71,7 +72,7 @@
 }
 
 /* ---- 数据表格：iOS 分组列表风格 ---- */
-#pywebio-scope-statistics-content .stat-table-card {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .stat-table-card {
     width: 100%;
     box-sizing: border-box;
     margin-top: 8px;
@@ -79,20 +80,20 @@
 
 /* 统计页不出现任何左右滚动条：两层旧/新包装都放开横向滚动，
    表格宽度收敛到卡片内，超长内容自动换行而不是横向溢出。 */
-#pywebio-scope-statistics-content .stat-table-card,
-#pywebio-scope-statistics-content .simple-table-wrap,
-#pywebio-scope-statistics-content .stat-table-scroll {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .stat-table-card,
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .simple-table-wrap,
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .stat-table-scroll {
     overflow: visible !important;
 }
 
-#pywebio-scope-statistics-content .stat-table-scroll {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .stat-table-scroll {
     width: 100%;
     border-radius: 12px;
     border: var(--stat-hairline) solid var(--stat-divider);
     background: var(--stat-surface);
 }
 
-#pywebio-scope-statistics-content .stat-table {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .stat-table {
     width: 100% !important;
     min-width: 0 !important;
     max-width: 100%;
@@ -103,7 +104,7 @@
     font-variant-numeric: tabular-nums;
 }
 
-#pywebio-scope-statistics-content .stat-table thead th {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .stat-table thead th {
     position: sticky;
     top: 0;
     z-index: 1;
@@ -119,7 +120,7 @@
     vertical-align: bottom;
 }
 
-#pywebio-scope-statistics-content .stat-table tbody td {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .stat-table tbody td {
     padding: 6px 8px;
     text-align: right;
     border-bottom: var(--stat-hairline) solid var(--stat-divider);
@@ -127,51 +128,51 @@
     overflow-wrap: break-word;
 }
 
-#pywebio-scope-statistics-content .stat-table thead th:first-child,
-#pywebio-scope-statistics-content .stat-table tbody td:first-child {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .stat-table thead th:first-child,
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .stat-table tbody td:first-child {
     text-align: left;
 }
 
 /* 列分隔线：每一列都有明确的竖向发丝线，避免多列数据串行难辨 */
-#pywebio-scope-statistics-content .stat-table thead th + th,
-#pywebio-scope-statistics-content .stat-table tbody td + td {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .stat-table thead th + th,
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .stat-table tbody td + td {
     border-left: var(--stat-hairline) solid var(--stat-divider);
 }
 
 /* 斑马纹：列多的时候便于横向追行 */
-#pywebio-scope-statistics-content .stat-table tbody tr:nth-child(even) td {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .stat-table tbody tr:nth-child(even) td {
     background: var(--stat-surface-muted);
 }
 
 /* 列数很多的表格（如侵蚀一/舰船经验等 9 列以上）进一步收紧留白 */
-#pywebio-scope-statistics-content .stat-table:has(thead th:nth-child(9)) {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .stat-table:has(thead th:nth-child(9)) {
     font-size: 12px;
 }
 
-#pywebio-scope-statistics-content .stat-table:has(thead th:nth-child(9)) thead th {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .stat-table:has(thead th:nth-child(9)) thead th {
     padding: 6px 6px;
     font-size: 11.5px;
 }
 
-#pywebio-scope-statistics-content .stat-table:has(thead th:nth-child(9)) tbody td {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .stat-table:has(thead th:nth-child(9)) tbody td {
     padding: 5px 6px;
 }
 
-#pywebio-scope-statistics-content .stat-table tbody tr:last-child td {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .stat-table tbody tr:last-child td {
     border-bottom: none;
 }
 
-#pywebio-scope-statistics-content .stat-table tbody tr {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .stat-table tbody tr {
     transition: background 0.15s ease;
 }
 
 /* 悬停在单元格上生效，保证能盖住斑马纹 */
-#pywebio-scope-statistics-content .stat-table tbody tr:hover td {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .stat-table tbody tr:hover td {
     background: var(--stat-accent-soft);
 }
 
 /* ---- 空状态提示 ---- */
-#pywebio-scope-statistics-content .stat-empty {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .stat-empty {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -185,7 +186,7 @@
 }
 
 /* ---- 按钮：iOS 填充 / 浅色 / 纯文字 ---- */
-#pywebio-scope-statistics-content .btn {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .btn {
     font-family: var(--stat-font) !important;
     border-radius: var(--stat-radius-control) !important;
     border: var(--stat-hairline) solid transparent !important;
@@ -197,35 +198,35 @@
     transition: background 0.18s ease, transform 0.12s ease, opacity 0.18s ease;
 }
 
-#pywebio-scope-statistics-content .btn:active {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .btn:active {
     transform: scale(0.97);
 }
 
-#pywebio-scope-statistics-content .btn:focus-visible {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .btn:focus-visible {
     outline: 2px solid var(--stat-accent);
     outline-offset: 1px;
 }
 
-#pywebio-scope-statistics-content .btn-primary {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .btn-primary {
     background: var(--stat-accent) !important;
     color: var(--stat-on-accent) !important;
 }
 
-#pywebio-scope-statistics-content .btn-secondary,
-#pywebio-scope-statistics-content .btn-off {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .btn-secondary,
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .btn-off {
     background: var(--stat-surface-muted) !important;
     color: var(--stat-text) !important;
     border-color: var(--stat-divider) !important;
 }
 
-#pywebio-scope-statistics-content .btn-secondary:hover,
-#pywebio-scope-statistics-content .btn-off:hover {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .btn-secondary:hover,
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .btn-off:hover {
     background: var(--stat-accent-soft) !important;
     color: var(--stat-accent) !important;
 }
 
 /* ---- 分段控件：按钮组整体化作 iOS Segmented Control ---- */
-#pywebio-scope-statistics-content .btn-group {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .btn-group {
     display: inline-flex !important;
     align-items: center;
     gap: 2px !important;
@@ -235,7 +236,7 @@
     border: var(--stat-hairline) solid var(--stat-divider);
 }
 
-#pywebio-scope-statistics-content .btn-group > .btn {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .btn-group > .btn {
     border-radius: 9px !important;
     border-color: transparent !important;
     background: transparent !important;
@@ -244,7 +245,7 @@
     font-size: 12.5px !important;
 }
 
-#pywebio-scope-statistics-content .btn-group > .btn-primary {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) .btn-group > .btn-primary {
     background: var(--stat-surface) !important;
     color: var(--stat-text) !important;
     font-weight: 600 !important;
@@ -252,7 +253,7 @@
 }
 
 /* ---- 顶部资源仪表盘：常驻冻结 + 等宽磁贴网格 + 更新时间 ---- */
-#pywebio-scope-statistics-content #pywebio-scope-stat_resources {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-stat_resources {
     /* 始终冻结在内容区上方：内联样式已声明 sticky，这里再显式固定一次，
        避免后续主题或覆盖规则改动导致失效 */
     position: sticky !important;
@@ -275,17 +276,17 @@
 }
 
 /* 磁贴内部：状态点垂直居中，内容列允许换行收缩 */
-#pywebio-scope-statistics-content #pywebio-scope-stat_resources > div > div {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-stat_resources > div > div {
     min-width: 0;
 }
 
-#pywebio-scope-statistics-content #pywebio-scope-stat_resources > div > div:first-child {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-stat_resources > div > div:first-child {
     align-items: center !important;
     justify-content: center !important;
 }
 
 /* 资源数值排版：系统字体 + 等宽数字 + 语义化层级 */
-#pywebio-scope-statistics-content #pywebio-scope-stat_resources *[style*="--dashboard-value--"] {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-stat_resources *[style*="--dashboard-value--"] {
     font-family: var(--stat-font) !important;
     font-size: 1.1rem !important;
     font-weight: 600 !important;
@@ -294,15 +295,15 @@
     color: var(--stat-text) !important;
 }
 
-#pywebio-scope-statistics-content #pywebio-scope-stat_resources *[style*="--dashboard-total--"],
-#pywebio-scope-statistics-content #pywebio-scope-stat_resources *[style*="--dashboard-limit--"] {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-stat_resources *[style*="--dashboard-total--"],
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-stat_resources *[style*="--dashboard-limit--"] {
     font-family: var(--stat-font) !important;
     font-size: 0.78rem !important;
     opacity: 0.55;
     font-variant-numeric: tabular-nums;
 }
 
-#pywebio-scope-statistics-content #pywebio-scope-stat_resources *[style*="--dashboard-help--"] {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-stat_resources *[style*="--dashboard-help--"] {
     font-family: var(--stat-font) !important;
     font-size: 0.75rem !important;
     color: var(--stat-muted) !important;
@@ -310,14 +311,14 @@
     white-space: normal;
 }
 
-#pywebio-scope-statistics-content #pywebio-scope-stat_resources .status-point {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-stat_resources .status-point {
     width: 9px !important;
     height: 9px !important;
     border-radius: 50% !important;
 }
 
 /* 有新数据时在仪表盘右上角浮出一枚小提示（原顶部刷新按钮的小圆点迁到这里） */
-#pywebio-scope-statistics-content #pywebio-scope-stat_resources.stat-has-new-data::after {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-stat_resources.stat-has-new-data::after {
     content: "有新数据";
     position: absolute;
     top: 6px;
@@ -334,13 +335,13 @@
 }
 
 /* ---- 委托收益：卡片 / 表格 / 截图按钮统一风格 ---- */
-#pywebio-scope-statistics-content #pywebio-scope-commission_income .commission-income-metric-card {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-commission_income .commission-income-metric-card {
     border-radius: 12px !important;
     border: var(--stat-hairline) solid var(--stat-divider) !important;
     background: var(--stat-surface-muted) !important;
 }
 
-#pywebio-scope-statistics-content #pywebio-scope-commission_income table th {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-commission_income table th {
     font-size: 12px !important;
     font-weight: 500 !important;
     color: var(--stat-muted) !important;
@@ -348,27 +349,27 @@
     border-bottom: var(--stat-hairline) solid var(--stat-divider) !important;
 }
 
-#pywebio-scope-statistics-content #pywebio-scope-commission_income table td {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-commission_income table td {
     font-family: var(--stat-font) !important;
     font-variant-numeric: tabular-nums;
 }
 
 /* 明细表：发丝行线替代内联的 1px 灰线，末行去线（iOS 分组列表观感） */
-#pywebio-scope-statistics-content #pywebio-scope-commission_income .commission-income-table thead th + th,
-#pywebio-scope-statistics-content #pywebio-scope-commission_income .commission-income-table tbody td + td {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-commission_income .commission-income-table thead th + th,
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-commission_income .commission-income-table tbody td + td {
     border-left: var(--stat-hairline) solid var(--stat-divider);
 }
 
-#pywebio-scope-statistics-content #pywebio-scope-commission_income .commission-income-table tbody tr {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-commission_income .commission-income-table tbody tr {
     border-bottom: var(--stat-hairline) solid var(--stat-divider) !important;
 }
 
-#pywebio-scope-statistics-content #pywebio-scope-commission_income .commission-income-table tbody tr:last-child {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-commission_income .commission-income-table tbody tr:last-child {
     border-bottom: none !important;
 }
 
 /* 卡片内节标题：与其它统计卡片统一为 17px/600 且去掉粗重下边线 */
-#pywebio-scope-statistics-content #pywebio-scope-commission_income #commission_income_container > div:first-child {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-commission_income #commission_income_container > div:first-child {
     font-size: 17px !important;
     font-weight: 600 !important;
     letter-spacing: -0.015em !important;
@@ -379,12 +380,12 @@
 }
 
 /* 指标卡：标签弱化、数值等宽加粗，形成清晰层级 */
-#pywebio-scope-statistics-content #pywebio-scope-commission_income .commission-income-metric-card > div > span:first-child {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-commission_income .commission-income-metric-card > div > span:first-child {
     color: var(--stat-muted) !important;
     letter-spacing: -0.005em;
 }
 
-#pywebio-scope-statistics-content #pywebio-scope-commission_income .commission-income-metric-card > div > span:last-child {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-commission_income .commission-income-metric-card > div > span:last-child {
     font-family: var(--stat-font) !important;
     font-size: 1.25rem !important;
     font-weight: 600 !important;
@@ -393,35 +394,35 @@
 }
 
 /* 最近记录：分隔线、小标题与空态文案 */
-#pywebio-scope-statistics-content #pywebio-scope-commission_income .commission-income-recent > div:first-child {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-commission_income .commission-income-recent > div:first-child {
     height: 0 !important;
     border-top: var(--stat-hairline) solid var(--stat-divider);
     background: transparent !important;
     margin: 20px 0 !important;
 }
 
-#pywebio-scope-statistics-content #pywebio-scope-commission_income .commission-income-recent > div:nth-child(2) {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-commission_income .commission-income-recent > div:nth-child(2) {
     font-size: 15px !important;
     font-weight: 600 !important;
     letter-spacing: -0.01em !important;
     margin-bottom: 8px !important;
 }
 
-#pywebio-scope-statistics-content #pywebio-scope-commission_income p {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-commission_income p {
     color: var(--stat-muted) !important;
     font-size: 12.5px !important;
 }
 
-#pywebio-scope-statistics-content #pywebio-scope-commission_income .commission-income-recent-row {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-commission_income .commission-income-recent-row {
     border-bottom: var(--stat-hairline) solid var(--stat-divider) !important;
     padding: 7px 0 !important;
 }
 
-#pywebio-scope-statistics-content #pywebio-scope-commission_income .commission-income-recent-row:last-child {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-commission_income .commission-income-recent-row:last-child {
     border-bottom: none !important;
 }
 
-#pywebio-scope-statistics-content #pywebio-scope-commission_income a[target="_blank"] {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-commission_income a[target="_blank"] {
     border-radius: 999px !important;
     border: var(--stat-hairline) solid var(--stat-divider) !important;
     background: var(--stat-surface-muted) !important;
@@ -433,45 +434,45 @@
     transition: background 0.18s ease, transform 0.12s ease;
 }
 
-#pywebio-scope-statistics-content #pywebio-scope-commission_income a[target="_blank"]:hover {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-commission_income a[target="_blank"]:hover {
     background: var(--stat-accent-soft) !important;
 }
 
-#pywebio-scope-statistics-content #pywebio-scope-commission_income a[target="_blank"]:active {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-commission_income a[target="_blank"]:active {
     transform: scale(0.97);
 }
 
 /* ---- 滚动条：细窄半透明，贴近 macOS 观感 ---- */
-#pywebio-scope-statistics-content ::-webkit-scrollbar {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
 }
 
-#pywebio-scope-statistics-content ::-webkit-scrollbar-thumb {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) ::-webkit-scrollbar-thumb {
     background: var(--stat-divider);
     border-radius: 999px;
 }
 
-#pywebio-scope-statistics-content ::-webkit-scrollbar-thumb:hover {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) ::-webkit-scrollbar-thumb:hover {
     background: var(--stat-muted);
 }
 
-#pywebio-scope-statistics-content ::-webkit-scrollbar-track {
+:is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) ::-webkit-scrollbar-track {
     background: transparent;
 }
 
 /* ---- 窄屏适配 ---- */
 @media (max-width: 720px) {
-    #pywebio-scope-statistics-content #pywebio-scope-ap_chart,
-    #pywebio-scope-statistics-content #pywebio-scope-opsi_stats,
-    #pywebio-scope-statistics-content #pywebio-scope-ship_exp_table,
-    #pywebio-scope-statistics-content #pywebio-scope-commission_income {
+    :is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-ap_chart,
+    :is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-opsi_stats,
+    :is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-ship_exp_table,
+    :is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-commission_income {
         padding: 14px 12px;
         border-radius: 14px;
     }
 
     /* 窄屏磁贴收窄，仍然保持等宽排布 */
-    #pywebio-scope-statistics-content #pywebio-scope-stat_resources {
+    :is(#pywebio-scope-statistics-content, #pywebio-scope-stat_panels) #pywebio-scope-stat_resources {
         grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
     }
 }
