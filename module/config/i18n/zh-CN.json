@@ -6260,7 +6260,8 @@
       "ClickToUpdate": "进行更新",
       "RetryUpdate": "重试更新",
       "CancelUpdate": "取消更新",
-      "Open": "打开"
+      "Open": "打开",
+      "CloseLog": "关闭日志"
     },
     "Toast": {
       "DisableTranslateMode": "点击这里关闭翻译模式",

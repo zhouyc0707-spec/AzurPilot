@@ -790,6 +790,37 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
     align-self: stretch;
 }
 
+/* 概览页下方区域可切换为日志：日志区与图表区占同一格（都定位在同一行），
+   谁显示由概览页的「日志 / 打开」按钮切换，默认只显示图表区。 */
+#pywebio-scope-stat_panels_log {
+    display: none;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    border: 1px solid var(--alas-entry-border);
+    border-radius: 16px;
+    background: var(--alas-entry-surface);
+    box-shadow: var(--alas-entry-panel-shadow);
+}
+
+#pywebio-scope-stat_panels_log > #pywebio-scope-log-bar {
+    flex: 0 0 auto;
+    border: 0;
+    border-bottom: 1px solid var(--alas-entry-divider);
+    border-radius: 0;
+    margin: 0;
+    padding: .5rem .7rem;
+}
+
+/* 日志正文：日志栏按内容取高，容器吃掉剩余高度并内部滚动 */
+#pywebio-scope-stat_panels_log > #pywebio-scope-log-container {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 0;
+    padding: .55rem .7rem;
+}
+
 /* 窄屏下总览页是单列布局，仪表盘改为整页滚动时吸顶 */
 @media (max-width: 768px) {
     #pywebio-scope-stat_panels_dashboard {

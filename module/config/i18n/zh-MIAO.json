@@ -6260,7 +6260,8 @@
       "ClickToUpdate": "更新喵！",
       "RetryUpdate": "再试一次喵",
       "CancelUpdate": "算了吧喵",
-      "Open": "打开喵"
+      "Open": "打开喵",
+      "CloseLog": "关闭日志喵"
     },
     "Toast": {
       "DisableTranslateMode": "点这里关翻译模式喵",

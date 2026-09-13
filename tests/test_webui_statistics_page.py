@@ -244,7 +244,9 @@ class TestStatisticsPanelRegions(unittest.TestCase):
             ["stat_resources", "stat_panels_dashboard", "ap_chart"],
             names[:3],
         )
-        self.assertEqual("stat_panels_charts", names[-1])
+        # 图表区之后才是可切换的日志区
+        self.assertIn("stat_panels_log", names)
+        self.assertLess(names.index("stat_panels_charts"), names.index("stat_panels_log"))
         # 资源仪表盘必须落在 dashboard 区内
         dashboard_children = self.recorder.content_of("stat_panels_dashboard")
         self.assertEqual("stat_resources", dashboard_children[0]._name)

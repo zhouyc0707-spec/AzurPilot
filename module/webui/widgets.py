@@ -119,6 +119,8 @@ class RichLog:
         self.display_dashboard = True
         self.first_display = True
         self.last_display_time = {}
+        # 已经渲染到日志区的 renderables 下标，用于只追加新增部分
+        self._log_rendered_upto = 0
         self.dashboard_arg_group = None
         if State.theme in ("dark", "dark_advanced_material"):
             self.terminal_theme = DARK_TERMINAL_THEME
@@ -148,16 +150,14 @@ class RichLog:
         return html
 
     def extend(self, text):
+        """把一批渲染好的 HTML 追加到日志区末尾。
+
+        这里用 ``put_html`` 而不是 ``run_js`` + jQuery：日志刷新任务跑在任务
+        处理线程里，``run_js`` 在该线程拿不到会话、命令会被静默丢弃，日志区
+        会一直是空的；``put_html`` 是 PyWebIO 的输出命令，任务线程可以正常使用。
+        """
         if text:
-            run_js(
-                """$("#pywebio-scope-{scope}>div").append(text);
-            """.format(
-                    scope=self.scope
-                ),
-                text=str(text),
-            )
-            if self.keep_bottom:
-                self.scroll()
+            put_html(text, scope=self.scope)
 
     def set_dashboard_display(self, b: bool) -> None:
         # use for lambda callback function. Copied.
@@ -165,19 +165,68 @@ class RichLog:
         self.first_display = True
 
     def reset(self):
-        run_js(f"""$("#pywebio-scope-{self.scope}>div").empty();""")
+        """清空日志区，避免整块日志在增量追加重绘时重复。"""
+        clear(self.scope)
 
-    def scroll(self) -> None:
+    def enable_auto_scroll(self) -> None:
+        """在会话线程里注册前端观察器：日志区内容一变化就滚到底部。
+
+        必须在会话线程（页面渲染时、或按钮回调里）调用；任务线程里注册不可靠。
+        这里用字符串拼接而不是 ``str.format``：JS 里的对象字面量花括号会和
+        format 的占位符冲突（实测抛 ``ValueError: unexpected '{' in field name``）。
+        """
         run_js(
-            """$("#pywebio-scope-{scope}").scrollTop($("#pywebio-scope-{scope}").prop("scrollHeight"));
-        """.format(
-                scope=self.scope
-            )
+            '(function () {'
+            '  var box = document.getElementById("pywebio-scope-' + self.scope + '");'
+            "  if (!box || box.__alasAutoScroll) return;"
+            "  box.__alasAutoScroll = true;"
+            "  var stick = true;"
+            "  box.__alasAutoScrollOnScroll = function () {"
+            "    stick = box.scrollHeight - box.scrollTop - box.clientHeight < 40;"
+            "  };"
+            "  box.addEventListener('scroll', box.__alasAutoScrollOnScroll);"
+            "  box.__alasAutoScrollObserver = new MutationObserver(function () {"
+            "    if (stick) box.scrollTop = box.scrollHeight;"
+            "  });"
+            "  box.__alasAutoScrollObserver.observe(box, {"
+            "    childList: true,"
+            "    subtree: true"
+            "  });"
+            "})();"
+        )
+
+    def remove_auto_scroll(self) -> None:
+        """移除前端观察器：「自动滚动 关」时日志不再跟随到底部。"""
+        run_js(
+            '(function () {'
+            '  var box = document.getElementById("pywebio-scope-' + self.scope + '");'
+            "  if (!box) return;"
+            "  if (box.__alasAutoScrollObserver) {"
+            "    box.__alasAutoScrollObserver.disconnect();"
+            "    box.__alasAutoScrollObserver = null;"
+            "  }"
+            "  if (box.__alasAutoScrollOnScroll) {"
+            "    box.removeEventListener('scroll', box.__alasAutoScrollOnScroll);"
+            "    box.__alasAutoScrollOnScroll = null;"
+            "  }"
+            "  box.__alasAutoScroll = false;"
+            "})();"
         )
 
     def set_scroll(self, b: bool) -> None:
-        # 用于 lambda 回调函数中设置是否保持滚动到底部
+        """设置是否保持滚动到底部（由「自动滚动」按钮回调调用）。
+
+        前端观察器必须在会话线程注册，按钮回调本身就在会话线程里，因此这里能
+        直接注册/注销。
+
+        Args:
+            b: True 表示开启自动滚动。
+        """
         self.keep_bottom = b
+        if b:
+            self.enable_auto_scroll()
+        else:
+            self.remove_auto_scroll()
 
     def set_dashboard_display(self, b: bool) -> None:
         # 用于 lambda 回调函数中设置是否显示仪表盘
@@ -233,25 +282,32 @@ class RichLog:
     #     self._callback_thread = None
     #     self.console.width = int(_width)
 
-    def put_log(self, pm: ProcessManager) -> Generator:
-        yield
+    def append_log(self, pm: ProcessManager) -> None:
+        """把进程日志中「上次渲染之后新增」的部分追加到日志区。
+
+        用普通函数而不是生成器：本项目的任务调度器会把可调用对象包成
+        `yield func()` 的生成器逐帧调用，普通函数每帧都会被调用一次；而把
+        生成器直接交给调度器时实测只会被执行一次，日志区因此一直空白。
+
+        用 ``put_html`` / ``clear`` 而不是 ``run_js`` + jQuery：本方法跑在任务
+        处理线程里，``run_js`` 在该线程拿不到会话、命令会被静默丢弃。
+        """
         try:
-            while True:
-                last_idx = len(pm.renderables)
+            current = len(pm.renderables)
+            if current < self._log_rendered_upto:
+                # 进程日志被裁剪，位置失效，整块重建
+                clear(self.scope)
+                self._log_rendered_upto = 0
                 html = self.render_many(pm.renderables[:])
-                self.reset()
-                self.extend(html)
-                counter = last_idx
-                while counter < pm.renderables_max_length * 2:
-                    yield
-                    idx = len(pm.renderables)
-                    if idx < last_idx:
-                        last_idx -= pm.renderables_reduce_length
-                    if idx != last_idx:
-                        html = self.render_many(pm.renderables[last_idx:idx])
-                        self.extend(html)
-                        counter += idx - last_idx
-                        last_idx = idx
+                if html:
+                    put_html(html, scope=self.scope)
+            elif current > self._log_rendered_upto:
+                html = self.render_many(
+                    pm.renderables[self._log_rendered_upto : current]
+                )
+                if html:
+                    put_html(html, scope=self.scope)
+            self._log_rendered_upto = current
         except SessionException:
             pass
 

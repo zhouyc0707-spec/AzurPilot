@@ -23,6 +23,7 @@ Button:
   RetryUpdate:
   CancelUpdate:
   Open:
+  CloseLog:
 
 Toast:
   DisableTranslateMode:

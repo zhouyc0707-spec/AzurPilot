@@ -6260,7 +6260,8 @@
       "ClickToUpdate": "Update Now",
       "RetryUpdate": "Retry Update",
       "CancelUpdate": "Cancel Update",
-      "Open": "Open"
+      "Open": "Open",
+      "CloseLog": "Close log"
     },
     "Toast": {
       "DisableTranslateMode": "Click here to turn off translation mode",

@@ -6260,7 +6260,8 @@
       "ClickToUpdate": "アップデートを行う",
       "RetryUpdate": "更新を再試行します",
       "CancelUpdate": "更新をキャンセルする",
-      "Open": "開く"
+      "Open": "開く",
+      "CloseLog": "ログを閉じる"
     },
     "Toast": {
       "DisableTranslateMode": "翻訳モードをオフにするにはここをクリックしてください",

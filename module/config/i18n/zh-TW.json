@@ -6260,7 +6260,8 @@
       "ClickToUpdate": "進行更新",
       "RetryUpdate": "重試更新",
       "CancelUpdate": "取消更新",
-      "Open": "開啟"
+      "Open": "開啟",
+      "CloseLog": "關閉日誌"
     },
     "Toast": {
       "DisableTranslateMode": "點選這裡關閉翻譯模式",

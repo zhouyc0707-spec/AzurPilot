@@ -61,6 +61,9 @@ class StatisticsPageMixin(WebUIMixinBase):
                 put_scope("commission_income", []),
             ],
         )
+        # 区域二的可选内容：日志区与图表区共用同一块位置，由概览页的
+        # 「日志 / 打开」按钮就地切换（默认隐藏，见 entry-alas.css）
+        put_scope("stat_panels_log", [])
 
         # 不再同步渲染：后台任务注册后 next_run=now 会立即在任务线程执行，
         # 页面切换只做轻量的空容器挂载，避免统计视图的数据库读取与图表构建
@@ -82,6 +85,11 @@ class StatisticsPageMixin(WebUIMixinBase):
             self._ap_chart_view = "line"
         if not hasattr(self, "_commission_income_period"):
             self._commission_income_period = "month"
+
+        # 面板在总览页与统计页之间复用，统计页始终显示图表区，
+        # 因此进页时把概览页可能开着的日志区收起来（模式记忆保留）
+        if getattr(self, "_log_panel_mounted", False):
+            self._apply_log_mode_display(False)
 
         cache_key = self._get_statistics_cache_key()
         cached_key = getattr(self, "_statistics_cache_key", None)

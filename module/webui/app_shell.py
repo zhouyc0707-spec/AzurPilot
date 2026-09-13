@@ -208,6 +208,9 @@ class AppShellMixin(WebUIMixinBase):
         self._simulator_logger_pm = None
         self._overview_log = None
         self._overview_log_config_name = None
+        # 概览页下方区域当前显示日志还是统计图表：None 表示尚未从浏览器读取
+        self._overview_show_log = None
+        self._log_panel_mounted = False
         self._statistics_cache_key = None
         self._statistics_source_signature = None
         self._statistics_refresh_pending = False
