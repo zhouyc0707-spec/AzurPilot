@@ -213,6 +213,8 @@ class AppShellMixin(WebUIMixinBase):
         self._log_panel_mounted = False
         # 日志跟随任务是否已注册（与面板挂载解耦，见 _enter_log_mode）
         self._log_task_added = False
+        # 日志跟随任务对象，用于核对它是否还在任务列表里
+        self._log_follow_task = None
         self._statistics_cache_key = None
         self._statistics_source_signature = None
         self._statistics_refresh_pending = False

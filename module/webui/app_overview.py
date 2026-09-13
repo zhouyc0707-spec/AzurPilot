@@ -38,6 +38,11 @@ class OverviewMixin(WebUIMixinBase):
         self.init_menu(name="Overview")
         self.set_title(t(f"Gui.MenuAlas.Overview"))
         self._overview_snapshot = None
+        # 总览页整页重建时 stat_panels 及其下的日志区 DOM 也一并重建，日志面板
+        # 必须跟着重新渲染；不重置这个标志就会出现「面板 div 还在、里面的日志
+        # 容器没了」——表现就是点「总览」重进页面后日志一片空白
+        self._log_panel_mounted = False
+        # 日志跟随任务的位置（_log_tail）挂在 RichLog 实例上，这里不能动
 
         put_scope("overview", [put_scope("schedulers"), put_scope("stat_panels")])
 
@@ -192,24 +197,48 @@ class OverviewMixin(WebUIMixinBase):
             # 反复切换不重建，避免按钮状态被重置
             with use_scope("stat_panels_log"):
                 self._mount_log_panel()
+            # 面板 DOM 每次（重）挂载都是空的，而跟随位置还停在旧内容之后，
+            # 只追加新字节会让日志区只剩寥寥几行。丢弃位置，让跟随任务重新
+            # 回读文件末尾的内容。
+            self._log.reset_log_tail()
             # 自动滚到底由前端观察器完成（任务线程里 run_js 无效），
             # 必须在会话线程这里注册
             self._log.enable_auto_scroll()
             self._log_panel_mounted = True
 
-        if show_log and not self._log_task_added:
-            # 跟随任务单独用一个标志，不再和面板挂载绑在一起：挂载时
-            # self.alas 可能还没就绪，那样就会「面板已挂载但任务没注册」，
-            # 日志区从此永远空白（表现就是「打开日志一片空白」）。
-            if hasattr(self, "alas") and self.alas is not None:
-                # 任务调度器把可调用对象包成 `yield func()`，不接受带参函数
-                config_name = self.alas_name
-                self.task_handler.add(
-                    lambda: self._log.append_log_from_file(config_name), 0.25, True
-                )
-                self._log_task_added = True
+        if show_log:
+            self._ensure_log_follow_task()
 
         self._apply_log_mode_display(show_log)
+
+    def _ensure_log_follow_task(self) -> bool:
+        """确保日志跟随任务在任务列表里，需要时补注册。
+
+        页面重挂载（点「总览」/切换菜单）会走 ``init_menu`` →
+        ``remove_pending_task()``，把所有待删任务一并移除，日志跟随任务就在其中。
+        只看自己记的标志会以为「任务还在」而永不补注册，日志区从此空白。
+        因此每帧都回到任务处理器的真实列表里核对一次。
+
+        Returns:
+            bool: True 表示任务在列表里（原本就在，或本次补注册成功）。
+        """
+        added = getattr(self, "_log_follow_task", None)
+        for task in getattr(self.task_handler, "tasks", []):
+            if task is added or task.name == "append_log_from_file":
+                self._log_follow_task = task
+                self._log_task_added = True
+                return True
+
+        if not hasattr(self, "alas") or self.alas is None:
+            self._log_task_added = False
+            return False
+        config_name = self.alas_name
+        self.task_handler.add(
+            lambda: self._log.append_log_from_file(config_name), 0.25, True
+        )
+        self._log_follow_task = self.task_handler.get_task("append_log_from_file")
+        self._log_task_added = True
+        return True
 
     @staticmethod
     def _apply_log_mode_display(show_log: bool) -> None:
