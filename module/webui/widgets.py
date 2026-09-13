@@ -11,6 +11,7 @@ import json
 import pywebio.pin
 import random
 import string
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Any, Callable, Dict, Generator, List, Optional, TYPE_CHECKING, Union
@@ -48,7 +49,32 @@ if TYPE_CHECKING:
 
 # 单帧最多读取的日志字节数：一次渲染过多内容会拖慢浏览器，
 # 超出的部分留给后续帧继续追加。
-LOG_TAIL_MAX_BYTES = 64 * 1024
+LOG_TAIL_READ_BYTES = 64 * 1024
+# 首次跟随（打开日志/面板重建）时最多回读的字节数
+LOG_TAIL_SEED_BYTES = 32 * 1024
+
+
+# 日志区最多保留的字符数：ALAS 日志量很大（每秒几十行），无上限追加会让
+# 页面元素数持续膨胀、浏览器越来越卡，因此超过上限时整块重建、只留最近内容。
+LOG_VIEW_MAX_CHARS = 400_000
+
+
+@dataclass
+class LogTailState:
+    """日志文件跟随状态。
+
+    只用来记录「读到哪儿了」，不含任何内容，因此面板重建后可以安全复用。
+    """
+
+    config_name: str
+    # 当前跟随的日志文件名（跨天会变成新文件）
+    path_name: str = ""
+    # 已经消费到的字节位置
+    position: int = 0
+    # 上次看到的文件大小，用于判断文件是否被截断/重建
+    size: int = 0
+    # 日志区当前已显示的字符数，用于判断是否需要整块重建
+    view_chars: int = 0
 
 
 class ScrollableCode:
@@ -128,9 +154,8 @@ class RichLog:
         self.display_dashboard = True
         self.first_display = True
         self.last_display_time = {}
-        # 跟随日志文件的位置与上次看到的文件大小，用于只追加新增部分
-        self._log_file_offset = 0
-        self._log_file_size = 0
+        # 日志跟随状态（见 LogTailState）：None 表示下次从文件末尾开始
+        self._log_tail: Optional[LogTailState] = None
         self.dashboard_arg_group = None
         if State.theme in ("dark", "dark_advanced_material"):
             self.terminal_theme = DARK_TERMINAL_THEME
@@ -307,6 +332,10 @@ class RichLog:
         """
         return Path("./log") / f"{date.today().isoformat()}_{config_name}.txt"
 
+    def reset_log_tail(self) -> None:
+        """重置日志跟随状态：下次打开日志区时从当前文件末尾继续。"""
+        self._log_tail = None
+
     def append_log_from_file(self, config_name: str) -> None:
         """跟随实例的日志文件，把新增内容追加到日志区。
 
@@ -319,8 +348,8 @@ class RichLog:
         `yield func()` 的生成器逐帧调用，普通函数每帧都会被调用一次；而把
         生成器直接交给调度器时实测只会被执行一次。
 
-        用 ``put_html`` / ``clear`` 而不是 ``run_js`` + jQuery：本方法跑在任务
-        处理线程里，``run_js`` 在该线程拿不到会话、命令会被静默丢弃。
+        用 ``put_html`` 而不是 ``run_js`` + jQuery：本方法跑在任务处理线程里，
+        ``run_js`` 在该线程拿不到会话、命令会被静默丢弃。
 
         异常一律就地记日志并吞掉：任务调度器遇到异常会把这个任务从列表里
         移除，日志刷新就此永久停止（表现为日志区一直空白）。
@@ -332,48 +361,121 @@ class RichLog:
             path = self.resolve_log_file(config_name)
             if not path.exists():
                 return
-
             size = path.stat().st_size
-            if self._log_file_size == 0:
-                # 首次跟随：跳到文件末尾，只显示打开日志之后产生的内容，
-                # 否则要把整份日志（可达十几 MB）渲染进页面
-                self._log_file_offset = size
-                self._log_file_size = size
-                return
-            if size < self._log_file_size:
-                # 日志轮转/被清空，从头重新跟随
-                clear(self.scope)
-                self._log_file_offset = 0
-            if size <= self._log_file_offset:
-                self._log_file_size = size
+
+            state = self._log_tail
+            if state is None:
+                # 首次跟随：只回读文件末尾一小段（不整份回放），并且只认完整行，
+                # 之后从文件末尾继续增量追加，因此重新打开面板也能看到最近日志
+                self._log_tail = LogTailState(
+                    config_name=config_name,
+                    path_name=path.name,
+                    position=size,
+                    size=size,
+                )
+                self._read_log_slice(path, max(0, size - LOG_TAIL_SEED_BYTES), size)
                 return
 
-            with path.open("rb") as f:
-                f.seek(self._log_file_offset)
-                chunk = f.read(LOG_TAIL_MAX_BYTES)
-            # 只消费到最后一个换行，避免把写了一半的行渲染出来
-            cut = chunk.rfind(b"\n")
-            if cut < 0:
+            if state.config_name != config_name or path.name != state.path_name:
+                # 跨天换文件：保留已显示内容，加一行分隔后从新文件开头跟随
+                self._append_log_html(
+                    f"—— 日志文件切换到 {path.name}，以上为上一份日志 ——"
+                )
+                self._log_tail = LogTailState(
+                    config_name=config_name,
+                    path_name=path.name,
+                    position=0,
+                    size=size,
+                    view_chars=state.view_chars,
+                )
                 return
-            self._log_file_offset += cut + 1
-            self._log_file_size = size
 
-            text = chunk[:cut].decode("utf-8", errors="replace")
-            if not text.strip():
+            if size < state.size:
+                # 文件被截断/重建：保留已显示内容，加一行分隔后从头跟随
+                self._append_log_html("—— 日志文件被重建，以下为新内容 ——")
+                state.position = 0
+            state.config_name = config_name
+            state.path_name = path.name
+            state.size = size
+
+            if size <= state.position:
                 return
-
-            # 直接转义成 HTML 追加，不复用 RichLog.console：
-            # 那个 console 是实例级共享状态，原日志页的刷新任务与这里会同时
-            # 使用它，export_html 的记录缓冲互相覆盖，实测会渲染出空串。
-            html = "<pre class=\"alas-log-line\">{}</pre>".format(
-                escape(text.rstrip("\n"))
-            )
-            put_html(html, scope=self.scope)
+            self._read_log_slice(path, state.position, size)
         except SessionException:
             # 会话已关闭，任务会随之结束，属正常退出
             pass
         except Exception as e:  # noqa: BLE001 - 记录后继续，避免任务被移除
             logger.warning(f"[WebUI-日志] 渲染日志失败（已跳过本帧）: {e!r}")
+
+    def _read_log_slice(self, path: Path, start: int, end: int) -> None:
+        """读取日志文件的 ``[start, end)`` 区间并追加到日志区。
+
+        只消费到最后一个换行（避免渲染写了一半的行），单帧最多读
+        ``LOG_TAIL_READ_BYTES``；已消费的部分推进位置，剩余留给后续帧。
+
+        Args:
+            path: 日志文件路径。
+            start: 起始字节位置。
+            end: 文件总大小（用于推进状态）。
+        """
+        state = self._log_tail
+        if state is None:
+            return
+        with path.open("rb") as f:
+            f.seek(start)
+            chunk = f.read(LOG_TAIL_READ_BYTES)
+        cut = chunk.rfind(b"\n")
+        if cut < 0:
+            # 没有完整行可消费
+            return
+        text = chunk[: cut + 1].decode("utf-8", errors="replace")
+        state.position = start + cut + 1
+        state.size = end
+        if text.strip():
+            self._append_log_html(text)
+
+    def _append_log_html(self, text: str) -> None:
+        """把一段日志文本转义后追加到日志区。
+
+        不复用 ``RichLog.console`` 渲染：那个 console 是实例级共享状态，
+        与原日志页的刷新任务同时使用时 ``export_html`` 的记录缓冲会互相覆盖，
+        实测会渲染出空串。
+
+        超过 ``LOG_VIEW_MAX_CHARS`` 时只裁掉最旧的若干行，保留最近内容，
+        避免面板无限增长拖慢浏览器。
+
+        Args:
+            text: 已解码的日志文本（可含多行）。
+        """
+        state = self._log_tail
+        if state is not None and state.view_chars + len(text) > LOG_VIEW_MAX_CHARS:
+            # 只裁掉最旧的若干行，而不是整块清空：日志是用户盯着看的内容，
+            # 整块消失比偶尔少几条旧日志更难受。
+            # 用 setTimeout 让本帧的新内容先落 DOM，再按字符预算从头删。
+            drop = int(LOG_VIEW_MAX_CHARS * 0.25)
+            run_js(
+                "(function(){"
+                "setTimeout(function(){"
+                'var box=document.getElementById("pywebio-scope-'
+                + self.scope
+                + '");'
+                "if(!box)return;"
+                "var nodes=box.querySelectorAll('pre.alas-log-line');"
+                "var budget=0,i=0;"
+                "for(;i<nodes.length&&budget<" + str(drop) + ";i++){"
+                "budget+=nodes[i].textContent.length;"
+                "var target=nodes[i].parentElement;"
+                "if(!target||target===box){target=nodes[i];}"
+                "target.remove();"
+                "}"
+                "},0);"
+                "})();"
+            )
+            state.view_chars = max(0, state.view_chars - drop)
+        if state is not None:
+            state.view_chars += len(text)
+        html = "<pre class=\"alas-log-line\">{}</pre>".format(escape(text.rstrip("\n")))
+        put_html(html, scope=self.scope)
 
 
 class BinarySwitchButton(Switch):

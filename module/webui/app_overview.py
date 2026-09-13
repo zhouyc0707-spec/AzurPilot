@@ -202,7 +202,6 @@ class OverviewMixin(WebUIMixinBase):
                     lambda: self._log.append_log_from_file(config_name), 0.25, True
                 )
             self._log_panel_mounted = True
-
         self._apply_log_mode_display(show_log)
 
     @staticmethod
@@ -244,12 +243,22 @@ class OverviewMixin(WebUIMixinBase):
         self._enter_log_mode(show_log)
         self._render_log_toggle_button(show_log)
 
+    def _clear_log_view(self) -> None:
+        """清空日志区已显示的内容，并把跟随位置重置到文件末尾。
+
+        供「清空日志」类操作调用：只丢弃面板里的内容，不动磁盘上的日志文件。
+        """
+        self._log.reset_log_tail()
+        clear(self._log.scope)
+
     def _mount_log_panel(self) -> None:
         """创建日志栏与日志内容容器（渲染进当前 scope，即 stat_panels_log）。"""
         if (
             self._overview_log is None
             or self._overview_log_config_name != self.alas_name
         ):
+            # 同一个实例复用同一个 RichLog（含日志跟随位置），换实例才重建，
+            # 否则重新打开日志会把已显示的内容连同读取位置一起丢掉
             self._overview_log = RichLog("log")
             self._overview_log_config_name = self.alas_name
         else:
