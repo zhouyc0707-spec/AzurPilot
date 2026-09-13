@@ -196,11 +196,10 @@ class OverviewMixin(WebUIMixinBase):
             # 必须在会话线程这里注册
             self._log.enable_auto_scroll()
             if hasattr(self, "alas") and self.alas is not None:
-                # 任务调度器把可调用对象包成 `yield func()`，不接受带参函数，
-                # 因此用闭包把进程管理器绑进去
-                process_manager = self.alas
+                # 任务调度器把可调用对象包成 `yield func()`，不接受带参函数
+                config_name = self.alas_name
                 self.task_handler.add(
-                    lambda: self._log.append_log(process_manager), 0.25, True
+                    lambda: self._log.append_log_from_file(config_name), 0.25, True
                 )
             self._log_panel_mounted = True
 

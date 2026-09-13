@@ -821,6 +821,17 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
     padding: .55rem .7rem;
 }
 
+/* 日志正文：等宽字体、保留原始换行与缩进，随日志区一起滚动 */
+#pywebio-scope-stat_panels_log .alas-log-line {
+    margin: 0;
+    font-family: 'JetBrains Mono NL', Menlo, consolas, 'DejaVu Sans Mono',
+        'Courier New', monospace;
+    font-size: .85rem;
+    line-height: 1.35;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
 /* 窄屏下总览页是单列布局，仪表盘改为整页滚动时吸顶 */
 @media (max-width: 768px) {
     #pywebio-scope-stat_panels_dashboard {

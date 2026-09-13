@@ -6,10 +6,13 @@ import copy
 # 此文件定义了 WebUI 中使用的各种自定义交互图形组件（Widgets）。
 # 包含彩色实时日志渲染器（RichLog）、状态感知切换按钮以及图标按钮组等高度定制化的可视化组件。
 import html
+from html import escape
 import json
 import pywebio.pin
 import random
 import string
+from datetime import date
+from pathlib import Path
 from typing import Any, Callable, Dict, Generator, List, Optional, TYPE_CHECKING, Union
 
 from pywebio.exceptions import SessionException
@@ -18,6 +21,7 @@ from pywebio.io_ctrl import Output
 from pywebio.output import *
 from pywebio.session import eval_js, local, run_js
 from rich.console import ConsoleRenderable
+from rich.text import Text
 
 from module.config.deep import deep_get
 from module.config.task_priority import (
@@ -25,7 +29,7 @@ from module.config.task_priority import (
     merge_task_priority,
     parse_task_priority,
 )
-from module.logger import HTMLConsole, Highlighter, WEB_THEME
+from module.logger import HTMLConsole, Highlighter, WEB_THEME, logger
 from module.webui.lang import t
 from module.webui.pin import put_checkbox, put_input, put_select, put_textarea
 from module.webui.process_manager import ProcessManager
@@ -40,6 +44,11 @@ from module.webui.utils import (
 
 if TYPE_CHECKING:
     from module.webui.app import AlasGUI
+
+
+# 单帧最多读取的日志字节数：一次渲染过多内容会拖慢浏览器，
+# 超出的部分留给后续帧继续追加。
+LOG_TAIL_MAX_BYTES = 64 * 1024
 
 
 class ScrollableCode:
@@ -119,8 +128,9 @@ class RichLog:
         self.display_dashboard = True
         self.first_display = True
         self.last_display_time = {}
-        # 已经渲染到日志区的 renderables 下标，用于只追加新增部分
-        self._log_rendered_upto = 0
+        # 跟随日志文件的位置与上次看到的文件大小，用于只追加新增部分
+        self._log_file_offset = 0
+        self._log_file_size = 0
         self.dashboard_arg_group = None
         if State.theme in ("dark", "dark_advanced_material"):
             self.terminal_theme = DARK_TERMINAL_THEME
@@ -282,34 +292,88 @@ class RichLog:
     #     self._callback_thread = None
     #     self.console.width = int(_width)
 
-    def append_log(self, pm: ProcessManager) -> None:
-        """把进程日志中「上次渲染之后新增」的部分追加到日志区。
+    @staticmethod
+    def resolve_log_file(config_name: str) -> Path:
+        """解析实例当天日志文件路径。
+
+        与 ``module.logger.set_file_logger`` 的命名一致：``log/<日期>_<实例名>.txt``，
+        例如 ``log/2026-09-13_alas.txt``。
+
+        Args:
+            config_name: 实例名（如 ``alas``）。
+
+        Returns:
+            Path: 日志文件路径（可能尚不存在）。
+        """
+        return Path("./log") / f"{date.today().isoformat()}_{config_name}.txt"
+
+    def append_log_from_file(self, config_name: str) -> None:
+        """跟随实例的日志文件，把新增内容追加到日志区。
+
+        直接读日志文件而不是进程管理器的 ``renderables`` 缓冲：日志由各自的
+        worker 进程写入 ``log/<日期>_<实例名>.txt``（``set_file_logger``），
+        这是唯一的权威来源；实测 WebUI 进程里的 ``renderables`` 一直是空的，
+        照它渲染日志区永远空白。
 
         用普通函数而不是生成器：本项目的任务调度器会把可调用对象包成
         `yield func()` 的生成器逐帧调用，普通函数每帧都会被调用一次；而把
-        生成器直接交给调度器时实测只会被执行一次，日志区因此一直空白。
+        生成器直接交给调度器时实测只会被执行一次。
 
         用 ``put_html`` / ``clear`` 而不是 ``run_js`` + jQuery：本方法跑在任务
         处理线程里，``run_js`` 在该线程拿不到会话、命令会被静默丢弃。
+
+        异常一律就地记日志并吞掉：任务调度器遇到异常会把这个任务从列表里
+        移除，日志刷新就此永久停止（表现为日志区一直空白）。
+
+        Args:
+            config_name: 实例名（如 ``alas``）。
         """
         try:
-            current = len(pm.renderables)
-            if current < self._log_rendered_upto:
-                # 进程日志被裁剪，位置失效，整块重建
+            path = self.resolve_log_file(config_name)
+            if not path.exists():
+                return
+
+            size = path.stat().st_size
+            if self._log_file_size == 0:
+                # 首次跟随：跳到文件末尾，只显示打开日志之后产生的内容，
+                # 否则要把整份日志（可达十几 MB）渲染进页面
+                self._log_file_offset = size
+                self._log_file_size = size
+                return
+            if size < self._log_file_size:
+                # 日志轮转/被清空，从头重新跟随
                 clear(self.scope)
-                self._log_rendered_upto = 0
-                html = self.render_many(pm.renderables[:])
-                if html:
-                    put_html(html, scope=self.scope)
-            elif current > self._log_rendered_upto:
-                html = self.render_many(
-                    pm.renderables[self._log_rendered_upto : current]
-                )
-                if html:
-                    put_html(html, scope=self.scope)
-            self._log_rendered_upto = current
+                self._log_file_offset = 0
+            if size <= self._log_file_offset:
+                self._log_file_size = size
+                return
+
+            with path.open("rb") as f:
+                f.seek(self._log_file_offset)
+                chunk = f.read(LOG_TAIL_MAX_BYTES)
+            # 只消费到最后一个换行，避免把写了一半的行渲染出来
+            cut = chunk.rfind(b"\n")
+            if cut < 0:
+                return
+            self._log_file_offset += cut + 1
+            self._log_file_size = size
+
+            text = chunk[:cut].decode("utf-8", errors="replace")
+            if not text.strip():
+                return
+
+            # 直接转义成 HTML 追加，不复用 RichLog.console：
+            # 那个 console 是实例级共享状态，原日志页的刷新任务与这里会同时
+            # 使用它，export_html 的记录缓冲互相覆盖，实测会渲染出空串。
+            html = "<pre class=\"alas-log-line\">{}</pre>".format(
+                escape(text.rstrip("\n"))
+            )
+            put_html(html, scope=self.scope)
         except SessionException:
+            # 会话已关闭，任务会随之结束，属正常退出
             pass
+        except Exception as e:  # noqa: BLE001 - 记录后继续，避免任务被移除
+            logger.warning(f"[WebUI-日志] 渲染日志失败（已跳过本帧）: {e!r}")
 
 
 class BinarySwitchButton(Switch):
