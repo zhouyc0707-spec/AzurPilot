@@ -89,10 +89,9 @@
     // 节点不重建，因此按钮上的点击回调仍然有效）
     (function movePeriodSelectorToLegend() {
         var scope = document.getElementById("pywebio-scope-" + chartId + "_period");
-        var legendRow = cv.closest(".ap-chart-panel");
-        var row = legendRow && legendRow.querySelector(".ap-legend-row");
-        if (scope && row && scope.parentElement !== row) {
-            row.appendChild(scope);
+        var slot = document.getElementById(chartId + "_period_slot");
+        if (scope && slot && scope.parentElement !== slot) {
+            slot.appendChild(scope);
         }
     })();
 

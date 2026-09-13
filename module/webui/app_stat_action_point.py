@@ -31,8 +31,8 @@ from module.webui.app_types import WebUIMixinBase
 class ActionPointStatisticsMixin(WebUIMixinBase):
     """WebUI 体力趋势图的数据装配和图表渲染。"""
 
-    # 图表时间范围：今日 / 近七天（滚动窗口）/ 本月（当月全部）
-    _AP_PERIODS = ("day", "week", "month")
+    # 图表时间范围：近 24 小时 / 近七天 / 本月（均为滚动窗口）
+    _AP_PERIODS = ("last24h", "week", "month")
     # 默认只看近七天：整月曲线点数太多，细节被压扁
     _AP_DEFAULT_PERIOD = "week"
 
@@ -45,12 +45,12 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
     def _filter_points_by_period(points, period, now):
         """按时间范围过滤时间线原始点。
 
-        数据源本身只覆盖当月，所以「本月」等价于不裁剪；「今日」与「近七天」
-        在这里裁掉更早的点，辅助序列随后按同样的图表点对齐。近七天是滚动窗口
-        （含今天在内的连续 7 天），不是自然周。
+        数据源本身只覆盖当月，所以「本月」等价于不裁剪；「近 24 小时」与
+        「近七天」在这里裁掉更早的点，辅助序列随后按同样的图表点对齐。
+        两者都是滚动窗口（近七天＝含今天在内的连续 7 天，不是自然周）。
         """
-        if period == "day":
-            start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        if period == "last24h":
+            start = now - timedelta(hours=24)
         elif period == "week":
             start = now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(
                 days=6
@@ -686,11 +686,11 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
         return float(value)
 
     def _put_ap_period_selector(self, scope_id, period):
-        """把「今日/本周/本月」渲染进图例行左侧的 scope。
+        """把「近24小时 / 近七天 / 本月」渲染进图例行左侧的 scope。
 
         Args:
             scope_id: 由 ``put_scope`` 创建的作用域名。
-            period: 当前时间范围（day/week/month），用于高亮。
+            period: 当前时间范围（last24h/week/month），用于高亮。
         """
 
         def on_period_click(selected_period):
@@ -700,9 +700,9 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
         put_buttons(
             [
                 {
-                    "label": t("Gui.Stat.ApPeriodDay"),
-                    "value": "day",
-                    "color": "primary" if period == "day" else "off",
+                    "label": t("Gui.Stat.ApPeriodLast24h"),
+                    "value": "last24h",
+                    "color": "primary" if period == "last24h" else "off",
                 },
                 {
                     "label": t("Gui.Stat.ApPeriodWeek"),
@@ -730,9 +730,6 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
         """
         current_view = chart_data["current_view"]
         chart_id = f"ap_cv_{id(self)}"
-        detail_controls_display = (
-            "display:flex;" if current_view in ("line", "detail") else "display:none;"
-        )
         palette = palette_for_theme(theme)
         period_scope = f"{chart_id}_period"
 
@@ -748,7 +745,7 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
             ap_max=chart_data["ap_max"],
             ap_min=chart_data["ap_min"],
             ap_avg=chart_data["ap_avg"],
-            detail_controls_display=detail_controls_display,
+            reset_chart_label=t("Gui.Stat.ResetChart"),
             coins_stats_html=auxiliary_data["coins_stats_html"],
             coins_legend_html=auxiliary_data["coins_legend_html"],
             chart_bg=palette["bg"],

@@ -135,16 +135,29 @@ class TestApChartPalette(unittest.TestCase):
 
     def test_javascript_moves_period_buttons_into_the_legend_row(self):
         """put_html 生成的 div 不是 PyWebIO scope，按钮只能渲染到面板末尾；
-        必须由前端把它搬进图例行，否则会掉到图表下方。"""
+        必须由前端把它搬进图例行左侧的插槽，否则会掉到图表下方。"""
         js = (PROJECT_ROOT / "webapp" / "ap_chart.js").read_text(encoding="utf-8")
         source = (PROJECT_ROOT / "module/webui/app_stat_action_point.py").read_text(
             encoding="utf-8"
         )
 
         self.assertIn("movePeriodSelectorToLegend", js)
-        self.assertIn(".ap-legend-row", js)
+        self.assertIn('chartId + "_period_slot"', js)
         # 容器必须是 put_scope 建的（put_html 的 div 不作为 scope 目标）
         self.assertIn("put_scope(period_scope, [])", source)
+
+    def test_reset_button_sits_in_the_legend_row_not_in_the_chart(self):
+        """「重置图表」移到图表之外：与时间范围按钮同一行的最右侧。"""
+        panel = (PROJECT_ROOT / "webapp" / "ap_chart_panel.html").read_text(
+            encoding="utf-8"
+        )
+
+        legend_row = panel.split('class="ap-legend-row"')[1].split("</div>\n  <div id=")[0]
+        self.assertIn("_reset", legend_row, "重置按钮应在图例行内")
+        self.assertIn("重置图表", panel)
+        # 图表容器里不应再留重置按钮
+        container = panel.split('{chart_id}_container"')[1]
+        self.assertNotIn("_reset", container, "图表容器内不应再有重置按钮")
 
     def test_panel_template_has_no_dark_only_colors(self):
         panel = (PROJECT_ROOT / "webapp" / "ap_chart_panel.html").read_text(
@@ -268,16 +281,17 @@ class TestApChartThemeRendering(unittest.TestCase):
 
         self.assertIn('class="ap-chart-panel"', html)
         self.assertIn('class="ap-legend-row"', html)
-        # 图例行左侧留给时间范围按钮（scope 由 put_scope 创建、渲染后由 JS 搬入）
-        self.assertIn('.ap-legend-row > [id^="pywebio-scope-"]', html)
-        self.assertIn("order: -1", html)
+        # 图例行左侧给时间范围按钮留插槽（节点由 put_scope 建、渲染后由 JS 搬入），
+        # 最右侧是「重置图表」
+        self.assertIn("_period_slot", html)
+        self.assertIn("alas-chart-reset", html)
         # 标题与图例的上下留白收紧，避免标题到图表之间出现过大空白
         self.assertIn("margin-top:10px", html)
         self.assertNotIn("margin-top:16px", html)
 
 
 class TestApChartPeriodFilter(unittest.TestCase):
-    """图表时间范围：今日 / 近七天（滚动窗口）/ 本月（不裁剪）。"""
+    """图表时间范围：近24小时 / 近七天（滚动窗口）/ 本月（不裁剪）。"""
 
     @classmethod
     def setUpClass(cls):
@@ -290,6 +304,13 @@ class TestApChartPeriodFilter(unittest.TestCase):
             for days_ago in days_ago_list
         ]
 
+    @staticmethod
+    def _points_hours_ago(hours_list, now):
+        return [
+            {"ts": (now - timedelta(hours=hours_ago)).isoformat(), "ap": 100}
+            for hours_ago in hours_list
+        ]
+
     def test_month_keeps_every_point(self):
         now = datetime(2026, 9, 13, 12, 0, 0)
         points = self._points([0, 1, 3, 8, 20], now)
@@ -300,14 +321,23 @@ class TestApChartPeriodFilter(unittest.TestCase):
 
         self.assertEqual(points, kept)
 
-    def test_day_keeps_only_today(self):
+    def test_last_24h_is_a_rolling_window(self):
+        """近 24 小时是滚动窗口，不是自然日：跨过昨天也要保留。"""
         now = datetime(2026, 9, 13, 12, 0, 0)
-        points = self._points([0, 1, 3, 8, 20], now)
+        # 23/24 小时前落在昨天，仍应保留；25 小时前被裁掉
+        points = self._points_hours_ago([0, 1, 12, 23, 24, 25, 48], now)
 
-        kept = ActionPointStatisticsMixin._filter_points_by_period(points, "day", now)
+        kept = ActionPointStatisticsMixin._filter_points_by_period(
+            points, "last24h", now
+        )
 
-        self.assertEqual(1, len(kept))
-        self.assertTrue(kept[0]["ts"].startswith("2026-09-13"))
+        self.assertEqual(5, len(kept))
+        for point in kept:
+            self.assertGreaterEqual(
+                datetime.fromisoformat(point["ts"]), now - timedelta(hours=24)
+            )
+        # 昨天下午的点确实在内（自然日口径会把它裁掉）
+        self.assertTrue(any(p["ts"].startswith("2026-09-12") for p in kept))
 
     def test_week_keeps_last_seven_days(self):
         now = datetime(2026, 9, 13, 12, 0, 0)
@@ -327,7 +357,9 @@ class TestApChartPeriodFilter(unittest.TestCase):
         now = datetime(2026, 9, 13, 12, 0, 0)
         points = [{"ts": "not-a-time", "ap": 1}, *self._points([0], now)]
 
-        kept = ActionPointStatisticsMixin._filter_points_by_period(points, "day", now)
+        kept = ActionPointStatisticsMixin._filter_points_by_period(
+            points, "last24h", now
+        )
 
         self.assertEqual(1, len(kept))
 
@@ -336,8 +368,8 @@ class TestApChartPeriodFilter(unittest.TestCase):
         harness._ap_chart_period_value = "fortnight"
 
         self.assertEqual("week", harness._ap_chart_period())
-        harness._ap_chart_period_value = "day"
-        self.assertEqual("day", harness._ap_chart_period())
+        harness._ap_chart_period_value = "last24h"
+        self.assertEqual("last24h", harness._ap_chart_period())
 
     def test_default_period_is_last_seven_days(self):
         """默认只看近七天：整月的点数太多，细节会被压扁。"""
@@ -346,15 +378,15 @@ class TestApChartPeriodFilter(unittest.TestCase):
         self.assertFalse(hasattr(harness, "_ap_chart_period_value"))
         self.assertEqual("week", harness._ap_chart_period())
 
-    def test_week_button_is_labelled_last_seven_days(self):
-        """按钮文案要说清是滚动窗口，不能写成会被理解成自然周的「本周」。"""
+    def test_period_buttons_are_labelled_with_rolling_windows(self):
+        """文案要说清是滚动窗口，不能写成会被理解成自然日/自然周的「今日」「本周」。"""
         labels = [
-            lang.t("Gui.Stat.ApPeriodDay"),
+            lang.t("Gui.Stat.ApPeriodLast24h"),
             lang.t("Gui.Stat.ApPeriodWeek"),
             lang.t("Gui.Stat.ApPeriodMonth"),
         ]
 
-        self.assertEqual(["今日", "近七天", "本月"], labels)
+        self.assertEqual(["近24小时", "近七天", "本月"], labels)
 
 
 if __name__ == "__main__":

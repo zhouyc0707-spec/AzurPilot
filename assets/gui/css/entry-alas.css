@@ -849,6 +849,51 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
 /* --- 统计页两区域布局结束 --- */
 
 /* --- 统计页统一按钮样式开始 --- */
+/* 图表右上角的「重置图表」：与同排的时间范围按钮同尺寸同风格。
+   它不在 PyWebIO 作用域里，是面板模板自带的按钮，因此用所在区块的 scope
+   限定（与本节其它规则一致，避免样式外溢）。 */
+#pywebio-scope-ap_chart .alas-chart-reset {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: auto !important;
+    min-width: 0 !important;
+    height: 30px !important;
+    padding: 0 14px !important;
+    border: 1px solid var(--alas-entry-border) !important;
+    border-radius: 10px !important;
+    background: var(--alas-entry-surface) !important;
+    color: var(--alas-entry-text) !important;
+    font-family: inherit !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    line-height: 1 !important;
+    cursor: pointer !important;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, .03) !important;
+    text-shadow: none !important;
+    transition: background-color .15s ease, color .15s ease,
+                border-color .15s ease, box-shadow .15s ease,
+                transform .15s ease !important;
+}
+
+#pywebio-scope-ap_chart .alas-chart-reset:hover {
+    border-color: var(--alas-entry-accent) !important;
+    background: var(--alas-entry-accent-soft) !important;
+    color: var(--alas-entry-accent) !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .08) !important;
+    transform: translateY(-1px);
+}
+
+#pywebio-scope-ap_chart .alas-chart-reset:active {
+    box-shadow: none !important;
+    transform: translateY(0) scale(.97);
+}
+
+#pywebio-scope-ap_chart .alas-chart-reset:focus-visible {
+    outline: none !important;
+    box-shadow: 0 0 0 3px var(--alas-entry-accent-soft) !important;
+}
+
 /* 统计界面的按钮统一为「轻量胶囊」：中性态是白底细边，选中态用主题主色实心
    填充，形成明确的主次层次——一眼能看出当前视图/区间/页码，其余按钮保持安静。
    形状全部一致（30px 高、10px 圆角、12px 字号），并排时不会一高一低。
