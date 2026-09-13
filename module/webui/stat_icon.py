@@ -107,7 +107,13 @@ def refresh_icon_data_uri(color: str) -> str:
     return f"url(\"data:image/svg+xml,{encoded}\")"
 
 
-def build_title_icon_row(title: str, scope_id: str, margin_top: int = 24, margin_bottom: int = 8) -> str:
+def build_title_icon_row(
+    title: str,
+    scope_id: str,
+    margin_top: int = 24,
+    margin_bottom: int = 8,
+    period_scope_id: str = "",
+) -> str:
     """构造「标题 + 图标按钮」的一行。
 
     图标按钮由 PyWebIO 渲染进预留的 ``scope_id``（HTML 里的按钮无法回调
@@ -119,17 +125,25 @@ def build_title_icon_row(title: str, scope_id: str, margin_top: int = 24, margin
         scope_id: 图标按钮要渲染进的 scope 名。
         margin_top: 该行的上外边距。
         margin_bottom: 该行的下外边距。
+        period_scope_id: 可选的第二行插槽（如时间范围按钮）。PyWebIO 的
+            ``put_buttons`` 需要 ``put_scope`` 建的作用域，所以这里只声明
+            插槽、由调用方在会话线程里用 ``put_scope`` 落地。
 
     Returns:
         str: 标题行 HTML。
     """
-    return (
+    html = (
         f'<div class="stat-title-row" style="margin-top:{margin_top}px;'
         f' margin-bottom:{margin_bottom}px">'
         f'<div class="stat-title-text">{title}</div>'
         f'<div id="pywebio-scope-{scope_id}"></div>'
         "</div>"
     )
+    if period_scope_id:
+        html += (
+            f'<div class="stat-title-secondary" id="pywebio-scope-{period_scope_id}"></div>'
+        )
+    return html
 
 
 def refresh_icon_button_css(scope_id: str) -> str:

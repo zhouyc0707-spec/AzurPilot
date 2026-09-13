@@ -23,8 +23,10 @@ from module.webui.app_types import WebUIMixinBase
 _COMMISSION_RECENT_PAGE_SIZE = 10
 _COMMISSION_RECENT_TOTAL = 50
 
-# 图标按钮作用域名，与 entry-alas.css 里 #pywebio-scope-<name> 的规则配套
+# 标题旁的刷新图标按钮作用域名，与 entry-alas.css 里 #pywebio-scope-<name> 的规则配套
 _REFRESH_BTN_SCOPE = "commission_income_refresh"
+# 标题与物品卡片之间的时间范围按钮作用域名
+_PERIOD_BTN_SCOPE = "commission_income_period"
 
 
 class CommissionIncomeStatisticsMixin(WebUIMixinBase):
@@ -136,11 +138,13 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
                 <div id="commission_income_container" class="commission-income-summary" style="padding: 0; width: 100%; box-sizing: border-box;">
                 """
 
-        # 标题行：标题在左、刷新图标紧邻其右。图标按钮由 PyWebIO 渲染到
-        # 预留的 scope 里（HTML 里的按钮无法回调 PyWebIO），行内布局用 CSS 收口。
+        # 标题行：标题在左、刷新图标紧邻其右；下面紧跟时间范围按钮插槽。
+        # 图标与范围按钮都由 PyWebIO 渲染到预留的 scope 里（HTML 里的按钮无法
+        # 回调 PyWebIO），行内布局用 CSS 收口。
         html += build_title_icon_row(
             t("Gui.Stat.CommissionIncomeTitle"),
             _REFRESH_BTN_SCOPE,
+            period_scope_id=_PERIOD_BTN_SCOPE,
         )
 
         html += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 12px; margin-bottom: 20px; width: 100%;">'
@@ -288,30 +292,33 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
             with use_scope(_REFRESH_BTN_SCOPE, clear=True):
                 self._put_refresh_icon_button()
 
-            # 周期按钮统一用 color="off"，外观由 entry-alas.css 的
-            # 「统计页统一按钮样式」收口，选中区间用 primary 标记。
-            put_buttons(
-                [
-                    {
-                        "label": t("Gui.Stat.CommissionIncomeDay"),
-                        "value": "day",
-                        "color": "primary" if period == "day" else "off",
-                    },
-                    {
-                        "label": t("Gui.Stat.CommissionIncomeWeek"),
-                        "value": "week",
-                        "color": "primary" if period == "week" else "off",
-                    },
-                    {
-                        "label": t("Gui.Stat.CommissionIncomeMonth"),
-                        "value": "month",
-                        "color": "primary" if period == "month" else "off",
-                    },
-                ],
-                onclick=on_period_click,
-                group=True,
-                scope="commission_income",
-            )
+            # 时间范围按钮放在标题与物品卡片之间：容器由 put_scope 建
+            # （put_buttons 的目标必须是 PyWebIO 作用域），再用 order 把它排到
+            # 物品卡片之前 —— 它紧跟在标题行后面，卡片网格在 summary_html 里
+            with use_scope(_PERIOD_BTN_SCOPE, clear=True):
+                # 周期按钮统一用 color="off"，外观由 entry-alas.css 的
+                # 「统计页统一按钮样式」收口，选中区间用 primary 标记。
+                put_buttons(
+                    [
+                        {
+                            "label": t("Gui.Stat.CommissionIncomeDay"),
+                            "value": "day",
+                            "color": "primary" if period == "day" else "off",
+                        },
+                        {
+                            "label": t("Gui.Stat.CommissionIncomeWeek"),
+                            "value": "week",
+                            "color": "primary" if period == "week" else "off",
+                        },
+                        {
+                            "label": t("Gui.Stat.CommissionIncomeMonth"),
+                            "value": "month",
+                            "color": "primary" if period == "month" else "off",
+                        },
+                    ],
+                    onclick=on_period_click,
+                    group=True,
+                )
             put_html(recent_html, scope="commission_income")
             if recent_count > _COMMISSION_RECENT_PAGE_SIZE:
                 self._output_recent_pagination(recent_count)

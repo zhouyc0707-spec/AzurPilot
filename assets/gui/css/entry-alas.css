@@ -1072,6 +1072,15 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
     flex: 0 0 auto !important;
 }
 
+/* 标题与内容之间的次级插槽（如委托收益的时间范围按钮）。
+   它紧跟标题行、位于物品卡片之前，左上对齐、按内容取宽。 */
+#pywebio-scope-commission_income .stat-title-secondary {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    margin-bottom: 10px;
+}
+
 /* 纯图标按钮：正方形、无边框、悬停时露出浅主色底。
    图标本体由 Python 以 data URI 背景图注入（深浅两套按主题切换），
    这里只负责外框：空 label 会把字号撑出多余行盒，一并压成 0。 */
