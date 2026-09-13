@@ -361,6 +361,9 @@ Stat:
   DetailChartTitle:
   ToggleDetailChart:
   DetailChartOn:
+  ApPeriodDay:
+  ApPeriodWeek:
+  ApPeriodMonth:
   DetailChartOff:
   LoadOpsiStatsFailed:
   LoadExpStatsFailed:

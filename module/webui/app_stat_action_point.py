@@ -31,7 +31,7 @@ from module.webui.app_types import WebUIMixinBase
 class ActionPointStatisticsMixin(WebUIMixinBase):
     """WebUI 体力趋势图的数据装配和图表渲染。"""
 
-    # 图表时间范围：今日 / 本周（近 7 天）/ 本月（当月全部）
+    # 图表时间范围：今日 / 近七天（滚动窗口）/ 本月（当月全部）
     _AP_PERIODS = ("day", "week", "month")
 
     def _ap_chart_period(self) -> str:
@@ -43,16 +43,15 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
     def _filter_points_by_period(points, period, now):
         """按时间范围过滤时间线原始点。
 
-        数据源本身只覆盖当月，所以「本月」等价于不裁剪；「今日」与「本周」
-        在这里裁掉更早的点，辅助序列随后按同样的图表点对齐。
+        数据源本身只覆盖当月，所以「本月」等价于不裁剪；「今日」与「近七天」
+        在这里裁掉更早的点，辅助序列随后按同样的图表点对齐。近七天是滚动窗口
+        （含今天在内的连续 7 天），不是自然周。
         """
         if period == "day":
             start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-            days = 1
         elif period == "week":
-            days = 7
             start = now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(
-                days=days - 1
+                days=6
             )
         else:
             return list(points)
@@ -699,17 +698,17 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
         put_buttons(
             [
                 {
-                    "label": t("Gui.Stat.CommissionIncomeDay"),
+                    "label": t("Gui.Stat.ApPeriodDay"),
                     "value": "day",
                     "color": "primary" if period == "day" else "off",
                 },
                 {
-                    "label": t("Gui.Stat.CommissionIncomeWeek"),
+                    "label": t("Gui.Stat.ApPeriodWeek"),
                     "value": "week",
                     "color": "primary" if period == "week" else "off",
                 },
                 {
-                    "label": t("Gui.Stat.CommissionIncomeMonth"),
+                    "label": t("Gui.Stat.ApPeriodMonth"),
                     "value": "month",
                     "color": "primary" if period == "month" else "off",
                 },

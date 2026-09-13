@@ -14,6 +14,7 @@ from module.webui.ap_chart_theme import (
     series_colors,
 )
 from module.webui.app_stat_action_point import ActionPointStatisticsMixin
+import module.webui.lang as lang
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -276,7 +277,11 @@ class TestApChartThemeRendering(unittest.TestCase):
 
 
 class TestApChartPeriodFilter(unittest.TestCase):
-    """图表时间范围：今日 / 本周（近 7 天）/ 本月（不裁剪）。"""
+    """图表时间范围：今日 / 近七天（滚动窗口）/ 本月（不裁剪）。"""
+
+    @classmethod
+    def setUpClass(cls):
+        lang.reload()
 
     @staticmethod
     def _points(days_ago_list, now):
@@ -333,6 +338,16 @@ class TestApChartPeriodFilter(unittest.TestCase):
         self.assertEqual("month", harness._ap_chart_period())
         harness._ap_chart_period_value = "day"
         self.assertEqual("day", harness._ap_chart_period())
+
+    def test_week_button_is_labelled_last_seven_days(self):
+        """按钮文案要说清是滚动窗口，不能写成会被理解成自然周的「本周」。"""
+        labels = [
+            lang.t("Gui.Stat.ApPeriodDay"),
+            lang.t("Gui.Stat.ApPeriodWeek"),
+            lang.t("Gui.Stat.ApPeriodMonth"),
+        ]
+
+        self.assertEqual(["今日", "近七天", "本月"], labels)
 
 
 if __name__ == "__main__":
