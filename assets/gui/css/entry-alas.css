@@ -821,9 +821,15 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
     padding: .55rem .7rem;
 }
 
-/* 日志正文：等宽字体、保留原始换行与缩进，随日志区一起滚动 */
+/* 日志正文：等宽字体、保留原始换行与缩进，随日志区一起滚动。
+   背景必须显式透明：pre 元素被主题里的代码块样式涂了浅灰底
+   （rgb(246,248,250)），贴在白色日志卡片上会显得整块发灰。 */
 #pywebio-scope-stat_panels_log .alas-log-line {
     margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
     font-family: 'JetBrains Mono NL', Menlo, consolas, 'DejaVu Sans Mono',
         'Courier New', monospace;
     font-size: .85rem;
