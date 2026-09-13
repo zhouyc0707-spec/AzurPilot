@@ -331,13 +331,20 @@ class TestApChartPeriodFilter(unittest.TestCase):
 
         self.assertEqual(1, len(kept))
 
-    def test_unknown_period_falls_back_to_month(self):
+    def test_unknown_period_falls_back_to_default(self):
         harness = ActionPointStatisticsMixin()
         harness._ap_chart_period_value = "fortnight"
 
-        self.assertEqual("month", harness._ap_chart_period())
+        self.assertEqual("week", harness._ap_chart_period())
         harness._ap_chart_period_value = "day"
         self.assertEqual("day", harness._ap_chart_period())
+
+    def test_default_period_is_last_seven_days(self):
+        """默认只看近七天：整月的点数太多，细节会被压扁。"""
+        harness = ActionPointStatisticsMixin()
+
+        self.assertFalse(hasattr(harness, "_ap_chart_period_value"))
+        self.assertEqual("week", harness._ap_chart_period())
 
     def test_week_button_is_labelled_last_seven_days(self):
         """按钮文案要说清是滚动窗口，不能写成会被理解成自然周的「本周」。"""

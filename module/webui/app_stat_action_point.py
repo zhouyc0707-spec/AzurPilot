@@ -33,11 +33,13 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
 
     # 图表时间范围：今日 / 近七天（滚动窗口）/ 本月（当月全部）
     _AP_PERIODS = ("day", "week", "month")
+    # 默认只看近七天：整月曲线点数太多，细节被压扁
+    _AP_DEFAULT_PERIOD = "week"
 
     def _ap_chart_period(self) -> str:
-        """返回当前图表时间范围，非法值回退为「本月」。"""
-        period = getattr(self, "_ap_chart_period_value", "month")
-        return period if period in self._AP_PERIODS else "month"
+        """返回当前图表时间范围，非法值回退为默认范围（近七天）。"""
+        period = getattr(self, "_ap_chart_period_value", self._AP_DEFAULT_PERIOD)
+        return period if period in self._AP_PERIODS else self._AP_DEFAULT_PERIOD
 
     @staticmethod
     def _filter_points_by_period(points, period, now):
