@@ -52,6 +52,8 @@ if TYPE_CHECKING:
 LOG_TAIL_READ_BYTES = 64 * 1024
 # 首次跟随（打开日志/面板重建）时最多回读的字节数
 LOG_TAIL_SEED_BYTES = 32 * 1024
+# 每隔多少帧向前端确认一次「日志区内容还在」
+LOG_VIEW_PROBE_EVERY_TICKS = 8
 
 
 # 日志区最多保留的字符数：ALAS 日志量很大（每秒几十行），无上限追加会让
@@ -75,6 +77,10 @@ class LogTailState:
     size: int = 0
     # 日志区当前已显示的字符数，用于判断是否需要整块重建
     view_chars: int = 0
+    # 是否已经向前端发出过「内容还在吗」的探针
+    probe_pending: bool = False
+    # 帧计数，用于给前端体检限频
+    ticks: int = 0
 
 
 class ScrollableCode:
@@ -336,6 +342,63 @@ class RichLog:
         """重置日志跟随状态：下次打开日志区时从当前文件末尾继续。"""
         self._log_tail = None
 
+    def reseed_log(self, reason: str = "") -> None:
+        """丢弃跟随位置并重新播种日志区。
+
+        用于「日志区内容已不在」的兜底：日志区可能被页面重建、被裁空、
+        或被别的路径清掉，此时只看字节位置会以为「没有新内容」而一直空白。
+
+        Args:
+            reason: 触发原因，仅用于日志排查。
+        """
+        if reason:
+            logger.info(f"[WebUI-日志] 重新播种日志区：{reason}")
+        self._log_tail = None
+
+    def _maybe_reseed_empty_view(self, config_name: str, size: int) -> None:
+        """日志区疑似已空时重新播种。
+
+        无法从任务线程同步读取 DOM，改为在日志区里放一个探针节点，前端每帧把
+        「探针还在不在」写进容器的 ``data-alas-probe``，下一帧再由会话线程读回来
+        （此时上一帧的写入已经执行），探针丢失即说明内容被清掉，丢弃位置重新播种。
+
+        只看探针在不在、不比字符数：注入的探针属性本身会让字符数略高于记录值，
+        而页面重建会让它略低，用字符数判断会误报。
+
+        Args:
+            config_name: 实例名。
+            size: 日志文件当前大小。
+        """
+        state = self._log_tail
+        if state is None or not state.path_name:
+            return
+        if not state.probe_pending:
+            # 请求前端回报一次状态，下一帧再判断
+            state.probe_pending = True
+            run_js(
+                "(function(){"
+                "var box=document.getElementById('pywebio-scope-"
+                + self.scope
+                + "');"
+                "if(!box)return;"
+                "box.setAttribute('data-alas-probe',"
+                "box.querySelector('.alas-log-probe')?'1':'0');"
+                "})();"
+            )
+            return
+
+        raw = eval_js(
+            "(function(){"
+            "var box=document.getElementById('pywebio-scope-" + self.scope + "');"
+            "return box?box.getAttribute('data-alas-probe'):null;"
+            "})();"
+        )
+        state.probe_pending = False
+        if raw is None:
+            return
+        if str(raw) != "1":
+            self.reseed_log(f"探针丢失（report={raw!r}），日志区内容已不在")
+
     def append_log_from_file(self, config_name: str) -> None:
         """跟随实例的日志文件，把新增内容追加到日志区。
 
@@ -398,6 +461,12 @@ class RichLog:
             state.path_name = path.name
             state.size = size
 
+            # 周期性体检：日志区可能被页面重建或被别的路径清掉，只看字节位置
+            # 发现不了内容已经不在，会一直以为「正在追加」而保持空白
+            state.ticks += 1
+            if state.ticks % LOG_VIEW_PROBE_EVERY_TICKS == 0:
+                self._maybe_reseed_empty_view(config_name, size)
+
             if size <= state.position:
                 return
             self._read_log_slice(path, state.position, size)
@@ -448,6 +517,8 @@ class RichLog:
             text: 已解码的日志文本（可含多行）。
         """
         state = self._log_tail
+        if state is not None:
+            state.probe_pending = False
         if state is not None and state.view_chars + len(text) > LOG_VIEW_MAX_CHARS:
             # 只裁掉最旧的若干行，而不是整块清空：日志是用户盯着看的内容，
             # 整块消失比偶尔少几条旧日志更难受。
@@ -474,7 +545,11 @@ class RichLog:
             state.view_chars = max(0, state.view_chars - drop)
         if state is not None:
             state.view_chars += len(text)
-        html = "<pre class=\"alas-log-line\">{}</pre>".format(escape(text.rstrip("\n")))
+        # 探针节点：前端每帧回报它还在不在，用来发现「日志区被清空」
+        html = (
+            '<pre class="alas-log-line alas-log-probe">{}</pre>'
+            '<pre class="alas-log-line alas-log-body">{}</pre>'
+        ).format("", escape(text.rstrip("\n")))
         put_html(html, scope=self.scope)
 
 

@@ -211,6 +211,8 @@ class AppShellMixin(WebUIMixinBase):
         # 概览页下方区域当前显示日志还是统计图表：None 表示尚未从浏览器读取
         self._overview_show_log = None
         self._log_panel_mounted = False
+        # 日志跟随任务是否已注册（与面板挂载解耦，见 _enter_log_mode）
+        self._log_task_added = False
         self._statistics_cache_key = None
         self._statistics_source_signature = None
         self._statistics_refresh_pending = False

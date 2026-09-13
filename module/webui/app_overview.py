@@ -195,13 +195,20 @@ class OverviewMixin(WebUIMixinBase):
             # 自动滚到底由前端观察器完成（任务线程里 run_js 无效），
             # 必须在会话线程这里注册
             self._log.enable_auto_scroll()
+            self._log_panel_mounted = True
+
+        if show_log and not self._log_task_added:
+            # 跟随任务单独用一个标志，不再和面板挂载绑在一起：挂载时
+            # self.alas 可能还没就绪，那样就会「面板已挂载但任务没注册」，
+            # 日志区从此永远空白（表现就是「打开日志一片空白」）。
             if hasattr(self, "alas") and self.alas is not None:
                 # 任务调度器把可调用对象包成 `yield func()`，不接受带参函数
                 config_name = self.alas_name
                 self.task_handler.add(
                     lambda: self._log.append_log_from_file(config_name), 0.25, True
                 )
-            self._log_panel_mounted = True
+                self._log_task_added = True
+
         self._apply_log_mode_display(show_log)
 
     @staticmethod
@@ -257,10 +264,12 @@ class OverviewMixin(WebUIMixinBase):
             self._overview_log is None
             or self._overview_log_config_name != self.alas_name
         ):
-            # 同一个实例复用同一个 RichLog（含日志跟随位置），换实例才重建，
-            # 否则重新打开日志会把已显示的内容连同读取位置一起丢掉
+            # 同一个实例复用同一个 RichLog（含日志跟随位置），换实例才重建
             self._overview_log = RichLog("log")
             self._overview_log_config_name = self.alas_name
+            # 新建了 RichLog 就必须重新注册跟随任务：旧任务持有的是旧实例的
+            # 引用，写不到新实例上，日志区会一直空白
+            self._log_task_added = False
         else:
             self._overview_log.scope = "log"
         log = self._overview_log
