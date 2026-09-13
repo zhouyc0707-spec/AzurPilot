@@ -17,6 +17,7 @@ from module.webui.app_helpers import (
     build_muted_notice,
     build_simple_table,
     build_stat_section_title,
+    build_title_block,
 )
 
 
