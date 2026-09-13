@@ -202,8 +202,10 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
 
         html = '<div class="commission-income-recent" style="width: 100% !important; max-width: none !important; display: block !important; box-sizing: border-box;">'
         if recent_page:
-            html += f'<div style="height: 1px; background: rgba(128, 128, 128, 0.2); margin: 24px 0;"></div>'
-            html += f'<div style="font-size: 0.9rem; font-weight: 500; color: inherit; margin-bottom: 10px;">{t("Gui.Stat.CommissionIncomeRecentTitle")}</div>'
+            # 分隔线上下留白收紧：原来 24px/24px 与物品卡片网格的 20px 下边距
+            # 叠加后，标题上方有 49px 空白，占了近半屏的一行高
+            html += f'<div style="height: 1px; background: rgba(128, 128, 128, 0.2); margin: 12px 0;"></div>'
+            html += f'<div style="font-size: 0.9rem; font-weight: 500; color: inherit; margin-bottom: 8px;">{t("Gui.Stat.CommissionIncomeRecentTitle")}</div>'
             html += '<div style="font-size: 13px; width: 100%;">'
             for entry in recent_page:
                 ts = entry.get("ts", "")
