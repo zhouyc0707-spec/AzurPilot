@@ -160,9 +160,12 @@
         var COIN_TICK_BASELINE = 4;
         var COIN_TICK_STACK_GAP = 11;
 
-        // 右侧刻度仅在确有可见的辅助序列时才留白，避免默认视图出现空白
+        // 右侧刻度仅在确有可见的辅助序列时才留白，避免默认视图出现空白。
+        // 左/下留白按刻度文字的实际占位收紧（左侧 y 轴刻度是右对齐、从
+        // pad.l-8 往左延伸，最多 4 位数；下方时间标签旋转 0.4 弧度后约 25px 高），
+        // 留太多会在曲线四周出现明显空带。
         var anyExtraVisible = seriesVisible[1] || seriesVisible[2] || seriesVisible[3] || seriesVisible[4];
-        pad = { t: 20, r: showCoins && anyExtraVisible ? 72 : 20, b: 52, l: 52 };
+        pad = { t: 20, r: showCoins && anyExtraVisible ? 72 : 20, b: 36, l: 38 };
         gW = W - pad.l - pad.r;
         gH = H - pad.t - pad.b;
 
