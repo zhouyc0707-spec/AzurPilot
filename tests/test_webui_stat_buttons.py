@@ -236,10 +236,16 @@ class TestStatButtonCallSites(unittest.TestCase):
         self.assertNotIn("md3_colors", src)
         self.assertNotIn("self.theme", src)
 
-    def test_export_buttons_use_off(self):
+    def test_opsi_section_has_no_refresh_or_export_buttons(self):
+        """耄耋相接收获下方的刷新与导出按钮已移除，CSV 导出方法一并删除。"""
         src = self._source("app_stat_opsi.py")
+        export_src = self._source("app_stat_opsi_export.py")
 
-        self.assertEqual(2, src.count('color="off"'))
+        self.assertNotIn("Gui.Stat.ExportAndSaveDesktop", src)
+        self.assertNotIn("_export_opsi_csv", src)
+        self.assertNotIn("_export_opsi_csv", export_src)
+        # 该区块原有的两个按钮都不应再出现
+        self.assertNotIn('color="off"', src)
 
 
 if __name__ == "__main__":
