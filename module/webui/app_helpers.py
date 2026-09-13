@@ -103,6 +103,14 @@ def read_webapp_template(filename: str) -> str:
         return f.read()
 
 
+# 统计页各板块的间距：板块之间统一 24px，标题到内容是 8px。
+# 用类而不是内联样式，便于一处调整全局生效，也避免各处参数各写一份。
+STAT_SECTION_STYLE = (
+    "<style>.stat-section{margin-top:24px !important;margin-bottom:8px !important;}"
+    "</style>"
+)
+
+
 def build_title_block(
     title: str,
     margin_top: int = 12,
@@ -130,6 +138,18 @@ def build_title_block(
         font_weight=font_weight,
         class_name=class_name,
     )
+
+
+def build_stat_section_title(title: str) -> str:
+    """构造统计页板块标题，间距全站一致。
+
+    Args:
+        title: 标题文本。
+
+    Returns:
+        str: 带 ``.stat-section`` 类的标题块 HTML。
+    """
+    return build_title_block(title, class_name="stat-section")
 
 
 def build_muted_notice(text: str) -> str:

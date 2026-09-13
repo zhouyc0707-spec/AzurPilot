@@ -16,7 +16,7 @@ from module.webui.app_dependencies import (
 from module.webui.app_helpers import (
     build_muted_notice,
     build_simple_table,
-    build_title_block,
+    build_stat_section_title,
 )
 
 
@@ -44,13 +44,7 @@ class OpsiExportMixin(WebUIMixinBase):
 
                     meow_rows.append(meow_row)
 
-            put_html(
-                build_title_block(
-                    t("Gui.Stat.MeowLootTitle"),
-                    margin_top=20,
-                    margin_bottom=8,
-                )
-            )
+            put_html(build_stat_section_title(t("Gui.Stat.MeowLootTitle")))
             if meow_rows:
                 put_html(
                     build_simple_table(AzurStats.meowofficer_farming_labels, meow_rows)
@@ -132,7 +126,7 @@ class OpsiExportMixin(WebUIMixinBase):
             ],
             size="auto 1fr",
         ).style(
-            "align-items:center; gap:10px; margin-top:20px; margin-bottom:8px"
+            "align-items:center; gap:10px; margin-top:24px; margin-bottom:8px"
         )
         put_html(
             build_simple_table(

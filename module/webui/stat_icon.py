@@ -107,23 +107,25 @@ def refresh_icon_data_uri(color: str) -> str:
     return f"url(\"data:image/svg+xml,{encoded}\")"
 
 
-def build_title_icon_row(title: str, scope_id: str, margin_bottom: int = 8) -> str:
+def build_title_icon_row(title: str, scope_id: str, margin_top: int = 24, margin_bottom: int = 8) -> str:
     """构造「标题 + 图标按钮」的一行。
 
     图标按钮由 PyWebIO 渲染进预留的 ``scope_id``（HTML 里的按钮无法回调
     Python），样式见 entry-alas.css 的 ``.stat-title-row`` 与
-    ``#pywebio-scope-<scope_id>``。
+    ``#pywebio-scope-<scope_id>``。默认上边距与其它统计板块标题一致（24px）。
 
     Args:
         title: 标题文本（调用方需自行转义）。
         scope_id: 图标按钮要渲染进的 scope 名。
+        margin_top: 该行的上外边距。
         margin_bottom: 该行的下外边距。
 
     Returns:
         str: 标题行 HTML。
     """
     return (
-        f'<div class="stat-title-row" style="margin-bottom:{margin_bottom}px">'
+        f'<div class="stat-title-row" style="margin-top:{margin_top}px;'
+        f' margin-bottom:{margin_bottom}px">'
         f'<div class="stat-title-text">{title}</div>'
         f'<div id="pywebio-scope-{scope_id}"></div>'
         "</div>"

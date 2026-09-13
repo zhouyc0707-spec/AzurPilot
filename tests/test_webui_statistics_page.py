@@ -257,13 +257,25 @@ class TestStatisticsPanelRegions(unittest.TestCase):
     def test_charts_region_holds_every_scrolling_view(self):
         self.gui._mount_stat_panels()
 
+        # 首个子项是注入的板块间距样式（put_html），其余才是图表 scope
         charts_children = [
-            child._name for child in self.recorder.content_of("stat_panels_charts")
+            child._name
+            for child in self.recorder.content_of("stat_panels_charts")
+            if hasattr(child, "_name")
         ]
         self.assertEqual(
             ["ap_chart", "opsi_stats", "ship_exp_table", "commission_income"],
             charts_children,
         )
+
+    def test_charts_region_injects_section_style_once(self):
+        """板块间距样式只注入一次，且排在图表 scope 之前。"""
+        self.gui._mount_stat_panels()
+
+        children = self.recorder.content_of("stat_panels_charts")
+        injected = [child for child in children if not hasattr(child, "_name")]
+        self.assertEqual(1, len(injected))
+        self.assertIs(children[0], injected[0])
 
     def test_dashboard_scope_is_not_recreated_when_mounting_stat_page(self):
         """统计页复用总览页装配的面板，只补一个工具栏，不重建图表 scope。"""

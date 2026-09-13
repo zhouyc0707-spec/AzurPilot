@@ -990,17 +990,19 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
 }
 
 /* 标题 + 图标按钮同排：图标紧随标题文字，不推到最右侧。
-   标题过长时省略，避免把图标挤到第二行；图标本身不参与收缩。 */
+   标题过长时省略，避免把图标挤到第二行；图标本身不参与收缩。
+   上边距与其它板块标题保持一致（24px），由 .stat-section 统一收口。 */
 #pywebio-scope-commission_income .stat-title-row,
 #pywebio-scope-ship_exp_table .stat-title-row {
     display: flex !important;
     align-items: center !important;
     flex-wrap: nowrap !important;
     gap: 8px !important;
+    margin-top: 24px !important;
+    margin-bottom: 8px !important;
 }
 
 #pywebio-scope-commission_income .stat-title-row {
-    margin-bottom: 14px !important;
     padding-bottom: 8px !important;
     border-bottom: 1px solid var(--alas-entry-divider) !important;
 }

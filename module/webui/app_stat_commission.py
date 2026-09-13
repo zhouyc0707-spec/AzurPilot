@@ -141,7 +141,6 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
         html += build_title_icon_row(
             t("Gui.Stat.CommissionIncomeTitle"),
             _REFRESH_BTN_SCOPE,
-            margin_bottom=14,
         )
 
         html += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 12px; margin-bottom: 20px; width: 100%;">'

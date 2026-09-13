@@ -14,7 +14,7 @@ from module.webui.app_dependencies import (
 from module.webui.app_helpers import (
     build_muted_notice,
     build_simple_table,
-    build_title_block,
+    build_stat_section_title,
 )
 
 
@@ -104,7 +104,7 @@ class OpsiStatisticsMixin(WebUIMixinBase):
         self, instance_name, exp_stats, ships_data, target_level, last_check_time
     ):
         with use_scope("opsi_stats", clear=True):
-            put_html(build_title_block(t("Gui.Stat.DailyExpCheckTitle")))
+            put_html(build_stat_section_title(t("Gui.Stat.DailyExpCheckTitle")))
             put_row(
                 [
                     put_text(t("Gui.Stat.CheckTime", value=last_check_time)),
@@ -361,7 +361,7 @@ class OpsiStatisticsMixin(WebUIMixinBase):
 
     def _render_opsi_summary(self, labels, values, ap_bought, meow_rows):
         with use_scope("opsi_stats", clear=True):
-            put_html(build_title_block(t("Gui.Stat.OpsiDataCollectionTitle")))
+            put_html(build_stat_section_title(t("Gui.Stat.OpsiDataCollectionTitle")))
             put_row([put_text(t("Gui.Stat.MonthlyPurchasedAP", value=ap_bought))])
             put_html(build_simple_table(labels, [values]))
 
@@ -381,13 +381,7 @@ class OpsiStatisticsMixin(WebUIMixinBase):
                 t("Gui.Stat.AvgMeowRoundTime"),
             ]
 
-            put_html(
-                build_title_block(
-                    t("Gui.Stat.MeowDataCollectionTitle"),
-                    margin_top=20,
-                    margin_bottom=8,
-                )
-            )
+            put_html(build_stat_section_title(t("Gui.Stat.MeowDataCollectionTitle")))
             put_html(f"<!-- meow-stats-refresh-token:{meow_refresh_token} -->")
             put_html(build_simple_table(meow_labels, meow_rows))
 

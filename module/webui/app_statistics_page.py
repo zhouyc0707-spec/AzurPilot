@@ -4,7 +4,15 @@ from datetime import date
 from pathlib import Path
 
 import module.webui.lang as lang
-from module.webui.app_dependencies import put_button, put_scope, run_js, t, use_scope
+from module.webui.app_dependencies import (
+    put_button,
+    put_html,
+    put_scope,
+    run_js,
+    t,
+    use_scope,
+)
+from module.webui.app_helpers import STAT_SECTION_STYLE
 from module.webui.app_types import WebUIMixinBase
 
 
@@ -39,9 +47,11 @@ class StatisticsPageMixin(WebUIMixinBase):
         self._dashboard_first_display = True
 
         # 区域二：其余统计内容，独立 scope 使周期刷新不会清空其他统计区域。
+        # 板块间距由 .stat-section 统一收口，随面板注入一次。
         put_scope(
             "stat_panels_charts",
             [
+                put_html(STAT_SECTION_STYLE),
                 put_scope("ap_chart", []),
                 # 隐藏全资源变化趋势图表（始终不渲染、不注册周期刷新）
                 # 确保页面加载、刷新、切换选项卡等任何交互后均保持隐藏状态
