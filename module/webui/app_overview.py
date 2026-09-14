@@ -1,5 +1,7 @@
 """WebUI实例概览和守护模式"""
 
+from collections.abc import Callable
+
 from module.webui.app_dependencies import (
     BinarySwitchButton,
     RichLog,
@@ -32,6 +34,46 @@ from module.webui.app_types import WebUIMixinBase
 
 class OverviewMixin(WebUIMixinBase):
     """WebUI实例概览和守护模式"""
+
+    def _mount_scheduler_switch(self, start: Callable[[], None]) -> BinarySwitchButton:
+        """创建调度器启停按钮，并让点击结果立即反映到按钮文案上。
+
+        按钮文案原本只由 1 秒间隔的轮询任务刷新，点击后要等下一帧才变化；
+        这里在启停动作结束后立刻推进一次切换器，用户点击后即可看到状态翻转。
+
+        Args:
+            start: 启动调度器的回调（概览页与守护页的启动参数不同）。
+
+        Returns:
+            BinarySwitchButton: 已渲染到 ``scheduler_btn`` 作用域的切换按钮。
+        """
+        switch = None
+
+        def stop_scheduler() -> None:
+            self.alas.stop_by_user(self.alas_config.Optimization_WhenSchedulerStopped)
+            self._refresh_scheduler_switch(switch)
+
+        def start_scheduler() -> None:
+            start()
+            self._refresh_scheduler_switch(switch)
+
+        switch = BinarySwitchButton(
+            label_on=t("Gui.Button.Stop"),
+            label_off=t("Gui.Button.Start"),
+            onclick_on=stop_scheduler,
+            onclick_off=start_scheduler,
+            get_state=lambda: self.alas.alive,
+            color_on="off",
+            color_off="on",
+            scope="scheduler_btn",
+        )
+        return switch
+
+    @staticmethod
+    def _refresh_scheduler_switch(switch: BinarySwitchButton | None) -> None:
+        """按当前状态重绘调度器按钮，状态未变化时切换器自身会跳过重绘。"""
+        if switch is not None:
+            switch.switch()
 
     @use_scope("content", clear=True)
     def alas_overview(self) -> None:
@@ -90,18 +132,7 @@ class OverviewMixin(WebUIMixinBase):
                 ],
             )
 
-        switch_scheduler = BinarySwitchButton(
-            label_on=t("Gui.Button.Stop"),
-            label_off=t("Gui.Button.Start"),
-            onclick_on=lambda: self.alas.stop_by_user(
-                self.alas_config.Optimization_WhenSchedulerStopped
-            ),
-            onclick_off=self._alas_start,
-            get_state=lambda: self.alas.alive,
-            color_on="off",
-            color_off="on",
-            scope="scheduler_btn",
-        )
+        switch_scheduler = self._mount_scheduler_switch(self._alas_start)
 
         # April Fools: runaway start button
         if getattr(self, "af_flag", False):
@@ -430,18 +461,7 @@ class OverviewMixin(WebUIMixinBase):
                 color="on",
             )
 
-        switch_scheduler = BinarySwitchButton(
-            label_on=t("Gui.Button.Stop"),
-            label_off=t("Gui.Button.Start"),
-            onclick_on=lambda: self.alas.stop_by_user(
-                self.alas_config.Optimization_WhenSchedulerStopped
-            ),
-            onclick_off=lambda: self.alas.start(task),
-            get_state=lambda: self.alas.alive,
-            color_on="off",
-            color_off="on",
-            scope="scheduler_btn",
-        )
+        switch_scheduler = self._mount_scheduler_switch(lambda: self.alas.start(task))
 
         with use_scope("log-bar"):
             put_text(t("Gui.Overview.Log")).style(

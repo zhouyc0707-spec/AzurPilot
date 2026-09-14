@@ -51,6 +51,15 @@ from module.webui.worker_registry import (
 
 _STOP_ACTION_UNSET = object()
 
+# 日志队列处理线程轮询退出信号的间隔。停止流程要等它结束后才返回，
+# 该值决定了停止按钮最坏情况下的额外延迟。
+LOG_QUEUE_HANDLER_POLL_INTERVAL = 0.25
+# 等待日志队列处理线程退出的上限
+LOG_QUEUE_HANDLER_JOIN_TIMEOUT = 1
+# 日志线程读取存活状态时最长等生命周期锁的时间：停止流程持有该锁等它退出，
+# 在这里死等只会再次僵持到 join 超时
+LOG_HANDLER_ALIVE_LOCK_TIMEOUT = 0.05
+
 
 class ProcessManager:
     _processes: Dict[str, "ProcessManager"] = {}
@@ -67,6 +76,10 @@ class ProcessManager:
         self.renderables_reduce_length = 80
         self._process: Process | None = None
         self.thd_log_queue_handler: threading.Thread | None = None
+        # 日志队列处理线程的私有退出信号。该线程不能用 alive 判断是否该结束：
+        # alive 需要实例生命周期锁，而停止流程正持有这把锁等它退出，双方会
+        # 一直僵持到一个完整的 join 超时，期间按钮状态（同样需要这把锁）无法刷新。
+        self._log_handler_stop = threading.Event()
         self._state_override: int | None = None
         self._state_override_deadline: float | None = None
 
@@ -168,7 +181,14 @@ class ProcessManager:
     def start_log_queue_handler(self) -> None:
         log_queue_handler = self.thd_log_queue_handler
         if log_queue_handler is not None and log_queue_handler.is_alive():
-            return
+            if not self._log_handler_stop.is_set():
+                return
+            # 上一轮线程正在响应退出信号收尾：等它结束再启动新的，
+            # 否则新 worker 的日志没有线程消费。
+            log_queue_handler.join(timeout=LOG_QUEUE_HANDLER_JOIN_TIMEOUT)
+            if log_queue_handler.is_alive():
+                return
+        self._log_handler_stop.clear()
         self.thd_log_queue_handler = threading.Thread(
             target=self._thread_log_queue_handler
         )
@@ -210,6 +230,25 @@ class ProcessManager:
         else:
             logger.warning(f"[{self.config_name}] worker 未完全停止")
         return stopped
+
+    def stop_log_queue_handler(self) -> None:
+        """请求日志队列处理线程退出并回收它。
+
+        只置位线程私有的退出信号，不依赖实例生命周期锁：调用方通常正持有该锁，
+        而线程原先要靠 ``alive`` 才能发现自己该结束，会一直等锁直到 join 超时。
+        """
+        self._log_handler_stop.set()
+        log_queue_handler = self.thd_log_queue_handler
+        if log_queue_handler is None:
+            return
+        if threading.current_thread() is log_queue_handler:
+            return
+        log_queue_handler.join(timeout=LOG_QUEUE_HANDLER_JOIN_TIMEOUT)
+        if log_queue_handler.is_alive():
+            logger.warning(
+                f"[{self.config_name}] 日志队列处理线程未在 "
+                f"{LOG_QUEUE_HANDLER_JOIN_TIMEOUT} 秒内停止"
+            )
 
     def _stop_worker_locked(self) -> tuple[bool, bool]:
         """在实例生命周期锁内终止 worker，并返回是否可执行收尾动作。"""
@@ -270,13 +309,10 @@ class ProcessManager:
                 )
         if not stopped:
             logger.error(f"[{self.config_name}] 停止工作进程失败 PID {pid}")
-        log_queue_handler = self.thd_log_queue_handler
-        if log_queue_handler is not None:
-            log_queue_handler.join(timeout=1)
-            if log_queue_handler.is_alive():
-                logger.warning(
-                    "[WebUI-进程管理] 日志队列处理线程未在 1 秒内停止"
-                )
+        elif self.thd_log_queue_handler is not None:
+            # worker 已确认结束，日志不会再产出：立即让日志线程退出，
+            # 避免它继续持有生命周期锁直到 join 超时（按钮状态依赖同一把锁）。
+            self.stop_log_queue_handler()
 
         return stopped, should_run_action
 
@@ -603,10 +639,30 @@ class ProcessManager:
             State.process_registry.pop(self.config_name, None)
         return True
 
+    def _alive_for_log_handler(self) -> bool:
+        """日志线程专用的存活判断：抢不到生命周期锁时按存活处理。
+
+        停止流程会持锁等日志线程退出，因此这里不能在锁上死等；抢不到锁说明
+        有人正在操作生命周期，保守返回 True，由外层循环的退出信号决定去留。
+        """
+        lock = self._get_lifecycle_lock(self.config_name)
+        if not lock.acquire(timeout=LOG_HANDLER_ALIVE_LOCK_TIMEOUT):
+            return True
+        try:
+            return self.alive
+        finally:
+            lock.release()
+
     def _thread_log_queue_handler(self) -> None:
-        while self.alive:
+        # 退出信号必须先判断：置位后本线程不再触碰 alive，
+        # 否则会与持有生命周期锁的停止流程互相等待。
+        while not self._log_handler_stop.is_set():
+            if not self._alive_for_log_handler():
+                break
             try:
-                log = self._renderable_queue.get(timeout=1)
+                log = self._renderable_queue.get(
+                    timeout=LOG_QUEUE_HANDLER_POLL_INTERVAL
+                )
             except queue.Empty:
                 continue
             self.renderables.append(log)
