@@ -132,6 +132,47 @@ class TestCommissionIncomeCards(unittest.TestCase):
         self.assertEqual([], self._cards(summary_html))
 
 
+class TestCommissionRecentScreenshotButton(unittest.TestCase):
+    """一条委托记录只对应一次收获，因此只渲染一张截图。"""
+
+    @classmethod
+    def setUpClass(cls):
+        lang.reload()
+
+    def _recent_html(self, screenshots):
+        harness = _CardHarness()
+        data = _income_data()
+        data["item_name_lookup"] = {}
+        data["tracked_items"] = ["Gem", "Cube", "Chip", "Oil", "Coin"]
+        data["recent"] = [
+            {
+                "ts": "2026-09-14T21:26:50.845000",
+                "items": {"Oil": 282},
+                "commission_count": 1,
+                "screenshots": screenshots,
+            }
+        ]
+        _, recent_html = harness._build_commission_income_html(data)
+        return recent_html
+
+    def test_one_screenshot_renders_one_button(self):
+        html = self._recent_html(["alas/2026-09/shot_a_0.png"])
+
+        self.assertEqual(1, html.count("查看截图"))
+        self.assertIn("/static/commission_rewards/alas/2026-09/shot_a_0.png", html)
+
+    def test_legacy_entry_with_two_screenshots_renders_only_the_first(self):
+        """历史遗留的双截图记录也不再渲染「查看截图2」。"""
+        html = self._recent_html(
+            ["alas/2026-09/legacy_0.png", "alas/2026-09/legacy_1.png"]
+        )
+
+        self.assertEqual(1, html.count("查看截图"))
+        self.assertNotIn("查看截图2", html)
+        self.assertIn("legacy_0.png", html)
+        self.assertNotIn("legacy_1.png", html)
+
+
 class TestCommissionTitleRefreshIcon(unittest.TestCase):
     """刷新改成标题旁的图标按钮，并去掉重复的页码文字。"""
     @classmethod
