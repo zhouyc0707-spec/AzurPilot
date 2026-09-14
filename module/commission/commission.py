@@ -827,8 +827,11 @@ class RewardCommission(UI, InfoHandler):
         记录委托奖励的收入（物品）。
 
         分析委托奖励收集过程中在 `_commission_reward_images` 中截取的截图，
-        识别特定物品（钻石、心智魔方、心智单元、石油、金币），
-        汇总数量并保存到数据库。
+        识别特定物品（钻石、心智魔方、心智单元、石油、金币）。
+
+        一个「获得道具」弹窗就是一次委托收获，因此每张通过校验的截图单独写一条
+        记录、单独落盘这一张截图，不做跨截图的合并累加（`merged_items` 只用于
+        本次领取的推送通知汇总）。
         """
         try:
             from module.statistics.get_items import (
@@ -861,10 +864,8 @@ class RewardCommission(UI, InfoHandler):
 
             get_items = GetItemsStatistics()
 
+            # 整次领取的汇总，只用于推送通知；写入数据库的每条记录对应一次收获
             merged_items = {}
-            item_count = 0
-            # 通过「获取物品」页面校验的截图，结算后落盘存档供 WebUI 查看
-            reward_images = []
 
             images = getattr(self, '_commission_reward_images', None)
             if not images:
@@ -880,7 +881,9 @@ class RewardCommission(UI, InfoHandler):
                 'Coins': 'Coin',
             }
 
+            instance = self.config.config_name
             logger.info(f'[委托-收入] 处理 {len(images)} 张奖励截图')
+            recorded = 0
             for idx, image in enumerate(images):
                 try:
                     if INFO_BAR_1.appear_on(image):
@@ -897,10 +900,10 @@ class RewardCommission(UI, InfoHandler):
                     else:
                         logger.info(f'[委托-收入] 截图[{idx}] 不是获取物品页面，跳过')
                         continue
-                    reward_images.append(image)
                     # 数量 OCR 在 CommissionAmount 内先放大 2 倍再裁剪，
                     # 碎片过滤后数字右对齐的问题由放大+裁剪共同规避
                     grid.predict(image, amount_trim=True)
+                    items = {}
                     recognized = []
                     for item in grid.items:
                         if item.is_known_item() and item.name not in ('DefaultItem',):
@@ -908,89 +911,98 @@ class RewardCommission(UI, InfoHandler):
                             if mapped_name not in COMMISSION_TRACKED_ITEMS:
                                 logger.info(f'[委托-收入] 截图[{idx}] 忽略 {item.name} (未跟踪)')
                                 continue
-                            merged_items[mapped_name] = merged_items.get(mapped_name, 0) + item.amount
-                            item_count += 1
+                            items[mapped_name] = items.get(mapped_name, 0) + item.amount
                             recognized.append(f'{mapped_name}x{item.amount}')
-                    if recognized:
-                        logger.info(f'[委托-收入] 截图[{idx}] 识别到 {len(recognized)} 个物品: {", ".join(recognized)}')
-                    else:
+                    if not recognized:
                         logger.info(f'[委托-收入] 截图[{idx}] 没有识别到已知物品')
+                        continue
+                    logger.info(f'[委托-收入] 截图[{idx}] 识别到 {len(recognized)} 个物品: {", ".join(recognized)}')
+
+                    # 一个「获得道具」弹窗就是一次委托收获：单独落盘这一张截图，
+                    # 单独写一条记录，绝不把多次收获并进同一条记录
+                    screenshot = self._save_commission_reward_screenshot(image, instance)
+                    cl1_db.add_commission_income(
+                        instance,
+                        items,
+                        commission_count=1,
+                        screenshots=[screenshot] if screenshot else [],
+                    )
+                    recorded += 1
+                    item_str = ', '.join([f'{k}x{v}' for k, v in items.items()])
+                    logger.info(f'[委托-收入] 委托收入记录: {item_str} (实例={instance})')
+                    for name, amount in items.items():
+                        merged_items[name] = merged_items.get(name, 0) + amount
                 except Exception as e:
                     logger.info(f'[委托-收入] 截图[{idx}] 识别失败: {e}')
                     continue
 
-            if merged_items:
-                instance = self.config.config_name
-                screenshots = self._save_commission_reward_screenshots(reward_images, instance)
-                cl1_db.add_commission_income(
-                    instance, merged_items, commission_count=1, screenshots=screenshots
-                )
-                item_str = ', '.join([f'{k}x{v}' for k, v in merged_items.items()])
-                logger.info(f'[委托-收入] 委托收入记录: {item_str} (实例={instance})')
-                if self.config.Commission_CommissionNotifyReward:
-                    reward_stats = None
-                    if self.config.Commission_CommissionNotifyRewardStatistics:
-                        reward_stats = cl1_db.get_commission_reward_stats(instance)
-                    gem_count = merged_items.get("Gem", 0)
-                    tracked = []
-                    if gem_count > 0:
-                        text = f'本次获得钻石 * {gem_count}'
-                        if reward_stats:
-                            text += (
-                                f'\n\n今日累计: {reward_stats["today"].get("Gem", 0)}'
-                                f'\n本周累计: {reward_stats["week"].get("Gem", 0)}'
-                                f'\n本月累计: {reward_stats["month"].get("Gem", 0)}'
-                            )
-                        tracked.append(text)
-                    if tracked:
-
-                        msg = '\n'.join(tracked)
-                        webui_msg = msg.replace('\n\n', '\n')
-                        title = f"AzurPilot <{instance}> 委托获得奖励喵！"
-                        webui_title = f"AzurPilot <{instance}> 委托获得奖励喵！"
-                        if gem_count >= 50:
-                            title = f"AzurPilot <{instance}> 大成功！！！委托获得顶级奖励喵！"
-                            webui_title = f"AzurPilot <{instance}> 大成功！！！委托获得顶级奖励喵！"
-
-                        elif gem_count > 0:
-                            title = f"AzurPilot <{instance}> 委托获得顶级奖励喵！"
-                            webui_title = f"AzurPilot <{instance}> 委托获得顶级奖励喵！"
-                        handle_notify(
-                            self.config.Error_OnePushConfig,
-                            title=title,
-                            content=msg,
-                        )
-
-                        notify_webui(
-                            instance,
-                            title=webui_title,
-                            content=webui_msg,
-                        )
-
-            else:
+            if recorded == 0:
                 logger.info('[委托-收入] 所有截图都没有识别到已知物品')
+                return
+
+            # 通知仍按整次领取汇总推送一次，避免拆成多条记录后重复通知
+            if self.config.Commission_CommissionNotifyReward:
+                reward_stats = None
+                if self.config.Commission_CommissionNotifyRewardStatistics:
+                    reward_stats = cl1_db.get_commission_reward_stats(instance)
+                gem_count = merged_items.get("Gem", 0)
+                tracked = []
+                if gem_count > 0:
+                    text = f'本次获得钻石 * {gem_count}'
+                    if reward_stats:
+                        text += (
+                            f'\n\n今日累计: {reward_stats["today"].get("Gem", 0)}'
+                            f'\n本周累计: {reward_stats["week"].get("Gem", 0)}'
+                            f'\n本月累计: {reward_stats["month"].get("Gem", 0)}'
+                        )
+                    tracked.append(text)
+                if tracked:
+
+                    msg = '\n'.join(tracked)
+                    webui_msg = msg.replace('\n\n', '\n')
+                    title = f"AzurPilot <{instance}> 委托获得奖励喵！"
+                    webui_title = f"AzurPilot <{instance}> 委托获得奖励喵！"
+                    if gem_count >= 50:
+                        title = f"AzurPilot <{instance}> 大成功！！！委托获得顶级奖励喵！"
+                        webui_title = f"AzurPilot <{instance}> 大成功！！！委托获得顶级奖励喵！"
+
+                    elif gem_count > 0:
+                        title = f"AzurPilot <{instance}> 委托获得顶级奖励喵！"
+                        webui_title = f"AzurPilot <{instance}> 委托获得顶级奖励喵！"
+                    handle_notify(
+                        self.config.Error_OnePushConfig,
+                        title=title,
+                        content=msg,
+                    )
+
+                    notify_webui(
+                        instance,
+                        title=webui_title,
+                        content=webui_msg,
+                    )
 
         except Exception as e:
             logger.warning(f'[委托-收入] 委托收入记录失败: {e}')
 
-    def _save_commission_reward_screenshots(self, images, instance):
-        """保存本次结算的委托收益截图。
+    def _save_commission_reward_screenshot(self, image, instance):
+        """保存一次委托收获的收益截图。
 
-        截图落盘到 ``./log/commission_rewards/<instance>/<YYYY-MM>/`` 目录，
-        文件名使用毫秒时间戳避免冲突。返回相对 ``log/commission_rewards``
-        根目录的路径列表（POSIX 风格），写入数据库供 WebUI 查看截图使用。
+        一个「获得道具」弹窗只对应一张截图，因此这里只接收单张图像。截图落盘到
+        ``./log/commission_rewards/<instance>/<YYYY-MM>/`` 目录，文件名使用毫秒
+        时间戳避免冲突。返回相对 ``log/commission_rewards`` 根目录的路径
+        （POSIX 风格），写入数据库供 WebUI 查看截图使用。
 
         Args:
-            images: 通过「获取物品」页面校验的截图列表（RGB numpy 数组）。
+            image: 通过「获取物品」页面校验的截图（RGB numpy 数组）。
             instance: 配置实例名称。
 
         Returns:
-            list[str]: 保存成功的截图相对路径列表，失败时返回空列表。
+            str | None: 保存成功的截图相对路径，失败时返回 None。
         """
         import os
 
-        if not images:
-            return []
+        if image is None:
+            return None
 
         month_str = current_time().strftime('%Y-%m')
         folder = os.path.join('.', 'log', 'commission_rewards', instance, month_str)
@@ -998,22 +1010,18 @@ class RewardCommission(UI, InfoHandler):
             os.makedirs(folder, exist_ok=True)
         except OSError as e:
             logger.warning(f'[委托-收入] 创建截图目录失败: {e}')
-            return []
+            return None
 
-        stamp = current_time().strftime('%Y%m%d_%H%M%S_%f')
-        paths = []
-        for idx, image in enumerate(images):
-            filename = f'{stamp}_{idx}.png'
-            try:
-                save_image(image, os.path.join(folder, filename))
-            except Exception as e:
-                logger.warning(f'[委托-收入] 保存截图失败 {filename}: {e}')
-                continue
-            paths.append(f'{instance}/{month_str}/{filename}')
-            logger.info(f'[委托-收入] 已保存收益截图: log/commission_rewards/{instance}/{month_str}/{filename}')
+        filename = f'{current_time().strftime("%Y%m%d_%H%M%S_%f")}_0.png'
+        try:
+            save_image(image, os.path.join(folder, filename))
+        except Exception as e:
+            logger.warning(f'[委托-收入] 保存截图失败 {filename}: {e}')
+            return None
+        logger.info(f'[委托-收入] 已保存收益截图: log/commission_rewards/{instance}/{month_str}/{filename}')
 
         self._prune_commission_reward_screenshots(instance)
-        return paths
+        return f'{instance}/{month_str}/{filename}'
 
     @staticmethod
     def _prune_commission_reward_screenshots(instance, max_keep=None):

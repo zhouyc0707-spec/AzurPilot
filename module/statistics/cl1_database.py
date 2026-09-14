@@ -1441,7 +1441,8 @@ class Cl1Database:
             instance: 实例名称
             items: 物品字典，如 {'Gem': 30, 'Cube': 1, 'Chip': 10, 'Oil': 500, 'Coin': 800}
             commission_count: 本次结算的委托数量
-            screenshots: 本次结算的收益截图路径列表，路径相对
+            screenshots: 本次委托收获的收益截图路径，一个「获得道具」弹窗对应一次
+                收获、只对应一张截图，因此至多保留一张；路径相对
                 ``log/commission_rewards`` 目录（供 WebUI 查看截图功能使用），
                 旧版本记录无此字段。
         """
@@ -1449,11 +1450,19 @@ class Cl1Database:
         data = self.get_stats(instance, month)
 
         commission_count = self._coerce_int(commission_count)
+        paths = [str(path) for path in (screenshots or [])]
+        if len(paths) > 1:
+            # 一次收获只对应一张截图：漏拆的记录会把多次收获并进一条，
+            # 统计口径随之失真，这里按存储边界兜底丢弃多余的截图
+            logger.warning(
+                f"[Statistics] 委托记录只允许一张截图，已丢弃多余的 {len(paths) - 1} 张: {paths[1:]}"
+            )
+            paths = paths[:1]
         entry = {
             "ts": datetime.now().isoformat(),
             "items": {k: self._coerce_int(v) for k, v in items.items() if v > 0},
             "commission_count": commission_count,
-            "screenshots": [str(path) for path in (screenshots or [])],
+            "screenshots": paths,
         }
 
         entries = data.get("commission_income_entries", [])
