@@ -478,6 +478,7 @@ class TestProcessManagerRegistry(unittest.TestCase):
 
         with patch("module.webui.process_manager.Process", return_value=process) as cls:
             manager._run_manual_stop_action_locked()
+            self._join_manual_stop_reapers()
 
         cls.assert_called_once_with(
             target=ProcessManager.run_manual_stop_action,
@@ -500,5 +501,13 @@ class TestProcessManagerRegistry(unittest.TestCase):
             ) as terminate,
         ):
             manager._run_manual_stop_action_locked()
+            self._join_manual_stop_reapers()
 
         terminate.assert_called_once_with(process)
+
+    @staticmethod
+    def _join_manual_stop_reapers(timeout: float = 2) -> None:
+        """等待停止收尾回收线程结束，避免断言与后台线程竞态。"""
+        for thread in threading.enumerate():
+            if thread.name.startswith("manual-stop-action-reaper-"):
+                thread.join(timeout=timeout)
