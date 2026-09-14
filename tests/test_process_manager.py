@@ -1,9 +1,31 @@
+import queue
 import threading
+import time
 import unittest
 from unittest.mock import Mock, PropertyMock, patch
 
 from module.webui.process_manager import ProcessManager
 from module.webui.setting import State
+
+
+class FakeAliveProcess:
+    """模拟可被终止的本地 worker 句柄（is_alive 由 terminate/kill 驱动）。"""
+
+    def __init__(self, pid: int):
+        self.pid = pid
+        self._alive = True
+
+    def is_alive(self) -> bool:
+        return self._alive
+
+    def terminate(self) -> None:
+        self._alive = False
+
+    def kill(self) -> None:
+        self._alive = False
+
+    def join(self, timeout=None) -> None:
+        return None
 
 
 class TestProcessManagerRegistry(unittest.TestCase):
@@ -504,6 +526,78 @@ class TestProcessManagerRegistry(unittest.TestCase):
             self._join_manual_stop_reapers()
 
         terminate.assert_called_once_with(process)
+
+    def test_stop_does_not_wait_for_lifecycle_lock_on_log_handler(self):
+        """停止流程不应为了等日志线程而长时间占住实例生命周期锁。
+
+        回归：日志线程原先靠 alive（需要生命周期锁）判断是否该结束，而停止流程
+        正持有该锁等它退出，双方僵持满一个 join 超时（1 秒）。按钮状态同样要读
+        alive，于是停止按钮要等 2 秒左右（1 秒锁等待 + 1 秒轮询）才变成启动。
+        """
+        State.manager.Queue.return_value = queue.Queue()
+        manager = ProcessManager.get_manager("alas")
+        manager._process = FakeAliveProcess(pid=12345)
+        State.process_registry["alas"] = 12345
+        manager.start_log_queue_handler()
+        self.assertTrue(manager.thd_log_queue_handler.is_alive())
+
+        with (
+            patch.object(ProcessManager, "_kill_process_tree", return_value=True),
+            patch("module.webui.process_manager.is_current_owner", return_value=True),
+            patch(
+                "module.webui.process_manager.get_workers",
+                return_value={"alas": {"pid": 12345, "created_at": 1}},
+            ),
+            patch("module.webui.process_manager.process_matches", return_value=True),
+            patch("module.webui.process_manager.unregister_worker", return_value=True),
+        ):
+            start = time.monotonic()
+            self.assertTrue(manager.stop())
+            elapsed = time.monotonic() - start
+
+        self.assertLess(elapsed, 0.8)
+        self.assertTrue(manager._log_handler_stop.is_set())
+        self.assertFalse(manager.thd_log_queue_handler.is_alive())
+
+    def test_log_handler_liveness_check_does_not_block_on_lifecycle_lock(self):
+        """停止流程持锁期间，日志线程的存活判断必须限时返回。
+
+        否则日志线程卡在锁上等停止流程、停止流程又在 join 里等日志线程，
+        又会退化成满一个 join 超时。
+        """
+        manager = ProcessManager.get_manager("alas")
+        manager._process = FakeAliveProcess(pid=12345)
+        State.process_registry["alas"] = 12345
+        outcome = []
+
+        def check():
+            start = time.monotonic()
+            outcome.append((manager._alive_for_log_handler(), time.monotonic() - start))
+
+        lock = ProcessManager._get_lifecycle_lock("alas")
+        with lock:
+            worker = threading.Thread(target=check, daemon=True)
+            worker.start()
+            worker.join(timeout=2)
+
+        self.assertFalse(worker.is_alive(), "存活判断在停止流程持锁期间死等")
+        self.assertTrue(outcome[0][0], "拿不到锁时应保守按存活处理")
+        self.assertLess(outcome[0][1], 0.5)
+
+    def test_log_handler_restarts_after_stop(self):
+        """停止置位的退出信号必须被清除，否则重启后日志线程立刻自杀。"""
+        State.manager.Queue.return_value = queue.Queue()
+        manager = ProcessManager.get_manager("alas")
+        manager.stop_log_queue_handler()
+
+        manager.start_log_queue_handler()
+
+        handler = manager.thd_log_queue_handler
+        self.assertTrue(handler.is_alive())
+        self.assertFalse(manager._log_handler_stop.is_set())
+        manager.stop_log_queue_handler()
+        handler.join(timeout=2)
+        self.assertFalse(handler.is_alive())
 
     @staticmethod
     def _join_manual_stop_reapers(timeout: float = 2) -> None:
