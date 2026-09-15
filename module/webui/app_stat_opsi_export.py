@@ -1,4 +1,4 @@
-"""WebUI 短猫收获月度视图（耄耋相接收获）。"""
+"""WebUI 短猫收获月度视图（本月耄耋相接收获）。"""
 
 from module.webui.app_dependencies import (
     close_popup,
@@ -8,15 +8,14 @@ from module.webui.app_dependencies import (
     put_buttons,
     put_html,
     put_row,
+    put_text,
     t,
     toast,
     use_scope,
 )
 
 from module.webui.app_helpers import (
-    build_muted_notice,
     build_simple_table,
-    build_stat_section_title,
     build_title_block,
 )
 
@@ -25,33 +24,66 @@ from module.webui.app_types import WebUIMixinBase
 
 
 class OpsiExportMixin(WebUIMixinBase):
-    """WebUI 短猫收获月度视图（耄耋相接收获）。"""
+    """WebUI 短猫收获月度视图（本月耄耋相接收获）。"""
 
     def _render_meowofficer_farming(self):
         from module.statistics.azurstats import AzurStats
 
         with use_scope("meow_loot_scope", clear=True):
+            # 只保留「本月耄耋相接收获」这一个标题（由 _render_monthly_meow_loot
+            # 渲染，历史月份下自动变成「历史耄耋相接收获（YYYY-MM）」），
+            # 不再另起一层板块标题 —— 两层标题叠在一起没有信息量。
+            # 「上次记录时间」紧跟在标题下方、表格上方，与主表汇总行同一形式；
+            # 它不随月份切换变化，所以渲染在 _render_monthly_meow_loot 之外：
+            # 选历史月份时只有下面那张表会重绘。
             self._render_monthly_meow_loot(AzurStats)
 
-            all_data = AzurStats.load_meowofficer_farming()
-            meow_rows = []
-            for row in all_data:
-                if row[2] > 0:
-                    meow_row = [
-                        int(row[0]),
-                        datetime.fromtimestamp(row[1]).strftime("%Y-%m-%d %H:%M:%S"),
-                        int(row[2]),
-                    ] + list(row[3:])
+    def _load_meow_cumulative_rows(self, AzurStats):
+        """读取累计表的有效行（只保留有效战斗轮数 > 0 的侵蚀等级）。
 
-                    meow_rows.append(meow_row)
+        Returns:
+            list: ``[(侵蚀等级, 上次记录时间戳, 有效战斗轮数, 平均黄币/轮,
+            平均金菜/轮, 平均深渊/轮, 平均隐秘/轮), ...]``，读不到时返回空列表。
+        """
+        rows = []
+        try:
+            for row in AzurStats.load_meowofficer_farming():
+                if float(row[2]) > 0:
+                    rows.append([float(v) for v in row])
+        except Exception:
+            return []
+        return rows
 
-            put_html(build_stat_section_title(t("Gui.Stat.MeowLootTitle")))
-            if meow_rows:
-                put_html(
-                    build_simple_table(AzurStats.meowofficer_farming_labels, meow_rows)
-                )
-            else:
-                put_html(build_muted_notice(t("Gui.Stat.NoMeowDataNotice")))
+    def _meow_extra_columns(self, AzurStats):
+        """累计表里要并入本月表的那些列，按侵蚀等级取用。
+
+        Returns:
+            dict: ``{侵蚀等级: [有效战斗轮数, 平均黄币/轮, 平均金菜/轮,
+            平均深渊/轮, 平均隐秘/轮]}``，读不到时返回空字典。
+        """
+        return {
+            int(row[0]): [
+                # 轮数原始值是浮点，取整展示
+                int(round(row[2])),
+                # 四个平均值保留 6 位小数：数值本身很小（如 0.002），
+                # 位数不够时看不出差异
+                *(f"{v:.6f}" for v in row[3:7]),
+            ]
+            for row in self._load_meow_cumulative_rows(AzurStats)
+        }
+
+    def _render_meow_loot_last_record(self, AzurStats):
+        """汇总行「上次记录时间」：取各侵蚀等级里最新的一次记录时间。"""
+        rows = self._load_meow_cumulative_rows(AzurStats)
+        latest = max((row[1] for row in rows), default=0)
+        text = (
+            datetime.fromtimestamp(latest).strftime("%Y-%m-%d %H:%M:%S")
+            if latest > 0
+            else "-"
+        )
+        put_row(
+            [put_text(t("Gui.Stat.MeowLastRecord", value=text))],
+        ).style("--meow-summary--")
 
     def _render_monthly_meow_loot(self, AzurStats):
         """渲染「本月/历史耄耋相接收获」表格（按侵蚀等级分列的月度掉落总数）。"""
@@ -102,6 +134,14 @@ class OpsiExportMixin(WebUIMixinBase):
                 ]
             )
 
+        # 追加累计表的 5 列（有效战斗轮数 + 四项「平均每轮」），按侵蚀等级取值。
+        # 这些列是累计值、不随所选月份变化，但和本月数据同属一个侵蚀等级，
+        # 放在同一张表里对照更直接。
+        extra = self._meow_extra_columns(AzurStats)
+        empty_extra = ["-"] * 5
+        for row in rows:
+            row.extend(extra.get(int(row[1]), empty_extra))
+
         # 月份切换按钮紧跟在标题右侧（标题列自适应内容宽度，按钮列吃掉剩余空间，
         # 因此按钮不会被推到最右边）；按钮统一用 color="off"，
         # 外观与其它统计按钮一致，由 entry-alas.css 的统一样式收口。
@@ -129,6 +169,10 @@ class OpsiExportMixin(WebUIMixinBase):
         ).style(
             "align-items:center; gap:10px; margin-top:24px; margin-bottom:8px"
         )
+        # 记录时间放在标题与表格之间（与主表汇总行同一形式）
+        self._render_meow_loot_last_record(AzurStats)
+
+        # 月份与掉落列（本月数据）+ 历史累计列（不随所选月份变化）
         put_html(
             build_simple_table(
                 [
@@ -141,6 +185,11 @@ class OpsiExportMixin(WebUIMixinBase):
                     "隐秘",
                     "深渊",
                     "金猫箱",
+                    t("Gui.Stat.MeowEffectiveRounds"),
+                    t("Gui.Stat.MeowAvgOperationCoin"),
+                    t("Gui.Stat.MeowAvgPlate"),
+                    t("Gui.Stat.MeowAvgAbyssal"),
+                    t("Gui.Stat.MeowAvgObscure"),
                 ],
                 rows,
             )

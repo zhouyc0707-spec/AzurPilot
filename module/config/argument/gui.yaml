@@ -406,6 +406,12 @@ Stat:
   MonthlyPurchasedAP:
   MonthlySortieCost:
   MonthlyLoopEfficiency:
+  MeowLastRecord:
+  MeowEffectiveRounds:
+  MeowAvgOperationCoin:
+  MeowAvgPlate:
+  MeowAvgAbyssal:
+  MeowAvgObscure:
   MeowDataCollectionTitle:
   MeowRounds:
   AvgMeowRoundTime:
