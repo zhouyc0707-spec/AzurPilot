@@ -863,6 +863,16 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
     margin-bottom: 8px;
 }
 
+/* 每日经验检测的汇总行（上次检查时间 + 今日经验 / 经验效率 / 今日运行）：
+   put_row 生成的是 grid，默认没有列间距，给各列留白避免几段文字挤在一起。
+   同样不要改 display，否则 grid-template-columns 失效。 */
+#pywebio-scope-ship_exp_table *[style*="--ship-exp-summary--"] {
+    align-items: baseline !important;
+    column-gap: 1.5rem !important;
+    row-gap: .25rem !important;
+    margin-bottom: 2px;
+}
+
 /* --- 统计页统一按钮样式开始 --- */
 /* 图表右上角的「重置图表」：与同排的时间范围按钮同尺寸同风格。
    它不在 PyWebIO 作用域里，是面板模板自带的按钮，因此用所在区块的 scope

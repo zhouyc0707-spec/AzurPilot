@@ -108,48 +108,44 @@ class ShipExperienceStatisticsMixin(WebUIMixinBase):
                     scope=_SHIP_EXP_REFRESH_SCOPE,
                 )
                 put_html(refresh_icon_button_css(_SHIP_EXP_REFRESH_SCOPE))
-                put_text(
-                    t(
-                        "Gui.Stat.LastCheckTime",
-                        value=stats.data.get("last_check_time", "-"),
-                    )
-                )
 
-                # 显示一行统计：今日战斗 / 今日经验 / 经验效率 / 今日运行
+                # 汇总一行：上次检查时间 + 今日经验 / 经验效率 / 今日运行。
+                # 「今日战斗」不再显示 —— 下面表格里已有战斗场次，重复了；
+                # 也不再单独占一行（原来检查时间与统计各占一行，行数偏多）。
+                summary_items = [
+                    put_text(
+                        t(
+                            "Gui.Stat.LastCheckTime",
+                            value=stats.data.get("last_check_time", "-"),
+                        )
+                    )
+                ]
                 if today_stats:
                     run_minutes = int(today_stats.get("total_run_time", 0) // 60)
-                    put_row(
-                        [
-                            put_text(
-                                t(
-                                    "Gui.Stat.TodayBattles",
-                                    value=today_stats.get("battle_count", 0),
-                                    unit=t("Gui.Stat.TodayBattleUnit"),
-                                )
-                            ),
-                            put_text(
-                                t(
-                                    "Gui.Stat.TodayExp",
-                                    value=today_stats.get("total_exp_gained", 0),
-                                )
-                            ),
-                            put_text(
-                                t(
-                                    "Gui.Stat.ExpEfficiency",
-                                    value=f"{exp_per_hour:.0f}",
-                                    unit=t("Gui.Stat.HourUnit"),
-                                )
-                            ),
-                            put_text(
-                                t(
-                                    "Gui.Stat.TodayRun",
-                                    value=run_minutes,
-                                    unit=t("Gui.Stat.MinuteUnit"),
-                                )
-                            ),
-                        ]
-                    )
-                else:
+                    summary_items += [
+                        put_text(
+                            t(
+                                "Gui.Stat.TodayExp",
+                                value=today_stats.get("total_exp_gained", 0),
+                            )
+                        ),
+                        put_text(
+                            t(
+                                "Gui.Stat.ExpEfficiency",
+                                value=f"{exp_per_hour:.0f}",
+                                unit=t("Gui.Stat.HourUnit"),
+                            )
+                        ),
+                        put_text(
+                            t(
+                                "Gui.Stat.TodayRun",
+                                value=run_minutes,
+                                unit=t("Gui.Stat.MinuteUnit"),
+                            )
+                        ),
+                    ]
+                put_row(summary_items).style("--ship-exp-summary--")
+                if not today_stats:
                     put_text(t("Gui.Stat.NoTodayBattleData"))
 
                 put_html(
