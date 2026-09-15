@@ -205,9 +205,10 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
     def _build_running_commissions_html(running, datetime_class):
         """构造「正在进行」区块：每个委托一个圆角矩形卡片，横向排成一行。
 
-        区分两种空态：状态文件还没生成（worker 尚未跑过委托任务）显示
-        「尚未获取到委托状态」，文件在但确实没有运行中的委托显示「当前无运行中
-        委托」—— 前者说明「还没看」，后者说明「看过了，确实没有」。
+        worker 只在跑委托任务时重新扫描，因此这里显示的是**上次扫描**的结果，
+        并在标题下标注扫描时刻 —— 委托只能被领取、不会自己消失，所以上次扫描
+        显示运行中的委托一定还在运行，不该按时间把它丢掉（那会让长耗时委托在
+        两次扫描之间凭空消失）。
 
         Args:
             running: ``RunningState``，或 None（读取失败）。
@@ -222,6 +223,7 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
         commissions = state.commissions or []
 
         if not state.available:
+            # 状态文件不存在：worker 自从启动以来还没跑过委托任务
             body = (
                 f'<div style="font-size: 12px; opacity: 0.6;">'
                 f'{escape(t("Gui.Stat.RunningCommissionUnknown"))}</div>'
@@ -240,12 +242,22 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
                     ).strftime("%H:%M")
                 except Exception:
                     finish_text = "--"
+                # 钻石委托（要员 / 度假 / 巡视护卫）用金色边框标出：边框加粗到
+                # 2px 并换成金色，底色给一层很淡的金，在整排白卡片里一眼可辨。
+                # 金色不跟随主题变量 —— 它是「稀有」的语义色，四个主题下都要
+                # 是金色才认得出来。
+                if entry.get("rare"):
+                    border = "2px solid #d4a017"
+                    background = "rgba(212, 160, 23, 0.08)"
+                else:
+                    border = "1px solid rgba(128, 128, 128, 0.25)"
+                    background = "transparent"
                 # 卡片用 flex:1 1 <基准宽>：窗口够宽时几张等分铺满一行，
                 # 窗口窄了自动换行而不是把文字压到换行
                 cards.append(
                     f'<div class="commission-running-card" style="flex: 1 1 150px; '
                     f'min-width: 0; box-sizing: border-box; padding: 6px 10px; '
-                    f'border: 1px solid rgba(128, 128, 128, 0.25); '
+                    f'border: {border}; background: {background}; '
                     f'border-radius: 10px;">'
                     f'<div style="font-size: 13px; word-break: break-all;">'
                     f'{escape(str(entry["name"]))}</div>'
@@ -258,10 +270,27 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
                 f'flex-wrap: wrap; gap: 8px;">{"".join(cards)}</div>'
             )
 
+        # 标题右侧标注上次扫描时刻，交代数据的新鲜度
+        scan_text = ""
+        if state.available and state.updated_at:
+            try:
+                scan_time = datetime_class.fromtimestamp(state.updated_at).strftime(
+                    "%H:%M"
+                )
+                scan_text = (
+                    f'<span style="font-size: 11px; opacity: 0.55; '
+                    f'font-weight: 400; margin-left: 8px;">'
+                    f'{escape(t("Gui.Stat.RunningCommissionScannedAt", value=scan_time))}'
+                    f"</span>"
+                )
+            except Exception:
+                scan_text = ""
+
         return (
             '<div class="commission-running" style="width: 100%;">'
             f'<div style="font-size: 0.9rem; font-weight: 500; color: inherit; '
-            f'margin-bottom: 8px;">{escape(t("Gui.Stat.RunningCommissionTitle"))}</div>'
+            f'margin-bottom: 8px;">{escape(t("Gui.Stat.RunningCommissionTitle"))}'
+            f"{scan_text}</div>"
             f"{body}</div>"
         )
 

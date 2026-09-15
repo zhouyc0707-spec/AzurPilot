@@ -6693,6 +6693,7 @@
       "CommissionIncomeTotalCommissions": "委託総回数: {value}",
       "CommissionIncomeRecentTitle": "最近の委託記録",
       "RunningCommissionTitle": "進行中",
+      "RunningCommissionScannedAt": "最終スキャン {value}",
       "RunningCommissionFinish": "完了予定 {value}",
       "RunningCommissionNone": "実行中の委託はありません",
       "RunningCommissionUnknown": "委託状態をまだ取得していません",

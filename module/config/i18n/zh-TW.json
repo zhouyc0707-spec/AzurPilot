@@ -6693,6 +6693,7 @@
       "CommissionIncomeTotalCommissions": "委託總次數: {value}",
       "CommissionIncomeRecentTitle": "最近委託記錄",
       "RunningCommissionTitle": "正在進行",
+      "RunningCommissionScannedAt": "上次掃描 {value}",
       "RunningCommissionFinish": "預計 {value} 完成",
       "RunningCommissionNone": "當前無運行中委託",
       "RunningCommissionUnknown": "尚未取得委託狀態",

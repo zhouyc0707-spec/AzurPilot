@@ -6693,6 +6693,7 @@
       "CommissionIncomeTotalCommissions": "委托总次数: {value}喵",
       "CommissionIncomeRecentTitle": "最近委托记录喵",
       "RunningCommissionTitle": "正在进行喵",
+      "RunningCommissionScannedAt": "上次扫描喵 {value}",
       "RunningCommissionFinish": "预计 {value} 完成喵",
       "RunningCommissionNone": "当前无运行中委托喵",
       "RunningCommissionUnknown": "尚未获取到委托状态喵",

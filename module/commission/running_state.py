@@ -19,9 +19,17 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-# 状态文件目录与文件名模板
-STATE_DIR = "./config"
+# 状态文件目录与文件名模板。
+# 放 log/ 而不是 config/：这个文件是纯运行时产物（每次委托扫描覆盖重建，丢了
+# 下次扫描就会补上），而 config/ 语义上是用户配置。日志与委托截图也都在 log/
+# 下，运行时产物集中在一处更清楚。
+STATE_DIR = "./log"
 STATE_FILE_TEMPLATE = "commission_running_{instance}.json"
+
+# 钻石委托（要员 / 度假 / 巡视护卫）的委托类型，页面上用金色边框标出。
+# 见 `project_data.dictionary_*`：各语言的名称字典都把这几个关键词映射到
+# `urgent_gem`，因此按 genre 判定对五个语言都成立。
+DIAMOND_GENRE = "urgent_gem"
 
 
 def state_file(instance: str) -> str:
@@ -99,7 +107,8 @@ class RunningState:
             （worker 还没跑过委托任务），与「扫描过但确实没有运行中委托」
             （available=True 且 ``commissions`` 为空）是两回事。
         updated_at: 状态写入时间（epoch 秒），0 表示未知。
-        commissions: ``[{'name': str, 'finish': float}, ...]``，已按完成时间升序。
+        commissions: ``[{'name': str, 'finish': float, 'rare': bool}, ...]``，
+            已按完成时间升序。``rare`` 表示钻石委托。
     """
 
     available: bool = False
@@ -122,7 +131,6 @@ def read_running_state(instance: str) -> RunningState:
     except (OSError, ValueError):
         return RunningState(available=False, updated_at=0.0, commissions=[])
 
-    now = datetime.now().timestamp()
     entries = []
     for entry in data.get("running") or []:
         if not isinstance(entry, dict):
@@ -131,11 +139,20 @@ def read_running_state(instance: str) -> RunningState:
         finish = entry.get("finish")
         if not isinstance(name, str) or not isinstance(finish, (int, float)):
             continue
-        # 过期的条目直接丢掉：worker 可能已经停止运行（游戏离线、任务暂停），
-        # 文件不会更新，但时间在走，完成时刻一过就该从列表里消失
-        if float(finish) <= now:
-            continue
-        entries.append({"name": name, "finish": float(finish)})
+        # 刻意**不**按完成时刻过滤：worker 只在跑委托任务时重新扫描（通常几十分钟
+        # 一次），而上次扫描显示「运行中」的委托一定还在运行 —— 委托只能被领取，
+        # 不会自己消失。按时间丢弃会让长耗时委托在两次扫描之间从列表里凭空消失，
+        # 看起来就像「重启后没有了」「过一会儿少了」。数据的陈旧程度改用
+        # updated_at 显示「上次扫描时间」来交代。
+        entries.append(
+            {
+                "name": name,
+                "finish": float(finish),
+                # 旧版状态文件没有 rare 字段，按「非稀有」处理即可：
+                # 下次委托扫描会把字段补上
+                "rare": bool(entry.get("rare")),
+            }
+        )
 
     entries.sort(key=lambda item: item["finish"])
     updated_at = data.get("updated_at")

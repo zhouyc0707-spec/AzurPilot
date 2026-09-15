@@ -66,19 +66,29 @@ COMMISSION_REWARD_SCREENSHOT_KEEP = 50
 
 
 class CommissionAmount(AmountOcr):
-    """委托收益数量 OCR：碎片过滤 + 2 倍放大 + 裁剪。
+    """委托收益数量 OCR：碎片过滤 + 3 倍最近邻放大。
 
-    委托页数字很小（高约 14px），直接识别时两处系统性误读：
-    - 不裁剪时右缘被截断的数字会被丢掉（71 → 7）；
-    - 裁剪后原尺寸下两个 7 会丢掉一个（77 → 7）。
-    实测「裁剪 + 放大 2 倍」后 71/77/97/13 等读数全部正确。
+    委托页数字很小（高约 14px），直接识别有多处系统性误读。50 张留存结算截图
+    的回归显示，「碎片过滤 + 3 倍**最近邻**放大」是唯一同时修好下面几类误读、
+    又不引入新错误的组合（相对原先的「2 倍双三次」只改动 5 张，且全部是修正）：
+
+    - 末位被吞：71 → 7（1 的笔画只有 1px 宽，双三次插值会把它糊掉；最近邻
+      保留原始像素边界，模型才能分辨出第二位）；
+    - 前位被吞：24 → 4（同上，实际值 4，与数据库记录一致）；
+    - 数量首位丢失：75 → 5。
+
+    放大倍率取 3 而不是 2：2 倍最近邻仍读不出 71，3 倍与 4 倍效果相同，
+    取小的那个省一点开销。
     """
+
     remove_fragments = True
 
     def pre_process(self, image):
         import cv2
 
-        image = cv2.resize(image, (0, 0), fx=2, fy=2, interpolation=2)
+        # INTER_NEAREST（=0）：必须用最近邻。双三次/线性插值会把 1px 宽的
+        # 笔画和数字之间的空隙糊在一起，导致 71 只读出 7、24 只读出 4。
+        image = cv2.resize(image, (0, 0), fx=3, fy=3, interpolation=cv2.INTER_NEAREST)
         return super().pre_process(image)
 
 
@@ -900,8 +910,8 @@ class RewardCommission(UI, InfoHandler):
                     else:
                         logger.info(f'[委托-收入] 截图[{idx}] 不是获取物品页面，跳过')
                         continue
-                    # 数量 OCR 在 CommissionAmount 内先放大 2 倍再裁剪，
-                    # 碎片过滤后数字右对齐的问题由放大+裁剪共同规避
+                    # 数量 OCR 由 CommissionAmount 先做 3 倍最近邻放大再提白字：
+                    # 放大不足或插值糊化都会吞掉数字（71 → 7、24 → 4）
                     grid.predict(image, amount_trim=True)
                     items = {}
                     recognized = []
@@ -1199,13 +1209,15 @@ class RewardCommission(UI, InfoHandler):
         """把运行中的委托写进状态文件，供 WebUI 显示。
 
         WebUI 是另一个进程，拿不到本进程内存里的委托对象，因此扫描完把
-        「委托名 + 预计完成时间（epoch 秒）」落到 `config/commission_running_<实例>.json`。
+        「委托名 + 预计完成时间（epoch 秒）+ 是否稀有」落到
+        `log/commission_running_<实例>.json`。
 
         完成时间用「本轮扫描时刻 + 剩余时间」得到，而不是 `Commission.finish_time`
         （那是 `create_time + 总时长`，对扫描时就已在跑的委托会偏早）。仍在运行的
         委托沿用上一轮写入的完成时间，避免每次扫描差几十秒造成页面上的时刻跳动。
         """
         from module.commission.running_state import (
+            DIAMOND_GENRE,
             load_previous_finish,
             write_running_commissions,
         )
@@ -1225,7 +1237,15 @@ class RewardCommission(UI, InfoHandler):
                 old = previous.get(comm.name)
                 if old is not None and abs(old - finish) <= 60:
                     finish = old
-                entries.append({'name': comm.name, 'finish': finish})
+                # 钻石委托（urgent_gem：要员/度假/巡视护卫）在页面上用金色边框标出。
+                # 用 genre 而不是委托名：名称字典本身就是按语言分 keyword 匹配的，
+                # 这样英日繁中服一样成立，将来新增同类变体也不用改代码。
+                entries.append({
+                    'name': comm.name,
+                    'finish': finish,
+                    'genre': getattr(comm, 'genre', ''),
+                    'rare': getattr(comm, 'genre', '') == DIAMOND_GENRE,
+                })
             entries.sort(key=lambda entry: entry['finish'])
             write_running_commissions(instance, entries)
             logger.attr('运行中委托', len(entries))
