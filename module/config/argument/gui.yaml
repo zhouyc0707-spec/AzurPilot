@@ -393,7 +393,6 @@ Stat:
   NetAP:
   LoopEfficiency:
   ExpEfficiency:
-  ExpEfficiencyHeader:
   AvgBattleTime:
   AvgBattleTimeHeader:
   AvgRoundTime:
@@ -405,6 +404,8 @@ Stat:
   TodayRunHeader:
   OpsiDataCollectionTitle:
   MonthlyPurchasedAP:
+  MonthlySortieCost:
+  MonthlyLoopEfficiency:
   MeowDataCollectionTitle:
   MeowRounds:
   AvgMeowRoundTime:
@@ -449,6 +450,7 @@ Stat:
   CommissionIncomeCardStat:
   CommissionIncomeTotalCommissions:
   CommissionIncomeRecentTitle:
+  ViewScreenshot:
   ResourceChartTitle:
   LoadResourceDataFailed:
   NoResourceData:

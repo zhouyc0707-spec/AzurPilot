@@ -848,6 +848,15 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
 }
 /* --- 统计页两区域布局结束 --- */
 
+/* 汇总行（当月购买体力 + 当月侵蚀一出击消耗）由 put_row 自己排版：
+   它生成的是 `display: grid`，列宽走 size="auto 24px 1fr"，其中 24px 那一列
+   就是 put_row 的 None 占位项（两段之间的间距）。
+   这里**不要**再改 display —— 覆盖成 flex 会让 grid-template-columns 失效、
+   间距消失。只做垂直居中，并在窄屏下允许换行而不是溢出。 */
+#pywebio-scope-opsi_stats *[style*="--opsi-summary--"] {
+    align-items: center !important;
+}
+
 /* --- 统计页统一按钮样式开始 --- */
 /* 图表右上角的「重置图表」：与同排的时间范围按钮同尺寸同风格。
    它不在 PyWebIO 作用域里，是面板模板自带的按钮，因此用所在区块的 scope
@@ -929,6 +938,51 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
     transition: background-color .15s ease, color .15s ease,
                 border-color .15s ease, box-shadow .15s ease,
                 transform .15s ease !important;
+}
+
+/* 委托收益「查看截图」是个链接（新标签页打开），不是 PyWebIO 按钮，
+   拿不到 .btn 的样式。这里按同一套规格补齐，免得它比同页按钮小一号、
+   按下去也没有反馈。行内只保留布局用的 flex-shrink / margin-left。 */
+:is(#pywebio-scope-commission_income) .alas-shot-link {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    vertical-align: middle !important;
+    width: auto !important;
+    min-width: 0 !important;
+    height: 30px !important;
+    padding: 0 14px !important;
+    border: 1px solid var(--alas-entry-border) !important;
+    border-radius: 10px !important;
+    background: var(--alas-entry-surface) !important;
+    color: var(--alas-entry-text) !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    line-height: 1 !important;
+    text-decoration: none !important;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, .03) !important;
+    text-shadow: none !important;
+    transition: background-color .15s ease, color .15s ease,
+                border-color .15s ease, box-shadow .15s ease,
+                transform .15s ease !important;
+}
+
+:is(#pywebio-scope-commission_income) .alas-shot-link:hover {
+    border-color: var(--alas-entry-accent) !important;
+    background: var(--alas-entry-accent-soft) !important;
+    color: var(--alas-entry-accent) !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .08) !important;
+    transform: translateY(-1px);
+}
+
+:is(#pywebio-scope-commission_income) .alas-shot-link:active {
+    box-shadow: none !important;
+    transform: translateY(0) scale(.97);
+}
+
+:is(#pywebio-scope-commission_income) .alas-shot-link:focus-visible {
+    outline: none !important;
+    box-shadow: 0 0 0 3px var(--alas-entry-accent-soft) !important;
 }
 
 :is(#pywebio-scope-stat_panels_charts,

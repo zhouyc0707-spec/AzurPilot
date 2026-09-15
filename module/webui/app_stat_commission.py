@@ -254,16 +254,15 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
                 )
 
                 # 查看截图按钮：一条记录只对应一次委托收获，因此只渲染这一张截图
+                # 外观由 entry-alas.css 的 .alas-shot-link 负责（与同页按钮同规格），
+                # 行内只保留布局用的 flex-shrink / margin-left
                 shots = entry.get("screenshots") or []
                 shot_links = ""
                 if shots:
                     shot_links = (
                         f'<a href="/static/commission_rewards/{escape(shots[0], quote=True)}" '
-                        f'target="_blank" rel="noopener" '
-                        f'style="flex-shrink: 0; margin-left: 8px; font-size: 0.7rem; padding: 2px 10px; '
-                        f'border: 1px solid rgba(128, 128, 128, 0.35); border-radius: 4px; '
-                        f'background: rgba(128, 128, 128, 0.08); color: inherit; text-decoration: none; '
-                        f'cursor: pointer;">查看截图</a>'
+                        f'target="_blank" rel="noopener" class="alas-shot-link" '
+                        f'style="flex-shrink: 0; margin-left: 8px;">{t("Gui.Stat.ViewScreenshot")}</a>'
                     )
 
                 html += (
