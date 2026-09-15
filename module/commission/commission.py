@@ -1195,6 +1195,43 @@ class RewardCommission(UI, InfoHandler):
 
         return reward
 
+    def _write_running_state(self):
+        """把运行中的委托写进状态文件，供 WebUI 显示。
+
+        WebUI 是另一个进程，拿不到本进程内存里的委托对象，因此扫描完把
+        「委托名 + 预计完成时间（epoch 秒）」落到 `config/commission_running_<实例>.json`。
+
+        完成时间用「本轮扫描时刻 + 剩余时间」得到，而不是 `Commission.finish_time`
+        （那是 `create_time + 总时长`，对扫描时就已在跑的委托会偏早）。仍在运行的
+        委托沿用上一轮写入的完成时间，避免每次扫描差几十秒造成页面上的时刻跳动。
+        """
+        from module.commission.running_state import (
+            load_previous_finish,
+            write_running_commissions,
+        )
+
+        instance = getattr(self.config, 'config_name', None)
+        if not instance:
+            return
+        try:
+            now = current_time()
+            previous = load_previous_finish(instance)
+            entries = []
+            for comm in self.daily.add_by_eq(self.urgent):
+                if not getattr(comm, 'valid', False) or comm.status != 'running':
+                    continue
+                finish = (now + comm.duration).timestamp()
+                # 上一轮已经记过、且差异在 1 分钟内，视为同一次运行，沿用旧值
+                old = previous.get(comm.name)
+                if old is not None and abs(old - finish) <= 60:
+                    finish = old
+                entries.append({'name': comm.name, 'finish': finish})
+            entries.sort(key=lambda entry: entry['finish'])
+            write_running_commissions(instance, entries)
+            logger.attr('运行中委托', len(entries))
+        except Exception as e:  # noqa: BLE001 - 状态文件失败不影响委托任务
+            logger.warning(f'[委托-状态] 写入运行中委托状态失败: {e}')
+
     def commission_receive(self):
         """
         Returns:
@@ -1241,6 +1278,7 @@ class RewardCommission(UI, InfoHandler):
         total = self.daily.add_by_eq(self.urgent)
         future_finish = sorted([f for f in total.get('finish_time') if f is not None])
         logger.info(f'[委托-完成] 委托完成时间: {[str(f) for f in future_finish]}')
+        self._write_running_state()
         if len(future_finish):
             self.config.task_delay(target=future_finish)
         else:

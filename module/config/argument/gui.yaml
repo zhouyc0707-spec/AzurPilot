@@ -454,6 +454,10 @@ Stat:
   CommissionIncomeCardStat:
   CommissionIncomeTotalCommissions:
   CommissionIncomeRecentTitle:
+  RunningCommissionTitle:
+  RunningCommissionFinish:
+  RunningCommissionNone:
+  RunningCommissionUnknown:
   ViewScreenshot:
   ResourceChartTitle:
   LoadResourceDataFailed:

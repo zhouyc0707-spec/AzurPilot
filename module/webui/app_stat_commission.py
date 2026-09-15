@@ -92,6 +92,7 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
             "recent": get_recent_commission_entries(
                 instance_name, limit=_COMMISSION_RECENT_TOTAL
             ),
+            "running": self._load_running_commissions(instance_name),
             "item_name_map": item_name_map,
             "item_icon_map": item_icon_map,
             "datetime": datetime,
@@ -99,6 +100,25 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
             "item_name_lookup": COMMISSION_ITEM_NAME_MAP,
             "tracked_items": COMMISSION_TRACKED_ITEMS,
         }
+
+    @staticmethod
+    def _load_running_commissions(instance_name):
+        """读取运行中的委托状态（由 ALAS worker 写入状态文件）。
+
+        读失败不该让整个委托收益板块渲染不出来，因此这里兜底返回「无数据」。
+
+        Args:
+            instance_name: 实例名。
+
+        Returns:
+            RunningState: 见 ``module.commission.running_state``。
+        """
+        from module.commission.running_state import RunningState, read_running_state
+
+        try:
+            return read_running_state(instance_name)
+        except Exception:
+            return RunningState(available=False, updated_at=0.0, commissions=[])
 
     def _build_commission_income_html(self, income_data):
         summary = income_data["summary"]
@@ -116,6 +136,7 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
                 income_data["item_meta"],
                 income_data["item_name_lookup"],
                 income_data["tracked_items"],
+                income_data.get("running"),
             ),
         )
 
@@ -180,6 +201,70 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
                     </div>"""
         return html + "</div>"
 
+    @staticmethod
+    def _build_running_commissions_html(running, datetime_class):
+        """构造「正在进行」区块：每个委托一个圆角矩形卡片，横向排成一行。
+
+        区分两种空态：状态文件还没生成（worker 尚未跑过委托任务）显示
+        「尚未获取到委托状态」，文件在但确实没有运行中的委托显示「当前无运行中
+        委托」—— 前者说明「还没看」，后者说明「看过了，确实没有」。
+
+        Args:
+            running: ``RunningState``，或 None（读取失败）。
+            datetime_class: datetime 类，便于测试注入。
+
+        Returns:
+            str: 区块 HTML。
+        """
+        from module.commission.running_state import RunningState
+
+        state = running if isinstance(running, RunningState) else RunningState()
+        commissions = state.commissions or []
+
+        if not state.available:
+            body = (
+                f'<div style="font-size: 12px; opacity: 0.6;">'
+                f'{escape(t("Gui.Stat.RunningCommissionUnknown"))}</div>'
+            )
+        elif not commissions:
+            body = (
+                f'<div style="font-size: 12px; opacity: 0.6;">'
+                f'{escape(t("Gui.Stat.RunningCommissionNone"))}</div>'
+            )
+        else:
+            cards = []
+            for entry in commissions:
+                try:
+                    finish_text = datetime_class.fromtimestamp(
+                        entry["finish"]
+                    ).strftime("%H:%M")
+                except Exception:
+                    finish_text = "--"
+                # 卡片用 flex:1 1 <基准宽>：窗口够宽时几张等分铺满一行，
+                # 窗口窄了自动换行而不是把文字压到换行
+                cards.append(
+                    f'<div class="commission-running-card" style="flex: 1 1 150px; '
+                    f'min-width: 0; box-sizing: border-box; padding: 6px 10px; '
+                    f'border: 1px solid rgba(128, 128, 128, 0.25); '
+                    f'border-radius: 10px;">'
+                    f'<div style="font-size: 13px; word-break: break-all;">'
+                    f'{escape(str(entry["name"]))}</div>'
+                    f'<div style="font-size: 11px; opacity: 0.65; margin-top: 2px;">'
+                    f'{escape(t("Gui.Stat.RunningCommissionFinish", value=finish_text))}'
+                    f"</div></div>"
+                )
+            body = (
+                '<div class="commission-running-cards" style="display: flex; '
+                f'flex-wrap: wrap; gap: 8px;">{"".join(cards)}</div>'
+            )
+
+        return (
+            '<div class="commission-running" style="width: 100%;">'
+            f'<div style="font-size: 0.9rem; font-weight: 500; color: inherit; '
+            f'margin-bottom: 8px;">{escape(t("Gui.Stat.RunningCommissionTitle"))}</div>'
+            f"{body}</div>"
+        )
+
     def _build_commission_recent_html(
         self,
         recent,
@@ -190,6 +275,7 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
         item_meta,
         item_name_lookup,
         tracked_items,
+        running=None,
     ):
         # 最近委托记录分页：仅渲染当前页的 10 条
         total_pages = (
@@ -205,6 +291,9 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
         recent_page = recent[start : start + _COMMISSION_RECENT_PAGE_SIZE]
 
         html = '<div class="commission-income-recent" style="width: 100% !important; max-width: none !important; display: block !important; box-sizing: border-box;">'
+        # 「正在进行」放在最近委托记录上方。它显示的是当前状态，与所选时间范围
+        # （今日/本周/本月）无关，所以即使没有最近记录也要渲染。
+        html += self._build_running_commissions_html(running, datetime_class)
         if recent_page:
             # 分隔线上下留白收紧：原来 24px/24px 与物品卡片网格的 20px 下边距
             # 叠加后，标题上方有 49px 空白，占了近半屏的一行高

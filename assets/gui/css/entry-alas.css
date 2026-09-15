@@ -865,10 +865,11 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
 
 /* 每日经验检测的汇总行（上次检查时间 + 今日经验 / 经验效率 / 今日运行）：
    put_row 生成的是 grid，默认没有列间距，给各列留白避免几段文字挤在一起。
-   同样不要改 display，否则 grid-template-columns 失效。 */
+   同样不要改 display，否则 grid-template-columns 失效。
+   间距取 .75rem：1.5rem 时几段之间空得太大，与标题行不成比例。 */
 #pywebio-scope-ship_exp_table *[style*="--ship-exp-summary--"] {
     align-items: baseline !important;
-    column-gap: 1.5rem !important;
+    column-gap: .75rem !important;
     row-gap: .25rem !important;
     margin-bottom: 2px;
 }
