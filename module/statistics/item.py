@@ -24,9 +24,11 @@ ITEM_AMOUNT_MAX = {
     'Oil': 1000,
     'Coin': 5000,
     'Coins': 5000,
-    # 军械测试报告 T4 单次掉落 1~5，超上限读数（如 1 被读成 51）
-    # 会触发抹灰版兜底重试修正
-    'OrdnanceTestingReportT4': 50,
+    # 军械测试报告单次掉落 1~5。数量区域会被报告图标边缘的斑点污染，
+    # 使「1」被拼成 41/51/721 这类虚高读数；上限设为 5 后这些读数会
+    # 触发抹灰版兜底重试（抹灰能去掉斑点），实测三张截图都能修正为 1。
+    'OrdnanceTestingReportT3': 5,
+    'OrdnanceTestingReportT4': 5,
     # 民用电子元件单次掉落 1~10，超上限读数（如 3 被读成 73）
     # 会触发抹灰版兜底重试修正
     'Consumer_Grade_Electronic_Components': 50,
