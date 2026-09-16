@@ -544,9 +544,13 @@ class OpsiStatisticsMixin(WebUIMixinBase):
                 ),
             ]
             put_html(self.summary_style_html())
+            # class="stat-summary" 给出「标题 → 这段文字 → 表格」的间距，
+            # 规则见 entry-alas.css
             put_html(
-                '<div style="display: flex; flex-wrap: wrap; align-items: baseline; '
-                'column-gap: 24px; row-gap: 4px;">' + "".join(items) + "</div>"
+                '<div class="stat-summary" style="display: flex; flex-wrap: wrap; '
+                'align-items: baseline; column-gap: 24px; row-gap: 4px;">'
+                + "".join(items)
+                + "</div>"
             )
             put_html(build_simple_table(labels, rows))
 

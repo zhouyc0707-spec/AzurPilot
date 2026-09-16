@@ -856,6 +856,15 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
    漏掉任何一个（默认的 light-alas.css 就漏过一次）都会让 color 解析失败、
    静默回退成继承色，排查成本远高于内联。 */
 
+/* 大世界数据收集板块的汇总行（当月侵蚀一 购买体力 / 出击消耗 / 净赚体力 /
+   循环效率）：给出「标题 → 这段文字 → 表格」的间距。
+   标题的下边距是 8px，所以这里上边距取 0 以免叠加；下边距 8px 是到表格。
+   只作用于这个板块 —— 本月耄耋相接收获与每日经验检测的间距未变。 */
+#pywebio-scope-opsi_stats .stat-summary {
+    margin-top: 0 !important;
+    margin-bottom: 8px !important;
+}
+
 /* 耄耋相接收获的「上次记录时间」汇总行，排布方式同上（put_row 的 grid） */
 #pywebio-scope-meow_loot_scope *[style*="--meow-summary--"] {
     align-items: center !important;
