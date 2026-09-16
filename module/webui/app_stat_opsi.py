@@ -1,5 +1,7 @@
 """WebUI 大世界统计视图。"""
 
+from html import escape
+
 from module.webui.app_dependencies import (
     current_time,
     put_html,
@@ -48,7 +50,7 @@ class OpsiStatisticsMixin(WebUIMixinBase):
             target_level,
             last_check_time,
         )
-        labels, values, ap_bought, loop_eff = self._build_cl1_summary(
+        labels, values, ap_bought, net_ap, loop_eff = self._build_cl1_summary(
             instance_name,
             summary,
             compute_monthly_cl1_akashi_ap,
@@ -60,7 +62,7 @@ class OpsiStatisticsMixin(WebUIMixinBase):
         labels, rows = self._build_hazard_rows(
             labels, values, meow_by_level, month
         )
-        self._render_opsi_summary(labels, rows, ap_bought, loop_eff)
+        self._render_opsi_summary(labels, rows, ap_bought, net_ap, loop_eff)
 
     def _load_opsi_stats_dependencies(self):
         try:
@@ -257,15 +259,14 @@ class OpsiStatisticsMixin(WebUIMixinBase):
             t("Gui.Stat.AkashiEncounters"),
             t("Gui.Stat.AkashiRate"),
             t("Gui.Stat.AverageAP"),
-            t("Gui.Stat.NetAP"),
             t("Gui.Stat.SirenResearchDevices"),
             t("Gui.Stat.SirenResearchRate"),
             t("Gui.Stat.AvgBattleTimeHeader"),
             t("Gui.Stat.AvgRoundTime"),
         ]
 
-        # 循环效率不进表格：它是侵蚀1 独有的口径（侵蚀3/5 不按每轮行动力核算），
-        # 放在表格里对 3/5 行只能留空，改到汇总行单独显示（见 _render_opsi_summary）
+        # 循环效率与净赚体力都不进表格：两者都是侵蚀1 独有的口径（侵蚀3/5 不按
+        # 每轮行动力核算），放在表格里对 3/5 行只能留空，改由汇总行单独显示
         values = [
             month,
             tb,
@@ -274,14 +275,13 @@ class OpsiStatisticsMixin(WebUIMixinBase):
             ak,
             akashi_rate,
             avg_ap,
-            net_ap,
             siren_research,
             siren_research_rate,
             avg_cl1_battle_str,
             avg_cl1_round_str,
         ]
 
-        return labels, values, ap_bought, loop_eff
+        return labels, values, ap_bought, net_ap, loop_eff
 
     # 三行表里各侵蚀等级每轮的行动力消耗，既用于算「净赚体力」，
     # 也用于算「出击消耗 = 每轮消耗 × 出击轮次」
@@ -331,12 +331,6 @@ class OpsiStatisticsMixin(WebUIMixinBase):
                         if encounters > 0
                         else "-"
                     ),
-                    "net_ap": int(
-                        round(
-                            akashi_ap
-                            - rounds * self.AP_COST_PER_ROUND.get(hazard_level, 0)
-                        )
-                    ),
                     "siren_devices": siren_count,
                     "siren_rate": (
                         f"{siren_count / rounds * 100:.2f}%" if rounds > 0 else "-"
@@ -362,8 +356,8 @@ class OpsiStatisticsMixin(WebUIMixinBase):
         「雪风大人的大世界数据收集」是一张按侵蚀等级分行的表：侵蚀等级 1 用侵蚀1
         的数据，3 / 5 用耄耋相接的数据。表格在最前面插入「侵蚀等级」列。
         出击消耗对三行都算：每轮行动力消耗 × 出击轮次（侵蚀1 每轮 5、侵蚀3 每轮
-        15、侵蚀5 每轮 30）。循环效率不在这张表里 —— 它是侵蚀1 独有的口径，
-        放在表里对 3/5 行只能留空，因此改由汇总行显示。
+        15、侵蚀5 每轮 30）。净赚体力与循环效率都不在这张表里 —— 两者都是侵蚀1
+        独有的口径，放在表里对 3/5 行只能留空，因此统一由汇总行显示。
 
         Args:
             cl1_labels: 侵蚀1 表的列名（不含侵蚀等级）。
@@ -387,7 +381,6 @@ class OpsiStatisticsMixin(WebUIMixinBase):
             t("Gui.Stat.AkashiEncounters"): "akashi_encounters",
             t("Gui.Stat.AkashiRate"): "akashi_rate",
             t("Gui.Stat.AverageAP"): "avg_ap",
-            t("Gui.Stat.NetAP"): "net_ap",
             t("Gui.Stat.SirenResearchDevices"): "siren_devices",
             t("Gui.Stat.SirenResearchRate"): "siren_rate",
             t("Gui.Stat.AvgBattleTimeHeader"): "avg_battle_time",
@@ -430,31 +423,131 @@ class OpsiStatisticsMixin(WebUIMixinBase):
             rows.append(row)
         return labels, rows
 
-    def _render_opsi_summary(self, labels, rows, ap_bought, loop_eff):
+    # 汇总行正负着色的色值。刻意不跟随主题主色 —— 红涨绿跌是语义色，四个主题下
+    # 都应保持红绿；但深浅主题族需要的明度不同（深绿在深色底上几乎看不见）。
+    # 直接内联在这里，不走主题 CSS 变量：变量散在四个主题文件里，漏掉任何一个
+    # （默认的 light-alas.css 就漏过）都会让 color 解析失败、静默回退成继承色。
+    SUMMARY_GAIN_LIGHT = "#d32f2f"
+    SUMMARY_LOSS_LIGHT = "#00897b"
+    SUMMARY_GAIN_DARK = "#ef5350"
+    SUMMARY_LOSS_DARK = "#26a69a"
+
+    @classmethod
+    def summary_sign_class(cls, raw_value):
+        """按数值正负返回汇总项要用的类名，无法判定正负时返回空串。
+
+        0 与 ``-``（无数据）都不着色，保持常规文字色。
+
+        Args:
+            raw_value: 可能是数字、数字字符串（含百分号）或 ``-``。
+
+        Returns:
+            str: ``alas-summary-gain`` / ``alas-summary-loss`` / ``""``。
+        """
+        try:
+            # 循环效率是带百分号的字符串（如 "35.26%"），去掉后缀再解析
+            number = float(str(raw_value).strip().rstrip("%"))
+        except (TypeError, ValueError):
+            return ""
+        if number > 0:
+            return "alas-summary-gain"
+        if number < 0:
+            return "alas-summary-loss"
+        return ""
+
+    @classmethod
+    def summary_style_html(cls):
+        """汇总行正负着色的 ``<style>`` 片段。
+
+        浅色一套、深色一套，由主题选择器切换，因此切主题不需要重新渲染。
+        深浅主题的标记方式与 ``stat_icon.refresh_icon_button_css`` 保持一致
+        （``body.webio-theme-dark`` 与 ``html[data-theme='dark']`` 都覆盖）。
+
+        Returns:
+            str: 一段 ``<style>`` HTML。
+        """
+        scope = "#pywebio-scope-opsi_stats"
+        rules = (
+            ("alas-summary-gain", cls.SUMMARY_GAIN_LIGHT, cls.SUMMARY_GAIN_DARK),
+            ("alas-summary-loss", cls.SUMMARY_LOSS_LIGHT, cls.SUMMARY_LOSS_DARK),
+        )
+        parts = []
+        for name, light, dark in rules:
+            parts.append(f"{scope} .{name}{{color:{light} !important;}}")
+            parts.append(
+                f"body.webio-theme-dark {scope} .{name},"
+                f"html[data-theme='dark'] {scope} .{name}"
+                f"{{color:{dark} !important;}}"
+            )
+        return "<style>" + "".join(parts) + "</style>"
+
+    def _summary_item_html(self, key, raw_value, signed=False):
+        """生成一条汇总项的 HTML。
+
+        ``signed=True`` 时只有**数值**染色，标签文字保持默认色 —— 整条染色会让
+        「侵蚀一净赚体力」这种文字标签也变红/变绿，读起来像标题出错了。
+
+        标签与数值从 i18n 文案里按最后一个冒号拆开：本页的汇总文案都是
+        ``标签: {value}`` 的形式，直接切分即可，不必再引入一个「纯标签」键。
+
+        Args:
+            key: i18n 键（``Gui.Stat.*``）。
+            raw_value: 要显示的值。
+            signed: 是否按正负给数值着色。
+
+        Returns:
+            str: 一条汇总项的 HTML。
+        """
+        text = escape(t(key, value=raw_value))
+        cls = self.summary_sign_class(raw_value) if signed else ""
+        if not cls:
+            return f"<span>{text}</span>"
+
+        # 只在有冒号时拆分；拆不开就整条染色（总比丢失颜色好）。
+        # ``sep`` 是 ": "（含尾随空格），要原样留在标签一侧 —— 冒号与数值之间
+        # 没有空格会显得挤，而没拆分的普通项带空格，两边会不一致。
+        head, sep, tail = text.rpartition(": ")
+        if not sep:
+            return f'<span class="{cls}">{text}</span>'
+        # 颜色只作用于后半段数值；外面再套一层 white-space:nowrap：标签与数值是
+        # 两个 flex 子项，不绑在一起的话窄屏换行会把数值甩到下一行，像丢了数据
+        return (
+            '<span style="white-space: nowrap;">'
+            f"<span>{head}{sep}</span>"
+            f'<span class="{cls}">{tail}</span>'
+            "</span>"
+        )
+
+    def _render_opsi_summary(self, labels, rows, ap_bought, net_ap, loop_eff):
         with use_scope("opsi_stats", clear=True):
             put_html(build_stat_section_title(t("Gui.Stat.OpsiDataCollectionTitle")))
-            # 三条汇总并排一行：当月侵蚀一购买体力 / 出击消耗 / 循环效率
-            #（后两者与表格「出击消耗」列同一口径：(场次+1)//2×5；
-            #  循环效率只对侵蚀1 有意义，因此从表格搬到这一行）
+            # 四条汇总并排一行：当月侵蚀一 购买体力 / 出击消耗 / 净赚体力 / 循环效率。
+            # 后三项都是侵蚀1 独有的口径（侵蚀3/5 不按每轮行动力核算），放在表格里
+            # 对 3/5 行只能留空，因此统一搬到这一行。
+            # 用 put_html + flex 而不是 put_row：put_row 生成的是 grid，列宽走
+            # grid-template-columns，窗口一窄就会把几条挤成多行；flex + wrap +
+            # column-gap 的换行行为可预期，间距也不再依赖 None 占位项。
             try:
                 sortie_cost_total = (
                     int(rows[0][labels.index(t("Gui.Stat.BattleCount"))]) + 1
                 ) // 2 * 5
             except Exception:
                 sortie_cost_total = "-"
-            put_row(
-                [
-                    put_text(t("Gui.Stat.MonthlyPurchasedAP", value=ap_bought)),
-                    # None 是 put_row 的「间距」占位项，配合 size 里的 24px
-                    # 把三条汇总分开（put_row 内部是 grid，列宽由 size 决定，
-                    # CSS 里不要再改 display，否则 grid-template-columns 失效）
-                    None,
-                    put_text(t("Gui.Stat.MonthlySortieCost", value=sortie_cost_total)),
-                    None,
-                    put_text(t("Gui.Stat.MonthlyLoopEfficiency", value=loop_eff)),
-                ],
-                size="auto 24px auto 24px 1fr",
-            ).style("--opsi-summary--")
+            items = [
+                self._summary_item_html("Gui.Stat.MonthlyPurchasedAP", ap_bought),
+                self._summary_item_html(
+                    "Gui.Stat.MonthlySortieCost", sortie_cost_total
+                ),
+                self._summary_item_html("Gui.Stat.MonthlyNetAP", net_ap, signed=True),
+                self._summary_item_html(
+                    "Gui.Stat.MonthlyLoopEfficiency", loop_eff, signed=True
+                ),
+            ]
+            put_html(self.summary_style_html())
+            put_html(
+                '<div style="display: flex; flex-wrap: wrap; align-items: baseline; '
+                'column-gap: 24px; row-gap: 4px;">' + "".join(items) + "</div>"
+            )
             put_html(build_simple_table(labels, rows))
 
             put_scope("meow_loot_scope")

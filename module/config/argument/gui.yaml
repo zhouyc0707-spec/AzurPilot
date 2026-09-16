@@ -404,6 +404,7 @@ Stat:
   OpsiDataCollectionTitle:
   MonthlyPurchasedAP:
   MonthlySortieCost:
+  MonthlyNetAP:
   MonthlyLoopEfficiency:
   MeowLastRecord:
   MeowEffectiveRounds:

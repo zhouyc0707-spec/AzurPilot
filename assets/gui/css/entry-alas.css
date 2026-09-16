@@ -848,14 +848,13 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
 }
 /* --- 统计页两区域布局结束 --- */
 
-/* 汇总行（当月购买体力 + 当月侵蚀一出击消耗）由 put_row 自己排版：
-   它生成的是 `display: grid`，列宽走 size="auto 24px 1fr"，其中 24px 那一列
-   就是 put_row 的 None 占位项（两段之间的间距）。
-   这里**不要**再改 display —— 覆盖成 flex 会让 grid-template-columns 失效、
-   间距消失。只做垂直居中，并在窄屏下允许换行而不是溢出。 */
-#pywebio-scope-opsi_stats *[style*="--opsi-summary--"] {
-    align-items: center !important;
-}
+/* 汇总行（当月侵蚀一 购买体力 / 出击消耗 / 净赚体力 / 循环效率）的布局与着色
+   由 `app_stat_opsi.summary_style_html` 与 `_render_opsi_summary` 就地输出：
+   布局用 flex（不依赖 put_row 的 grid，也不再需要 --opsi-summary-- 钩子），
+   正负着色用内联 <style>，色值定义在 OpsiStatisticsMixin 的常量上。
+   这里不再放规则 —— 色值曾经走主题 CSS 变量，但变量散在四个主题文件里，
+   漏掉任何一个（默认的 light-alas.css 就漏过一次）都会让 color 解析失败、
+   静默回退成继承色，排查成本远高于内联。 */
 
 /* 耄耋相接收获的「上次记录时间」汇总行，排布方式同上（put_row 的 grid） */
 #pywebio-scope-meow_loot_scope *[style*="--meow-summary--"] {
