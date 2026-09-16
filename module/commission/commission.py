@@ -82,6 +82,11 @@ class CommissionAmount(AmountOcr):
     """
 
     remove_fragments = True
+    # 3 倍放大域下约等于原图 3.3px：心智单元等图标的白边会伸入数量区域，
+    # 形成 6px 高的小块。这些小块若按默认 6px 判为「大组件」就会当成数字
+    # （数字本身高约 42px），使 4 被读成 24、2 被读成 22。抬高到 10px 后
+    # 它们按碎片处理：离数字远则删除，属于字形本身的部件仍因贴近数字保留。
+    fragment_min_height = 10
 
     def pre_process(self, image):
         import cv2
