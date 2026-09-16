@@ -164,10 +164,9 @@
         // 左/下留白按刻度文字的实际占位收紧（左侧 y 轴刻度是右对齐、从
         // pad.l-8 往左延伸，最多 4 位数；下方时间标签旋转 0.4 弧度后约 25px 高），
         // 留太多会在曲线四周出现明显空带。
-        var anyExtraVisible = seriesVisible[1] || seriesVisible[2] || seriesVisible[3] || seriesVisible[4];
-        pad = { t: 20, r: showCoins && anyExtraVisible ? 72 : 20, b: 36, l: 38 };
-        gW = W - pad.l - pad.r;
-        gH = H - pad.t - pad.b;
+        // pad.r 与右侧刻度配置不在这里定：它们依赖「哪些序列当前可见」，而图例
+        // 切换只走 renderDetailChart 不重跑本函数，所以统一由下面的
+        // updateExtraAxes() 在每次绘制前算。
 
         // ---- 主数据范围（体力轴，最小值固定 0） ----
         var allMin = 0, allMax = -Infinity;
@@ -236,22 +235,53 @@
             combinedMax += combinedRng * 0.08;
         }
 
-        // 刻度配置（右侧标签）：第1行紫币独立，第2行黄币代表合并轴；
-        // 对应曲线被隐藏时不显示刻度，避免只画行动力却留着其他轴的数字
+        // 右侧刻度配置：由 updateExtraAxes 按当前可见序列重算
         var EXTRA_SERIES_CONFIGS = [];
         var cfgOffset = 0;
-        function addCfg(has, color, dataMin, dataMax) {
-            if (!has) return;
-            EXTRA_SERIES_CONFIGS.push({ color: color, dataMin: dataMin, dataMax: dataMax, offsetY: cfgOffset });
-            cfgOffset += COIN_TICK_STACK_GAP;
+        // pad 先给个初值，updateExtraAxes 会按可见序列修正 pad.r 与 gW
+        pad = { t: 20, r: 20, b: 36, l: 38 };
+        gW = W - pad.l - pad.r;
+        gH = H - pad.t - pad.b;
+
+        // 按当前可见序列重算右侧留白与刻度配置。
+        // 必须在**每次**绘制前调用：图例切换走的是 renderDetailChart，它原先直接
+        // 复用 initChart 算好的 pad / EXTRA_SERIES_CONFIGS，于是打开黄币等序列后
+        // 右侧留白仍是 20px、轴配置仍是空数组 —— 刻度一个都画不出来。
+        function updateExtraAxes() {
+            var extraVisible = seriesVisible[1] || seriesVisible[2]
+                || seriesVisible[3] || seriesVisible[4];
+            // 最多两行刻度（紫币 1 行 + 黄币/资产/海里数 合并轴 1 行）：每格
+            // COIN_TICK_STACK_GAP(11px) 叠 11px 的字体正好，再多会互相压住
+            var wanted = 0;
+            if (hasPurpleCoins && seriesVisible[1]) wanted++;
+            if (hasCombined && (seriesVisible[2] || seriesVisible[3] || seriesVisible[4])) wanted++;
+
+            function addCfg(has, color, dataMin, dataMax) {
+                if (!has) return;
+                EXTRA_SERIES_CONFIGS.push({
+                    color: color,
+                    dataMin: dataMin,
+                    dataMax: dataMax,
+                    offsetY: cfgOffset,
+                });
+                cfgOffset += COIN_TICK_STACK_GAP;
+            }
+
+            pad.r = showCoins && extraVisible
+                ? 56 + Math.max(0, Math.min(wanted, 2) - 1) * COIN_TICK_STACK_GAP
+                : 20;
+            gW = W - pad.l - pad.r;
+
+            EXTRA_SERIES_CONFIGS = [];
+            cfgOffset = 0;
+            addCfg(hasPurpleCoins && seriesVisible[1], C.purple, purpleMin, purpleMax);
+            addCfg(
+                hasCombined && (seriesVisible[2] || seriesVisible[3] || seriesVisible[4]),
+                C.yellow,
+                combinedMin,
+                combinedMax
+            );
         }
-        addCfg(hasPurpleCoins && seriesVisible[1], C.purple, purpleMin, purpleMax);
-        addCfg(
-            hasCombined && (seriesVisible[2] || seriesVisible[3] || seriesVisible[4]),
-            C.yellow,
-            combinedMin,
-            combinedMax
-        );
 
         // 系列绘制配置（所有线都要画，资产用时间戳）
         var SERIES_DRAW = [
@@ -274,6 +304,14 @@
             return pad.l + (i / Math.max(nn - 1, 1)) * gW;
         }
 
+        // 右轴刻度数字：整数 + 千位分隔符（右轴常在十万量级，不分隔难以读数）
+        function formatTickValue(value) {
+            if (!isFinite(value)) return "-";
+            var neg = value < 0;
+            var s = String(Math.abs(value)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+            return neg ? "-" + s : s;
+        }
+
         function drawAssetTicks(ctx, yOfMain, mainMin, mainMax) {
             if (!hasExtra) return;
             ctx.font = "10px -apple-system, sans-serif";
@@ -285,7 +323,9 @@
                     var cfg = EXTRA_SERIES_CONFIGS[ci];
                     var val = cfg.dataMin + (cfg.dataMax - cfg.dataMin) * (i / 5);
                     ctx.fillStyle = cfg.color;
-                    ctx.fillText(Math.round(val), W - pad.r + COIN_TICK_X, y + COIN_TICK_BASELINE + cfg.offsetY);
+                    // 带千位分隔符：右轴数值常在十万量级（黄币/海里数/资产），
+                    // 不分隔难以一眼读数
+                    ctx.fillText(formatTickValue(Math.round(val)), W - pad.r + COIN_TICK_X, y + COIN_TICK_BASELINE + cfg.offsetY);
                 }
             }
         }
@@ -354,6 +394,7 @@
         }
 
         // ======== 初始绘制（非缩放全量视图） ========
+        updateExtraAxes();
         ctx.fillStyle = C.bg;
         ctx.fillRect(0, 0, W, H);
 
@@ -736,6 +777,9 @@
                 var drng = dMax - dMin || 1;
                 dMax += drng * 0.1;
 
+                // 缩放视图也要按当前可见序列重算右侧留白与刻度配置 ——
+                // 图例切换后走的就是这条路径
+                updateExtraAxes();
                 ctx.fillStyle = C.bg;
                 ctx.fillRect(0, 0, W, H);
 
