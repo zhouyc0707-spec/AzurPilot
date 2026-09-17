@@ -144,7 +144,14 @@ class ShipExperienceStatisticsMixin(WebUIMixinBase):
                             )
                         ),
                     ]
-                put_row(summary_items).style("--ship-exp-summary--")
+                # size 必须显式给：put_row 不传 size 时 PyWebIO 会把每一项都设成
+                # 1fr（等分整行），短文字只占列宽的一半，多出来的空白看起来就是
+                # 巨大的间距 —— 之前只调 column-gap 没效果，主因在这里。
+                # 改成「按内容取宽 + 末尾 1fr 吸收剩余空间」，各项自然靠拢。
+                put_row(
+                    summary_items,
+                    size=" ".join(["auto"] * len(summary_items)) + " 1fr",
+                ).style("--ship-exp-summary--")
                 if not today_stats:
                     put_text(t("Gui.Stat.NoTodayBattleData"))
 
