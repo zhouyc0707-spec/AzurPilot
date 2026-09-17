@@ -4,6 +4,7 @@ from html import escape
 
 from module.webui.app_dependencies import (
     current_time,
+    put_button,
     put_html,
     put_row,
     put_scope,
@@ -18,9 +19,17 @@ from module.webui.app_helpers import (
     build_simple_table,
     build_stat_section_title,
 )
+from module.webui.stat_icon import (
+    build_title_icon_row,
+    refresh_icon_button_css,
+)
 
 
 from module.webui.app_types import WebUIMixinBase
+
+
+# 标题旁刷新图标按钮的作用域名，与 entry-alas.css 的规则配套
+_OPSI_REFRESH_SCOPE = "opsi_stats_refresh"
 
 
 class OpsiStatisticsMixin(WebUIMixinBase):
@@ -520,7 +529,19 @@ class OpsiStatisticsMixin(WebUIMixinBase):
 
     def _render_opsi_summary(self, labels, rows, ap_bought, net_ap, loop_eff):
         with use_scope("opsi_stats", clear=True):
-            put_html(build_stat_section_title(t("Gui.Stat.OpsiDataCollectionTitle")))
+            # 标题行用带图标槽的版本，刷新图标由 PyWebIO 渲染进预留作用域
+            put_html(
+                build_title_icon_row(
+                    t("Gui.Stat.OpsiDataCollectionTitle"), _OPSI_REFRESH_SCOPE
+                )
+            )
+            put_button(
+                "",
+                onclick=self._render_opsi_stats,
+                color="off",
+                scope=_OPSI_REFRESH_SCOPE,
+            )
+            put_html(refresh_icon_button_css(_OPSI_REFRESH_SCOPE))
             # 四条汇总并排一行：当月侵蚀一 购买体力 / 出击消耗 / 净赚体力 / 循环效率。
             # 后三项都是侵蚀1 独有的口径（侵蚀3/5 不按每轮行动力核算），放在表格里
             # 对 3/5 行只能留空，因此统一搬到这一行。

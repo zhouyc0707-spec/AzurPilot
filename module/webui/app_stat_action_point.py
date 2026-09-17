@@ -23,6 +23,7 @@ from module.webui.ap_chart_theme import (
     palette_for_theme,
     series_colors,
 )
+from module.webui.stat_icon import refresh_icon_button_css
 
 
 from module.webui.app_types import WebUIMixinBase
@@ -808,6 +809,19 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
 
         with use_scope("ap_chart", clear=True):
             put_html(html)
+            # 刷新按钮：作用域先建好并渲染按钮，再由面板 JS 搬进标题行右侧的
+            # slot（与时间范围按钮同一套做法 —— 面板 HTML 由 run_js 注入，
+            # 直接在里面写 #pywebio-scope-xxx 对不上 PyWebIO 自己建的那个 div）。
+            # 注意顺序：面板 HTML 必须最先输出。
+            refresh_scope = f"{chart_id}_refresh"
+            put_scope(refresh_scope, [])
+            put_button(
+                "",
+                onclick=self._render_ap_chart,
+                color="off",
+                scope=refresh_scope,
+            )
+            put_html(refresh_icon_button_css(refresh_scope))
             # 时间范围按钮：必须由 put_scope 建容器（put_html 生成的 div
             # 不算 PyWebIO scope，put_buttons 的 scope 目标会落到空处），
             # 再用 CSS order 排到图例行左侧。

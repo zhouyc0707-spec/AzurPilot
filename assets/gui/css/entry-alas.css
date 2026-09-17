@@ -1163,9 +1163,12 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
 
 /* 标题 + 图标按钮同排：图标紧随标题文字，不推到最右侧。
    标题过长时省略，避免把图标挤到第二行；图标本身不参与收缩。
-   上边距与其它板块标题保持一致（24px），由 .stat-section 统一收口。 */
+   这三个板块的标题行都由 build_title_icon_row 生成，它是一个普通 div
+   （不是 put_row 的 grid），因此必须有 display:flex —— 否则标题与图标
+   会各占一行、标题也拿不到下面 .stat-title-text 的字号。 */
 #pywebio-scope-commission_income .stat-title-row,
-#pywebio-scope-ship_exp_table .stat-title-row {
+#pywebio-scope-ship_exp_table .stat-title-row,
+#pywebio-scope-opsi_stats .stat-title-row {
     display: flex !important;
     align-items: center !important;
     flex-wrap: nowrap !important;
@@ -1180,7 +1183,8 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
 }
 
 #pywebio-scope-commission_income .stat-title-row .stat-title-text,
-#pywebio-scope-ship_exp_table .stat-title-row .stat-title-text {
+#pywebio-scope-ship_exp_table .stat-title-row .stat-title-text,
+#pywebio-scope-opsi_stats .stat-title-row .stat-title-text {
     flex: 0 1 auto !important;
     min-width: 0 !important;
     overflow: hidden !important;
@@ -1192,7 +1196,8 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
 }
 
 #pywebio-scope-commission_income .stat-title-row [id^="pywebio-scope-"],
-#pywebio-scope-ship_exp_table .stat-title-row [id^="pywebio-scope-"] {
+#pywebio-scope-ship_exp_table .stat-title-row [id^="pywebio-scope-"],
+#pywebio-scope-opsi_stats .stat-title-row [id^="pywebio-scope-"] {
     flex: 0 0 auto !important;
 }
 
@@ -1207,9 +1212,18 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
 
 /* 纯图标按钮：正方形、无边框、悬停时露出浅主色底。
    图标本体由 Python 以 data URI 背景图注入（深浅两套按主题切换），
-   这里只负责外框：空 label 会把字号撑出多余行盒，一并压成 0。 */
-#pywebio-scope-commission_income_refresh .btn,
-#pywebio-scope-ship_exp_refresh .btn {
+   这里只负责外框：空 label 会把字号撑出多余行盒，一并压成 0。
+   作用域用 :is() 收口一次 —— 新增刷新按钮时只改这一处，
+   避免四处选择器列表各写一份、漏掉一个就只剩默认按钮外观。
+   图表刷新按钮的作用域名带**运行时生成的图表 id**（`ap_cv_<id>_refresh`，
+   见 app_stat_action_point 的 chart_id = f"ap_cv_{id(self)}"），写死成
+   `#pywebio-scope-ap_chart_refresh` 永远匹配不上，因此下面用属性选择器
+   匹配「以 pywebio-scope-ap_cv_ 开头、以 _refresh 结尾」的容器。 */
+:is(#pywebio-scope-commission_income_refresh,
+    #pywebio-scope-ship_exp_refresh,
+    #pywebio-scope-meow_loot_refresh,
+    #pywebio-scope-opsi_stats_refresh,
+    [id^="pywebio-scope-ap_cv_"][id$="_refresh"]) .btn {
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -1235,22 +1249,31 @@ body.alas-manage-active #input-container .ws-form-submit-btns .btn {
                 box-shadow .15s ease, transform .15s ease !important;
 }
 
-#pywebio-scope-commission_income_refresh .btn:hover,
-#pywebio-scope-ship_exp_refresh .btn:hover {
+:is(#pywebio-scope-commission_income_refresh,
+    #pywebio-scope-ship_exp_refresh,
+    #pywebio-scope-meow_loot_refresh,
+    #pywebio-scope-opsi_stats_refresh,
+    [id^="pywebio-scope-ap_cv_"][id$="_refresh"]) .btn:hover {
     border-color: var(--alas-entry-accent) !important;
     background-color: var(--alas-entry-accent-soft) !important;
     box-shadow: 0 2px 6px rgba(0, 0, 0, .08) !important;
     transform: translateY(-1px);
 }
 
-#pywebio-scope-commission_income_refresh .btn:active,
-#pywebio-scope-ship_exp_refresh .btn:active {
+:is(#pywebio-scope-commission_income_refresh,
+    #pywebio-scope-ship_exp_refresh,
+    #pywebio-scope-meow_loot_refresh,
+    #pywebio-scope-opsi_stats_refresh,
+    [id^="pywebio-scope-ap_cv_"][id$="_refresh"]) .btn:active {
     box-shadow: none !important;
     transform: translateY(0) scale(.97);
 }
 
-#pywebio-scope-commission_income_refresh .btn:focus-visible,
-#pywebio-scope-ship_exp_refresh .btn:focus-visible {
+:is(#pywebio-scope-commission_income_refresh,
+    #pywebio-scope-ship_exp_refresh,
+    #pywebio-scope-meow_loot_refresh,
+    #pywebio-scope-opsi_stats_refresh,
+    [id^="pywebio-scope-ap_cv_"][id$="_refresh"]) .btn:focus-visible {
     outline: none !important;
     box-shadow: 0 0 0 3px var(--alas-entry-accent-soft) !important;
 }

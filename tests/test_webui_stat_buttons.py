@@ -236,16 +236,56 @@ class TestStatButtonCallSites(unittest.TestCase):
         self.assertNotIn("md3_colors", src)
         self.assertNotIn("self.theme", src)
 
-    def test_opsi_section_has_no_refresh_or_export_buttons(self):
-        """耄耋相接收获下方的刷新与导出按钮已移除，CSV 导出方法一并删除。"""
+    def test_opsi_section_export_button_stays_removed(self):
+        """耄耋相接收获下方的「刷新」与「导出」按钮曾一并移除，CSV 导出方法删除。
+
+        刷新按钮后来以标题旁的图标按钮形式加回（与其它统计板块一致），
+        因此这里只守住「导出」这条 —— 不再用 ``color="off"`` 之类的间接特征
+        判断按钮存在与否。
+        """
         src = self._source("app_stat_opsi.py")
         export_src = self._source("app_stat_opsi_export.py")
 
         self.assertNotIn("Gui.Stat.ExportAndSaveDesktop", src)
         self.assertNotIn("_export_opsi_csv", src)
         self.assertNotIn("_export_opsi_csv", export_src)
-        # 该区块原有的两个按钮都不应再出现
-        self.assertNotIn('color="off"', src)
+
+    def test_refresh_icon_button_present_in_every_stat_section(self):
+        """五个统计板块的标题旁都应有刷新图标按钮，且作用域已登记样式。
+
+        图表那个按钮的作用域名带**运行时生成的图表 id**
+        （``ap_cv_<id>_refresh``，见 ``chart_id = f"ap_cv_{id(self)}"``），
+        没法写成固定 id，因此样式表里用属性选择器匹配；这里也按同样方式断言
+        —— 曾经因为写死成 ``ap_chart_refresh`` 匹配不上，图表的按钮比别的
+        宽一圈（``padding: 0 14px`` 没被覆盖）。
+        """
+        css = _read_css()
+        fixed_scopes = (
+            "commission_income_refresh",
+            "ship_exp_refresh",
+            "meow_loot_refresh",
+            "opsi_stats_refresh",
+        )
+        for scope in fixed_scopes:
+            self.assertIn(
+                f"#pywebio-scope-{scope}",
+                css,
+                f"{scope} 未在样式表中登记，图标按钮会退化成默认按钮外观",
+            )
+        # 图表按钮：必须用属性选择器覆盖动态 id
+        self.assertIn(
+            '[id^="pywebio-scope-ap_cv_"][id$="_refresh"]',
+            css,
+            "图表刷新按钮的作用域是动态 id，样式表需用属性选择器匹配",
+        )
+        # 不允许在**选择器**里写死图表刷新 scope（它永远匹配不上）；
+        # 注释里会提到这个名字用于说明原因，所以先剥掉注释再判断
+        without_comments = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+        self.assertNotIn(
+            "#pywebio-scope-ap_chart_refresh",
+            without_comments,
+            "图表刷新作用域带动态 id，写死成 ap_chart_refresh 匹配不上",
+        )
 
 
 if __name__ == "__main__":

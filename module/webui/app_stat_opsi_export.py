@@ -5,9 +5,11 @@ from module.webui.app_dependencies import (
     current_time,
     datetime,
     popup,
+    put_button,
     put_buttons,
     put_html,
     put_row,
+    put_scope,
     put_text,
     t,
     toast,
@@ -18,9 +20,14 @@ from module.webui.app_helpers import (
     build_simple_table,
     build_title_block,
 )
+from module.webui.stat_icon import refresh_icon_button_css
 
 
 from module.webui.app_types import WebUIMixinBase
+
+
+# 标题旁刷新图标按钮的作用域名，与 entry-alas.css 的规则配套
+_MEOW_REFRESH_SCOPE = "meow_loot_refresh"
 
 
 class OpsiExportMixin(WebUIMixinBase):
@@ -37,6 +44,18 @@ class OpsiExportMixin(WebUIMixinBase):
             # 它不随月份切换变化，所以渲染在 _render_monthly_meow_loot 之外：
             # 选历史月份时只有下面那张表会重绘。
             self._render_monthly_meow_loot(AzurStats)
+            # 刷新按钮：作用域已由 _render_monthly_meow_loot 的标题行建好
+            # （put_row 里的 put_scope），这里只往里面渲染按钮。
+            # 整块重绘会连带清掉旧 DOM，因此作用域每轮重建是安全的；
+            # 反过来若把 put_scope 放进 _render_monthly_meow_loot，切月份时
+            # 同名元素仍在 DOM 里，PyWebIO 会插入灰条报错（duplicated_scope_name）。
+            put_button(
+                "",
+                onclick=self._render_meowofficer_farming,
+                color="off",
+                scope=_MEOW_REFRESH_SCOPE,
+            )
+            put_html(refresh_icon_button_css(_MEOW_REFRESH_SCOPE))
 
     def _load_meow_cumulative_rows(self, AzurStats):
         """读取累计表的有效行（只保留有效战斗轮数 > 0 的侵蚀等级）。
@@ -150,6 +169,10 @@ class OpsiExportMixin(WebUIMixinBase):
         buttons = [{"label": "查看历史月份", "value": "history", "color": "off"}]
         if view_month is not None:
             buttons.append({"label": "回到本月", "value": "current", "color": "off"})
+        # 刷新图标按钮紧跟月份按钮之后。作用域只在整块重绘的入口建一次：
+        # PyWebIO 的 put_scope 在「同名元素已存在」时会插入灰条报错
+        # （duplicated_scope_name），而本函数会因切月份/刷新被再次调用，
+        # 所以不能放在这里建。
         put_row(
             [
                 put_html(
@@ -164,8 +187,9 @@ class OpsiExportMixin(WebUIMixinBase):
                     buttons,
                     onclick=self._on_meow_loot_month_click,
                 ),
+                put_scope(_MEOW_REFRESH_SCOPE, []),
             ],
-            size="auto 1fr",
+            size="auto auto 1fr",
         ).style(
             "align-items:center; gap:10px; margin-top:24px; margin-bottom:8px"
         )

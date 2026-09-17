@@ -95,6 +95,15 @@
         }
     })();
 
+    // 刷新按钮同理：搬进标题行右侧的 slot
+    (function moveRefreshButtonToTitle() {
+        var scope = document.getElementById("pywebio-scope-" + chartId + "_refresh");
+        var slot = document.getElementById(chartId + "_title_slot");
+        if (scope && slot && scope.parentElement !== slot) {
+            slot.appendChild(scope);
+        }
+    })();
+
     var dpr = window.devicePixelRatio || 1;
     var W, H, pad, gW, gH;
     var cleanupHandlers = [];
