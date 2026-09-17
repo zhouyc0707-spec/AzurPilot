@@ -16,6 +16,8 @@ from module.webui.ap_chart_theme import (
 from module.webui.app_stat_action_point import ActionPointStatisticsMixin
 import module.webui.lang as lang
 
+from tests.pywebio_stubs import stub_pywebio_output
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -178,19 +180,25 @@ class _ChartRenderHarness:
     def render(self, chart_data, auxiliary_data):
         harness = ActionPointStatisticsMixin()
         harness.theme = self.theme
-        captured = {}
-        with patch(
-            "module.webui.app_stat_action_point.put_html",
-            side_effect=lambda x: captured.setdefault("html", x),
-        ), patch(
+        calls = []
+        # 用共享护栏整体打桩 PyWebIO 输出：这些函数在无会话时被调用会让 PyWebIO
+        # 起脚本模式服务器并**用默认浏览器打开页面**（测试期间凭空弹标签页）。
+        # 原先只挑了 put_html / put_scope / put_button，漏掉的 put_buttons
+        # （_put_ap_period_selector 使用的）就足以触发弹窗。
+        with stub_pywebio_output(
+            "module.webui.app_stat_action_point"
+        ) as records, patch(
             "module.webui.app_stat_action_point.use_scope",
             side_effect=lambda *args, **kwargs: contextlib.nullcontext(),
         ), patch(
             "pywebio.session.run_js",
-            side_effect=lambda x: captured.setdefault("js", x),
+            side_effect=lambda x: calls.append(x),
         ):
             harness._render_ap_chart_content(chart_data, auxiliary_data, self.theme)
-        return captured["html"], captured["js"]
+        # 记录里保留的是第一次 put_html（面板 HTML）；刷新的 <style> 注入
+        # 不会顶掉它 —— 见 tests/pywebio_stubs.py 的 setdefault 语义
+        html = records["put_html"][0]
+        return html, calls[0]
 
 
 def _chart_data():

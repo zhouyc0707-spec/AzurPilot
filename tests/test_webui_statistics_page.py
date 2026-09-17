@@ -134,6 +134,14 @@ class TestStatisticsPageCache(unittest.TestCase):
                 "module.webui.app_statistics_page.put_button",
                 return_value=_OutputStub(),
             ),
+            # put_html 也必须打桩：_mount_stat_panels 注入 STAT_SECTION_STYLE 时
+            # 会调用它，而 PyWebIO 输出函数在无会话时被调用会进入脚本模式 ——
+            # 起服务器并**用默认浏览器打开页面**（测试期间凭空弹「PyWebIO
+            # Application」标签页）。详见 tests/pywebio_stubs.py。
+            patch(
+                "module.webui.app_statistics_page.put_html",
+                return_value=_OutputStub(),
+            ),
             patch("module.webui.app_statistics_page.t", side_effect=lambda key: key),
             patch("module.webui.app_statistics_page.run_js"),
         )
@@ -224,6 +232,12 @@ class TestStatisticsPanelRegions(unittest.TestCase):
             ),
             patch(
                 "module.webui.app_statistics_page.put_button",
+                return_value=_OutputStub(),
+            ),
+            # 同上：put_html 不打桩会被 PyWebIO 当成无会话输出，触发脚本模式
+            # 并把页面用默认浏览器打开
+            patch(
+                "module.webui.app_statistics_page.put_html",
                 return_value=_OutputStub(),
             ),
             patch("module.webui.app_statistics_page.t", side_effect=lambda key: key),
