@@ -47,6 +47,28 @@ class OpsiStatisticsMixin(WebUIMixinBase):
             compute_monthly_cl1_akashi_ap,
             get_ship_exp_stats,
         ) = dependencies
+        # 本轮渲染只读：开启 get_stats 缓存。一次渲染会经由多条路径重复读取同一个
+        # 月份的 blob（get_meow_stats 每个侵蚀等级一次等），而每次读取都要把整个
+        # 月度 JSON（实测 2~4 MB）反序列化一遍，单次 17~34 ms、累计 150~200 ms。
+        # 缓存只在本方法内有效，退出即清空。
+        with cl1_db.read_cache():
+            self._render_opsi_stats_locked(
+                instance_name,
+                summary,
+                cl1_db,
+                compute_monthly_cl1_akashi_ap,
+                get_ship_exp_stats,
+            )
+
+    def _render_opsi_stats_locked(
+        self,
+        instance_name,
+        summary,
+        cl1_db,
+        compute_monthly_cl1_akashi_ap,
+        get_ship_exp_stats,
+    ):
+        """``_render_opsi_stats`` 的主体（在只读缓存作用域内执行）。"""
         exp_data = self._load_ship_exp_data(get_ship_exp_stats, instance_name)
         if exp_data is None:
             return

@@ -8,7 +8,7 @@
 import sqlite3
 import json
 import os
-from contextlib import closing, suppress
+from contextlib import closing, suppress, contextmanager
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Tuple
@@ -21,6 +21,11 @@ from module.logger import logger
 
 
 class Cl1Database:
+    # 只读缓存的存活时间（秒）。同一个渲染周期内的连续读取会命中同一份解析结果，
+    # 而跨周期的读取必然重新查库 —— 窗口很短，外部（worker 进程）刚写入的数据
+    # 最多多显示这么久。
+    READ_CACHE_TTL = 2.0
+
     @staticmethod
     def _coerce_int(value: Any) -> int:
         """严格转换为 int；无效输入由调用方按上下文捕获处理。"""
@@ -114,6 +119,10 @@ class Cl1Database:
 
     def __init__(self, db_path: Optional[Path] = None):
         self._manage_legacy_db_path = db_path is None
+        # 只读缓存：{（instance, month): (库签名, 缓存时刻, 解析后的数据)}
+        # 默认关闭，由只读场景显式调用 enable_read_cache() 开启
+        self._read_cache: Dict[Tuple[str, str], Tuple[Tuple[int, int], datetime, Dict[str, Any]]] = {}
+        self._read_cache_enabled = False
         if db_path is None:
             project_root = Path(__file__).resolve().parents[2]
             self.db_dir = project_root / "config"
@@ -241,6 +250,7 @@ class Cl1Database:
                 conn.commit()
 
                 migrated = len(updated_rows) + len(clear_rows)
+                self.invalidate_read_cache()
                 if migrated:
                     logger.info(f"[Statistics] 旧版 CL1 数据库解密迁移完成，条目数: {migrated}")
                 if failed_rows:
@@ -309,8 +319,69 @@ class Cl1Database:
                 return data
         return None
 
+    def _db_signature(self) -> Tuple[int, int]:
+        """库文件的 (修改时间, 大小)，用于识别外部进程的写入。
+
+        worker 与 WebUI 是两个进程，进程内的失效标记看不到对方的写入，因此靠
+        文件本身的属性判断：「修改时间 + 大小」任一变化即认为数据已更新。
+        """
+        try:
+            stat = os.stat(self.db_path)
+            return (int(stat.st_mtime_ns), int(stat.st_size))
+        except OSError:
+            return (0, 0)
+
+    def invalidate_read_cache(self) -> None:
+        """清空只读缓存。任何写操作后都必须调用。"""
+        self._read_cache.clear()
+
+    def enable_read_cache(self) -> None:
+        """开启只读缓存。
+
+        每次 ``get_stats`` 都要把整个月度 JSON（实测 2~4 MB）反序列化一遍，
+        单次 17~34 ms；而渲染一个板块会走多条读取路径（``get_meow_stats`` 每个
+        侵蚀等级一次、``get_build_cl1_summary`` 等），同一个月的 blob 被重复解析
+        十几次，累计 150~200 ms。开启缓存后同一周期内只解析一次。
+
+        **只读场景专用**：缓存返回的是同一个 dict 对象，调用方若就地修改再写回，
+        会同时改到缓存。写路径（``add_*`` / ``save_stats`` 等）不要开启，或者开启后
+        在写入时调用 :meth:`invalidate_read_cache`。
+        """
+        self._read_cache_enabled = True
+
+    def disable_read_cache(self) -> None:
+        """关闭只读缓存并清空已缓存内容。"""
+        self._read_cache_enabled = False
+        self._read_cache.clear()
+
+    @contextmanager
+    def read_cache(self):
+        """只读缓存的作用域：进入时开启、退出时关闭并清空。
+
+        用法（只读渲染路径）：``with cl1_db.read_cache(): ...``。
+        用 with 而不是手工开关，是为了保证异常路径也会关掉 —— 忘了关会让后续
+        写路径读到缓存里的旧数据。
+        """
+        self.enable_read_cache()
+        try:
+            yield
+        finally:
+            self.disable_read_cache()
+
     def get_stats(self, instance: str, month: str) -> Dict[str, Any]:
         """获取指定实例和月份的统计数据"""
+        cache_key = (instance, month)
+        if self._read_cache_enabled:
+            cached = self._read_cache.get(cache_key)
+            if cached is not None:
+                signature, timestamp, data = cached
+                if (
+                    signature == self._db_signature()
+                    and (datetime.now() - timestamp).total_seconds() < self.READ_CACHE_TTL
+                ):
+                    return data
+                # 库变了或过期了：丢掉，走正常读取
+                self._read_cache.pop(cache_key, None)
         try:
             with closing(sqlite3.connect(self.db_path)) as conn:
                 cursor = conn.cursor()
@@ -322,6 +393,12 @@ class Cl1Database:
                 if row:
                     data = self._deserialize_data(row[0])
                     if data is not None:
+                        if self._read_cache_enabled:
+                            self._read_cache[cache_key] = (
+                                self._db_signature(),
+                                datetime.now(),
+                                data,
+                            )
                         return data
                     if row[1] and (data := self._decrypt(row[1])):
                         self.save_stats(instance, month, data)
@@ -634,6 +711,8 @@ class Cl1Database:
 
     def save_stats(self, instance: str, month: str, data: Dict[str, Any]):
         """保存统计数据"""
+        # 唯一写入口：写完立刻清只读缓存，避免开启缓存后读到过期内容
+        self.invalidate_read_cache()
         try:
             data_json = self._serialize_data(data)
             with closing(sqlite3.connect(self.db_path)) as conn:

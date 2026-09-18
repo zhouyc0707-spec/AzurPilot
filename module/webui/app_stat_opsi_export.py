@@ -35,8 +35,11 @@ class OpsiExportMixin(WebUIMixinBase):
 
     def _render_meowofficer_farming(self):
         from module.statistics.azurstats import AzurStats
+        from module.statistics.cl1_database import db as cl1_db
 
-        with use_scope("meow_loot_scope", clear=True):
+        # 只读渲染：开启 get_stats 缓存。本板块会分别取侵蚀 3 / 5 的耄耋统计，
+        # 每次都要反序列化整个月度 JSON（实测 2~4 MB），缓存后只解析一次。
+        with cl1_db.read_cache(), use_scope("meow_loot_scope", clear=True):
             # 只保留「本月耄耋相接收获」这一个标题（由 _render_monthly_meow_loot
             # 渲染，历史月份下自动变成「历史耄耋相接收获（YYYY-MM）」），
             # 不再另起一层板块标题 —— 两层标题叠在一起没有信息量。
