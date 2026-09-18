@@ -788,9 +788,16 @@ def put_arg_state(kwargs: T_Output_Kwargs) -> Output:
 def put_arg_textarea(kwargs: T_Output_Kwargs) -> Output:
     name: str = kwargs["name"]
     mode: str = kwargs.pop("mode", None)
-    kwargs.setdefault(
-        "code", {"lineWrapping": True, "lineNumbers": False, "mode": mode}
-    )
+    if mode is not None:
+        # 只有声明了 mode 的参数（YAML 配置、筛选列表等）才值得挂代码编辑器：
+        # 每个 CodeMirror 实例在前端要构建上百个节点并反复测量样式，初始化开销
+        # 数十毫秒，占满整屏渲染的大头。纯文本字段（路径、密钥、命令）用原生
+        # textarea 即可，64 个此类参数足以让「智慧港区设置」比普通页慢近十倍。
+        kwargs.setdefault(
+            "code", {"lineWrapping": True, "lineNumbers": False, "mode": mode}
+        )
+    else:
+        kwargs.setdefault("code", None)
 
     return put_scope(
         f"arg_contianer-textarea-{name}",

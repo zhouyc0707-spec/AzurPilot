@@ -23,6 +23,7 @@ from module.webui.fastapi import (
 )
 from module.webui.utils import Task, TaskHandler
 from module.webui.widgets import RichLog
+from tests.pywebio_stubs import _StubOutput
 
 
 class _RecordingWebSocket:
@@ -241,6 +242,47 @@ class TestInitialRendering(unittest.TestCase):
 
 
 class TestTaskConfigRendering(unittest.TestCase):
+    def test_plain_textarea_does_not_instantiate_codemirror(self):
+        """未声明 mode 的多行文本参数不该挂代码编辑器。
+
+        每个 CodeMirror 实例构建上百个节点并反复测量样式，初始化开销数十毫秒。
+        「智慧港区设置」页有 8 个 textarea，其中 7 个是路径/密钥/命令这类纯文本
+        字段，被无条件挂上编辑器后整页渲染进约 600 ms 的长任务，比委托、科研页
+        慢近一个数量级。
+        """
+        from module.webui import widgets
+
+        captured = {}
+
+        def fake_put_textarea(**kwargs):
+            captured.update(kwargs)
+            return _StubOutput()
+
+        with (
+            patch("module.webui.widgets.put_scope", return_value=_StubOutput()),
+            patch("module.webui.widgets.get_title_help", return_value=_StubOutput()),
+            patch("module.webui.widgets.put_textarea", fake_put_textarea),
+        ):
+            widgets.put_arg_textarea(
+                {"name": "Alas_EmulatorInfo_path", "title": "路径"}
+            )
+        self.assertIsNone(captured.get("code"))
+
+        captured.clear()
+        with (
+            patch("module.webui.widgets.put_scope", return_value=_StubOutput()),
+            patch("module.webui.widgets.get_title_help", return_value=_StubOutput()),
+            patch("module.webui.widgets.put_textarea", fake_put_textarea),
+        ):
+            widgets.put_arg_textarea(
+                {"name": "Alas_Error_OnePushConfig", "title": "推送配置", "mode": "yaml"}
+            )
+        self.assertEqual(
+            {"lineWrapping": True, "lineNumbers": False, "mode": "yaml"},
+            captured.get("code"),
+        )
+        self.assertNotIn("mode", captured)
+
     def test_subconfig_fields_are_sent_as_one_nested_output(self):
         commands = []
         closed = threading.Event()
