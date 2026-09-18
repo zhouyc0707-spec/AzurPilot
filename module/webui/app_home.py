@@ -31,6 +31,7 @@ from module.webui.app_dependencies import (
 
 
 from module.webui.app_types import WebUIMixinBase
+from module.webui.warmup import start_warmup
 
 
 class HomeMixin(WebUIMixinBase):
@@ -292,6 +293,9 @@ class HomeMixin(WebUIMixinBase):
         # 先发送页面骨架，再读取恢复页面所需的 localStorage。即使浏览器端
         # RPC 较慢，用户也能立即看到真实外壳，且该读取不再阻塞首条内容。
         self.mount_shell()
+        # 外壳已经画出来了，趁着读取 localStorage、恢复实例这段空档，把首次进
+        # 总览页才用到的重模块与统计库在后台预热掉（每进程一次，见 warmup 模块）。
+        start_warmup()
         if localstorage is None:
             localstorage = get_localstorage_values(("clarity_notice_shown", "aside"))
         aside = localstorage.get("aside")
