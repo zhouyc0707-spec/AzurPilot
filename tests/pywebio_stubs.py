@@ -18,7 +18,19 @@
 
 from contextlib import ExitStack, contextmanager
 from importlib import import_module
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
+
+
+class _StubOutput:
+    """桩返回值：PyWebIO 的输出对象支持链式 ``.style(...)`` 等调用。
+
+    ``put_row(...).style("...")`` 这类写法很常见，若桩返回 ``None`` 会在
+    ``.style`` 上抛 AttributeError —— 那是桩的问题，不是被测代码的问题。
+    """
+
+    def __getattr__(self, name):
+        return MagicMock(name=name)
+
 
 # 渲染路径可能用到的全部输出函数
 OUTPUT_NAMES = (
@@ -66,7 +78,7 @@ def stub_pywebio_output(*modules, capture=None):
 
                 def stub(*args, _name=name, **kwargs):
                     records.setdefault(_name, args)
-                    return None
+                    return _StubOutput()
 
                 stack.enter_context(
                     patch(f"{module_name}.{name}", side_effect=stub)
