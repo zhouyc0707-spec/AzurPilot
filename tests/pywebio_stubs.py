@@ -14,11 +14,26 @@
 各测试 harness 原先只挑自己用到的那几个函数打桩，漏掉一个（例如渲染路径里新加了
 `put_scope` / `put_button`）就会重新开始弹窗 —— 而且很难从测试结果看出来。
 这里提供一次性的整体打桩，渲染测试统一用它，新增输出调用不会再漏。
+
+**第二道防线**：即便某个 harness 漏打了桩，也不该真的弹浏览器。PyWebIO 的
+「脚本模式」在 Tornado 平台上是这样开浏览器的（`pywebio/platform/tornado.py`）：
+
+    if "PYWEBIO_SCRIPT_MODE_PORT" not in os.environ:
+        tornado.ioloop.IOLoop.current().spawn_callback(
+            open_webbrowser_on_server_started, '127.0.0.1', port)
+
+注意它**不受 `auto_open_webbrowser` 控制**，只认这个环境变量。所以在导入本模块时
+就把它设上：漏桩的 harness 顶多让脚本模式起个后台服务器，不会再往用户桌面上丢
+标签页。
 """
 
+import os
 from contextlib import ExitStack, contextmanager
 from importlib import import_module
 from unittest.mock import MagicMock, patch
+
+# 必须早于任何会进入脚本模式的调用；模块顶层执行，import 本模块即生效。
+os.environ.setdefault("PYWEBIO_SCRIPT_MODE_PORT", "0")
 
 
 class _StubOutput:
