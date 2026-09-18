@@ -447,54 +447,71 @@ class Island(SelectCharacter):
             return False
         destination_clicked = False
         confirmed = False
-        for _ in self.loop(timeout=20, skip_first=False):
-            if not destination_clicked:
+        # 目的地图标在"有任务可提交"时会变成问号，图标匹配必然失败；
+        # 因此图标连续几秒匹配不到时，退化为直接点击该地点的固定坐标区域。
+        icon_miss = Timer(3).start()
+        fixed_click = False
+        # 岛屿地图是静态插画，等待期间容易被"截图未变化"误判卡死并重启游戏，
+        # 这里放宽该阈值（下方两个循环合计最长约 65s）。
+        with self.device.stuck_timeout_override(image_stuck=180):
+            for _ in self.loop(timeout=20, skip_first=False):
+                if not destination_clicked:
+                    if self.appear_then_click(destination_button, interval=1):
+                        logger.info(f"[岛屿] 点击岛屿地图目的地: {destination}")
+                        destination_clicked = True
+                        continue
+                    if not fixed_click and icon_miss.reached():
+                        fixed_click = True
+                        logger.info(
+                            f"[岛屿] 目的地图标未匹配（有任务可提交时会变成问号），"
+                            f"改为点击固定坐标: {destination}"
+                        )
+                        self.device.click(destination_button)
+                        destination_clicked = True
+                    continue
+
+                if self.appear(check_button, offset=(20, 20)):
+                    logger.info(
+                        f"[岛屿] 岛屿地图目的地详情已识别: {destination} "
+                        f"({check_button.name})"
+                    )
+                    self.device.click(ISLAND_MAP_CONFIRM)
+                    confirmed = True
+                    break
                 if self.appear_then_click(destination_button, interval=1):
-                    logger.info(f"[岛屿] 点击岛屿地图目的地: {destination}")
-                    destination_clicked = True
-                continue
+                    continue
 
-            if self.appear(check_button, offset=(20, 20)):
-                logger.info(
-                    f"[岛屿] 岛屿地图目的地详情已识别: {destination} "
-                    f"({check_button.name})"
-                )
-                self.device.click(ISLAND_MAP_CONFIRM)
-                confirmed = True
-                break
-            if self.appear_then_click(destination_button, interval=1):
-                continue
+            if not confirmed:
+                logger.warning(f"[岛屿] 岛屿地图目的地选择超时: {destination}")
+                return False
 
-        if not confirmed:
-            logger.warning(f"[岛屿] 岛屿地图目的地选择超时: {destination}")
+            confirm_wait = Timer(ISLAND_MAP_CONFIRM_WAIT).start()
+            confirm_retry = Timer(ISLAND_MAP_CONFIRM_RETRY_WAIT).start()
+            for _ in self.loop(timeout=ISLAND_MAP_DESTINATION_WAIT, skip_first=False):
+                if self.ui_additional(get_ship=False):
+                    continue
+
+                # 确认按钮通常会在场景加载开始后消失；若仍可见则在前 10s 内补点，
+                # 超时窗口后不再点击，避免确认弹窗卡住时触发单按钮点击过多保护。
+                if not confirm_retry.reached() and self.appear_then_click(
+                        ISLAND_MAP_CONFIRM, interval=2):
+                    confirm_wait.reset()
+                    continue
+
+                if self.ui_page_appear(page_island_map):
+                    continue
+
+                if confirm_wait.reached() and (
+                        self.appear(ISLAND_CHECK, offset=(20, 20))
+                        or (in_friend and self.is_in_friend_island())
+                ):
+                    self.device.sleep(1)
+                    logger.info(f"[岛屿] 岛屿地图进入成功: {destination}")
+                    return True
+
+            logger.warning(f"[岛屿] 岛屿地图进入目的地超时: {destination}")
             return False
 
-        confirm_wait = Timer(ISLAND_MAP_CONFIRM_WAIT).start()
-        confirm_retry = Timer(ISLAND_MAP_CONFIRM_RETRY_WAIT).start()
-        for _ in self.loop(timeout=ISLAND_MAP_DESTINATION_WAIT, skip_first=False):
-            if self.ui_additional(get_ship=False):
-                continue
-
-            # 确认按钮通常会在场景加载开始后消失；若仍可见则在前 10s 内补点，
-            # 超时窗口后不再点击，避免确认弹窗卡住时触发单按钮点击过多保护。
-            if not confirm_retry.reached() and self.appear_then_click(
-                    ISLAND_MAP_CONFIRM, interval=2):
-                confirm_wait.reset()
-                continue
-
-            if self.ui_page_appear(page_island_map):
-                continue
-
-            if confirm_wait.reached() and (
-                    self.appear(ISLAND_CHECK, offset=(20, 20))
-                    or (in_friend and self.is_in_friend_island())
-            ):
-                self.device.sleep(1)
-                logger.info(f"[岛屿] 岛屿地图进入成功: {destination}")
-                return True
-
-        logger.warning(f"[岛屿] 岛屿地图进入目的地超时: {destination}")
-        return False
     def post_manage_mode(self, post_manage_mode):
         post_manage_button = POST_MANAGE_BUSINESS if post_manage_mode == POST_MANAGE_PRODUCTION else POST_MANAGE_PRODUCTION
         direct_click_timer = Timer(1)
