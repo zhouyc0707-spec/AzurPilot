@@ -128,6 +128,9 @@ class OpsiDaily(OSMap):
         # 第1步：清主舰队问号
         self.fleet_set(primary)
         self.device.screenshot()
+        # 显式调用 OSMap 单舰队实现：组合类 OperationSiren 中 OpsiHazard1Leveling
+        # 重写了多舰队版 clear_question，裸调用会把「清主舰队问号」误解析成
+        # 侵蚀1的切换主舰队+2/3/4 检测；本方法自己负责切换舰队。
         if OSMap.clear_question(self):
             event_solved = True
 

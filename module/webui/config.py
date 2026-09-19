@@ -1,28 +1,21 @@
+"""兼容转发层：本模块已迁移到 :mod:`module.runtime.config`。
+
+旧 WebUI（PyWebIO）仍按 ``module.webui.config`` 导入，这里把属性访问转发到
+新位置，保证新旧两套界面共用同一份运行时状态（State、进程管理器等），
+避免出现两份互不可见的单例。新代码请直接引用 :mod:`module.runtime.config`。
 """
-Web界面部署配置管理。
 
-提供 DeployConfig 的 WebUI 子类，将配置变更实时写入部署文件。
-通过 __setattr__ 拦截属性修改，自动同步到磁盘配置。
-"""
+import importlib as _importlib
 
-from deploy.config import DeployConfig as _DeployConfig
+_target = _importlib.import_module("module.runtime.config")
+
+# 把公开符号注入本模块命名空间，兼容 `from module.webui.config import X`
+for _symbol in dir(_target):
+    if not _symbol.startswith("__"):
+        globals().setdefault(_symbol, getattr(_target, _symbol))
+del _symbol
 
 
-class DeployConfig(_DeployConfig):
-    def show_config(self):
-        pass
-
-    def __setattr__(self, key: str, value):
-        """
-        Catch __setattr__, copy to `self.config`, write deploy config.
-        """
-        super().__setattr__(key, value)
-        if key[0].isupper() and key in self.config:
-            if key in self.config:
-                before = self.config[key]
-                if before != value:
-                    self.config[key] = value
-                    self.write()
-            else:
-                self.config[key] = value
-                self.write()
+def __getattr__(name):
+    """未显式注入的属性（含私有名）一律转发到新模块。"""
+    return getattr(_target, name)

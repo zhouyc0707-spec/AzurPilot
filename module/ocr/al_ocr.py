@@ -325,6 +325,9 @@ def _create_ocr(name):
 
         model_path, rec_keys_path, ocr_version = _get_onnx_model_params(name)
         params = {
+            # rapidocr 3.9.0 的 _load_config 在 model_root_dir 为 None 时写入 Path
+            # 对象，omegaconf 不支持而抛 UnsupportedValueType，显式传字符串规避
+            "Global.model_root_dir": os.getcwd(),
             "Global.use_det": False,
             "Global.use_cls": False,
             "Det.model_path": None,
@@ -411,6 +414,7 @@ def _create_det_ocr_for_onnx(name):
     use_coreml = ocr_device == 'ane'
     model_path, rec_keys_path, ocr_version = _get_onnx_model_params(name)
     params = {
+        "Global.model_root_dir": os.getcwd(),
         "Global.use_det": True,
         "Global.use_cls": False,
         "Det.model_path": DET_MODEL_PATH,
@@ -437,6 +441,7 @@ def _create_det_ocr_for_onnx(name):
 def _create_det_ocr_for_ncnn():
     """为 ncnn 后端创建 DetOnlyOCR 实例。"""
     params = {
+        "Global.model_root_dir": os.getcwd(),
         "Global.use_det": True,
         "Global.use_cls": False,
         "Global.use_rec": False,

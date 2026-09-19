@@ -201,7 +201,13 @@ class OpsiMeowfficerFarming(MeowfficerTargetZoneMixin, CoinTaskMixin, OSMap):
 
     def _meow_fixed_patrol_scan(self):
         """
-        战后效率模式强制移动（套用侵蚀一，可开关，默认关闭）。
+        短猫相接的战后强制移动：短猫舰队没找到事件就换其他舰队扫雷达。
+
+        这是短猫唯一的强制移动形式——等价于侵蚀一的 L0/L1（换队扫雷达清问号），
+        **没有**侵蚀一的 L2。侵蚀一 L2 会把舰队逐个挪到固定的 C1/D1/E1/F1，
+        那是照侵蚀一那张图定的，短猫跑的海域地图各不相同，挪了没意义、还可能
+        把舰队挪到不该去的地方。共享的 _execute_fixed_patrol_scan 也会直接
+        跳过短猫，短猫不走那条路。
 
         开启后遍历 1~4 号舰队的雷达清剩余问号：只切换舰队看雷达、
         不挪动舰队；已解决目标事件（明石/记录塔/信息探测装置）时跳过。
@@ -250,9 +256,13 @@ class OpsiMeowfficerFarming(MeowfficerTargetZoneMixin, CoinTaskMixin, OSMap):
                     if not self._clear_question_primary():
                         # 主舰队没清到事件，重扫地图
                         self.map_rescan()
-                        # 重扫也没发现事件，再切换其他舰队依次清问号
-                        if not self._solved_map_event:
+                        # 重扫也没发现事件：开启强制移动时交给它遍历 1~4 队
+                        # （两边扫的是同一批雷达，先后各跑一遍就是白扫第二遍），
+                        # 未开启时沿用本地分步检索链自己切队清问号
+                        if (not self._solved_map_event
+                                and not self.config.OpsiMeowfficerFarming_ExecuteFixedPatrolScan):
                             self._clear_question_other_fleets()
+                    self._meow_fixed_patrol_scan()
                 self.handle_after_auto_search()
         finally:
             self.meow_search_metrics_end()
@@ -287,8 +297,11 @@ class OpsiMeowfficerFarming(MeowfficerTargetZoneMixin, CoinTaskMixin, OSMap):
                     if not self._clear_question_primary():
                         # 主舰队没清到事件，重扫地图
                         self.map_rescan()
-                        # 重扫也没发现事件，再切换其他舰队依次清问号
-                        if not self._solved_map_event:
+                        # 重扫也没发现事件：开启强制移动时交给它遍历 1~4 队
+                        # （两边扫的是同一批雷达，先后各跑一遍就是白扫第二遍），
+                        # 未开启时沿用本地分步检索链自己切队清问号
+                        if (not self._solved_map_event
+                                and not self.config.OpsiMeowfficerFarming_ExecuteFixedPatrolScan):
                             self._clear_question_other_fleets()
                     self._meow_fixed_patrol_scan()
 
@@ -364,16 +377,18 @@ class OpsiMeowfficerFarming(MeowfficerTargetZoneMixin, CoinTaskMixin, OSMap):
         self.meow_search_metrics_start()
         try:
             self.run_auto_search()
-            # 自律寻敌完成后，查看短猫舰队雷达上的剩余问号并处理
-            # （仅当前舰队雷达，不切换 1~4 队；参考侵蚀一的战后问号处理）
             with self._meow_debug_clip():
                 self._solved_map_event = set()
                 self._solved_fleet_mechanism = False
+                # 强制移动开启时它已遍历 1~4 队雷达（含主队），这里不再重复扫；
+                # 未开启时保留本地「仅当前舰队雷达」清问号。
                 # 显式调用 OSMap 的单舰队实现：组合类 OperationSiren 的 MRO 中
                 # OpsiMeowfficerFarming 之后是 OpsiHazard1Leveling，裸调用会错误解析到
                 # 侵蚀1的多舰队 override，与本处「仅当前舰队雷达」的本意相反。
-                OSMap.clear_question(self)
+                if not self.config.OpsiMeowfficerFarming_ExecuteFixedPatrolScan:
+                    OSMap.clear_question(self)
                 self.map_rescan()
+                self._meow_fixed_patrol_scan()
                 self.handle_after_auto_search()
         finally:
             self.meow_search_metrics_end()

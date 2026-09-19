@@ -26,12 +26,12 @@ from deploy.uv import (
     redact_sensitive_text,
 )
 from module.logger import logger
-from module.webui.setting import (
+from module.runtime.setting import (
     State,
     clear_dependency_sync_pending,
     is_dependency_sync_pending,
 )
-from module.webui import worker_registry
+from module.runtime import worker_registry
 
 
 WEBUI_READY_TIMEOUT = 120
@@ -40,6 +40,23 @@ WEBUI_RUNTIME_RETRY_LIMIT = 3
 WEBUI_STABLE_RUNTIME = 60
 DEPENDENCY_SYNC_START_RETRY_LIMIT = 3
 DEPENDENCY_SYNC_RESPONSE_TIMEOUT = DEPENDENCY_SYNC_TIMEOUT + 60
+
+# 本地定制：默认继续使用旧 PyWebIO 界面（module.webui），上游已改为 React 前端
+# （module.api）。设置环境变量 ALAS_WEBUI=react 可切回上游新前端，此时才需要
+# Node.js 构建 frontend/ 静态资源。
+USE_REACT_FRONTEND = os.environ.get("ALAS_WEBUI", "").strip().lower() == "react"
+WEBUI_APP_TARGET = (
+    "module.api.app:create_app" if USE_REACT_FRONTEND else "module.webui.app:app"
+)
+
+
+def _ensure_frontend_if_needed() -> None:
+    """仅在启用 React 前端时构建并校验前端静态资源。"""
+    if not USE_REACT_FRONTEND:
+        return
+    from deploy.frontend import ensure_frontend
+
+    ensure_frontend()
 
 
 def _is_ipv6_unavailable_error(exc: OSError) -> bool:
@@ -149,6 +166,8 @@ def func(
     State.restart_event = ev
     State.dependency_sync_event = dependency_sync_event
 
+    _ensure_frontend_if_needed()
+
     # 解析命令行参数
     parser = argparse.ArgumentParser(description="AzurPilot Web 服务")
     parser.add_argument(
@@ -168,7 +187,7 @@ def func(
     parser.add_argument(
         "--cdn",
         action="store_true",
-        help="使用jsdelivr CDN获取pywebio静态文件（css, js）。默认使用自托管CDN",
+        help="已废弃，React 静态资源始终由本地提供",
     )
     parser.add_argument(
         "--electron", action="store_true", help="由Electron客户端运行"
@@ -223,6 +242,8 @@ def func(
             "host": host,
             "port": port,
             "factory": True,
+            "ws_max_size": 1048576,
+            "ws_max_queue": 16,
         }
         if ssl:
             uvicorn_options.update(
@@ -233,7 +254,7 @@ def func(
         if host in ("0.0.0.0", "::", "[::]"):
             if host in ("::", "[::]"):
                 uvicorn_options["host"] = "::"
-            config = uvicorn.Config("module.webui.app:app", **uvicorn_options)
+            config = uvicorn.Config(WEBUI_APP_TARGET, **uvicorn_options)
             sockets = _create_dual_stack_sockets(
                 port,
                 backlog=config.backlog,
@@ -253,7 +274,7 @@ def func(
                 for listener in sockets:
                     listener.close()
         else:
-            config = uvicorn.Config("module.webui.app:app", **uvicorn_options)
+            config = uvicorn.Config(WEBUI_APP_TARGET, **uvicorn_options)
             _run_uvicorn_server(config, ready_event=ready_event)
     except Exception as e:
         logger.exception_context(
@@ -852,6 +873,20 @@ def run_webui_supervisor() -> None:
                 should_exit = True
                 break
             force_dependency_sync = False
+
+            # 首次安装前端依赖可能较慢，必须在子进程监听计时开始前完成。
+            # 旧 PyWebIO 界面无需前端构建，此时该调用直接返回。
+            try:
+                _ensure_frontend_if_needed()
+            except Exception as exc:
+                logger.exception_context(
+                    title='React 前端构建失败',
+                    exc=exc,
+                    impact='前端静态资源不可用，停止创建 WebUI 子进程。',
+                    action='检查 Node.js 安装和 npm 输出，修复后重新启动。',
+                    level=50,
+                )
+                break
 
             event = Event()
             dependency_sync_event = Event()

@@ -134,10 +134,12 @@
     },
     "DropRecord": {
       "SaveFolder": "./screenshots",
+      "RetentionDays": 0,
       "AzurStatsID": null,
       "API": "default",
       "ResearchRecord": "do_not",
       "CommissionRecord": "do_not",
+      "CommissionIncomeScreenshot": "save",
       "CombatRecord": "do_not",
       "OpsiRecord": "upload",
       "MeowfficerBuy": "do_not",
@@ -145,10 +147,15 @@
       "TelemetryReport": true,
       "BugReport": true
     },
+    "Backup": {
+      "Enable": true,
+      "KeepDays": 7
+    },
     "EmulatorManagement": {
       "ScheduledEmulatorRestart": false,
       "ForceScheduledRestart": false,
-      "RestartIntervalHours": 4
+      "RestartIntervalHours": 4,
+      "DeepRestartAfterFailures": 0
     },
     "Storage": {
       "Storage": {}
@@ -241,6 +248,7 @@
     },
     "StopCondition": {
       "OilLimit": 1000,
+      "OilLimitHardFloor": 500,
       "CoinLimit": 0,
       "RunCount": 0,
       "MapAchievement": "non_stop",
@@ -269,6 +277,7 @@
     },
     "Emotion": {
       "Mode": "calculate",
+      "IgnoreShipwreck": false,
       "Fleet1Value": 119,
       "Fleet1Record": "2020-01-01 00:00:00",
       "Fleet1Control": "prevent_green_face",
@@ -324,6 +333,7 @@
     },
     "StopCondition": {
       "OilLimit": 1000,
+      "OilLimitHardFloor": 500,
       "CoinLimit": 0,
       "RunCount": 0,
       "MapAchievement": "non_stop",
@@ -352,6 +362,7 @@
     },
     "Emotion": {
       "Mode": "calculate",
+      "IgnoreShipwreck": false,
       "Fleet1Value": 119,
       "Fleet1Record": "2020-01-01 00:00:00",
       "Fleet1Control": "prevent_green_face",
@@ -407,6 +418,7 @@
     },
     "StopCondition": {
       "OilLimit": 1000,
+      "OilLimitHardFloor": 500,
       "CoinLimit": 0,
       "RunCount": 0,
       "MapAchievement": "non_stop",
@@ -435,6 +447,7 @@
     },
     "Emotion": {
       "Mode": "calculate",
+      "IgnoreShipwreck": false,
       "Fleet1Value": 119,
       "Fleet1Record": "2020-01-01 00:00:00",
       "Fleet1Control": "prevent_green_face",
@@ -509,6 +522,7 @@
     },
     "StopCondition": {
       "OilLimit": 1000,
+      "OilLimitHardFloor": 500,
       "CoinLimit": 0,
       "RunCount": 0,
       "MapAchievement": "non_stop",
@@ -537,6 +551,7 @@
     },
     "Emotion": {
       "Mode": "calculate_ignore",
+      "IgnoreShipwreck": false,
       "Fleet1Value": 119,
       "Fleet1Record": "2020-01-01 00:00:00",
       "Fleet1Control": "prevent_red_face",
@@ -601,6 +616,7 @@
     },
     "StopCondition": {
       "OilLimit": 1000,
+      "OilLimitHardFloor": 500,
       "CoinLimit": 0,
       "RunCount": 0,
       "MapAchievement": "non_stop",
@@ -629,6 +645,7 @@
     },
     "Emotion": {
       "Mode": "calculate_ignore",
+      "IgnoreShipwreck": false,
       "Fleet1Value": 119,
       "Fleet1Record": "2020-01-01 00:00:00",
       "Fleet1Control": "prevent_red_face",
@@ -693,6 +710,7 @@
     },
     "StopCondition": {
       "OilLimit": 1000,
+      "OilLimitHardFloor": 500,
       "CoinLimit": 0,
       "RunCount": 0,
       "MapAchievement": "non_stop",
@@ -721,6 +739,7 @@
     },
     "Emotion": {
       "Mode": "calculate",
+      "IgnoreShipwreck": false,
       "Fleet1Value": 119,
       "Fleet1Record": "2020-01-01 00:00:00",
       "Fleet1Control": "prevent_green_face",
@@ -777,6 +796,7 @@
     },
     "StopCondition": {
       "OilLimit": 1000,
+      "OilLimitHardFloor": 500,
       "CoinLimit": 0,
       "RunCount": 0,
       "MapAchievement": "non_stop",
@@ -805,6 +825,7 @@
     },
     "Emotion": {
       "Mode": "calculate",
+      "IgnoreShipwreck": false,
       "Fleet1Value": 119,
       "Fleet1Record": "2020-01-01 00:00:00",
       "Fleet1Control": "prevent_green_face",
@@ -860,6 +881,7 @@
     },
     "StopCondition": {
       "OilLimit": 1000,
+      "OilLimitHardFloor": 500,
       "CoinLimit": 0,
       "RunCount": 0,
       "MapAchievement": "non_stop",
@@ -888,6 +910,7 @@
     },
     "Emotion": {
       "Mode": "calculate",
+      "IgnoreShipwreck": false,
       "Fleet1Value": 119,
       "Fleet1Record": "2020-01-01 00:00:00",
       "Fleet1Control": "prevent_green_face",
@@ -943,6 +966,7 @@
     },
     "StopCondition": {
       "OilLimit": 1000,
+      "OilLimitHardFloor": 500,
       "CoinLimit": 0,
       "RunCount": 0,
       "MapAchievement": "non_stop",
@@ -971,6 +995,7 @@
     },
     "Emotion": {
       "Mode": "calculate",
+      "IgnoreShipwreck": false,
       "Fleet1Value": 119,
       "Fleet1Record": "2020-01-01 00:00:00",
       "Fleet1Control": "prevent_green_face",
@@ -1030,6 +1055,7 @@
     },
     "StopCondition": {
       "OilLimit": 1000,
+      "OilLimitHardFloor": 500,
       "CoinLimit": 0,
       "RunCount": 0,
       "MapAchievement": "non_stop",
@@ -1039,6 +1065,7 @@
     },
     "Emotion": {
       "Mode": "calculate",
+      "IgnoreShipwreck": false,
       "Fleet1Value": 119,
       "Fleet1Record": "2020-01-01 00:00:00",
       "Fleet1Control": "prevent_yellow_face",
@@ -1085,6 +1112,7 @@
     },
     "StopCondition": {
       "OilLimit": 1000,
+      "OilLimitHardFloor": 500,
       "CoinLimit": 0,
       "RunCount": 0,
       "MapAchievement": "non_stop",
@@ -1113,6 +1141,7 @@
     },
     "Emotion": {
       "Mode": "calculate",
+      "IgnoreShipwreck": false,
       "Fleet1Value": 119,
       "Fleet1Record": "2020-01-01 00:00:00",
       "Fleet1Control": "prevent_green_face",
@@ -1146,6 +1175,7 @@
     },
     "StopCondition": {
       "OilLimit": 1000,
+      "OilLimitHardFloor": 500,
       "CoinLimit": 0,
       "RunCount": 0,
       "MapAchievement": "non_stop",
@@ -1155,6 +1185,7 @@
     },
     "Emotion": {
       "Mode": "calculate",
+      "IgnoreShipwreck": false,
       "Fleet1Value": 119,
       "Fleet1Record": "2020-01-01 00:00:00",
       "Fleet1Control": "prevent_yellow_face",
@@ -1201,6 +1232,7 @@
     },
     "StopCondition": {
       "OilLimit": 1000,
+      "OilLimitHardFloor": 500,
       "CoinLimit": 0,
       "RunCount": 0,
       "MapAchievement": "non_stop",
@@ -1210,6 +1242,7 @@
     },
     "Emotion": {
       "Mode": "calculate",
+      "IgnoreShipwreck": false,
       "Fleet1Value": 119,
       "Fleet1Record": "2020-01-01 00:00:00",
       "Fleet1Control": "prevent_green_face",
@@ -1259,6 +1292,7 @@
     },
     "StopCondition": {
       "OilLimit": 1000,
+      "OilLimitHardFloor": 500,
       "CoinLimit": 0,
       "RunCount": 0,
       "MapAchievement": "non_stop",
@@ -1268,6 +1302,7 @@
     },
     "Emotion": {
       "Mode": "calculate",
+      "IgnoreShipwreck": false,
       "Fleet1Value": 119,
       "Fleet1Record": "2020-01-01 00:00:00",
       "Fleet1Control": "prevent_green_face",
@@ -1320,6 +1355,10 @@
       "PresetFilter": "all",
       "CustomFilter": "EquipUR > EquipSSR > Cube > GachaTicket\n> Array > Chip > CatT3 \n> Meta > SkinBox\n> Oil > Coin > Medal > ExpBookT1 > FoodT1\n> DR > PR\n> AugmentCore > AugmentEnhanceT2 > AugmentChangeT2 > AugmentChangeT1\n> CatT2 > CatT1 > PlateGeneralT3 > PlateT3 > BoxT4\n> ShipSSR"
     },
+    "ShopAdvanced": {
+      "Mode": "legacy",
+      "Script": ""
+    },
     "Storage": {
       "Storage": {}
     }
@@ -1349,6 +1388,7 @@
     },
     "StopCondition": {
       "OilLimit": 1000,
+      "OilLimitHardFloor": 500,
       "CoinLimit": 0,
       "RunCount": 0,
       "MapAchievement": "non_stop",
@@ -1358,6 +1398,10 @@
     },
     "WarArchives": {
       "DailyRunCount": 0,
+      "AutoClear": false,
+      "AutoSelectEvent": false,
+      "AutoClearTarget": "three_star",
+      "AutoClearProgress": null,
       "DailyRunCountRemain": 0,
       "DailyRunCountRecord": "2020-01-01 00:00:00",
       "DailyRunCountLimit": 0
@@ -1383,6 +1427,7 @@
     },
     "Emotion": {
       "Mode": "calculate",
+      "IgnoreShipwreck": false,
       "Fleet1Value": 119,
       "Fleet1Record": "2020-01-01 00:00:00",
       "Fleet1Control": "prevent_green_face",
@@ -1442,6 +1487,7 @@
     },
     "StopCondition": {
       "OilLimit": 1000,
+      "OilLimitHardFloor": 500,
       "CoinLimit": 0,
       "RunCount": 0,
       "MapAchievement": "non_stop",
@@ -1470,6 +1516,7 @@
     },
     "Emotion": {
       "Mode": "calculate",
+      "IgnoreShipwreck": false,
       "Fleet1Value": 119,
       "Fleet1Record": "2020-01-01 00:00:00",
       "Fleet1Control": "prevent_green_face",
@@ -1529,6 +1576,7 @@
     },
     "StopCondition": {
       "OilLimit": 1000,
+      "OilLimitHardFloor": 500,
       "CoinLimit": 0,
       "RunCount": 0,
       "MapAchievement": "non_stop",
@@ -1557,6 +1605,7 @@
     },
     "Emotion": {
       "Mode": "calculate",
+      "IgnoreShipwreck": false,
       "Fleet1Value": 119,
       "Fleet1Record": "2020-01-01 00:00:00",
       "Fleet1Control": "prevent_green_face",
@@ -1616,6 +1665,7 @@
     },
     "StopCondition": {
       "OilLimit": 1000,
+      "OilLimitHardFloor": 500,
       "CoinLimit": 0,
       "RunCount": 0,
       "MapAchievement": "non_stop",
@@ -1644,6 +1694,7 @@
     },
     "Emotion": {
       "Mode": "calculate",
+      "IgnoreShipwreck": false,
       "Fleet1Value": 119,
       "Fleet1Record": "2020-01-01 00:00:00",
       "Fleet1Control": "prevent_green_face",
@@ -1703,6 +1754,7 @@
     },
     "StopCondition": {
       "OilLimit": 1000,
+      "OilLimitHardFloor": 500,
       "CoinLimit": 0,
       "RunCount": 0,
       "MapAchievement": "non_stop",
@@ -1731,6 +1783,7 @@
     },
     "Emotion": {
       "Mode": "calculate",
+      "IgnoreShipwreck": false,
       "Fleet1Value": 119,
       "Fleet1Record": "2020-01-01 00:00:00",
       "Fleet1Control": "prevent_green_face",
@@ -1786,6 +1839,7 @@
     },
     "StopCondition": {
       "OilLimit": 1000,
+      "OilLimitHardFloor": 500,
       "CoinLimit": 0,
       "RunCount": 0,
       "MapAchievement": "non_stop",
@@ -1814,6 +1868,7 @@
     },
     "Emotion": {
       "Mode": "calculate",
+      "IgnoreShipwreck": false,
       "Fleet1Value": 119,
       "Fleet1Record": "2020-01-01 00:00:00",
       "Fleet1Control": "prevent_green_face",
@@ -1872,6 +1927,7 @@
     },
     "StopCondition": {
       "OilLimit": 1000,
+      "OilLimitHardFloor": 500,
       "CoinLimit": 0,
       "RunCount": 0,
       "MapAchievement": "non_stop",
@@ -1881,6 +1937,7 @@
     },
     "Emotion": {
       "Mode": "calculate",
+      "IgnoreShipwreck": false,
       "Fleet1Value": 119,
       "Fleet1Record": "2020-01-01 00:00:00",
       "Fleet1Control": "prevent_green_face",
@@ -1927,6 +1984,7 @@
     },
     "StopCondition": {
       "OilLimit": 1000,
+      "OilLimitHardFloor": 500,
       "CoinLimit": 0,
       "RunCount": 0,
       "MapAchievement": "non_stop",
@@ -1936,6 +1994,7 @@
     },
     "Emotion": {
       "Mode": "calculate",
+      "IgnoreShipwreck": false,
       "Fleet1Value": 119,
       "Fleet1Record": "2020-01-01 00:00:00",
       "Fleet1Control": "prevent_green_face",
@@ -1955,7 +2014,7 @@
   },
   "Commission": {
     "Scheduler": {
-      "Enable": false,
+      "Enable": true,
       "PushNotification": false,
       "NextRun": "2020-01-01 00:00:00",
       "Command": "Commission",
@@ -1977,7 +2036,10 @@
       "DoMajorCommission": false,
       "CommissionNotifyReward": false,
       "CommissionNotifyRewardStatistics": true,
-      "DetectShipDrop": false
+      "DetectShipDrop": false,
+      "GemNotify": true,
+      "GemStatistics": false,
+      "GemStatisticsPeriod": "month"
     },
     "Storage": {
       "Storage": {}
@@ -2017,7 +2079,7 @@
   },
   "Research": {
     "Scheduler": {
-      "Enable": false,
+      "Enable": true,
       "PushNotification": false,
       "NextRun": "2020-01-01 00:00:00",
       "Command": "Research",
@@ -2123,7 +2185,7 @@
   },
   "Reward": {
     "Scheduler": {
-      "Enable": false,
+      "Enable": true,
       "PushNotification": false,
       "NextRun": "2020-01-01 00:00:00",
       "Command": "Reward",
@@ -2162,6 +2224,30 @@
       "Storage": {}
     }
   },
+  "Secretary": {
+    "Scheduler": {
+      "Enable": false,
+      "PushNotification": false,
+      "NextRun": "2020-01-01 00:00:00",
+      "Command": "Secretary",
+      "SuccessInterval": 0,
+      "FailureInterval": 120,
+      "ServerUpdate": "00:00",
+      "Sensitive": false
+    },
+    "Secretary": {
+      "CustomFilter": "ultra > super_rare > elite > rare > common",
+      "LowFavorabilityPriority": false,
+      "FavouriteOnly": true,
+      "BackupEnable": true,
+      "CheckInterval": 0,
+      "Notify": true,
+      "OnePushConfig": "provider: null"
+    },
+    "Storage": {
+      "Storage": {}
+    }
+  },
   "OperationHandover": {
     "Scheduler": {
       "Enable": false,
@@ -2194,7 +2280,8 @@
       "ConsumeAllBookTime": "00:00",
       "MaintainOverride": false,
       "OilLimit": 1000,
-      "ConsumeAllBookRecord": null
+      "ConsumeAllBookRecord": "2020-01-01 00:00:00",
+      "CommissionEnd": "2020-01-01 00:00:00"
     },
     "Storage": {
       "Storage": {}
@@ -2295,6 +2382,10 @@
       "OverflowCoins": 0,
       "Filter": "BookRedT3 > BookYellowT3 > BookBlueT3 > BookRedT2\n> Cube\n> FoodT6 > FoodT5"
     },
+    "ShopAdvanced": {
+      "Mode": "legacy",
+      "Script": ""
+    },
     "Storage": {
       "Storage": {}
     }
@@ -2346,6 +2437,10 @@
     "CoreShop": {
       "Enable": true,
       "Filter": "Array"
+    },
+    "ShopAdvanced": {
+      "Mode": "legacy",
+      "Script": ""
     },
     "Storage": {
       "Storage": {}
@@ -2463,6 +2558,10 @@
       "TargetInteract": true,
       "TargetShip": "anchorage"
     },
+    "ShopAdvanced": {
+      "Mode": "legacy",
+      "Script": ""
+    },
     "Storage": {
       "Storage": {}
     }
@@ -2572,6 +2671,10 @@
       "CustomFilter": "LoggerAbyssalT6 > LoggerAbyssalT5 > LoggerAbyssalT4 > LoggerObscureT6 > LoggerObscureT5 > LoggerObscureT4 > LoggerObscureT3 > ActionPoint > PurpleCoins\n> GearDesignPlanT3 > PlateRandomT4 > DevelopmentMaterialT3 > GearDesignPlanT2 > GearPart\n> OrdnanceTestingReportT3 > OrdnanceTestingReportT2 > DevelopmentMaterialT2 > OrdnanceTestingReportT1\n> METARedBook > CrystallizedHeatResistantSteel > NanoceramicAlloy > NeuroplasticProstheticArm > SupercavitationGenerator",
       "DisableBeforeDate": 0
     },
+    "ShopAdvanced": {
+      "Mode": "legacy",
+      "Script": ""
+    },
     "Storage": {
       "Storage": {}
     }
@@ -2589,6 +2692,10 @@
     },
     "OpsiVoucher": {
       "Filter": "LoggerAbyssal > LoggerObscure > Book > Coin > Fragment"
+    },
+    "ShopAdvanced": {
+      "Mode": "legacy",
+      "Script": ""
     },
     "Storage": {
       "Storage": {}
@@ -2782,7 +2889,7 @@
       "TargetZone": 0,
       "OperationCoinsPreserve": 40000,
       "MinimumActionPointReserve": 200,
-      "ExecuteFixedPatrolScan": 0,
+      "ExecuteFixedPatrolScan": false,
       "SkipHpCheck": false,
       "Cl1Filter": "ActionPoint",
       "RecordNonCL1AP": true,
@@ -2836,6 +2943,7 @@
       "EnableAbyssal": false,
       "EnableStronghold": false,
       "TaskPriority": "OpsiStronghold > OpsiObscure > OpsiAbyssal > OpsiMeowfficerFarming",
+      "ObscureAbyssalCheckDelayDays": 0,
       "MonthEndActionPointCleanupEnable": false,
       "MonthEndActionPointCleanupDays": 0,
       "MonthEndActionPointPreserve": 0,
@@ -3435,16 +3543,16 @@
       "Storage": {}
     }
   },
-  "FleetScan": {
-    "Storage": {
-      "Storage": {}
-    }
-  },
   "FleetInfo": {
     "FleetInfo": {
       "Result": {},
       "Record": "2020-01-01 00:00:00"
     },
+    "Storage": {
+      "Storage": {}
+    }
+  },
+  "FleetScan": {
     "Storage": {
       "Storage": {}
     }

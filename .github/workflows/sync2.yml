@@ -4,6 +4,7 @@ on:
     branches:
       - master
       - dev
+      - dev_frontend
 jobs:
   repo-sync:
     env:

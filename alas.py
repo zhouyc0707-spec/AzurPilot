@@ -5,6 +5,7 @@ import shutil
 import threading
 import time
 from datetime import datetime, timedelta
+from functools import partial
 from types import SimpleNamespace
 
 import inflection
@@ -40,8 +41,18 @@ WATCHDOG_CHECK_INTERVAL = 30
 # 单个任务最长运行时间（分钟），仅作为配置读取失败的兜底默认值
 # 实际值从配置 Error.WatchdogTaskTimeout 读取，0 表示禁用
 WATCHDOG_TASK_TIMEOUT_DEFAULT = 120
-# 模拟器 stop/start 单次操作的硬超时秒数
-RESTART_EMULATOR_OP_TIMEOUT = 120
+# 模拟器 stop/start 单次操作的硬超时秒数。
+# 必须覆盖 PlatformWindows.emulator_start() 的完整预算，一次调用最多：
+#   关闭 30 + 深度清场 90（关全部实例≤60 + 等进程退出≤30） + 等实例真正关闭 60
+#   + 启动监视 300（阶梯上限） = 480 秒
+# 普通路径没有深度清场那 90 秒（实测 390 秒封顶），但按最坏情况取。
+# 取 600 秒：宁可慢，也不能在模拟器正在启动时放弃——超时被放弃的
+# worker 线程仍会继续对模拟器执行关/开操作，是历史上"模拟器永远起不来"
+# 的根因（原值 120 秒 < 内层 180 秒监视超时，必然超时、必然残留）。
+# 残留线程由 PlatformWindows 的启停互斥锁兜底：它结束之前，任何新的
+# 启停操作都会抛 EmulatorOpBusy 被跳过，不会再打断正在进行的启动。
+RESTART_EMULATOR_OP_TIMEOUT = 600
+
 DAILY_SUMMARY_CHECK_INTERVAL = 1
 
 
@@ -328,6 +339,29 @@ class AzurLaneAutoScript:
         except Exception as error:
             logger.warning(f'[日报] 记录任务结果失败，已忽略: {type(error).__name__}')
 
+    def _deep_restart_enabled(self):
+        """判断本次模拟器重启是否改用「深度重启」。
+
+        配置 EmulatorManagement.DeepRestartAfterFailures：模拟器连续重启失败
+        达到该次数后，此后每次重启都改为深度重启——结束 MuMu 全部进程
+        （含后台服务与虚拟机）再重新启动。
+
+        这是设备较差、反复重启都起不来时的最后一招逃生口，实测并不能省内存，
+        所以默认 0（禁用），需要的人自己开。
+
+        只在 MuMu12 上生效：其它模拟器没有这套进程模型，会忽略该标志。
+
+        Returns:
+            bool: True 表示本次使用深度重启。
+        """
+        try:
+            threshold = int(self.config.EmulatorManagement_DeepRestartAfterFailures)
+        except (TypeError, ValueError, AttributeError):
+            return False
+        if threshold <= 0:
+            return False
+        return self.consecutive_adb_offline >= threshold
+
     def _try_restart_emulator(self):
         """
         尝试重启模拟器。永不放弃，一直重试。
@@ -361,6 +395,14 @@ class AzurLaneAutoScript:
                 from module.device.platform import Platform
                 device = Platform(self.config, connect=False)
 
+            # 连续失败够多次就改用深度重启（结束 MuMu 全部进程）
+            deep = self._deep_restart_enabled()
+            if deep:
+                logger.warning(
+                    f'[Alas] 连续重启失败 {self.consecutive_adb_offline} 次，'
+                    f'本次改用深度重启（结束 MuMu 全部进程）'
+                )
+
             logger.info('[Alas] 正在停止模拟器...')
             self._emulator_op_with_timeout(
                 device.emulator_stop,
@@ -370,7 +412,15 @@ class AzurLaneAutoScript:
             time.sleep(5)
             logger.info('[Alas] 正在启动模拟器...')
             self._emulator_op_with_timeout(
-                device.emulator_start,
+                # consecutive_adb_offline 在函数开头已 +1，减 1 得到"本次之前
+                # 已经连续失败过几次"；平台据此选取启动监视的等待时长，
+                # 连续失败越多等得越久（60 → 90 → 120 → 180 → 300 秒），
+                # 重启成功后该计数归零、等待时间随之回到 60 秒
+                partial(
+                    device.emulator_start,
+                    deep=deep,
+                    failures=max(0, self.consecutive_adb_offline - 1),
+                ),
                 timeout=RESTART_EMULATOR_OP_TIMEOUT,
                 operation_name='模拟器启动',
             )
@@ -382,6 +432,13 @@ class AzurLaneAutoScript:
             # 重置连续离线计数
             self.consecutive_adb_offline = 0
             return True
+        except EmulatorOpBusy as e:
+            # 上一轮的重启操作还在后台跑（很可能正在冷启动模拟器）。
+            # 此时既不能停也不能再启——那会把正在进行的启动打断，正是
+            # "模拟器窗口一直卡在加载、永远起不来"的成因。放弃本轮即可，
+            # 后台那次操作结束后，下一轮调度自然会接手。
+            logger.warning(f'[Alas] 上一轮模拟器重启仍在进行，放弃本轮重启：{e}')
+            return False
         except Exception as e:
             logger.exception_context(
                 title='重启模拟器失败',
@@ -400,12 +457,18 @@ class AzurLaneAutoScript:
         线程中执行操作，超时后抛出 TimeoutError，由外层 try/except 捕获
         并返回 False，调度器会退避重试。
 
+        并发保护由 PlatformWindows 的启停互斥锁负责（emulator_op_exclusive）：
+        超时被放弃的 worker 线程仍在真实地关闭/启动模拟器，锁由它一直持有
+        到操作真正结束，因此后续任何启停请求都会抛 EmulatorOpBusy 被跳过，
+        不会出现"一个线程刚发出启动命令、另一个线程随即 shutdown"的踩踏。
+
         Args:
             func: 无参数的可调用对象。
             timeout (int | float): 超时秒数。
             operation_name (str): 操作名称，用于日志。
 
         Raises:
+            EmulatorOpBusy: 已有启停操作在进行（由平台层抛出），本次被跳过。
             TimeoutError: 操作超时。
             Exception: 操作本身抛出的异常会被原样向上抛出。
         """
@@ -425,7 +488,8 @@ class AzurLaneAutoScript:
         if thread.is_alive():
             logger.critical(
                 f'[Alas] {operation_name} 超过 {timeout}s 未完成，'
-                f'跳过此操作（daemon 线程残留，进程退出时自动清理）'
+                f'放弃等待（操作线程仍在后台运行并持有模拟器启停锁，'
+                f'下一轮恢复会主动跳过，直到它结束）'
             )
             raise TimeoutError(
                 f'{operation_name} 超过 {timeout}s 未完成'
@@ -618,6 +682,10 @@ class AzurLaneAutoScript:
             logger.info(
                 '[Alas][看门狗] 已强制停止模拟器，主线程的下次 I/O 调用将失败并触发恢复'
             )
+        except EmulatorOpBusy as e:
+            logger.warning(
+                f'[Alas][看门狗] 上一轮模拟器重启仍在进行，本次不再插手：{e}'
+            )
         except TimeoutError:
             logger.warning(
                 '[Alas][看门狗] 强制停止模拟器超时，等待下个周期重试'
@@ -643,13 +711,22 @@ class AzurLaneAutoScript:
                 logger.warning('[Alas] 未找到模拟器实例，无法在长时间等待后启动模拟器')
                 return False
 
-            if platform.emulator_start():
+            if self._emulator_op_with_timeout(
+                platform.emulator_start,
+                timeout=RESTART_EMULATOR_OP_TIMEOUT,
+                operation_name='长时间等待后启动模拟器',
+            ):
                 logger.info('[Alas] 长时间等待后模拟器启动完成')
                 if 'device' in self.__dict__:
                     del_cached_property(self, 'device')
                 return True
 
             logger.warning('[Alas] 长时间等待后启动模拟器失败，继续调度恢复流程')
+            return False
+        except EmulatorOpBusy as e:
+            # 与 _try_restart_emulator 同理：已有启停操作在跑时不要插队，
+            # 否则会打断对方正在进行的冷启动
+            logger.warning(f'[Alas] 已有模拟器启停操作在进行，跳过本次启动：{e}')
             return False
         except Exception as e:
             logger.warning(f'[Alas] 长时间等待后启动模拟器失败，继续调度恢复流程: {e}')
@@ -870,6 +947,8 @@ class AzurLaneAutoScript:
                 False — 不可恢复的失败，计入连续失败限制。
                 'recoverable' — 可恢复的失败，不计入连续失败限制。
         """
+        from module.runtime.preview import set_task
+        set_task(inflection.camelize(command))
         try:
             if not skip_first_screenshot:
                 self.device.screenshot()
@@ -1162,6 +1241,8 @@ class AzurLaneAutoScript:
                 content=f"<{self.config_name}> 发生异常 正在尝试自动重启恢复喵~",
             )
             return 'recoverable'
+        finally:
+            set_task(None)
 
     def keep_last_errlog(self, folder_path, n: int = 30):
         """
@@ -1339,6 +1420,10 @@ class AzurLaneAutoScript:
     def awaken(self):
         from module.awaken.awaken import Awaken
         Awaken(config=self.config, device=self.device).run()
+
+    def secretary(self):
+        from module.secretary.secretary import Secretary
+        Secretary(config=self.config, device=self.device).run()
 
     def shop_frequent(self):
         from module.shop.shop_reward import RewardShop
@@ -2039,6 +2124,32 @@ class AzurLaneAutoScript:
                 level=50,
             )
             exit(1)
+
+        # 每日自动备份：备份数据库与用户配置，超过保留天数的历史备份自动清理。
+        # 备份失败不阻断调度器启动，仅记录告警。
+        try:
+            from module.base.backup import backup
+            today = datetime.now().strftime('%Y-%m-%d')
+            if getattr(self, 'last_backup_date', None) != today:
+                backup(
+                    enable=self.config.Backup_Enable,
+                    keep_days=self.config.Backup_KeepDays,
+                )
+                self.last_backup_date = today
+        except Exception as e:
+            logger.warning(f'每日自动备份失败，已跳过本次备份：{e}')
+
+        # 本地调试服务：仅在显式设置环境变量 ALAS_DEBUG_SERVER=1 时启动，
+        # 监听 127.0.0.1，用于向统计库注入测试数据并验证推送链路。
+        # 默认不启动，避免无意中开放本地端口。
+        if os.environ.get('ALAS_DEBUG_SERVER') == '1':
+            try:
+                from module.debug.commission_debug import CommissionDebugHandler
+                from module.debug.web_debug_server import start_debug_server
+
+                start_debug_server(CommissionDebugHandler(self))
+            except Exception as e:
+                logger.warning(f'调试服务启动失败：{e}')
 
         # 全局异常连续失败计数（仅用于日志展示和退避策略，不再触发退出）
         consecutive_global_failures = 0
