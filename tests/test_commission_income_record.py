@@ -5,7 +5,7 @@
 """
 
 import unittest
-from types import SimpleNamespace
+from types import MethodType, SimpleNamespace
 from unittest.mock import Mock, patch
 
 # WebUI 测试会往 sys.modules 注入假的 PIL 模块；同进程混跑时先摘掉它，
@@ -76,6 +76,18 @@ class CommissionIncomeRecordHarness(unittest.TestCase):
             _save_commission_reward_screenshot=save_screenshot,
         )
         stub.saved_screenshots = saved
+
+        # 上游把收入流程拆成识别 / 持久化 / 通知三个方法：直接用类方法驱动替身时，
+        # 需要把它们绑到替身上（与 tests/test_commission_settlement.py 同做法），
+        # 否则 _record_commission_income 会在替身上找不到这三个方法而整体异常。
+        for name in (
+            '_recognize_commission_income',
+            '_persist_commission_income',
+            '_notify_commission_income',
+        ):
+            setattr(stub, name, MethodType(getattr(RewardCommission, name), stub))
+        # 含钻石的用例会走时长推断；它是静态方法，直接取函数即可（不能再绑 self）
+        stub._guess_gem_duration = RewardCommission._guess_gem_duration
 
         hits = list(page_hits) if page_hits is not None else [True] * len(images)
 

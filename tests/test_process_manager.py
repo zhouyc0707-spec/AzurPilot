@@ -6,6 +6,7 @@ from unittest.mock import Mock, PropertyMock, patch
 
 from module.runtime.process_manager import ProcessManager
 from module.runtime.setting import State
+from module.runtime.worker_events import WorkerResult
 
 
 class FakeAliveProcess:
@@ -68,12 +69,51 @@ class TestProcessManagerRegistry(unittest.TestCase):
         ):
             self.assertTrue(manager.alive)
 
+    def test_authoritative_record_repairs_missing_or_stale_pid_cache(self):
+        for cached in (None, 23456):
+            with self.subTest(cached=cached):
+                State.process_registry.clear()
+                if cached is not None:
+                    State.process_registry["alas"] = cached
+                manager = ProcessManager.get_manager("alas")
+                record = {"pid": 12345, "created_at": 1}
+                with (
+                    patch("module.runtime.process_manager.is_current_owner", return_value=True),
+                    patch("module.runtime.process_manager.get_workers", return_value={"alas": record}),
+                    patch("module.runtime.process_manager.process_matches", return_value=True),
+                ):
+                    self.assertTrue(manager.alive)
+                self.assertEqual(State.process_registry["alas"], 12345)
+
+    def test_local_handle_must_match_record_even_if_cache_matches(self):
+        State.process_registry["alas"] = 12345
+        manager = ProcessManager.get_manager("alas")
+        manager._process = Mock(pid=12345)
+        manager._process.is_alive.return_value = True
+        with (
+            patch("module.runtime.process_manager.get_workers", return_value={"alas": {"pid": 23456, "created_at": 1}}),
+            patch("module.runtime.process_manager.stop_process_tree") as stop_tree,
+            patch("module.runtime.process_manager.unregister_worker") as unregister,
+        ):
+            self.assertFalse(manager.stop())
+        stop_tree.assert_not_called()
+        unregister.assert_not_called()
+
+    def test_start_rejects_unreadable_registry_without_pid_cache(self):
+        manager = ProcessManager.get_manager("alas")
+        with (
+            patch("module.runtime.process_manager.get_workers", side_effect=RuntimeError("拒绝读取")),
+            patch("module.runtime.process_manager.Process") as process,
+        ):
+            manager.start("alas")
+        process.assert_not_called()
+
     def test_stop_uses_registered_worker_pid_without_local_process(self):
         State.process_registry["alas"] = 12345
         manager = ProcessManager.get_manager("alas")
 
         with (
-            patch.object(ProcessManager, "_kill_process_tree", return_value=True) as kill,
+            patch("module.runtime.process_manager.stop_process_tree", return_value=True) as kill,
             patch(
                 "module.runtime.process_manager.is_current_owner", return_value=True
             ),
@@ -86,76 +126,52 @@ class TestProcessManagerRegistry(unittest.TestCase):
         ):
             self.assertTrue(manager.stop())
 
-        kill.assert_called_once_with(12345)
+        kill.assert_called_once_with(None, record={"pid": 12345, "created_at": 1}, name="worker alas", timeout=0)
         self.assertNotIn("alas", State.process_registry)
+        self.assertEqual(manager.exit_result, WorkerResult.MANUAL_STOP)
+        self.assertEqual(manager.state, 2)
 
-    def test_stop_uses_local_process_handle_before_tree_kill(self):
-        """本地 Process 句柄存活时应优先使用 terminate/kill，而非 taskkill。"""
+    def test_stop_passes_local_handle_and_record_to_tree_stop(self):
         State.process_registry["alas"] = 12345
         manager = ProcessManager.get_manager("alas")
-        process = Mock()
-        process.pid = 12345
-        # _is_process_alive: 初始 + 同步各两次 True；_stop_local_process:
-        # terminate 后仍 True，kill 后变 False → 本地句柄成功停止。
-        process.is_alive.side_effect = [True, True, True, True, True, False]
+        process = Mock(pid=12345)
+        process.is_alive.return_value = True
         manager._process = process
-
+        record = {"pid": 12345, "created_at": 1}
         with (
-            patch.object(ProcessManager, "_kill_process_tree") as kill,
-            patch(
-                "module.runtime.process_manager.is_current_owner", return_value=True
-            ),
-            patch(
-                "module.runtime.process_manager.get_workers",
-                return_value={"alas": {"pid": 12345, "created_at": 1}},
-            ),
+            patch("module.runtime.process_manager.stop_process_tree", return_value=True) as stop_tree,
+            patch("module.runtime.process_manager.is_current_owner", return_value=True),
+            patch("module.runtime.process_manager.get_workers", return_value={"alas": record}),
             patch("module.runtime.process_manager.process_matches", return_value=True),
             patch("module.runtime.process_manager.unregister_worker"),
         ):
             self.assertTrue(manager.stop())
-
-        # 本地句柄成功停止，不应回退到 taskkill
-        kill.assert_not_called()
-        process.terminate.assert_called_once()
-        process.kill.assert_called_once()
+        stop_tree.assert_called_once_with(process, record=record, name="worker alas", timeout=5)
         self.assertNotIn("alas", State.process_registry)
 
-    def test_stop_falls_back_to_tree_kill_when_local_fails(self):
-        """本地句柄 terminate/kill 均失败时回退到 taskkill 终止进程树。"""
+    def test_failed_local_tree_stop_keeps_handle_and_registry(self):
         State.process_registry["alas"] = 12345
         manager = ProcessManager.get_manager("alas")
-        process = Mock()
-        process.pid = 12345
-        # _is_process_alive: 初始 + 同步各两次 True
-        # _stop_local_process: terminate 后 True，kill 后仍 True → 本地失败
-        # 回退 _kill_process_tree 后 join(3)，最终检查 _is_process_alive → False
-        process.is_alive.side_effect = [True, True, True, True, True, True, False]
+        process = Mock(pid=12345)
+        process.is_alive.return_value = True
         manager._process = process
-
         with (
-            patch.object(ProcessManager, "_kill_process_tree", return_value=True) as kill,
-            patch(
-                "module.runtime.process_manager.is_current_owner", return_value=True
-            ),
-            patch(
-                "module.runtime.process_manager.get_workers",
-                return_value={"alas": {"pid": 12345, "created_at": 1}},
-            ),
+            patch("module.runtime.process_manager.stop_process_tree", return_value=False),
+            patch("module.runtime.process_manager.is_current_owner", return_value=True),
+            patch("module.runtime.process_manager.get_workers", return_value={"alas": {"pid": 12345, "created_at": 1}}),
             patch("module.runtime.process_manager.process_matches", return_value=True),
-            patch("module.runtime.process_manager.unregister_worker"),
+            patch("module.runtime.process_manager.unregister_worker") as unregister,
         ):
-            self.assertTrue(manager.stop())
-
-        # 本地句柄失败，应回退到 taskkill
-        kill.assert_called_once_with(12345)
-        process.kill.assert_called()  # _stop_local_process 中调用
-        self.assertNotIn("alas", State.process_registry)
+            self.assertFalse(manager.stop())
+        self.assertIs(manager._process, process)
+        self.assertEqual(State.process_registry["alas"], 12345)
+        unregister.assert_not_called()
 
     def test_failed_cross_session_stop_keeps_worker_registered(self):
         State.process_registry["alas"] = 12345
         manager = ProcessManager.get_manager("alas")
 
-        with patch.object(ProcessManager, "_kill_process_tree", return_value=False):
+        with patch("module.runtime.process_manager.stop_process_tree", return_value=False):
             with (
                 patch(
                     "module.runtime.process_manager.is_current_owner", return_value=True
@@ -175,7 +191,7 @@ class TestProcessManagerRegistry(unittest.TestCase):
         manager = ProcessManager.get_manager("alas")
 
         with (
-            patch.object(ProcessManager, "_kill_process_tree") as kill,
+            patch("module.runtime.process_manager.stop_process_tree") as kill,
             patch(
                 "module.runtime.process_manager.is_current_owner", return_value=True
             ),
@@ -196,7 +212,7 @@ class TestProcessManagerRegistry(unittest.TestCase):
         manager = ProcessManager.get_manager("alas")
 
         with (
-            patch.object(ProcessManager, "_kill_process_tree") as kill,
+            patch("module.runtime.process_manager.stop_process_tree") as kill,
             patch(
                 "module.runtime.process_manager.is_current_owner", return_value=False
             ),
@@ -215,7 +231,7 @@ class TestProcessManagerRegistry(unittest.TestCase):
         manager._process = process
 
         with (
-            patch.object(ProcessManager, "_kill_process_tree") as kill,
+            patch("module.runtime.process_manager.stop_process_tree") as kill,
             patch(
                 "module.runtime.process_manager.is_current_owner", return_value=True
             ),
@@ -235,43 +251,13 @@ class TestProcessManagerRegistry(unittest.TestCase):
         self.assertIs(manager._process, process)
         self.assertNotIn("alas", State.process_registry)
 
-    def test_stop_revalidates_identity_before_terminating_process_tree(self):
-        State.process_registry["alas"] = 12345
-        manager = ProcessManager.get_manager("alas")
-        process = Mock()
-        process.pid = 12345
-        process.is_alive.return_value = True
-        manager._process = process
-
-        with (
-            patch.object(ProcessManager, "_kill_process_tree") as kill,
-            patch(
-                "module.runtime.process_manager.is_current_owner", return_value=True
-            ),
-            patch(
-                "module.runtime.process_manager.get_workers",
-                return_value={"alas": {"pid": 12345, "created_at": 1}},
-            ),
-            patch(
-                "module.runtime.process_manager.process_matches",
-                side_effect=[True, False],
-            ) as matches,
-        ):
-            self.assertFalse(manager.stop())
-
-        self.assertEqual(2, matches.call_count)
-        kill.assert_not_called()
-
     def test_start_waits_for_stop_lifecycle_lock(self):
         State.process_registry["alas"] = 12345
         manager = ProcessManager.get_manager("alas")
         starter_manager = ProcessManager("alas")
         old_process = Mock()
         old_process.pid = 12345
-        # 保持本地句柄存活直到 taskkill 完成，再让最终活性检查确认退出。
-        # _is_process_alive() 每次会探测两次，_stop_local_process() 还会
-        # 进行 terminate/kill 两级检查，因此必须提供完整状态序列。
-        old_process.is_alive.side_effect = [True, True, True, True, True, True, False]
+        old_process.is_alive.return_value = True
         manager._process = old_process
 
         stop_entered = threading.Event()
@@ -281,14 +267,14 @@ class TestProcessManagerRegistry(unittest.TestCase):
         new_process.pid = 23456
         new_process.start.side_effect = new_process_started.set
 
-        def kill_process_tree(_):
+        def kill_process_tree(*_, **__):
             stop_entered.set()
             release_stop.wait(timeout=2)
             return True
 
         with (
-            patch.object(
-                ProcessManager, "_kill_process_tree", side_effect=kill_process_tree
+            patch(
+                "module.runtime.process_manager.stop_process_tree", side_effect=kill_process_tree
             ),
             patch(
                 "module.runtime.process_manager.is_current_owner", return_value=True
@@ -414,13 +400,46 @@ class TestProcessManagerRegistry(unittest.TestCase):
         with (
             patch("module.runtime.process_manager.Process", return_value=process),
             patch.object(manager, "_register_process", side_effect=RuntimeError("deny")),
-            patch.object(ProcessManager, "_kill_process_tree") as kill,
         ):
             with self.assertRaises(RuntimeError):
                 manager.start(func="alas")
 
-        kill.assert_not_called()
+        process.kill.assert_not_called()
+        process.terminate.assert_not_called()
         process.join.assert_called_once_with(timeout=0)
+        self.assertIsNone(manager._process)
+
+    def test_failed_start_rollback_keeps_live_handle_and_prevents_duplicate_start(self):
+        manager = ProcessManager.get_manager("alas")
+        process = Mock(pid=12345)
+        process.is_alive.return_value = True
+        with (
+            patch("module.runtime.process_manager.Process", return_value=process) as factory,
+            patch.object(manager, "_register_process", side_effect=RuntimeError("登记失败")),
+            patch("module.runtime.process_manager.stop_process_tree", return_value=False),
+            patch("module.runtime.process_manager.stop_process", return_value=False) as stop_root,
+        ):
+            with self.assertRaises(RuntimeError):
+                manager.start("alas")
+            manager.start("alas")
+        self.assertIs(manager._process, process)
+        factory.assert_called_once()
+        stop_root.assert_called_once_with(process, timeout=3)
+
+    def test_start_rollback_stops_trusted_root_when_tree_enumeration_fails(self):
+        manager = ProcessManager.get_manager("alas")
+        process = Mock(pid=12345)
+        process.is_alive.return_value = True
+        process.terminate.side_effect = lambda: setattr(process.is_alive, "return_value", False)
+        with (
+            patch("module.runtime.process_manager.Process", return_value=process),
+            patch.object(manager, "_register_process", side_effect=RuntimeError("登记失败")),
+            patch("module.runtime.process_manager.stop_process_tree", return_value=False),
+        ):
+            with self.assertRaises(RuntimeError):
+                manager.start("alas")
+        process.terminate.assert_called_once_with()
+        process.join.assert_any_call(timeout=3)
         self.assertIsNone(manager._process)
 
     def test_stop_by_user_stay_there_uses_original_stop_path(self):
@@ -542,9 +561,9 @@ class TestProcessManagerRegistry(unittest.TestCase):
         self.assertTrue(manager.thd_log_queue_handler.is_alive())
 
         with (
-            patch.object(ProcessManager, "_kill_process_tree", return_value=True),
-            # 实现已迁移到 module.runtime.process_manager（module.webui 下是转发层，
-            # 打在转发层上不会影响真实模块的全局名查找）
+            # 上游已把进程树回收抽到 module.runtime.process_control，停止路径调用
+            # stop_process_tree（不再是 ProcessManager._kill_process_tree）
+            patch("module.runtime.process_manager.stop_process_tree", return_value=True),
             patch("module.runtime.process_manager.is_current_owner", return_value=True),
             patch(
                 "module.runtime.process_manager.get_workers",
@@ -562,29 +581,26 @@ class TestProcessManagerRegistry(unittest.TestCase):
         self.assertFalse(manager.thd_log_queue_handler.is_alive())
 
     def test_log_handler_liveness_check_does_not_block_on_lifecycle_lock(self):
-        """停止流程持锁期间，日志线程的存活判断必须限时返回。
+        """日志线程的存活判断不得依赖生命周期锁，且停止信号要能立刻收尾。
 
-        否则日志线程卡在锁上等停止流程、停止流程又在 join 里等日志线程，
-        又会退化成满一个 join 超时。
+        上游实现把「本轮句柄 + 本轮队列与锁」一起绑定给线程，存活判断走
+        `_is_process_alive(process)`，不再触碰实例生命周期锁；本地保留的停止信号
+        （`stop_log_queue_handler`）则保证 stop 不必等满一个轮询周期。
         """
+        State.manager.Queue.return_value = queue.Queue()
         manager = ProcessManager.get_manager("alas")
         manager._process = FakeAliveProcess(pid=12345)
         State.process_registry["alas"] = 12345
-        outcome = []
+        manager.start_log_queue_handler()
+        handler = manager.thd_log_queue_handler
+        self.assertTrue(handler.is_alive())
 
-        def check():
-            start = time.monotonic()
-            outcome.append((manager._alive_for_log_handler(), time.monotonic() - start))
+        start = time.monotonic()
+        manager.stop_log_queue_handler()
+        elapsed = time.monotonic() - start
 
-        lock = ProcessManager._get_lifecycle_lock("alas")
-        with lock:
-            worker = threading.Thread(target=check, daemon=True)
-            worker.start()
-            worker.join(timeout=2)
-
-        self.assertFalse(worker.is_alive(), "存活判断在停止流程持锁期间死等")
-        self.assertTrue(outcome[0][0], "拿不到锁时应保守按存活处理")
-        self.assertLess(outcome[0][1], 0.5)
+        self.assertFalse(handler.is_alive(), "停止信号未能让日志线程收尾")
+        self.assertLess(elapsed, 0.8, "日志线程退出耗时过长，停止按钮会被拖慢")
 
     def test_log_handler_restarts_after_stop(self):
         """停止置位的退出信号必须被清除，否则重启后日志线程立刻自杀。"""
