@@ -281,6 +281,16 @@ class OverviewMixin(WebUIMixinBase):
                 var logPanel = document.getElementById("pywebio-scope-stat_panels_log");
                 if (charts) charts.style.display = show_log ? "none" : "";
                 if (logPanel) logPanel.style.display = show_log ? "flex" : "none";
+
+                // 图表隐藏期间 clientWidth/Height 都是 0，那时的重绘只能按 fallback
+                // 尺寸（800×360）落笔，与实际显示尺寸不符；恢复显示后没人重新量尺寸，
+                // 画布就带着错误分辨率显示 —— 曲线被拉伸成又粗又陡，只有整页刷新才
+                // 恢复。display 切换不触发 window.resize，所以这里显式通知一次。
+                var registry = window._alasApChartRelayout;
+                if (!registry) return;
+                Object.keys(registry).forEach(function (key) {
+                    try { registry[key](); } catch (e) {}
+                });
             })();
             """,
             show_log=show_log,

@@ -107,7 +107,9 @@
     var dpr = window.devicePixelRatio || 1;
     var W, H, pad, gW, gH;
     var cleanupHandlers = [];
+    var cleanupCallbacks = [];
     var animationFrameId = null;
+    var layoutFrameId = null;
     // 缩放/平移状态提升到闭包层：窗口缩放重绘时保留当前视图
     var zoomLevel = 1.0;
     var panOffset = 0;
@@ -120,8 +122,20 @@
             item.target.removeEventListener(item.type, item.handler, item.options);
         });
         cleanupHandlers = [];
+        cleanupCallbacks.forEach(function (fn) {
+            try {
+                fn();
+            } catch (e) {}
+        });
+        cleanupCallbacks = [];
         if (animationFrameId !== null) cancelAnimationFrame(animationFrameId);
         animationFrameId = null;
+        if (layoutFrameId !== null) cancelAnimationFrame(layoutFrameId);
+        layoutFrameId = null;
+        // 防抖定时器也要撤掉：图表被重建后它仍会触发，去 initChart() 一个
+        // 已经被丢弃的闭包，白跑一次重绘。
+        if (resizeTimer !== null) clearTimeout(resizeTimer);
+        resizeTimer = null;
         if (window.__apChartCleanups[chartId] === cleanup) {
             delete window.__apChartCleanups[chartId];
         }
@@ -134,6 +148,39 @@
     }
 
     window.__apChartCleanups[chartId] = cleanup;
+
+    // 在画布重新可见时补一次重绘。
+    //
+    // 为什么需要：图表隐藏（`display:none`）时 clientWidth/clientHeight 都是 0，
+    // initChart() 只能走 fallback 尺寸（800×360）。面板重新可见时若不重新量尺寸，
+    // 画布就带着错误的内部分辨率显示 —— 曲线被拉伸，看起来又粗又陡，且只有整页
+    // 刷新才恢复。现场实测：关掉日志后 canvas.width 仍是 800、height 360，而实际
+    // 显示只有 731×262（`height: clamp(260px, 34vh, 360px)` 在 1200 高的屏幕上
+    // 算出 262px），纵向被压掉 27%。
+    //
+    // 判断依据必须是「画布内部分辨率是否与显示尺寸匹配」，不能只比显示尺寸 ——
+    // 恢复可见时显示尺寸本来就没变（一直是 731×262），变的只是它在隐藏期间被
+    // 错误地重绘过。
+    //
+    // 之所以不在 resize 监听里处理：`display` 切换不触发 `window.resize`。也不能用
+    // requestAnimationFrame 轮询 —— 每帧读 clientWidth 会强制重排，长期开着太贵。
+    // 这里由概览页的日志开关（app_overview 的 _apply_log_mode_display）在切换后
+    // 调用一次，只在这一刻量尺寸。
+    window._alasApChartRelayout = window._alasApChartRelayout || {};
+    window._alasApChartRelayout[chartId] = function () {
+        layoutFrameId = requestAnimationFrame(function () {
+            layoutFrameId = null;
+            var cw = cv.clientWidth;
+            var ch = cv.clientHeight;
+            if (!cw || !ch) return;  // 仍隐藏，什么都不用做
+            var ratio = window.devicePixelRatio || 1;
+            if (cv.width === cw * ratio && cv.height === ch * ratio) return;  // 已经是准的
+            initChart();
+        });
+    };
+    cleanupCallbacks.push(function () {
+        if (window._alasApChartRelayout) delete window._alasApChartRelayout[chartId];
+    });
 
     // 延迟渲染以确保 canvas 布局完成，避免首次加载坐标偏移
     animationFrameId = requestAnimationFrame(function () {
@@ -161,7 +208,14 @@
         ovCv.style.width = W + "px"; ovCv.style.height = H + "px";
 
         var ctx = cv.getContext("2d");
-        ctx.scale(dpr, dpr);
+        // 用 setTransform 而不是 scale：scale 是**乘法**叠加，一旦本函数在画布
+        // 尺寸未变的情况下被重跑（窗口 resize 防抖、容器重新布局），就会把 dpr
+        // 再乘一遍，表现为主曲线变粗。同一目录的 resource_chart.js 一直用的是
+        // setTransform，这里对齐过来，不依赖「设置 canvas.width 会重置变换矩阵」
+        // 这一隐含前提。
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        // 叠加层刻意不在这里缩放：它的每个绘制入口都先 setTransform(1,0,0,1,0,0)
+        // 复位再按需 scale（见下面的 mousemove / renderDetailChart）。
         var oc = ovCv.getContext("2d");
 
         // 硬币刻度标签布局常量
