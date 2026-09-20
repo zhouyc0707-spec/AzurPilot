@@ -528,4 +528,6 @@ class OverviewMixin(WebUIMixinBase):
         self.task_handler.add(switch_scheduler.g(), 1, True)
         self.task_handler.add(switch_log_scroll.g(), 1, True)
         if hasattr(self, "alas") and self.alas is not None:
-            self.task_handler.add(log.put_log(self.alas), 0.25, True)
+            # 日志区改为跟随日志文件后，注册入口统一走 _ensure_log_follow_task
+            # （旧写法 log.put_log 已随重构移除，调用它会 AttributeError）
+            self._ensure_log_follow_task()

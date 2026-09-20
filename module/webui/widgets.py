@@ -209,6 +209,32 @@ class RichLog:
         """清空日志区，避免整块日志在增量追加重绘时重复。"""
         clear(self.scope)
 
+    def append_log(self, pm) -> None:
+        """把内存日志缓冲的增量渲染到本日志区。
+
+        日志面板整体已改为跟随日志文件（见 ``append_log_from_file``），但
+        「工具 - 模拟器」页的日志来自模拟器自身的内存缓冲（不落盘），仍需要这个
+        渲染入口。原先的 ``put_log`` 是生成器版本、靠任务调度器逐帧驱动；改成
+        普通方法后由闭包按帧调用，因此这里自行记录上次渲染位置。
+
+        Args:
+            pm: 具备 ``renderables`` / ``renderables_max_length`` /
+                ``renderables_reduce_length`` 字段的对象（进程管理器或模拟器
+                用的同构轻量替身）。
+        """
+        last_idx = getattr(self, "_append_log_last_idx", None)
+        idx = len(pm.renderables)
+        if last_idx is None or idx < last_idx:
+            # 首次渲染，或缓冲区被裁剪过：整段重建，避免残留旧内容
+            self.reset()
+            self.extend(self.render_many(pm.renderables[:]))
+            self._append_log_last_idx = idx
+            return
+        if idx == last_idx:
+            return
+        self.extend(self.render_many(pm.renderables[last_idx:idx]))
+        self._append_log_last_idx = idx
+
     def enable_auto_scroll(self) -> None:
         """在会话线程里注册前端观察器：日志区内容一变化就滚到底部。
 

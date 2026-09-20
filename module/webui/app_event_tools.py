@@ -6,13 +6,11 @@ from module.webui.app_dependencies import (
     Dict,
     List,
     Optional,
-    ProcessManager,
     RichLog,
     base64,
     build_error_html,
     build_event_calculator_html,
     build_event_calculator_js,
-    cast,
     current_time,
     datetime,
     deep_get,
@@ -415,5 +413,6 @@ class EventToolsMixin(WebUIMixinBase):
 
         self.task_handler.add(_update_simulator_figure, 0.5, True)
 
-        # RichLog 只读取日志缓冲字段；模拟器使用同构的轻量对象而非进程管理器。
-        self.task_handler.add(log.put_log(cast(ProcessManager, pm)), 0.25, True)
+        # 模拟器日志走内存缓冲（不落盘），按帧增量渲染；日志面板整体已改为
+        # 跟随日志文件，这里用 RichLog.append_log（旧名 put_log 已移除）
+        self.task_handler.add(lambda: log.append_log(pm), 0.25, True)
