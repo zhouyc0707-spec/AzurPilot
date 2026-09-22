@@ -41,6 +41,18 @@ WEBUI_STABLE_RUNTIME = 60
 DEPENDENCY_SYNC_START_RETRY_LIMIT = 3
 DEPENDENCY_SYNC_RESPONSE_TIMEOUT = DEPENDENCY_SYNC_TIMEOUT + 60
 
+# 启动失败时父进程的退出码。
+EXIT_STARTUP_FAILURE = 70
+
+
+class FatalStartupError(Exception):
+    """本进程无法再提供服务，需以非零退出码结束后由启动器报告。"""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
 # 本地定制：默认继续使用旧 PyWebIO 界面（module.webui），上游已改为 React 前端
 # （module.api）。设置环境变量 ALAS_WEBUI=react 可切回上游新前端，此时才需要
 # Node.js 构建 frontend/ 静态资源。
@@ -51,7 +63,7 @@ WEBUI_APP_TARGET = (
 
 
 def _ensure_frontend_if_needed() -> None:
-    """仅在启用 React 前端时构建并校验前端静态资源。"""
+    """仅在启用 React 前端时构建并校验 frontend 静态资源。"""
     if not USE_REACT_FRONTEND:
         return
     from deploy.frontend import ensure_frontend
@@ -627,8 +639,9 @@ def _prepare_dependency_sync_before_webui_start(
     return True, service, request_queue, response_queue
 
 
-def run_webui_supervisor() -> None:
-    """监督热重载 WebUI 子进程及其独立依赖同步服务。"""
+def run_webui_supervisor() -> int:
+    """监督热重载 WebUI 子进程及其独立依赖同步服务，返回本进程退出码。"""
+    fatal_error: Optional[FatalStartupError] = None
     should_exit = False
     process = None
     service = None
@@ -638,7 +651,9 @@ def run_webui_supervisor() -> None:
     runtime_failures = 0
     force_dependency_sync = False
     if not _recover_orphaned_workers():
-        return
+        fatal_error = FatalStartupError("残留 worker 未能回收，无法保证设备控制任务唯一")
+        logger.error("[GUI] AzurPilot Web服务启动失败：%s", fatal_error.reason)
+        return EXIT_STARTUP_FAILURE
     try:
         while not should_exit:
             (
@@ -653,8 +668,7 @@ def run_webui_supervisor() -> None:
                 force=force_dependency_sync,
             )
             if not ready_to_start:
-                should_exit = True
-                break
+                raise FatalStartupError("依赖同步未就绪，WebUI 无法启动")
             force_dependency_sync = False
 
             # 首次安装前端依赖可能较慢，必须在子进程监听计时开始前完成。
@@ -669,7 +683,7 @@ def run_webui_supervisor() -> None:
                     action='检查 Node.js 安装和 npm 输出，修复后重新启动。',
                     level=50,
                 )
-                break
+                raise FatalStartupError("React 前端构建失败") from exc
 
             event = Event()
             dependency_sync_event = Event()
@@ -693,9 +707,8 @@ def run_webui_supervisor() -> None:
                     level=50,
                 )
                 if startup_failures >= WEBUI_START_RETRY_LIMIT:
-                    should_exit = True
-                else:
-                    time.sleep(startup_failures)
+                    raise FatalStartupError("WebUI 子进程连续启动失败")
+                time.sleep(startup_failures)
                 continue
             logger.info(f"[GUI] 启动AzurPilot Web服务 (PID: {process.pid})")
 
@@ -718,7 +731,7 @@ def run_webui_supervisor() -> None:
                         action='手动结束残留 gui.py 子进程后重新启动。',
                         level=50,
                     )
-                    should_exit = True
+                    raise FatalStartupError("WebUI 子进程未就绪且无法停止")
                 elif startup_failures >= WEBUI_START_RETRY_LIMIT:
                     logger.error_context(
                         title='WebUI 子进程未能完成启动',
@@ -727,7 +740,9 @@ def run_webui_supervisor() -> None:
                         action='检查端口占用、WebUI 日志和 Python 环境后重新启动。',
                         level=50,
                     )
-                    should_exit = True
+                    raise FatalStartupError(
+                        f'连续 {startup_failures} 次未在 {WEBUI_READY_TIMEOUT} 秒内完成监听'
+                    )
                 else:
                     logger.warning(
                         f"[GUI] WebUI 未就绪，将在 {startup_failures} 秒后重试 "
@@ -756,8 +771,7 @@ def run_webui_supervisor() -> None:
                         action='检查 WebUI 子进程状态和系统进程权限。',
                         level=50,
                     )
-                    should_exit = True
-                    break
+                    raise FatalStartupError("WebUI 重启事件处理失败") from e
 
                 if restart_triggered:
                     logger.info("[GUI] 重启事件触发，终止当前服务...")
@@ -769,8 +783,7 @@ def run_webui_supervisor() -> None:
                             action='检查系统进程权限，手动结束残留的 gui.py 子进程后重新启动。',
                             level=50,
                         )
-                        should_exit = True
-                        break
+                        raise FatalStartupError("重启时旧 WebUI 子进程未能停止")
                     try:
                         force_dependency_sync = dependency_sync_event.is_set()
                     except OSError as exc:
@@ -781,8 +794,7 @@ def run_webui_supervisor() -> None:
                             action='检查 config 目录读写权限后重新启动。',
                             level=50,
                         )
-                        should_exit = True
-                        break
+                        raise FatalStartupError("无法读取依赖同步状态") from exc
                     if force_dependency_sync:
                         logger.info("[GUI] 检测到更新请求，创建替代 WebUI 前将同步依赖")
                     break
@@ -801,7 +813,7 @@ def run_webui_supervisor() -> None:
                             action='查看对应的 GUI 日志和子进程错误现场后重新启动。',
                             level=50,
                         )
-                        should_exit = True
+                        raise FatalStartupError("WebUI 反复意外退出")
                     else:
                         logger.warning(
                             f"[GUI] WebUI 意外退出，将在 {runtime_failures} 秒后重试 "
@@ -812,7 +824,7 @@ def run_webui_supervisor() -> None:
 
             # 确保子进程完全退出；清理失败时不能创建替代 WebUI。
             if not _stop_webui_process_tree(process):
-                if not should_exit:
+                if fatal_error is None:
                     logger.error_context(
                         title='WebUI 子进程清理失败',
                         reason='子进程已退出或需要重启，但关联 worker 未能确认回收。',
@@ -820,11 +832,19 @@ def run_webui_supervisor() -> None:
                         action='检查残留 gui.py/worker 进程后重新启动。',
                         level=50,
                     )
-                should_exit = True
+                    raise FatalStartupError("WebUI 子进程清理失败，关联 worker 未能回收")
+    except FatalStartupError as exc:
+        # 致命路径统一收敛到此，只决定退出码；错误现场已在各自分支记录。
+        fatal_error = exc
     finally:
         _stop_webui_process_tree(process)
         _stop_dependency_sync_service(service, service_request_queue)
-        logger.info("[GUI] AzurPilot Web服务已成功退出")
+        if fatal_error is None:
+            logger.info("[GUI] AzurPilot Web服务已成功退出")
+        else:
+            logger.error("[GUI] AzurPilot Web服务启动失败：%s", fatal_error.reason)
+
+    return EXIT_STARTUP_FAILURE if fatal_error is not None else 0
 
 
 if __name__ == "__main__":
@@ -838,7 +858,7 @@ if __name__ == "__main__":
         logger.warning("[GUI] 无法设置spawn启动方式，可能使用fork（macOS上不推荐）")
 
     if State.deploy_config.EnableReload:
-        run_webui_supervisor()
+        sys.exit(run_webui_supervisor())
     else:
         # 非重载模式：直接运行
         func(None, None)

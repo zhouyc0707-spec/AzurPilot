@@ -2448,6 +2448,10 @@
       }
     },
     "GemsFarming": {
+      "EventFallbackStage": {
+        "type": "input",
+        "value": "2-4"
+      },
       "ChangeFlagship": {
         "type": "select",
         "value": "ship_equip",
@@ -2991,6 +2995,10 @@
       }
     },
     "GemsFarming": {
+      "EventFallbackStage": {
+        "type": "input",
+        "value": "2-4"
+      },
       "ChangeFlagship": {
         "type": "select",
         "value": "ship_equip",
@@ -3534,6 +3542,11 @@
       }
     },
     "GemsFarming": {
+      "EventFallbackStage": {
+        "type": "input",
+        "value": "0",
+        "display": "hide"
+      },
       "ChangeFlagship": {
         "type": "select",
         "value": "ship_equip",

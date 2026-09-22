@@ -490,6 +490,7 @@
       "Sensitive": false
     },
     "GemsFarming": {
+      "EventFallbackStage": "2-4",
       "ChangeFlagship": "ship_equip",
       "CommonCV": "any",
       "CommonCVFilter": "bogue > ranger > langley > hermes",
@@ -584,6 +585,7 @@
       "Sensitive": false
     },
     "GemsFarming": {
+      "EventFallbackStage": "2-4",
       "ChangeFlagship": "ship_equip",
       "CommonCV": "any",
       "CommonCVFilter": "bogue > ranger > langley > hermes",
@@ -678,6 +680,7 @@
       "Sensitive": false
     },
     "GemsFarming": {
+      "EventFallbackStage": 0,
       "ChangeFlagship": "ship_equip",
       "CommonCV": "any",
       "CommonCVFilter": "bogue > ranger > langley > hermes",
