@@ -132,14 +132,16 @@ class OpsiExportMixin(WebUIMixinBase):
         rows = []
         for hazard_level in (3, 5):
             loot = loot_totals.get(hazard_level, {})
-            # 战斗轮次：与数据收集表一致的有效轮次口径
+            # 出击轮次：与数据收集表一致的有效轮次口径，展示时取整 ——
+            # effective_rounds 是 float（由战斗场次之类的比值算出，实测会出现 360.8），
+            # 原来只在「本来就接近整数」时才转 int，于是 360.8 会带着小数显示出来。
+            # 同一张表右侧的累计轮数（_meow_extra_columns）早就是 int(round(...))，
+            # 这里对齐成同一口径。
             try:
                 meow_data = cl1_db.get_meow_stats(
                     instance_name, year, month, hazard_level=hazard_level
                 )
-                rounds = round(float(meow_data.get("effective_rounds", 0) or 0), 1)
-                if abs(rounds - int(rounds)) < 1e-6:
-                    rounds = int(rounds)
+                rounds = int(round(float(meow_data.get("effective_rounds", 0) or 0)))
             except Exception:
                 rounds = 0
             rows.append(

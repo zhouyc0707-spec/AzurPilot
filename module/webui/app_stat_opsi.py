@@ -323,6 +323,24 @@ class OpsiStatisticsMixin(WebUIMixinBase):
     # 该格无数据时的占位（与既有约定一致的 ASCII 短横）
     DASH = "-"
 
+    @staticmethod
+    def _format_rounds(rounds):
+        """把「出击轮次」四舍五入成整数。
+
+        耄耋相接的有效轮次是 float（`effective_rounds` 由战斗场次之类的比值算出，
+        实测会出现 360.8 这样的小数），而侵蚀1 那行是 `(battles + 1) // 2` 得到的
+        整数 —— 同一列两种形态看起来不一致，所以展示时统一取整。
+
+        返回值跟侵蚀1 行保持一致：取整后的 int，取不到值时是 ``None``（由调用方
+        换成占位符）。只影响展示：调用方仍保留未取整的原值参与
+        「出击消耗 = 每轮消耗 × 轮次」，不改动统计口径（该口径与导出一致，见
+        ``app_stat_opsi_export``）。
+        """
+        try:
+            return int(round(float(rounds)))
+        except (TypeError, ValueError):
+            return None
+
     def _build_meow_stats_by_level(self, cl1_db, instance_name):
         """按侵蚀等级汇总耄耋相接数据，供三行表按等级取用。
 
@@ -435,8 +453,9 @@ class OpsiStatisticsMixin(WebUIMixinBase):
             data = meow_by_level.get(hazard_level)
             for label in body_labels:
                 if label == rounds_label:
-                    # 出击轮次直接取耄耋相接的有效轮次
-                    row.append((data or {}).get("rounds", dash))
+                    # 出击轮次直接取耄耋相接的有效轮次（取整展示，见 _format_rounds）
+                    formatted = self._format_rounds((data or {}).get("rounds"))
+                    row.append(dash if formatted is None else formatted)
                 elif label == sortie_cost_label:
                     # 出击消耗 = 每轮行动力消耗 × 出击轮次
                     rounds = float((data or {}).get("rounds", 0) or 0)
