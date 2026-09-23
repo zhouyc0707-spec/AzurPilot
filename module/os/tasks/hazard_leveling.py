@@ -29,12 +29,16 @@ from module.os_handler.assets import MISSION_ENTER, MISSION_CHECK, MISSION_QUIT
 
 class OpsiHazard1Leveling(CoinTaskMixin, OSMap):
     def clear_question(self, drop=None):
-        """清理附近问号，必要时切换其他舰队检测。
+        """清理附近问号，必要时切换其他舰队检测与处理。
 
         侵蚀 1 战略搜索后，配置的主舰队可能离明石问号过远（Issue #5656），
         导致原 clear_question 只能检测主舰队附近固定位置而漏掉明石。
         依次切换到其他舰队重新扫描，直到某个舰队能在雷达上检测到问号，
         再由父类 clear_question 基于该舰队处理。
+
+        某支舰队「看得到却走不到」（本回合步数耗尽、相邻双舰队机关等）时
+        继续换下一支舰队尝试——步数是各舰队独立的，换队往往就能清掉；
+        全部舰队都处理失败才返回 False。
         """
         primary = self.config.OpsiFleet_Fleet
         fleets = [primary] + [fleet for fleet in [1, 2, 3, 4] if fleet != primary]
@@ -54,11 +58,15 @@ class OpsiHazard1Leveling(CoinTaskMixin, OSMap):
 
             logger.info(f"[大世界-侵蚀1练级] 使用舰队 {fleet} 检测到附近问号")
             result = super().clear_question(drop=drop)
-            # 恢复主舰队，避免后续步骤在非主舰队状态下执行
-            self.fleet_set(primary)
-            return result
+            if result:
+                # 恢复主舰队，避免后续步骤在非主舰队状态下执行
+                self.fleet_set(primary)
+                return True
+            # 该舰队走不到这个问号（常见于本回合步数耗尽、或相邻双舰队机关）：
+            # 步数是各舰队独立的，换下一支舰队再试，别在第一支能"看到"的舰队上放弃
+            logger.info(f"[大世界-侵蚀1练级] 舰队 {fleet} 未能处理该问号，改试其他舰队")
 
-        # 所有舰队都没检测到问号，恢复主舰队
+        # 所有舰队都没检测到问号，或都处理失败：恢复主舰队
         self.fleet_set(primary)
         return False
 
