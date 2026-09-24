@@ -107,20 +107,21 @@
 :root[data-theme='legacy-dark'] .legacy-summary-value.is-gain {color: #ef5350}
 :root[data-theme='legacy-dark'] .legacy-summary-value.is-loss {color: #26a69a}
 
-/* 简洁表格：结构对应 webapp/simple_table.html（表头左对齐、6px 内边距）。
-   旧页面里数据是居中的，但那张表按内容取宽、列很窄，居中和左对齐看起来都是齐的；
-   这里的表要铺满面板宽度（min-width: 100%），列被拉宽后居中的数值会远离自己的
-   表头（看起来像靠在最右边），因此表头与数据统一左对齐。 */
+/* 简洁表格：结构对应 webapp/simple_table.html（6px 内边距）。
+   表头与数据都居中：旧页面里表头左对齐、数据居中，但那张表按内容取宽、列很窄，
+   两者看着仍是齐的；这里的表要铺满面板宽度（min-width: 100%），列被拉宽后两种对齐
+   方式就会分家（表头贴左、数值居中，看起来像数值跑到右边），因此两边统一居中，
+   数值正好落在自己表头正下方。 */
 .legacy-table-wrap {overflow-x: auto}
 .legacy-table {border-collapse: collapse; width: max-content; min-width: 100%; font-size: .8125rem}
 .legacy-table th {
-  text-align: left;
+  text-align: center;
   padding: 6px;
   font-weight: 600;
   white-space: nowrap;
   border-bottom: 1px solid var(--border, var(--theme-border));
 }
-.legacy-table td {text-align: left; padding: 6px; white-space: nowrap}
+.legacy-table td {text-align: center; padding: 6px; white-space: nowrap}
 .legacy-table tbody tr + tr td {border-top: 1px solid color-mix(in srgb, var(--border, var(--theme-border)) 55%, transparent)}
 
 .legacy-muted {margin: 8px 0; font-size: .85rem; opacity: .6}
