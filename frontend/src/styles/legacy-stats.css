@@ -173,7 +173,9 @@
 
 .legacy-segmented {display: inline-flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px}
 
-/* 委托收益：卡片区 + 正在进行 + 最近记录 */
+/* 委托收益：卡片区 + 正在进行 + 最近记录。
+   卡片与「正在进行/最近记录」区都不再铺半透明灰底（旧界面用的是 5% 中灰，
+   放进白色底纹卡片里看着发灰、显脏），改为跟随面板底色，只用描边与分隔线分层。 */
 .legacy-commission .legacy-stat-title-row {
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border, var(--theme-border));
@@ -191,9 +193,9 @@
   flex-direction: column;
   gap: 4px;
   padding: 12px 14px;
-  border: 1px solid color-mix(in srgb, var(--border, var(--theme-border)) 70%, transparent);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--text, var(--theme-text)) 5%, transparent);
+  border: 1px solid var(--border, var(--theme-border));
+  border-radius: 10px;
+  background: transparent;
 }
 
 .legacy-commission-card-head {display: flex; align-items: center; gap: 8px; font-size: .8125rem}
@@ -212,9 +214,9 @@
 
 .legacy-commission-recent {
   padding: 12px 14px;
-  border: 1px solid color-mix(in srgb, var(--border, var(--theme-border)) 70%, transparent);
+  border: 1px solid var(--border, var(--theme-border));
   border-radius: var(--radius, 8px);
-  background: color-mix(in srgb, var(--text, var(--theme-text)) 4%, transparent);
+  background: transparent;
 }
 
 .legacy-running-head {display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px}
