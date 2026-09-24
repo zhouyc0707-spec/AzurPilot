@@ -13,6 +13,7 @@ export interface Parameters {
   "overview.get": { instance: string }
   "scheduler.start": { instance: string }
   "scheduler.stop": { instance: string }
+  "system.restart": Record<string, never>
   "tasks.run": { instance: string; task: string }
   "logs.get": { instance: string; after?: number }
   "preview.capture": { instance: string }

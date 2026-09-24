@@ -31,6 +31,7 @@ class Router:
             'overview.get': Method(p.InstanceParams, lambda x: runtime.overview(x.instance)),
             'scheduler.start': Method(p.InstanceParams, lambda x: runtime.start(x.instance), True),
             'scheduler.stop': Method(p.InstanceParams, lambda x: runtime.stop(x.instance), True),
+            'system.restart': Method(p.Params, self.system_restart, True),
             'tasks.run': Method(p.TaskParams, lambda x: runtime.start(x.instance, x.task), True),
             'logs.get': Method(p.LogsParams, lambda x: runtime.logs(x.instance, x.after)),
             'preview.capture': Method(p.InstanceParams, lambda x: runtime.capture(x.instance)),
@@ -79,6 +80,11 @@ class Router:
     def statistics_legacy(self, params):
         from module.api.legacy_stats_service import report
         return report(self.configs, params.instance, params.month)
+
+    def system_restart(self, _params):
+        """重启 WebUI 服务：保存运行中的实例并通知父监督进程重新拉起。"""
+        from module.api.restart_service import request_restart
+        return request_restart()
 
     def meowfficer_score_report(self, params):
         from module.api.meowfficer_service import report

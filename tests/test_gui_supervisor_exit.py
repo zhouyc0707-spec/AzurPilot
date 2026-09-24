@@ -12,10 +12,15 @@ class TestSupervisorExitCode(unittest.TestCase):
             self.assertEqual(run_webui_supervisor(), EXIT_STARTUP_FAILURE)
 
     def test_frontend_build_failure_returns_failure_code(self):
+        # 本地定制：gui.py 的 USE_REACT_FRONTEND 由 ALAS_WEBUI 决定，未设置时不会走
+        # 前端构建分支 —— 那样这个用例就绕过了被 patch 的 ensure_frontend，转而去启动
+        # 真的监督进程（不会返回）。这里把开关钉住，让用例与环境变量无关。
         with patch("gui._recover_orphaned_workers", return_value=True), patch(
             "gui._prepare_dependency_sync_before_webui_start",
             return_value=(True, None, None, None),
-        ), patch("deploy.frontend.ensure_frontend", side_effect=RuntimeError("npm 不可用")):
+        ), patch("gui.USE_REACT_FRONTEND", True), patch(
+            "deploy.frontend.ensure_frontend", side_effect=RuntimeError("npm 不可用")
+        ):
             self.assertEqual(run_webui_supervisor(), EXIT_STARTUP_FAILURE)
 
     def test_dependency_sync_not_ready_returns_failure_code(self):

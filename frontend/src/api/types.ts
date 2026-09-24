@@ -124,6 +124,7 @@ export interface Results {
   'overview.get': Overview
   'scheduler.start': Overview
   'scheduler.stop': Overview
+  'system.restart': {restarting: boolean}
   'tasks.run': Overview
   'logs.get': Logs
   'preview.capture': Preview

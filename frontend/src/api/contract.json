@@ -324,6 +324,15 @@
         "type": "object"
       }
     },
+    "system.restart": {
+      "mutates": true,
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "title": "Params",
+        "type": "object"
+      }
+    },
     "tasks.run": {
       "mutates": true,
       "params": {

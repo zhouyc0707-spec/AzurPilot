@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
-import { ArrowDown, ArrowUp, Check, CircleAlert, Download, GitBranch, GitCommitHorizontal, RefreshCw, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, CircleAlert, Download, GitBranch, GitCommitHorizontal, Power, RefreshCw, X } from 'lucide-react'
 import { api } from '../api/client'
 import type { CommitHistory } from '../api/types'
 import type { UpdaterState } from '../app/updater'
@@ -19,6 +19,7 @@ export function Updater() {
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const [retry, setRetry] = useState(0)
   const local = data?.localHead, upstream = data?.upstreamHead
   useEffect(() => {setOffset(0)}, [local, upstream])
@@ -36,10 +37,20 @@ export function Updater() {
     try {await api.request(method, {}); refresh()}
     catch (error) {setError((error as Error).message)} finally {setBusy(false)}
   }
+  /* 重启服务：后端保存运行中的实例并通知父监督进程重新拉起 WebUI，
+     连接随后会断开重连（客户端自带重连），因此这里只提示、不等结果。 */
+  async function restart() {
+    setBusy(true); setError('')
+    try {
+      await api.request('system.restart', {})
+      setNotice(ui('updater.state.reload'))
+    } catch (error) {setError((error as Error).message)} finally {setBusy(false)}
+  }
   const disabled = busy || connection !== 'ready' || !data || data.busy
   const statusLabel = !local || !upstream ? ui('updater.noVersion') : data?.state === 'failed' ? ui('updater.state.failed') : data?.available && !data.busy ? ui('updater.state.available') : states[data?.state ?? ''] ? ui(states[data?.state ?? '']) : data?.state
   return <>
-    <PageTitle title={ui('nav.updater')} actions={<><button className="button" disabled={disabled} onClick={() => void act('updater.fetch')}><RefreshCw size={16} className={data?.state === 'fetch' || data?.state === 'checking' ? 'spin' : ''}/>{ui('updater.fetch')}</button><button className="button primary" disabled={disabled || !data?.canApply} onClick={() => void act('updater.apply')}><Download size={16}/>{ui('updater.update')}</button>{data?.canCancel && <button className="button" disabled={busy || connection !== 'ready'} onClick={() => void act('updater.cancel')}><X size={16}/>{ui('updater.cancel')}</button>}</>}/>
+    <PageTitle title={ui('nav.updater')} actions={<><button className="button" disabled={disabled} onClick={() => void act('updater.fetch')}><RefreshCw size={16} className={data?.state === 'fetch' || data?.state === 'checking' ? 'spin' : ''}/>{ui('updater.fetch')}</button><button className="button primary" disabled={disabled || !data?.canApply} onClick={() => void act('updater.apply')}><Download size={16}/>{ui('updater.update')}</button>{data?.canCancel && <button className="button" disabled={busy || connection !== 'ready'} onClick={() => void act('updater.cancel')}><X size={16}/>{ui('updater.cancel')}</button>}<button className="button" disabled={busy || connection !== 'ready'} data-tip={ui('updater.restartHint')} onClick={() => void restart()}><Power size={16}/>{ui('updater.restartService')}</button></>}/>
+    {notice && <p className="muted" role="status">{notice}</p>}
     {(error || statusError || data?.error) && <ErrorBox message={error || statusError || data?.error || ''} retry={() => {refresh(); setRetry(value => value + 1)}}/>}
     {!data ? <Loading/> : <>
       <div className="head-grid">{[
