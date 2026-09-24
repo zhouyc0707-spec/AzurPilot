@@ -107,7 +107,10 @@
 :root[data-theme='legacy-dark'] .legacy-summary-value.is-gain {color: #ef5350}
 :root[data-theme='legacy-dark'] .legacy-summary-value.is-loss {color: #26a69a}
 
-/* 简洁表格：结构与 webapp/simple_table.html 一致（表头左对齐、内容居中、6px 内边距） */
+/* 简洁表格：结构对应 webapp/simple_table.html（表头左对齐、6px 内边距）。
+   旧页面里数据是居中的，但那张表按内容取宽、列很窄，居中和左对齐看起来都是齐的；
+   这里的表要铺满面板宽度（min-width: 100%），列被拉宽后居中的数值会远离自己的
+   表头（看起来像靠在最右边），因此表头与数据统一左对齐。 */
 .legacy-table-wrap {overflow-x: auto}
 .legacy-table {border-collapse: collapse; width: max-content; min-width: 100%; font-size: .8125rem}
 .legacy-table th {
@@ -117,7 +120,7 @@
   white-space: nowrap;
   border-bottom: 1px solid var(--border, var(--theme-border));
 }
-.legacy-table td {text-align: center; padding: 6px; white-space: nowrap}
+.legacy-table td {text-align: left; padding: 6px; white-space: nowrap}
 .legacy-table tbody tr + tr td {border-top: 1px solid color-mix(in srgb, var(--border, var(--theme-border)) 55%, transparent)}
 
 .legacy-muted {margin: 8px 0; font-size: .85rem; opacity: .6}
