@@ -116,6 +116,8 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
   const [overview, setOverview] = useState<Overview>()
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  // 静默重取中（切月份 / 自动刷新）：保留现有内容，只把按钮禁用、表格压暗
+  const [pending, setPending] = useState(false)
   // 耄耋相接收获查看的月份，undefined 表示本月
   const [meowMonth, setMeowMonth] = useState<string>()
   const [monthPickerOpen, setMonthPickerOpen] = useState(false)
@@ -123,7 +125,11 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
   const [recentPage, setRecentPage] = useState(0)
 
   const load = useCallback((silent: boolean) => {
-    if (connection !== 'ready') return Promise.resolve()
+    if (connection !== 'ready') {
+      setBusy(false)
+      setPending(false)
+      return Promise.resolve()
+    }
     if (!silent) setBusy(true)
     const request = api.request('statistics.legacy', {instance, month: meowMonth ?? null})
     const resources = api.request('overview.get', {instance})
@@ -133,13 +139,22 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
       setError('')
     }).catch((error: Error) => {
       if (!silent) setError(error.message)
-    }).finally(() => setBusy(false))
+    }).finally(() => {
+      setBusy(false)
+      setPending(false)
+    })
   }, [connection, instance, meowMonth])
 
+  /* 只在切换实例（或首次进入）时清空内容：切月份走静默重取，页面 DOM 保持不变，
+     否则整块内容会被替换成 Loading，滚动位置随之回到顶部（看起来像整页刷新）。 */
   useEffect(() => {
     setData(undefined)
     setError('')
-    void load(false)
+    setMeowMonth(undefined)
+  }, [instance])
+
+  useEffect(() => {
+    void load(true)
   }, [load])
 
   /* 旧界面各板块 60 秒自刷新一次，仪表盘更快；这里统一按 60 秒静默重取。 */
@@ -179,6 +194,9 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
   }
 
   function pickMonth(month?: string) {
+    // 切月份只压暗表格、保留页面 DOM（整页 Loading 会把滚动位置顶回顶部）；
+    // 60 秒自动刷新不压暗，否则每分钟闪一下。
+    setPending(true)
     setMeowMonth(month)
     setMonthPickerOpen(false)
   }
@@ -212,12 +230,12 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
       </section>
 
       {/* 本月 / 历史耄耋相接收获 */}
-      <section className="legacy-stats-section legacy-stats-card">
+      <section className={`legacy-stats-section legacy-stats-card${pending ? ' is-pending' : ''}`}>
         <LegacySectionTitle title={meowTitle} onRefresh={() => void load(false)} busy={busy}>
           <div className="legacy-stat-title-actions">
             {data.meowLoot.isCurrentMonth
-              ? <button type="button" className="legacy-button" onClick={() => historyMonths.length ? setMonthPickerOpen(true) : notify('暂无历史月份数据')}>查看历史月份</button>
-              : <button type="button" className="legacy-button is-primary" onClick={() => pickMonth(undefined)}>回到本月</button>}
+              ? <button type="button" className="legacy-button" disabled={pending} onClick={() => historyMonths.length ? setMonthPickerOpen(true) : notify('暂无历史月份数据')}>查看历史月份</button>
+              : <button type="button" className="legacy-button is-primary" disabled={pending} onClick={() => pickMonth(undefined)}>回到本月</button>}
           </div>
         </LegacySectionTitle>
         <div className="legacy-stat-summary">
@@ -325,10 +343,11 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
 
     {monthPickerOpen && <Modal title="选择查看月份" onClose={() => setMonthPickerOpen(false)} className="legacy-month-modal">
       <div className="legacy-month-grid">
-        <button type="button" className={`legacy-button${data.meowLoot.isCurrentMonth ? ' is-primary' : ''}`} onClick={() => pickMonth(undefined)}>本月（{currentMonthKey()}）</button>
+        <button type="button" disabled={pending} className={`legacy-button${data.meowLoot.isCurrentMonth ? ' is-primary' : ''}`} onClick={() => pickMonth(undefined)}>本月（{currentMonthKey()}）</button>
         {historyMonths.map(month => <button
           type="button"
           key={month}
+          disabled={pending}
           className={`legacy-button${month === data.meowLoot.month ? ' is-primary' : ''}`}
           onClick={() => pickMonth(month)}>{month}</button>)}
       </div>
