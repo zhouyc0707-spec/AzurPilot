@@ -38,6 +38,18 @@
   min-width: 0;
 }
 
+/* 大世界数据收集 / 耄耋相接收获 / 每日经验检测 / 委托收益四个区域各自一张底纹卡片：
+   底色取主题 surface（旧版浅色主题即白色），边框与圆角跟页面其它卡片一致。
+   体力图表不在其中 —— 它的画布本身已经是圆角描边的卡片。 */
+.legacy-stats-card {
+  margin-top: 16px;
+  padding: 16px 18px;
+  border: 1px solid var(--border, var(--theme-border));
+  border-radius: var(--theme-radius-card, 12px);
+  background: var(--surface, var(--theme-surface));
+  box-shadow: var(--theme-shadow-panel, none);
+}
+
 .legacy-stat-title-row {
   display: flex;
   align-items: center;

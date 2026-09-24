@@ -205,14 +205,14 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
       </section>
 
       {/* 雪风大人的大世界数据收集：一张表按侵蚀等级分三行（1 / 5 / 3） */}
-      <section className="legacy-stats-section">
+      <section className="legacy-stats-section legacy-stats-card">
         <LegacySectionTitle title={text('Gui.Stat.OpsiDataCollectionTitle')} onRefresh={() => void load(false)} busy={busy}/>
         <LegacySummary items={data.opsi.summary} text={text}/>
         <LegacyTable columns={data.opsi.columns} rows={data.opsi.rows} text={text}/>
       </section>
 
       {/* 本月 / 历史耄耋相接收获 */}
-      <section className="legacy-stats-section">
+      <section className="legacy-stats-section legacy-stats-card">
         <LegacySectionTitle title={meowTitle} onRefresh={() => void load(false)} busy={busy}>
           <div className="legacy-stat-title-actions">
             {data.meowLoot.isCurrentMonth
@@ -227,7 +227,7 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
       </section>
 
       {/* 每日经验检测 / 舰船升级进度 */}
-      <section className="legacy-stats-section">
+      <section className="legacy-stats-section legacy-stats-card">
         <LegacySectionTitle title={text('Gui.Stat.ShipExpProgressTitle')} onRefresh={() => void load(false)} busy={busy}/>
         {data.shipExp.hasData
           ? <>
@@ -246,7 +246,7 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
       </section>
 
       {/* 委托收益统计 */}
-      <section className="legacy-stats-section legacy-commission">
+      <section className="legacy-stats-section legacy-stats-card legacy-commission">
         <LegacySectionTitle title={text('Gui.Stat.CommissionIncomeTitle')} onRefresh={() => void load(false)} busy={busy}/>
         <div className="legacy-segmented" role="group">
           {(['day', 'week', 'month'] as const).map(period => <button
