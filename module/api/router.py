@@ -36,6 +36,7 @@ class Router:
             'preview.capture': Method(p.InstanceParams, lambda x: runtime.capture(x.instance)),
             'statistics.refreshLoot': Method(p.InstanceParams, self.refresh_loot, True),
             'statistics.report': Method(p.StatisticsReportParams, self.statistics_report),
+            'statistics.legacy': Method(p.LegacyStatisticsParams, self.statistics_legacy),
             'meowfficer.scoreReport': Method(p.MeowfficerScoreReportParams, self.meowfficer_score_report),
             'meowfficer.clearReport': Method(p.MeowfficerClearReportParams,
                                              self.meowfficer_clear_report, True),
@@ -74,6 +75,10 @@ class Router:
         from module.api.statistics_service import report
         return report(self.configs, params.instance, params.category, params.month,
                       params.days, params.period, research_series=params.series)
+
+    def statistics_legacy(self, params):
+        from module.api.legacy_stats_service import report
+        return report(self.configs, params.instance, params.month)
 
     def meowfficer_score_report(self, params):
         from module.api.meowfficer_service import report

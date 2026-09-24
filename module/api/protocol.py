@@ -99,6 +99,13 @@ class StatisticsReportParams(InstanceParams):
     series: StrictInt = Field(default=0, ge=0, le=20)
 
 
+class LegacyStatisticsParams(InstanceParams):
+    """旧版统计页（旧版主题整页还原）的整页数据查询。"""
+
+    # 耄耋相接收获查看的月份，缺省为当前月
+    month: StrictStr | None = Field(default=None, pattern=r'^\d{4}-(0[1-9]|1[0-2])$')
+
+
 class MeowfficerScoreReportParams(InstanceParams):
     """指挥喵评分报告的只读查询。"""
 

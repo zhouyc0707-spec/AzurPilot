@@ -1,0 +1,255 @@
+/* 旧版统计页（旧版主题整页还原）的样式。
+   面板结构对应 module/webui/app_stat_*.py 里各板块的 HTML：标题行 + 汇总行 + 简洁表格，
+   间距沿用旧界面的口径（板块之间 24px、标题到内容 8px、汇总行左右 24px 间距）。 */
+
+.legacy-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-bottom: 24px;
+}
+
+/* 区域一：资源仪表盘。窄屏时吸顶，与旧界面一致。 */
+.legacy-stats-dashboard {
+  flex: 0 0 auto;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border, var(--theme-border));
+}
+
+.legacy-stats-charts {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.legacy-stats-section {
+  margin-top: 24px;
+  margin-bottom: 8px;
+  min-width: 0;
+}
+
+.legacy-stat-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.legacy-stat-heading {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.legacy-stat-title-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+/* 统计页的图标按钮：30px 见方、10px 圆角，与旧界面五个板块统一的形式一致 */
+.legacy-stat-refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--border, var(--theme-border));
+  border-radius: 10px;
+  background: var(--surface, var(--theme-surface));
+  color: var(--muted, var(--theme-muted));
+  cursor: pointer;
+  transition: border-color .15s, color .15s, background-color .15s;
+}
+
+.legacy-stat-refresh:hover:not(:disabled) {
+  border-color: var(--accent, var(--theme-accent));
+  color: var(--accent, var(--theme-accent));
+}
+
+.legacy-stat-refresh:disabled {opacity: .5; cursor: default}
+
+/* 汇总行：flex-wrap 而不是 grid —— 窗口变窄时换行行为可预期（旧界面的实测口径：
+   1500px 一行、1200px 两行、1000px 以下三行）。 */
+.legacy-stat-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 24px;
+  row-gap: 4px;
+  margin: 8px 0;
+  font-size: .875rem;
+}
+
+.legacy-summary-item {white-space: nowrap}
+.legacy-summary-value {margin-left: 4px}
+
+/* 正负着色只作用于数值：红涨绿跌是语义色，不跟随主题主色；深色主题用更亮的一档 */
+.legacy-summary-value.is-gain {color: #d32f2f}
+.legacy-summary-value.is-loss {color: #00897b}
+:root[data-theme='legacy-dark'] .legacy-summary-value.is-gain {color: #ef5350}
+:root[data-theme='legacy-dark'] .legacy-summary-value.is-loss {color: #26a69a}
+
+/* 简洁表格：结构与 webapp/simple_table.html 一致（表头左对齐、内容居中、6px 内边距） */
+.legacy-table-wrap {overflow-x: auto}
+.legacy-table {border-collapse: collapse; width: max-content; min-width: 100%; font-size: .8125rem}
+.legacy-table th {
+  text-align: left;
+  padding: 6px;
+  font-weight: 600;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border, var(--theme-border));
+}
+.legacy-table td {text-align: center; padding: 6px; white-space: nowrap}
+.legacy-table tbody tr + tr td {border-top: 1px solid color-mix(in srgb, var(--border, var(--theme-border)) 55%, transparent)}
+
+.legacy-muted {margin: 8px 0; font-size: .85rem; opacity: .6}
+
+/* 按钮：中性描边 + 选中主色实心（旧界面统计页统一按钮样式） */
+.legacy-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  padding: 0 14px;
+  border: 1px solid var(--border, var(--theme-border));
+  border-radius: 10px;
+  background: var(--surface, var(--theme-surface));
+  color: var(--text, var(--theme-text));
+  font: inherit;
+  font-size: .8125rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color .15s, background-color .15s, color .15s;
+}
+
+.legacy-button:hover:not(:disabled) {border-color: var(--accent, var(--theme-accent)); color: var(--accent, var(--theme-accent))}
+.legacy-button:disabled {opacity: .45; cursor: default}
+.legacy-button.is-primary {
+  border-color: var(--accent, var(--theme-accent));
+  background: var(--accent, var(--theme-accent));
+  color: var(--theme-on-accent, #fff);
+}
+.legacy-button.is-primary:hover {color: var(--theme-on-accent, #fff)}
+
+.legacy-segmented {display: inline-flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px}
+
+/* 委托收益：卡片区 + 正在进行 + 最近记录 */
+.legacy-commission .legacy-stat-title-row {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border, var(--theme-border));
+}
+
+.legacy-commission-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin: 10px 0 16px;
+}
+
+.legacy-commission-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--border, var(--theme-border)) 70%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--text, var(--theme-text)) 5%, transparent);
+}
+
+.legacy-commission-card-head {display: flex; align-items: center; gap: 8px; font-size: .8125rem}
+.legacy-commission-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  flex: 0 0 auto;
+}
+.legacy-commission-name {color: var(--text, var(--theme-text))}
+.legacy-commission-total {font-size: 1.05rem; font-weight: 600}
+.legacy-commission-stat {font-size: .72rem; opacity: .55}
+
+.legacy-commission-recent {
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--border, var(--theme-border)) 70%, transparent);
+  border-radius: var(--radius, 8px);
+  background: color-mix(in srgb, var(--text, var(--theme-text)) 4%, transparent);
+}
+
+.legacy-running-head {display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px}
+.legacy-running-title {font-size: .9rem; font-weight: 500}
+.legacy-running-scanned {font-size: .75rem; opacity: .55}
+.legacy-running-list {display: flex; flex-wrap: wrap; gap: 8px}
+.legacy-running-card {
+  display: flex;
+  flex: 1 1 150px;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--border, var(--theme-border)) 70%, transparent);
+  border-radius: 10px;
+}
+/* 钻石委托（要员 / 度假 / 巡视护卫）用金色边框标出 */
+.legacy-running-card.is-rare {border: 2px solid #d4a017}
+.legacy-running-name {font-size: .8125rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap}
+.legacy-running-finish {font-size: .72rem; opacity: .6}
+
+.legacy-recent-divider {height: 1px; margin: 12px 0; background: color-mix(in srgb, var(--border, var(--theme-border)) 70%, transparent)}
+.legacy-recent-title {font-size: .9rem; font-weight: 500; margin-bottom: 8px}
+.legacy-recent-list {font-size: 13px}
+.legacy-recent-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 6px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border, var(--theme-border)) 50%, transparent);
+}
+.legacy-recent-time {flex: 0 0 auto; min-width: 80px; font-size: 12px; opacity: .65}
+.legacy-recent-items {display: flex; flex-wrap: wrap; align-items: center; min-width: 0}
+.legacy-recent-item {display: inline-flex; align-items: center; height: 24px; margin-right: 12px}
+.legacy-recent-dot {display: inline-block; width: 8px; height: 8px; margin-right: 4px; border-radius: 50%}
+.legacy-recent-amount {margin-left: 2px; opacity: .65}
+.legacy-recent-empty {opacity: .6}
+
+/* 「查看截图」：与同页按钮同规格（30px 高 / 10px 圆角 / 12px 字号 / 600 字重） */
+.legacy-shot-link {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  height: 30px;
+  margin-left: 8px;
+  padding: 0 14px;
+  border: 1px solid var(--border, var(--theme-border));
+  border-radius: 10px;
+  color: var(--accent, var(--theme-accent));
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: border-color .15s, background-color .15s;
+}
+.legacy-shot-link:hover {border-color: var(--accent, var(--theme-accent)); background: var(--accent-soft, var(--theme-accent-soft))}
+.legacy-shot-link:focus-visible {outline: 2px solid var(--accent, var(--theme-accent)); outline-offset: 1px}
+
+.legacy-pagination {display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px}
+.legacy-commission-foot {margin: 10px 0 0; font-size: .75rem; opacity: .5}
+
+.legacy-month-grid {display: flex; flex-wrap: wrap; gap: 8px}
+
+@media (max-width: 768px) {
+  .legacy-stats-dashboard {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: var(--bg, var(--theme-bg));
+  }
+}

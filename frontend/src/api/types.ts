@@ -60,6 +60,41 @@ export interface MeowfficerCat {
 }
 /** 「指挥喵评分」任务写入 log/meowfficer_score.json 的结构化结果，报告不存在时后端返回 NOT_FOUND。 */
 export interface MeowfficerScoreReport { instance: string; generatedAt: string; count: number; cats: MeowfficerCat[] }
+/** 旧版统计页的列描述：`key` 是 `Gui.Stat.*` 翻译键，非 `Gui.` 开头时按原文显示。 */
+export interface LegacyColumn {key: string; format: string}
+export interface LegacySeries {key: string; label: string; points: {time: string; value: number; apNow?: number}[]}
+/** 旧版汇总项：`sign` 决定数值着色（gain 红 / loss 深绿 / 空不着色）。 */
+export interface LegacySummaryItem {key: string; value: number | string; format: string; sign: string}
+export interface LegacyOpsiPanel {summary: LegacySummaryItem[]; columns: LegacyColumn[]; rows: (number | string)[][]}
+export interface LegacyMeowLootPanel {
+  month: string; isCurrentMonth: boolean; availableMonths: string[]; lastRecord: string
+  columns: LegacyColumn[]; rows: (number | string)[][]
+}
+export interface LegacyShipPanel {
+  hasData: boolean; hasToday?: boolean; lastCheckTime?: string
+  expPerHour?: number; todayExp?: number; todayRunMinutes?: number
+  columns: LegacyColumn[]; rows: (number | string)[][]
+}
+export interface LegacyCommissionCard {name: string; index: number; color: string; labelKey: string; total: number; count: number; avg: number}
+export interface LegacyCommissionItem {name: string; labelKey: string; color: string; icon: number; amount: number}
+export interface LegacyCommissionRecent {time: string; items: LegacyCommissionItem[]; screenshot: string | null}
+export interface LegacyCommissionRunning {name: string; finish: number; rare: boolean}
+/**
+ * 旧版统计页（旧版主题整页还原）的整页数据，见后端
+ * `module/api/legacy_stats_service.py`；只含数据与 i18n 键，文案一律由前端渲染。
+ */
+export interface LegacyStatisticsReport {
+  instance: string; month: string; dashboardKeys: string[]
+  apChart: {series: LegacySeries[]}
+  opsi: LegacyOpsiPanel
+  meowLoot: LegacyMeowLootPanel
+  shipExp: LegacyShipPanel
+  commission: {
+    periods: Record<'day' | 'week' | 'month', {cards: LegacyCommissionCard[]; totalCommissions: number}>
+    recent: {rows: LegacyCommissionRecent[]; pageSize: number; maxPages: number; limit: number}
+    running: {available: boolean; scannedAt: string | null; items: LegacyCommissionRunning[]}
+  }
+}
 export interface DeployField { key: string; type: string; label: string; help: string; value: Value; options: Value[] }
 export interface RemoteAccessStatus { enabled: boolean; state: string; address: string; error: string }
 export interface Settings { groups: {key: string; label: string; fields: DeployField[]}[]; notice: string; demo: boolean; remote?: RemoteAccessStatus }
@@ -94,6 +129,7 @@ export interface Results {
   'preview.capture': Preview
   'statistics.resources': Statistics
   'statistics.report': StatisticsReport
+  'statistics.legacy': LegacyStatisticsReport
   'statistics.refreshLoot': {refreshed: boolean}
   'meowfficer.scoreReport': MeowfficerScoreReport
   'meowfficer.clearReport': {cleared: boolean; removed: string[]}

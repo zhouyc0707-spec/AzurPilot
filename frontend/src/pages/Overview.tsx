@@ -77,7 +77,7 @@ export function Overview() {
       {/* 换面板时重挂一次，让内容列的淡入重放；方向类决定从哪一侧滑入。 */}
       <div className={`instance-page-panel ${panel === 'stats' ? 'panel-drop' : 'panel-rise'}`} key={panel}>
         {panel === 'stats'
-          ? <div className="instance-panel-stats"><Statistics/></div>
+          ? <div className="instance-panel-stats"><Statistics embedded/></div>
           : <MonitorPanel instance={instance}/>}
       </div>
     </div>

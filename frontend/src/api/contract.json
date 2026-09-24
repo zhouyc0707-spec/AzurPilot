@@ -483,6 +483,39 @@
         "type": "object"
       }
     },
+    "statistics.legacy": {
+      "mutates": false,
+      "params": {
+        "additionalProperties": false,
+        "description": "旧版统计页（旧版主题整页还原）的整页数据查询。",
+        "properties": {
+          "instance": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Instance",
+            "type": "string"
+          },
+          "month": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Month"
+          }
+        },
+        "required": [
+          "instance"
+        ],
+        "title": "LegacyStatisticsParams",
+        "type": "object"
+      }
+    },
     "meowfficer.scoreReport": {
       "mutates": false,
       "params": {

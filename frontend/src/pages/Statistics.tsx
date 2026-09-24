@@ -93,10 +93,11 @@ function getMetricIcon(label: string): LucideIcon | undefined {
 }
 
 const StatisticsChart = lazy(() => import('../components/StatisticsChart').then(module => ({default: module.StatisticsChart})))
+const StatisticsLegacy = lazy(() => import('./StatisticsLegacy').then(module => ({default: module.StatisticsLegacy})))
 const categories: Record<Category, UiKey> = {resources: 'stats.category.resources', action: 'stats.category.action', opsi: 'stats.category.opsi', commission: 'stats.category.commission', ships: 'stats.category.ships', loot: 'stats.category.loot', research: 'stats.category.research'}
 type Category = NonNullable<Parameters['statistics.report']['category']>
 
-export function Statistics() {
+export function Statistics({embedded = false}: {embedded?: boolean} = {}) {
   const {ui, theme, language} = useApp()
   const {instance = ''} = useParams()
   const legacy = usesLegacyLayout(theme)
@@ -258,6 +259,11 @@ export function Statistics() {
     {condensed && (category === 'ships' || category === 'loot') && <div className="statistics-controls period-controls">{hints}</div>}
     {dataView}
   </>
+
+  // 旧版主题：整页还原本地旧版统计页（资源仪表盘 + 体力图表 + 大世界数据收集
+  // + 本月耄耋收获 + 舰船经验 + 委托收益），数据走 statistics.legacy；其它主题保留
+  // 上游的分类视图。旧版主题的整页还原见 定制化修改清单 第一章「旧版统计页整页还原」。
+  if (legacy) return <Suspense fallback={<Loading/>}><StatisticsLegacy embedded={embedded}/></Suspense>
 
   // 旧版版式：整页只放统计内容（不放调度器与任务计划），页名由顶栏居中显示。
   if (legacy) return <>
