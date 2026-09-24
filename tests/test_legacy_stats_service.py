@@ -229,6 +229,10 @@ class MeowLootPanelTests(unittest.TestCase):
 
         self.assertEqual(panel['month'], '2026-09')
         self.assertEqual(panel['availableMonths'], ['2026-08', '2026-07'])
+        # 掉落与可用月份都不带实例过滤：库里历史记录的 instance 列是 NULL，
+        # 按实例查会把它们全滤掉（面板看起来像数据没了）
+        azurstats.get_meow_loot_monthly_totals.assert_called_once_with(year=2026, month=9)
+        azurstats.get_meow_loot_available_months.assert_called_once_with()
         self.assertEqual(panel['lastRecord'], '2026-09-21 12:00:00')
         self.assertEqual([row[1] for row in panel['rows']], [3, 5])
         first, second = panel['rows']

@@ -278,12 +278,15 @@ def _meow_loot_panel(instance, year, month):
     from module.statistics.cl1_database import db as cl1_db
 
     month_str = f'{year:04d}-{month:02d}'
-    loot_totals = AzurStats.get_meow_loot_monthly_totals(year=year, month=month, instance=instance)
+    # 掉落列与可用月份**不按实例过滤**，与旧界面一致：掉落库里 2026-09 之前的记录
+    # instance 列是 NULL（实例隔离是后来才加的），按实例查会把这些历史数据全部滤掉，
+    # 面板看起来就像「数据都没了」。只有下面的「出击轮次」按实例取（也跟旧界面一致）。
+    loot_totals = AzurStats.get_meow_loot_monthly_totals(year=year, month=month)
     # 历史月份选择器里只列「有掉落数据的其它月份」，当前月由「回到本月」按钮承担
     current_month = (datetime.now().year, datetime.now().month)
     available_months = [
         f'{item_year:04d}-{item_month:02d}'
-        for item_year, item_month in (AzurStats.get_meow_loot_available_months(instance=instance) or [])
+        for item_year, item_month in (AzurStats.get_meow_loot_available_months() or [])
         if (item_year, item_month) != current_month
     ]
 
