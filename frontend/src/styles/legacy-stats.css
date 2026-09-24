@@ -16,6 +16,16 @@
   border-bottom: 1px solid var(--border, var(--theme-border));
 }
 
+/* 嵌在旧版总览页的主区里时，父级 .instance-panel-stats 是「定高 + overflow:hidden」的
+   容器（上游给新统计页准备的），而页面根按 legacy.css 的 `flex: 1 0 auto` 会长到内容高，
+   结果内容被裁掉且整块滚不动（实测 clientHeight 719 / scrollHeight 1951）。
+   这里让根自己收缩成容器高并内部滚动。独立统计页不匹配这条选择器，仍由 main 滚。 */
+.instance-panel-stats > .statistics-legacy.legacy-stats {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .legacy-stats-charts {
   display: flex;
   flex-direction: column;
