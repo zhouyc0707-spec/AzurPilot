@@ -50,6 +50,13 @@ dependencies = [
 [dependency-groups]
 dev = [
     "ruff",
+    # 启动器（alas-launcher）启动前会检查 deploy 基础依赖 requests，缺了就自己
+    # `python -m pip install requests`（带多个镜像轮询）。uv 建的 venv 默认不带 pip，
+    # 而 `uv sync` 还会把手工装的 pip 删掉（实测 sync 输出里有 `- pip==...`），
+    # 于是只要环境有一点偏差（例如漏装 requests 的依赖 idna），启动器就因为没有 pip
+    # 无法自愈，直接报「安装 deploy 基础依赖 requests 失败」并退出。
+    # 把 pip 声明成依赖，让它随 uv sync 常驻。
+    "pip",
 ]
 
 [tool.uv]
