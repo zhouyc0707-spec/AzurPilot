@@ -13,14 +13,16 @@ import '../styles/legacy-stats.css'
 const AUTO_REFRESH_MS = 60_000
 /** 历史月份选择器里最多列出多少个历史月份（旧界面同样是 24）。 */
 const HISTORY_MONTH_LIMIT = 24
-/* 委托收益五张卡片的图标：旧界面用 assets/gui/icon/icon_N.png，新前端改用同一套
-   语义的 webp 图标（与资源仪表盘一致，这些文件已在 frontend/public 下）。 */
+/* 委托收益五张卡片的图标沿用**旧界面**那一套（assets/gui/icon/icon_N.png，
+   由后端挂在 /gui-icons 下，与旧界面用的是同一份文件）：
+   钻石 icon_1 / 心智魔方 icon_2 / **心智 icon_3（浅蓝）** / 石油 icon_4 / 物资 icon_5。
+   注意「心智」不是新前端的“核心数据”（core_data.webp），两者不是同一个东西。 */
 const commissionIcons: Record<string, string> = {
-  Gem: 'diamond.webp',
-  Cube: 'cube.webp',
-  Chip: 'core_data.webp',
-  Oil: 'oil.webp',
-  Coin: 'gold.webp',
+  Gem: '/gui-icons/icon_1.png',
+  Cube: '/gui-icons/icon_2.png',
+  Chip: '/gui-icons/icon_3.png',
+  Oil: '/gui-icons/icon_4.png',
+  Coin: '/gui-icons/icon_5.png',
 }
 type Cell = number | string
 
@@ -280,7 +282,8 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
           {(periodSummary?.cards ?? []).map(card => <div className="legacy-commission-card" key={card.name}>
             <div className="legacy-commission-card-head">
               <span className="legacy-commission-icon" style={{background: `${card.color}1a`}}>
-                <img src={`${import.meta.env.BASE_URL}${commissionIcons[card.name] ?? 'core_data.webp'}`} alt="" width={16} height={16}/>
+                <img src={commissionIcons[card.name] ?? '/gui-icons/icon_3.png'} alt="" width={16} height={16}
+                  onError={event => {(event.currentTarget as HTMLImageElement).style.visibility = 'hidden'}}/>
               </span>
               <span className="legacy-commission-name">{text(card.labelKey)}</span>
             </div>

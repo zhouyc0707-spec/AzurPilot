@@ -15,6 +15,7 @@ class FrontendStaticTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         root = fixture(temporary.name)
+        self.root = root
         dist = root / 'frontend/dist'
         (dist / 'assets').mkdir(parents=True)
         (dist / 'icons').mkdir()
@@ -48,6 +49,19 @@ class FrontendStaticTests(unittest.TestCase):
                      '/%2e%2e/%2e%2e/config/testpilot.json']:
             with self.subTest(path=path):
                 self.assertEqual(self.client.get(path).status_code, 404)
+
+    def test_legacy_gui_icons_are_served_from_repo_assets(self):
+        """旧版统计页的委托卡片用旧界面的道具图标（「心智」是浅蓝那张 icon_3），
+        由后端把 assets/gui/icon 直接挂在 /gui-icons 下，不往 frontend/public 复制副本。"""
+        icons = self.root / 'assets' / 'gui' / 'icon'
+        icons.mkdir(parents=True)
+        (icons / 'icon_3.png').write_bytes(b'\x89PNG-legacy-icon')
+        client = TestClient(create_app(root=self.root, password='', manage_runtime=False, mount_mcp=False))
+
+        response = client.get('/gui-icons/icon_3.png')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b'\x89PNG-legacy-icon')
+        self.assertIn('image/png', response.headers['content-type'])
 
 
 class StaticMimeTypeTests(unittest.TestCase):

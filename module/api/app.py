@@ -120,6 +120,12 @@ def create_app(*, root: Path = ROOT, password=None, manage_runtime=True, mount_m
     research_items = root / 'assets' / 'stats' / 'research_items'
     if research_items.is_dir():
         routes.append(Mount('/research-items', StaticFiles(directory=research_items)))
+    # 旧界面的道具图标（assets/gui/icon/icon_N.png）：旧版统计页的委托收益卡片按旧界面
+    # 用同一套图 —— 其中「心智」是浅蓝那张（icon_3），与新前端的「核心数据」并不是
+    # 同一个东西；直接挂旧目录，图标只有一份，不往 frontend/public 里复制副本。
+    gui_icons = root / 'assets' / 'gui' / 'icon'
+    if gui_icons.is_dir():
+        routes.append(Mount('/gui-icons', StaticFiles(directory=gui_icons)))
     if mount_mcp:
         from mcp_server_sse import create_app as create_mcp_app, configure_auth
         configure_auth(password, public_bind=bool(password))
