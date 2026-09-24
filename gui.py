@@ -54,12 +54,45 @@ class FatalStartupError(Exception):
 
 
 # 本地定制：默认继续使用旧 PyWebIO 界面（module.webui），上游已改为 React 前端
-# （module.api）。设置环境变量 ALAS_WEBUI=react 可切回上游新前端，此时才需要
-# Node.js 构建 frontend/ 静态资源。
-USE_REACT_FRONTEND = os.environ.get("ALAS_WEBUI", "").strip().lower() == "react"
+# （module.api）。界面选择规则：
+#   ALAS_WEBUI=react         → 新前端（需要 Node.js 构建 frontend/ 静态资源）
+#   ALAS_WEBUI=<其它非空值>  → 旧界面（pywebio / legacy / old 等写法都接受）
+#   未设置 + 由启动器拉起     → 新前端：启动器（alas-launcher）会用环境变量
+#                              ALAS_WEBUI_TRUST_SECRET 拉起 WebUI，它要的控制流
+#                              （/api/launcher/*）与通知流（/api/notify_stream）
+#                              在新前端后端同样齐备（module/api/launcher_routes.py）
+#   未设置 + 手动启动         → 旧界面（保持原有默认）
+LAUNCHER_TRUST_SECRET_ENV = "ALAS_WEBUI_TRUST_SECRET"
+_EXPLICIT_WEBUI = os.environ.get("ALAS_WEBUI", "").strip().lower()
+_LAUNCHED_BY_LAUNCHER = bool(os.environ.get(LAUNCHER_TRUST_SECRET_ENV, "").strip())
+USE_REACT_FRONTEND = _EXPLICIT_WEBUI == "react" or (
+    not _EXPLICIT_WEBUI and _LAUNCHED_BY_LAUNCHER
+)
 WEBUI_APP_TARGET = (
     "module.api.app:create_app" if USE_REACT_FRONTEND else "module.webui.app:app"
 )
+
+
+def _resolve_frontend(electron: bool = False) -> None:
+    """按启动方式最终确定界面，并把结果写回模块级常量。
+
+    ``--electron``（启动器/Electron 客户端）同样视为「由启动器拉起」：即使环境里
+    没有信任密钥，也不该让启动器窗口落在旧界面上。显式设置 ``ALAS_WEBUI`` 时
+    一律以它为准。
+
+    Args:
+        electron: 命令行是否带 ``--electron``。
+    """
+    global USE_REACT_FRONTEND, WEBUI_APP_TARGET
+    if _EXPLICIT_WEBUI:
+        use_react = _EXPLICIT_WEBUI == "react"
+    else:
+        use_react = _LAUNCHED_BY_LAUNCHER or electron
+    USE_REACT_FRONTEND = use_react
+    WEBUI_APP_TARGET = (
+        "module.api.app:create_app" if use_react else "module.webui.app:app"
+    )
+    logger.attr("WebUI", "react" if use_react else "pywebio")
 
 
 def _ensure_frontend_if_needed() -> None:
@@ -178,8 +211,6 @@ def func(
     State.restart_event = ev
     State.dependency_sync_event = dependency_sync_event
 
-    _ensure_frontend_if_needed()
-
     # 解析命令行参数
     parser = argparse.ArgumentParser(description="AzurPilot Web 服务")
     parser.add_argument(
@@ -217,6 +248,11 @@ def func(
         help="启动时运行指定配置的AzurPilot",
     )
     args, _ = parser.parse_known_args()
+
+    # 界面在参数解析之后才能最终确定（--electron 也参与判定），
+    # 需要 React 前端时在这里完成构建与校验。
+    _resolve_frontend(electron=args.electron)
+    _ensure_frontend_if_needed()
 
     # 配置服务器设置
     host = args.host or State.deploy_config.WebuiHost or "0.0.0.0"

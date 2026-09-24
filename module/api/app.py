@@ -1,6 +1,7 @@
 """Starlette 应用工厂：静态 React 页面与同源 WebSocket。"""
 import argparse
 import asyncio
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -10,11 +11,17 @@ from starlette.routing import Mount, Route, WebSocketRoute
 from starlette.staticfiles import StaticFiles
 
 from module.api.config_service import ConfigService, ROOT
+from module.api.launcher_routes import routes as launcher_routes
 from module.api.router import Router
 from module.api.runtime_service import RuntimeService
 from module.api.socket import Gateway
 from module.api.static import FrontendFiles
 from module.logger import logger
+from module.runtime.launcher_trust import (
+    TRUST_SECRET_ENV,
+    configure as configure_launcher_trust,
+    enabled as launcher_trust_enabled,
+)
 from module.runtime.password_utils import ensure_password_for_host, is_demo_mode
 from module.runtime.setting import State
 
@@ -34,6 +41,10 @@ def create_app(*, root: Path = ROOT, password=None, manage_runtime=True, mount_m
         password = ensure_password_for_host(key, host, demo=is_demo_mode())
         if password and password != key:
             State.deploy_config.Password = password
+    # 启动器（alas-launcher）会用信任密钥拉起 WebUI：登记它与当前密码，
+    # 供 /api/launcher/trusted-login 签发免密令牌；手动启动时该环境变量缺省，
+    # 免密通道整体关闭。与旧界面（module/webui/app.py）的行为一致。
+    configure_launcher_trust(os.environ.get(TRUST_SECRET_ENV), password)
     gateway = Gateway(Router(configs, runtime), password)
 
     @asynccontextmanager
@@ -98,6 +109,10 @@ def create_app(*, root: Path = ROOT, password=None, manage_runtime=True, mount_m
               Route('/reports/meowfficer_score', meowfficer_score_report),
               WebSocketRoute('/api/v1/ws', gateway.endpoint),
               Mount('/static/commission_rewards', StaticFiles(directory=commission_rewards_dir))]
+    # 启动器的控制/通知/免密端点必须排在静态资源之前：下面的 SPA 兜底会把
+    # 未匹配路径都当成前端路由返回 index.html（HTTP 200 + text/html），
+    # 启动器会因此拿到 HTML 而不是 SSE 流。
+    routes.extend(launcher_routes)
     if (dist / 'assets').is_dir():
         routes.append(Mount('/assets', StaticFiles(directory=dist / 'assets')))
     # 科研掉落的物品图标直接用仓库里的模板图，不走前端构建，
