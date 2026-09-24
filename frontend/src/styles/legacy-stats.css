@@ -65,7 +65,7 @@
 
 .legacy-stat-heading {
   margin: 0;
-  font-size: 1rem;
+  font-size: 15px;
   font-weight: 600;
   line-height: 1.4;
   overflow: hidden;
@@ -113,7 +113,7 @@
   column-gap: 24px;
   row-gap: 4px;
   margin: 8px 0;
-  font-size: .875rem;
+  font-size: 13px;
 }
 
 .legacy-summary-item {white-space: nowrap}
@@ -136,7 +136,7 @@
    方式就会分家（表头贴左、数值居中，看起来像数值跑到右边），因此两边统一居中，
    数值正好落在自己表头正下方。 */
 .legacy-table-wrap {overflow-x: auto}
-.legacy-table {border-collapse: collapse; width: max-content; min-width: 100%; font-size: .8125rem}
+.legacy-table {border-collapse: collapse; width: max-content; min-width: 100%; font-size: 13px}
 .legacy-table th {
   text-align: center;
   padding: 6px;
@@ -147,7 +147,7 @@
 .legacy-table td {text-align: center; padding: 6px; white-space: nowrap}
 .legacy-table tbody tr + tr td {border-top: 1px solid color-mix(in srgb, var(--border, var(--theme-border)) 55%, transparent)}
 
-.legacy-muted {margin: 8px 0; font-size: .85rem; opacity: .6}
+.legacy-muted {margin: 8px 0; font-size: 13px; opacity: .6}
 
 /* 按钮：中性描边 + 选中主色实心（旧界面统计页统一按钮样式） */
 .legacy-button {
@@ -161,7 +161,7 @@
   background: var(--surface, var(--theme-surface));
   color: var(--text, var(--theme-text));
   font: inherit;
-  font-size: .8125rem;
+  font-size: 13px;
   cursor: pointer;
   white-space: nowrap;
   transition: border-color .15s, background-color .15s, color .15s;
@@ -203,7 +203,7 @@
   background: transparent;
 }
 
-.legacy-commission-card-head {display: flex; align-items: center; gap: 8px; font-size: .8125rem}
+.legacy-commission-card-head {display: flex; align-items: center; gap: 8px; font-size: 13px}
 .legacy-commission-icon {
   display: inline-flex;
   align-items: center;
@@ -214,8 +214,8 @@
   flex: 0 0 auto;
 }
 .legacy-commission-name {color: var(--text, var(--theme-text))}
-.legacy-commission-total {font-size: 1.05rem; font-weight: 600}
-.legacy-commission-stat {font-size: .72rem; opacity: .55}
+.legacy-commission-total {font-size: 15px; font-weight: 600}
+.legacy-commission-stat {font-size: 12px; opacity: .55}
 
 .legacy-commission-recent {
   padding: 12px 14px;
@@ -225,8 +225,8 @@
 }
 
 .legacy-running-head {display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px}
-.legacy-running-title {font-size: .9rem; font-weight: 500}
-.legacy-running-scanned {font-size: .75rem; opacity: .55}
+.legacy-running-title {font-size: 13.5px; font-weight: 500}
+.legacy-running-scanned {font-size: 12px; opacity: .55}
 .legacy-running-list {display: flex; flex-wrap: wrap; gap: 8px}
 .legacy-running-card {
   display: flex;
@@ -240,11 +240,11 @@
 }
 /* 钻石委托（要员 / 度假 / 巡视护卫）用金色边框标出 */
 .legacy-running-card.is-rare {border: 2px solid #d4a017}
-.legacy-running-name {font-size: .8125rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap}
-.legacy-running-finish {font-size: .72rem; opacity: .6}
+.legacy-running-name {font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap}
+.legacy-running-finish {font-size: 12px; opacity: .6}
 
 .legacy-recent-divider {height: 1px; margin: 12px 0; background: color-mix(in srgb, var(--border, var(--theme-border)) 70%, transparent)}
-.legacy-recent-title {font-size: .9rem; font-weight: 500; margin-bottom: 8px}
+.legacy-recent-title {font-size: 13.5px; font-weight: 500; margin-bottom: 8px}
 .legacy-recent-list {font-size: 13px}
 .legacy-recent-row {
   display: flex;
@@ -253,7 +253,7 @@
   padding: 6px 0;
   border-bottom: 1px solid color-mix(in srgb, var(--border, var(--theme-border)) 50%, transparent);
 }
-.legacy-recent-time {flex: 0 0 auto; min-width: 80px; font-size: 12px; opacity: .65}
+.legacy-recent-time {flex: 0 0 auto; min-width: 84px; font-size: 12.5px; opacity: .65}
 .legacy-recent-items {display: flex; flex-wrap: wrap; align-items: center; min-width: 0}
 .legacy-recent-item {display: inline-flex; align-items: center; height: 24px; margin-right: 12px}
 .legacy-recent-dot {display: inline-block; width: 8px; height: 8px; margin-right: 4px; border-radius: 50%}
@@ -271,7 +271,7 @@
   border: 1px solid var(--border, var(--theme-border));
   border-radius: 10px;
   color: var(--accent, var(--theme-accent));
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   text-decoration: none;
   transition: border-color .15s, background-color .15s;
@@ -280,7 +280,7 @@
 .legacy-shot-link:focus-visible {outline: 2px solid var(--accent, var(--theme-accent)); outline-offset: 1px}
 
 .legacy-pagination {display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px}
-.legacy-commission-foot {margin: 10px 0 0; font-size: .75rem; opacity: .5}
+.legacy-commission-foot {margin: 10px 0 0; font-size: 12px; opacity: .5}
 
 .legacy-month-grid {display: flex; flex-wrap: wrap; gap: 8px}
 
