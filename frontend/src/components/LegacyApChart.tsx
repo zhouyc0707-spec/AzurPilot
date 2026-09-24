@@ -111,7 +111,16 @@ export function LegacyApChart({series, onRefresh, refreshing = false}: {
     observer.observe(container)
     // 双击恢复默认视图（旧图表用重置按钮，这里两种都支持）
     chart.getZr().on('dblclick', () => chart.dispatchAction({type: 'dataZoom', start: 0, end: 100}))
+    /* zrender 会给画布挂 wheel 监听并 stopPropagation，指针停在图表上时整页就滚不动
+       （实测：画布上滚轮页面 scrollTop 恒为 0，图例行与表格处正常）。这里在捕获阶段
+       先拦下「没按 Ctrl」的滚轮：事件不再传到画布，浏览器按默认行为滚页面；
+       按住 Ctrl 时放行给 zrender 做缩放，与 zoomOnMouseWheel: 'ctrl' 配套。 */
+    const keepPageScroll = (event: WheelEvent) => {
+      if (!event.ctrlKey) event.stopPropagation()
+    }
+    container.addEventListener('wheel', keepPageScroll, {capture: true})
     return () => {
+      container.removeEventListener('wheel', keepPageScroll, {capture: true})
       observer.disconnect()
       chart.dispose()
       chartRef.current = undefined
@@ -178,7 +187,10 @@ export function LegacyApChart({series, onRefresh, refreshing = false}: {
           splitLine: {show: false}, axisLine: {show: false}, axisTick: {show: false},
         }] : []),
       ],
-      dataZoom: [{type: 'inside', filterMode: 'none'}],
+      /* 滚轮默认交给页面滚动，只有按住 Ctrl 滚轮才缩放图表：旧图表是滚轮即缩放，
+         但画布占掉大半屏之后，指针停在图表上就整页滚不动。上游统计图表同样用
+         zoomOnMouseWheel: 'ctrl'。拖拽平移与「重置图表」保持可用。 */
+      dataZoom: [{type: 'inside', filterMode: 'none', zoomOnMouseWheel: 'ctrl', moveOnMouseWheel: false}],
       // 涨跌配色：正数红、负数绿、持平灰；体力被隐藏时不参与着色（避免着色到别的序列）
       visualMap: visible[0] ? {
         show: false, dimension: 2, seriesIndex: 0,
