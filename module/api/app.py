@@ -89,9 +89,15 @@ def create_app(*, root: Path = ROOT, password=None, manage_runtime=True, mount_m
             return PlainTextResponse('评分报告尚未生成，请先运行「指挥喵评分」任务。', status_code=404)
         return FileResponse(path, media_type='text/html', headers={'Cache-Control': 'no-cache'})
 
+    # 委托收益截图由统计页「查看截图」直接打开，沿用旧 WebUI 的路径结构
+    # <log>/commission_rewards/<实例>/<YYYY-MM>/<文件>，与 module/webui/app.py 保持一致。
+    commission_rewards_dir = root / 'log' / 'commission_rewards'
+    commission_rewards_dir.mkdir(parents=True, exist_ok=True)
+
     routes = [Route('/healthz', health),
               Route('/reports/meowfficer_score', meowfficer_score_report),
-              WebSocketRoute('/api/v1/ws', gateway.endpoint)]
+              WebSocketRoute('/api/v1/ws', gateway.endpoint),
+              Mount('/static/commission_rewards', StaticFiles(directory=commission_rewards_dir))]
     if (dist / 'assets').is_dir():
         routes.append(Mount('/assets', StaticFiles(directory=dist / 'assets')))
     if mount_mcp:
