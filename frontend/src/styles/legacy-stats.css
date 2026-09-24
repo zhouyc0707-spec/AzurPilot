@@ -9,10 +9,12 @@
   padding-bottom: 24px;
 }
 
-/* 区域一：资源仪表盘。窄屏时吸顶，与旧界面一致。 */
+/* 区域一：资源仪表盘。窄屏时吸顶，与旧界面一致。
+   下内边距比上边小：仪表盘与下面第一个板块（体力图表）之间的空隙原先有 39px，
+   看着太空，收紧到十几像素。 */
 .legacy-stats-dashboard {
   flex: 0 0 auto;
-  padding: 8px 0;
+  padding: 8px 0 4px;
   border-bottom: 1px solid var(--border, var(--theme-border));
 }
 
@@ -31,6 +33,10 @@
   flex-direction: column;
   min-width: 0;
 }
+
+/* 第一个板块（体力图表）紧接仪表盘，不套用板块之间的 24px 间距 */
+.legacy-stats-charts > .legacy-stats-section:first-child {margin-top: 8px}
+.legacy-stats-charts > .legacy-stats-section:first-child .legacy-ap-head {margin-top: 2px}
 
 .legacy-stats-section {
   margin-top: 24px;
