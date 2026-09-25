@@ -11,6 +11,7 @@
 
 import threading
 import hashlib
+import shutil
 import tempfile
 from contextlib import closing
 import os
@@ -154,6 +155,20 @@ class AzurStats:
     LOCAL_GENRES = {'opsi_meowfficer_farming'}
     # 未识别物品的定位截图保存目录（随 screenshots/ 一起被 git 忽略）
     UNKNOWN_ITEM_FOLDER = './screenshots/unknown_items'
+    # 耄耋相接高价值物品分类：分类键 -> (文件夹名, 物品名判定)。
+    # 口径与统计页「本月耄耋相接收获」表一致，便于截图与统计互相核对。
+    MEOW_LOOT_RULES = (
+        ('GearDesignPlanT5', '彩图纸',
+         lambda name: name.startswith('GearDesignPlan') and name.endswith('T5')),
+        ('OrdnanceTestingReportT4', '金机密',
+         lambda name: name.startswith('OrdnanceTestingReport') and name.endswith('T4')),
+        ('Plate', '金菜', lambda name: name.startswith('Plate')),
+        ('CoordinateObscure', '隐秘', lambda name: name.startswith('CoordinateObscure')),
+        ('CoordinateAbyssal', '深渊', lambda name: name.startswith('CoordinateAbyssal')),
+        ('CatT3', '金猫箱', lambda name: name.startswith('CatT3')),
+    )
+    # 不含任何高价值物品的结算截图归入该文件夹
+    MEOW_LOOT_NONE_FOLDER = '无高价值物品'
     _local_lock = threading.Lock()
     _record_lock = threading.Lock()
 
@@ -386,22 +401,7 @@ class AzurStats:
             device_id = get_device_id()
         AzurStats._ensure_local_db()
 
-        # 分类规则：前缀 + 可选等级后缀（彩图纸只取 T5、金机密只取 T4）
-        def classify(name: str):
-            if name.startswith("CatT3"):
-                return "CatT3"
-            if name.startswith("GearDesignPlan") and name.endswith("T5"):
-                return "GearDesignPlanT5"
-            if name.startswith("OrdnanceTestingReport") and name.endswith("T4"):
-                return "OrdnanceTestingReportT4"
-            if name.startswith("CoordinateObscure"):
-                return "CoordinateObscure"
-            if name.startswith("CoordinateAbyssal"):
-                return "CoordinateAbyssal"
-            if name.startswith("Plate"):
-                return "Plate"
-            return None
-
+        # 分类规则统一在 AzurStats.classify_meow_loot（截图归类复用同一口径）
         keys = (
             "Plate",
             "GearDesignPlanT5",
@@ -428,7 +428,7 @@ class AzurStats:
                     continue
                 if h not in totals or not total:
                     continue
-                key = classify(str(item or ""))
+                key = AzurStats.classify_meow_loot(item)
                 if key is None:
                     continue
                 try:
@@ -506,6 +506,91 @@ class AzurStats:
 
         return rows
 
+    @classmethod
+    def classify_meow_loot(cls, name):
+        """判断物品名属于哪一类耄耋相接高价值物品。
+
+        Args:
+            name (str): 物品名，如 PlateGunT4、GearDesignPlanGunT5。
+
+        Returns:
+            str: 分类键（Plate / GearDesignPlanT5 / ...）；不属于高价值物品返回 None。
+        """
+        name = str(name or '')
+        for key, _, matched in cls.MEOW_LOOT_RULES:
+            if matched(name):
+                return key
+        return None
+
+    @classmethod
+    def meow_loot_folders(cls, item_names):
+        """给出结算截图应归入的文件夹名。
+
+        一次结算可能同时含多类高价值物品，此时每个命中的分类各放一份；
+        不含任何高价值物品时归入「无高价值物品」。
+
+        Args:
+            item_names: 该次结算识别到的物品名集合。
+
+        Returns:
+            list[str]: 文件夹名列表，顺序与 MEOW_LOOT_RULES 一致。
+        """
+        keys = {cls.classify_meow_loot(name) for name in item_names}
+        keys.discard(None)
+        if not keys:
+            return [cls.MEOW_LOOT_NONE_FOLDER]
+        return [folder for key, folder, _ in cls.MEOW_LOOT_RULES if key in keys]
+
+    @staticmethod
+    def classify_meow_screenshot(folder, filename, item_names):
+        """把耄耋相接结算截图按高价值物品归类到子文件夹。
+
+        含多类高价值物品时每个分类文件夹各放一份（优先硬链接，失败则复制），
+        归类成功后删除平铺的原文件；不含高价值物品则放入「无高价值物品」。
+        任何一步失败都保留原文件，避免丢图。
+
+        Args:
+            folder (str): 结算截图所在目录（如 ./screenshots/opsi_meowfficer_farming）。
+            filename (str): 结算截图文件名。
+            item_names: 该次结算识别到的物品名集合。
+
+        Returns:
+            list[str]: 实际写入的文件路径；未归类时返回空列表。
+        """
+        source = os.path.join(folder, filename)
+        # 截图由保存线程写入，这里稍等片刻，避免保存略慢时漏归类
+        for _ in range(50):
+            if os.path.exists(source):
+                break
+            time.sleep(0.1)
+        if not os.path.exists(source):
+            return []
+
+        targets = []
+        for name in AzurStats.meow_loot_folders(item_names):
+            target_dir = os.path.join(folder, name)
+            target = os.path.join(target_dir, filename)
+            try:
+                os.makedirs(target_dir, exist_ok=True)
+                if os.path.exists(target):
+                    os.remove(target)
+                try:
+                    # 硬链接：一张截图命中多个分类时不额外占用磁盘
+                    os.link(source, target)
+                except OSError:
+                    shutil.copy2(source, target)
+                targets.append(target)
+            except Exception as e:
+                logger.warning(f'结算截图归类失败 {name}: {e}')
+
+        if targets:
+            try:
+                os.remove(source)
+            except OSError as e:
+                logger.warning(f'归类后删除原截图失败: {e}')
+
+        return targets
+
     @staticmethod
     def _save_unknown_item_images(scene, filename):
         """保存含未识别物品的掉落截图。
@@ -557,7 +642,7 @@ class AzurStats:
         if saved:
             logger.info(f'发现未识别物品，截图已保存: {", ".join(saved)}')
 
-    def _record_local(self, image, genre, filename, combat_count):
+    def _record_local(self, image, genre, filename, combat_count, save=False):
         if genre not in ['opsi_meowfficer_farming']:
             return False
 
@@ -571,6 +656,18 @@ class AzurStats:
             inserted = self._insert_local_opsi_items(rows)
             self.get_meowofficer_farming(instance=self.config.config_name)
             logger.info(f'本地碧蓝统计解析成功，行数={inserted}')
+            if save:
+                # 按高价值物品把结算截图归入对应文件夹，便于人工查阅；
+                # 归类失败不影响统计入库
+                try:
+                    folder = os.path.join(str(self.config.DropRecord_SaveFolder), genre)
+                    targets = self.classify_meow_screenshot(
+                        folder, filename, [row['item'] for row in rows])
+                    if targets:
+                        logger.info('结算截图已归类: %s' % ', '.join(
+                            os.path.relpath(target, folder) for target in targets))
+                except Exception as e:
+                    logger.warning(f'结算截图归类失败, {e}')
             return True
         except Exception as e:
             logger.warning(f'本地碧蓝统计解析失败, {e}')
@@ -677,7 +774,7 @@ class AzurStats:
         if local:
             logger.info(f'本地碧蓝统计解析开始，类型={genre}')
             with self._record_lock:
-                self._record_local(image, genre, filename, combat_count)
+                self._record_local(image, genre, filename, combat_count, save=save)
 
         if analyze and genre == 'research':
             # 同步解析：一次约 1 秒，发生在领奖之后，不打断任何状态循环。
