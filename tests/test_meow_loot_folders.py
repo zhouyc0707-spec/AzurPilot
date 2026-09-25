@@ -72,6 +72,29 @@ class TestMeowLootMonthFolder(unittest.TestCase):
         self.assertIsNone(AzurStats.meow_loot_month_folder('no-such-name.png'))
 
 
+class TestMeowLootNameSuffix(unittest.TestCase):
+    def test_single_category(self):
+        self.assertEqual(
+            AzurStats.meow_loot_name_suffix([('PlateGunT4', 1), ('Coins', 64)]),
+            '_金菜x1')
+
+    def test_same_category_amounts_are_summed(self):
+        self.assertEqual(
+            AzurStats.meow_loot_name_suffix(
+                [('PlateGunT4', 1), ('PlateAntiAirT4', 2), ('Oil', 50)]),
+            '_金菜x3')
+
+    def test_multiple_categories_keep_rule_order(self):
+        self.assertEqual(
+            AzurStats.meow_loot_name_suffix(
+                [('CatT3', 1), ('PlateTorpedoT4', 2), ('GearDesignPlanGunT5', 1)]),
+            '_彩图纸x1_金菜x2_金猫箱x1')
+
+    def test_no_high_value_item_is_empty(self):
+        self.assertEqual(AzurStats.meow_loot_name_suffix([('Coins', 10)]), '')
+        self.assertEqual(AzurStats.meow_loot_name_suffix([]), '')
+
+
 class TestClassifyMeowScreenshot(unittest.TestCase):
     def setUp(self):
         self._dir = tempfile.TemporaryDirectory()
@@ -91,10 +114,12 @@ class TestClassifyMeowScreenshot(unittest.TestCase):
     def test_multi_category_links_and_removes_source(self):
         source = self.write('1789490773600.png')
         targets = AzurStats.classify_meow_screenshot(
-            self.folder, '1789490773600.png', ['PlateGunT4', 'CoordinateObscure'])
+            self.folder, '1789490773600.png',
+            [('PlateGunT4', 1), ('CoordinateObscure', 2), ('Coins', 30)])
+        expected = '1789490773600_金菜x1_隐秘x2.png'
         self.assertEqual(sorted(os.path.relpath(t, self.folder) for t in targets),
-                         sorted([os.path.join('金菜', self.month, '1789490773600.png'),
-                                 os.path.join('隐秘', self.month, '1789490773600.png')]))
+                         sorted([os.path.join('金菜', self.month, expected),
+                                 os.path.join('隐秘', self.month, expected)]))
         for target in targets:
             self.assertTrue(os.path.exists(target), target)
         self.assertFalse(os.path.exists(source))
@@ -102,13 +127,14 @@ class TestClassifyMeowScreenshot(unittest.TestCase):
     def test_no_high_value_item_goes_to_fallback(self):
         self.write('1789490773601.png')
         targets = AzurStats.classify_meow_screenshot(
-            self.folder, '1789490773601.png', ['Coins', 'Oil'])
+            self.folder, '1789490773601.png', [('Coins', 64), ('Oil', 50)])
         self.assertEqual([os.path.relpath(t, self.folder) for t in targets],
                          [os.path.join('无高价值物品', self.month, '1789490773601.png')])
 
     def test_missing_source_is_ignored(self):
         self.assertEqual(
-            AzurStats.classify_meow_screenshot(self.folder, 'nope.png', ['PlateGunT4']), [])
+            AzurStats.classify_meow_screenshot(
+                self.folder, 'nope.png', [('PlateGunT4', 1)]), [])
 
 
 if __name__ == '__main__':

@@ -542,6 +542,31 @@ class AzurStats:
             return [cls.MEOW_LOOT_NONE_FOLDER]
         return [folder for key, folder, _ in cls.MEOW_LOOT_RULES if key in keys]
 
+    @classmethod
+    def meow_loot_name_suffix(cls, items):
+        """高价值物品的名称与数量后缀，如 ``_彩图纸x1_金菜x2``。
+
+        同一分类下的多个物品合并计数（如两块不同的金板记作 金菜x2）；
+        不含任何高价值物品时返回空串，文件名保持原样，靠所在文件夹区分。
+
+        Args:
+            items: 可迭代的 (物品名, 数量) 序列。
+
+        Returns:
+            str: 形如 ``_彩图纸x1_金菜x2`` 的后缀；无高价值物品时为空串。
+        """
+        counts = {}
+        for name, amount in items:
+            key = cls.classify_meow_loot(name)
+            if key is None:
+                continue
+            try:
+                counts[key] = counts.get(key, 0) + int(amount)
+            except (TypeError, ValueError):
+                continue
+        return ''.join('_%sx%d' % (folder, counts[key])
+                       for key, folder, _ in cls.MEOW_LOOT_RULES if key in counts)
+
     @staticmethod
     def meow_loot_month_folder(source):
         """结算截图所属月份的文件夹名，形如 ``26年9月``。
@@ -576,18 +601,19 @@ class AzurStats:
         return f'{moment.year % 100}年{moment.month}月'
 
     @staticmethod
-    def classify_meow_screenshot(folder, filename, item_names):
+    def classify_meow_screenshot(folder, filename, items):
         """把耄耋相接结算截图按高价值物品归类到子文件夹。
 
-        目录结构为 ``<分类>/<月份>/<文件名>``（月份如 ``26年9月``）。含多类
-        高价值物品时每个分类文件夹各放一份（优先硬链接，失败则复制），归类
-        成功后删除平铺的原文件；不含高价值物品则放入「无高价值物品」。任何
-        一步失败都保留原文件，避免丢图。
+        目录结构为 ``<分类>/<月份>/<文件名>``（月份如 ``26年9月``），文件名会
+        追加该截图高价值物品的名称与数量（如 ``_彩图纸x1_金菜x2``，无高价值
+        物品时不追加）。含多类高价值物品时每个分类文件夹各放一份（优先硬链接，
+        失败则复制），归类成功后删除平铺的原文件；不含高价值物品则放入
+        「无高价值物品」。任何一步失败都保留原文件，避免丢图。
 
         Args:
             folder (str): 结算截图所在目录（如 ./screenshots/opsi_meowfficer_farming）。
-            filename (str): 结算截图文件名。
-            item_names: 该次结算识别到的物品名集合。
+            filename (str): 结算截图文件名（不含物品后缀的原始名）。
+            items: 该次结算识别到的 (物品名, 数量) 序列。
 
         Returns:
             list[str]: 实际写入的文件路径；未归类时返回空列表。
@@ -602,13 +628,15 @@ class AzurStats:
             return []
 
         month = AzurStats.meow_loot_month_folder(source)
+        stem, ext = os.path.splitext(filename)
+        target_name = f'{stem}{AzurStats.meow_loot_name_suffix(items)}{ext}'
         targets = []
-        for name in AzurStats.meow_loot_folders(item_names):
+        for name in AzurStats.meow_loot_folders([item[0] for item in items]):
             target_dir = os.path.join(folder, name)
             if month:
                 # 分类之下再按月份分文件夹，便于按月份翻找
                 target_dir = os.path.join(target_dir, month)
-            target = os.path.join(target_dir, filename)
+            target = os.path.join(target_dir, target_name)
             try:
                 os.makedirs(target_dir, exist_ok=True)
                 if os.path.exists(target):
@@ -701,7 +729,8 @@ class AzurStats:
                 try:
                     folder = os.path.join(str(self.config.DropRecord_SaveFolder), genre)
                     targets = self.classify_meow_screenshot(
-                        folder, filename, [row['item'] for row in rows])
+                        folder, filename,
+                        [(row['item'], row['amount']) for row in rows])
                     if targets:
                         logger.info('结算截图已归类: %s' % ', '.join(
                             os.path.relpath(target, folder) for target in targets))
