@@ -7,6 +7,7 @@
 import os
 import tempfile
 import unittest
+from datetime import datetime
 
 from module.statistics.azurstats import AzurStats
 
@@ -49,10 +50,34 @@ class TestMeowLootFolders(unittest.TestCase):
         self.assertEqual(AzurStats.meow_loot_folders([]), ['无高价值物品'])
 
 
+class TestMeowLootMonthFolder(unittest.TestCase):
+    def test_millisecond_filename(self):
+        # 2026-09-16 的结算截图
+        self.assertEqual(AzurStats.meow_loot_month_folder('1789490773600.png'), '26年9月')
+
+    def test_mumu_export_filename(self):
+        self.assertEqual(
+            AzurStats.meow_loot_month_folder('MuMu-20260910-202852-819.png'), '26年9月')
+
+    def test_falls_back_to_mtime(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = os.path.join(folder, 'unknown-name.png')
+            with open(path, 'wb') as f:
+                f.write(b'png')
+            expected = datetime.fromtimestamp(os.path.getmtime(path))
+            self.assertEqual(AzurStats.meow_loot_month_folder(path),
+                             f'{expected.year % 100}年{expected.month}月')
+
+    def test_missing_file_returns_none(self):
+        self.assertIsNone(AzurStats.meow_loot_month_folder('no-such-name.png'))
+
+
 class TestClassifyMeowScreenshot(unittest.TestCase):
     def setUp(self):
         self._dir = tempfile.TemporaryDirectory()
         self.folder = self._dir.name
+        # 2026-09-16 的结算截图名，归类后应落在 26年9月 子文件夹
+        self.month = '26年9月'
 
     def tearDown(self):
         self._dir.cleanup()
@@ -64,22 +89,22 @@ class TestClassifyMeowScreenshot(unittest.TestCase):
         return path
 
     def test_multi_category_links_and_removes_source(self):
-        source = self.write('1789.png')
+        source = self.write('1789490773600.png')
         targets = AzurStats.classify_meow_screenshot(
-            self.folder, '1789.png', ['PlateGunT4', 'CoordinateObscure'])
+            self.folder, '1789490773600.png', ['PlateGunT4', 'CoordinateObscure'])
         self.assertEqual(sorted(os.path.relpath(t, self.folder) for t in targets),
-                         sorted([os.path.join('金菜', '1789.png'),
-                                 os.path.join('隐秘', '1789.png')]))
+                         sorted([os.path.join('金菜', self.month, '1789490773600.png'),
+                                 os.path.join('隐秘', self.month, '1789490773600.png')]))
         for target in targets:
             self.assertTrue(os.path.exists(target), target)
         self.assertFalse(os.path.exists(source))
 
     def test_no_high_value_item_goes_to_fallback(self):
-        self.write('1790.png')
+        self.write('1789490773601.png')
         targets = AzurStats.classify_meow_screenshot(
-            self.folder, '1790.png', ['Coins', 'Oil'])
+            self.folder, '1789490773601.png', ['Coins', 'Oil'])
         self.assertEqual([os.path.relpath(t, self.folder) for t in targets],
-                         [os.path.join('无高价值物品', '1790.png')])
+                         [os.path.join('无高价值物品', self.month, '1789490773601.png')])
 
     def test_missing_source_is_ignored(self):
         self.assertEqual(

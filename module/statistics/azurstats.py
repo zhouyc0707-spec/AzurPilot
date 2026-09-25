@@ -11,6 +11,7 @@
 
 import threading
 import hashlib
+import re
 import shutil
 import tempfile
 from contextlib import closing
@@ -542,12 +543,46 @@ class AzurStats:
         return [folder for key, folder, _ in cls.MEOW_LOOT_RULES if key in keys]
 
     @staticmethod
+    def meow_loot_month_folder(source):
+        """结算截图所属月份的文件夹名，形如 ``26年9月``。
+
+        优先用文件名里的时间戳（本项目的结算截图以毫秒时间为名），其次识别
+        MuMu 导出的 ``MuMu-YYYYMMDD-HHMMSS-xxx`` 命名，最后退回文件修改时间。
+
+        Args:
+            source (str): 截图路径或文件名。
+
+        Returns:
+            str: 形如 ``26年9月`` 的文件夹名；时间无法判断时返回 None。
+        """
+        stem = os.path.splitext(os.path.basename(source))[0]
+        stamp = None
+        if stem.isdigit() and len(stem) >= 10:
+            stamp = int(stem[:10])
+        else:
+            matched = re.search(r'(\d{8})-(\d{6})', stem)
+            if matched:
+                try:
+                    stamp = datetime.strptime(
+                        matched.group(1) + matched.group(2), '%Y%m%d%H%M%S').timestamp()
+                except ValueError:
+                    stamp = None
+        if stamp is None:
+            try:
+                stamp = os.path.getmtime(source)
+            except OSError:
+                return None
+        moment = datetime.fromtimestamp(stamp)
+        return f'{moment.year % 100}年{moment.month}月'
+
+    @staticmethod
     def classify_meow_screenshot(folder, filename, item_names):
         """把耄耋相接结算截图按高价值物品归类到子文件夹。
 
-        含多类高价值物品时每个分类文件夹各放一份（优先硬链接，失败则复制），
-        归类成功后删除平铺的原文件；不含高价值物品则放入「无高价值物品」。
-        任何一步失败都保留原文件，避免丢图。
+        目录结构为 ``<分类>/<月份>/<文件名>``（月份如 ``26年9月``）。含多类
+        高价值物品时每个分类文件夹各放一份（优先硬链接，失败则复制），归类
+        成功后删除平铺的原文件；不含高价值物品则放入「无高价值物品」。任何
+        一步失败都保留原文件，避免丢图。
 
         Args:
             folder (str): 结算截图所在目录（如 ./screenshots/opsi_meowfficer_farming）。
@@ -566,9 +601,13 @@ class AzurStats:
         if not os.path.exists(source):
             return []
 
+        month = AzurStats.meow_loot_month_folder(source)
         targets = []
         for name in AzurStats.meow_loot_folders(item_names):
             target_dir = os.path.join(folder, name)
+            if month:
+                # 分类之下再按月份分文件夹，便于按月份翻找
+                target_dir = os.path.join(target_dir, month)
             target = os.path.join(target_dir, filename)
             try:
                 os.makedirs(target_dir, exist_ok=True)
