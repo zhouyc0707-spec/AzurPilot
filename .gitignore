@@ -354,3 +354,6 @@ frontend/*.tsbuildinfo
 
 # GraphFlow 工具的本地缓存（graphflow MCP 在工作目录运行时产生）
 .graphflow-cache/
+
+# OCR 运行时下载到仓库根目录的模型（rapidocr 缺模型时自行下载，不入库）
+/*.onnx
