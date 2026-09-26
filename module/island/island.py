@@ -1004,14 +1004,15 @@ class Island(SelectCharacter):
             ):
                 retry_swipe_used += 1
                 logger.info(f"[岛屿] 未识别到岗位按钮 {post}，第{retry_swipe_used + 1}次滑动定位岗位列表")
-                swipe_count = getattr(self, 'post_manage_swipe_count', 1)
-                if swipe_count >= 2:
-                    # 店铺岗位位于列表较深处：先回到顶部按调参步数下滑，再继续补滑
-                    # 直到目标岗位出现（模拟器滑动距离不够时自动补偿）
-                    self.post_manage_swipe_to_top()
-                    self.post_manage_swipe_until_appear(post, min_swipes=swipe_count)
-                else:
-                    self.post_manage_swipe(swipe_count)
+                # 列表可能停在上一次操作留下的位置，先回到顶部；然后**先看再滑**：
+                # 目标岗位可能本来就在顶部（例如餐厅 ISLAND_RESTAURANT_POST1），
+                # 旧实现无论目标在哪都按 swipe_count 下滑一步，正好把它推出可视区，
+                # 而重试次数只有 1 次，于是只能干等到 45 秒超时、抛
+                # 「打开岗位详情超时」（2026-09-20/22/25 三次实例）。
+                self.post_manage_swipe_to_top()
+                if not self.appear(post, offset=300):
+                    # min_swipes=0：先检测再滑，边滑边找，避免把已在可视区的岗位滑走
+                    self.post_manage_swipe_until_appear(post, min_swipes=0)
                 retry_swipe_timer.reset()
                 continue
             if (
