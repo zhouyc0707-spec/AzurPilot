@@ -30,10 +30,28 @@ def import_fake_pil_module():
     fake_pil_module = ModuleType('PIL')
     fake_pil_module.Image = ModuleType('PIL.Image')
     fake_pil_module.Image.Image = type('MockPILImage', (), dict(__init__=None))
+    # 打上标记：remove_fake_pil_module 据此只摘自己注入的假模块，不动真 PIL
+    fake_pil_module.__azurpilot_fake_pil__ = True
+    fake_pil_module.Image.__azurpilot_fake_pil__ = True
     sys.modules['PIL'] = fake_pil_module
     sys.modules['PIL.Image'] = fake_pil_module.Image
 
 
+def _is_fake(module) -> bool:
+    """判断 sys.modules 里的条目是不是本模块注入的假 PIL。"""
+    return bool(getattr(module, '__azurpilot_fake_pil__', False))
+
+
 def remove_fake_pil_module():
-    sys.modules.pop('PIL', None)
-    sys.modules.pop('PIL.Image', None)
+    """移除假 PIL 注入；**只摘自己注入的**。
+
+    原先无差别 ``sys.modules.pop('PIL')`` 会把真 PIL 一起摘掉：进程里其他地方
+    （例如 ``module.base.utils``）已经持有真的 ``PIL.Image`` 引用，父包被摘走后它
+    再懒加载图片插件就失败，于是**完好的 PNG 也会抛 UnidentifiedImageError**。
+    2026-09-26 排查：全量测试跑过 test_commission_income_record 之后，岛屿/科研
+    那批图片用例集体失败，单独运行却全过，就是这里造成的。
+    """
+    for name in ('PIL', 'PIL.Image'):
+        module = sys.modules.get(name)
+        if module is not None and _is_fake(module):
+            sys.modules.pop(name, None)
