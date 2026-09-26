@@ -405,15 +405,80 @@ class SelectCharacter(UI):
                 return True
         return False
 
-    def select_character_filter(self):
-        if self.appear_then_click(SELECT_CHARACTER_FILTER):
-            self.device.sleep(0.5)
-            self.device.click(SELECT_CHARACTER_FILTER_STAMINA)
-            self.device.sleep(0.5)
+    def is_character_filter_visible(self):
+        """角色选择页的「筛选」弹窗是否打开。
+
+        弹窗只在筛选时出现，因此用弹窗内的「确定」/「剩余体力」按钮判断；
+        弹窗打开时它盖住角色网格，角色页与岗位详情那批模板全都认不出来。
+
+        Returns:
+            bool: 弹窗可见返回 True。
+        """
+        return (
+                self.appear(SELECT_CHARACTER_FILTER_CONFIRM, offset=30)
+                or self.appear(SELECT_CHARACTER_FILTER_STAMINA, offset=30)
+        )
+
+    def close_character_filter(self, timeout=8):
+        """关闭角色选择的「筛选」弹窗，返回是否已关闭。
+
+        「确定」与「取消」都能关掉弹窗，这里点「确定」：筛选结果不影响随后退出该页面
+        的流程。低帧率/云机下单次点击可能不生效，所以循环点击直到弹窗消失。
+
+        Args:
+            timeout (int): 最长等待秒数。
+
+        Returns:
+            bool: 弹窗已关闭返回 True。
+        """
+        for _ in self.loop(timeout=timeout, skip_first=False):
+            if not self.is_character_filter_visible():
+                return True
             self.device.click(SELECT_CHARACTER_FILTER_CONFIRM)
-            self.device.sleep(0.5)
-            return True
+        logger.warning("[岛屿] 关闭角色筛选弹窗超时")
         return False
+
+    def select_character_filter(self):
+        """打开「筛选」并选「剩余体力」，确认后校验弹窗确实关闭。
+
+        原先点完「确定」直接返回 True。低帧率/云机下这次点击可能不生效，弹窗会一直
+        留在屏幕上；而退出流程依赖的模板（角色页、岗位详情、产品选择…）都认不出这个
+        弹窗，只能空转到 15 秒超时——画面长时间不变还会升级成设备级卡死并重启游戏
+        （2026-09-26 18:31 实例：卡死截图正是这个筛选弹窗）。这里改为等弹窗出现、
+        选择并确认后再校验，未关闭就重试。
+
+        注意不要用 wait_until_appear / wait_until_disappear：它们没有超时，弹窗不出现
+        就会一直等下去。这里一律用有界的 self.loop。
+
+        Returns:
+            bool: 筛选已应用且弹窗确认关闭返回 True。
+        """
+        if not self.is_character_filter_visible():
+            if not self.appear_then_click(SELECT_CHARACTER_FILTER):
+                return False
+            # 等弹窗真正出现再点，避免点到弹窗背后的角色卡
+            opened = False
+            for _ in self.loop(timeout=4, skip_first=False):
+                if self.is_character_filter_visible():
+                    opened = True
+                    break
+            if not opened:
+                logger.warning("[岛屿] 角色筛选弹窗未出现")
+                return False
+
+        # 选一次「剩余体力」；选中后按钮外观变化、模板可能不再命中，所以随后一律点
+        # 「确定」直到弹窗消失（两个按钮都能关掉弹窗）。
+        clicked_stamina = False
+        for _ in self.loop(timeout=8, skip_first=False):
+            if not self.is_character_filter_visible():
+                return True
+            if not clicked_stamina and self.appear(SELECT_CHARACTER_FILTER_STAMINA, offset=30):
+                self.device.click(SELECT_CHARACTER_FILTER_STAMINA)
+                clicked_stamina = True
+                continue
+            self.device.click(SELECT_CHARACTER_FILTER_CONFIRM)
+        logger.warning("[岛屿] 角色筛选弹窗未能确认关闭")
+        return self.close_character_filter()
 
     @staticmethod
     def parse_character_filter(character_list):

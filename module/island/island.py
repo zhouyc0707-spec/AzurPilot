@@ -616,6 +616,11 @@ class Island(SelectCharacter):
         for _ in self.loop(timeout=15, skip_first=False):
             if self.ui_page_appear(page_island_postmanage) and not self.is_post_detail_visible():
                 return True
+            if self.is_character_filter_visible():
+                # 角色筛选弹窗盖住整屏，下面这些模板全都认不出它；不收拾就会空转
+                # 到超时，画面不变还会升级成设备级卡死并重启游戏。
+                self.close_character_filter()
+                continue
             if self.appear(ISLAND_GET, offset=30):
                 self.device.click(ISLAND_POST_SAFE_AREA)
                 continue
@@ -640,6 +645,10 @@ class Island(SelectCharacter):
         for _ in self.loop(timeout=20, skip_first=False):
             if self.ui_page_appear(page_island_postmanage) and not self.is_post_detail_visible():
                 return True
+            if self.is_character_filter_visible():
+                # 同 post_close：先收拾掉筛选弹窗，别让循环空转到设备级卡死。
+                self.close_character_filter()
+                continue
             if self.appear(ERROR1, offset=30):
                 self.device.click(POST_CLOSE)
                 self.island_error = True
@@ -752,6 +761,11 @@ class Island(SelectCharacter):
                     and not self.is_post_detail_visible()
             ):
                 return True
+            if self.is_character_filter_visible():
+                # 筛选弹窗（低帧率下「确定」可能没点掉）不属于下面任何一类，
+                # 原先只会空转到超时，进而触发设备级卡死。先把它关掉再继续。
+                self.close_character_filter()
+                continue
             if self.appear(ISLAND_GET, offset=30):
                 self.device.click(ISLAND_POST_SAFE_AREA)
                 continue
