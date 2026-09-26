@@ -39,9 +39,11 @@ def main():
     lines.append('}')
     directory = Path(__file__).resolve().parents[1] / 'frontend/src/api'
     directory.mkdir(parents=True, exist_ok=True)
-    (directory / 'generated.ts').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+    # newline='\n'：.gitattributes 要求这两个产物用 LF，而 Python 的文本模式在
+    # Windows 上会把 \n 翻成 CRLF，生成后 git 一直把文件标成已修改（内容其实一样）。
+    (directory / 'generated.ts').write_text('\n'.join(lines) + '\n', encoding='utf-8', newline='\n')
     (directory / 'contract.json').write_text(json.dumps({'version': 1, 'methods': contracts},
-                                                     ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+                                                     ensure_ascii=False, indent=2) + '\n', encoding='utf-8', newline='\n')
 
 
 if __name__ == '__main__':
