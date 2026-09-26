@@ -256,6 +256,18 @@
 .legacy-recent-time {flex: 0 0 auto; min-width: 84px; font-size: 12.5px; opacity: .65}
 .legacy-recent-items {display: flex; flex-wrap: wrap; align-items: center; min-width: 0}
 .legacy-recent-item {display: inline-flex; align-items: center; height: 24px; margin-right: 12px}
+/* 「最近记录」的物品图标（替代原来的纯色圆点）：图标用旧界面那套道具图，
+   底色仍取物品种类的淡色，颜色信息不丢；没有图标时回退到 .legacy-recent-dot。 */
+.legacy-recent-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-right: 4px;
+  border-radius: 4px;
+  flex: 0 0 auto;
+}
 .legacy-recent-dot {display: inline-block; width: 8px; height: 8px; margin-right: 4px; border-radius: 50%}
 .legacy-recent-amount {margin-left: 2px; opacity: .65}
 .legacy-recent-empty {opacity: .6}

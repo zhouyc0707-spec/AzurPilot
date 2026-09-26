@@ -317,7 +317,14 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
                 <span className="legacy-recent-items">
                   {row.items.length
                     ? row.items.map(item => <span className="legacy-recent-item" key={item.name}>
-                        <span className="legacy-recent-dot" style={{background: item.color}}/>
+                        {/* 物品图标与上面五张卡片同一套（/gui-icons/icon_1..5.png）；
+                            图标缺失时退回原来的纯色圆点，颜色信息始终保留。 */}
+                        {commissionIcons[item.name]
+                          ? <span className="legacy-recent-icon" style={{background: `${item.color}1a`}}>
+                              <img src={commissionIcons[item.name]} alt="" width={14} height={14}
+                                onError={event => {(event.currentTarget as HTMLImageElement).style.visibility = 'hidden'}}/>
+                            </span>
+                          : <span className="legacy-recent-dot" style={{background: item.color}}/>}
                         <span>{text(item.labelKey)}</span>
                         <span className="legacy-recent-amount">x{item.amount}</span>
                       </span>)
