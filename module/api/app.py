@@ -105,10 +105,12 @@ def create_app(*, root: Path = ROOT, password=None, manage_runtime=True, mount_m
     commission_rewards_dir = root / 'log' / 'commission_rewards'
     commission_rewards_dir.mkdir(parents=True, exist_ok=True)
 
+    from module.api.android import routes as android_routes
     routes = [Route('/healthz', health),
               Route('/reports/meowfficer_score', meowfficer_score_report),
               WebSocketRoute('/api/v1/ws', gateway.endpoint),
               Mount('/static/commission_rewards', StaticFiles(directory=commission_rewards_dir))]
+    routes.extend(android_routes(configs, runtime))
     # 启动器的控制/通知/免密端点必须排在静态资源之前：下面的 SPA 兜底会把
     # 未匹配路径都当成前端路由返回 index.html（HTTP 200 + text/html），
     # 启动器会因此拿到 HTML 而不是 SSE 流。
@@ -126,6 +128,11 @@ def create_app(*, root: Path = ROOT, password=None, manage_runtime=True, mount_m
     gui_icons = root / 'assets' / 'gui' / 'icon'
     if gui_icons.is_dir():
         routes.append(Mount('/gui-icons', StaticFiles(directory=gui_icons)))
+    # 大世界掉落的物品图标同理。opsi_reward_items 是模板库的超集
+    # （opsi_items 的每个模板名这里都有），挂一个目录就够。
+    opsi_items = root / 'assets' / 'stats' / 'opsi_reward_items'
+    if opsi_items.is_dir():
+        routes.append(Mount('/opsi-items', StaticFiles(directory=opsi_items)))
     if mount_mcp:
         from mcp_server_sse import create_app as create_mcp_app, configure_auth
         configure_auth(password, public_bind=bool(password))

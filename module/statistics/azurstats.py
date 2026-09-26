@@ -34,6 +34,29 @@ from module.statistics.utils import pack
 from module.base.device_id import get_device_id
 
 
+# 大世界掉落解析的适用范围（2026-09-25 定）：凡属大世界任务都解析入库，
+# 只有侵蚀1练级除外——它的掉落只有黄币与低级材料，且另有「大世界总结」页
+# 看战斗与行动力，再入库只会让掉落明细被它刷满。
+# 判定用前缀而不是逐个列举任务名，将来新出的大世界任务自动纳入。
+OPSI_DROP_GENRE_PREFIX = 'opsi_'
+OPSI_DROP_GENRE_EXCLUDE = frozenset({'opsi_hazard1_leveling'})
+
+
+def is_opsi_drop_genre(genre) -> bool:
+    """判断某个掉落分类是否属于要解析的大世界任务。
+
+    Args:
+        genre (str): 掉落记录的分类标识，取自当前任务名（如 'opsi_abyssal'）。
+
+    Returns:
+        bool: 是否需要解析入库。
+    """
+    genre = str(genre or '')
+    if not genre.startswith(OPSI_DROP_GENRE_PREFIX):
+        return False
+    return genre not in OPSI_DROP_GENRE_EXCLUDE
+
+
 class DropImage:
     """掉落截图上下文管理器，用于收集截图并在退出时统一提交。
 
@@ -141,7 +164,7 @@ class AzurStats:
         TIMEOUT (int): 请求超时时间（秒）。
         LOCAL_DB (str): 本地 SQLite 数据库路径。
         LOCAL_MEOW_CSV (str): 指挥喵 farming 统计 CSV 路径。
-        LOCAL_GENRES (set): 需要本地处理的记录分类集合。
+        UNKNOWN_ITEM_FOLDER (str): 未识别物品的定位截图目录。
 
     Examples:
         >>> stats = AzurStats(config)
@@ -153,7 +176,6 @@ class AzurStats:
     TIMEOUT = 20
     LOCAL_DB = './config/azurstats_local.db'
     LOCAL_MEOW_CSV = './log/azurstat_meowofficer_farming.csv'
-    LOCAL_GENRES = {'opsi_meowfficer_farming'}
     # 未识别物品的定位截图保存目录（随 screenshots/ 一起被 git 忽略）
     UNKNOWN_ITEM_FOLDER = './screenshots/unknown_items'
     # 耄耋相接高价值物品分类：分类键 -> (文件夹名, 物品名判定)。
@@ -298,6 +320,54 @@ class AzurStats:
         query += ' ORDER BY id ASC'
         connection.row_factory = sqlite3.Row
         return [dict(row) for row in connection.execute(query, params).fetchall()]
+
+    @staticmethod
+    def load_opsi_drop_rows(instance=None, start=None, end=None, task=None, device_id=None):
+        """读取大世界掉落明细，供统计页按时间窗口汇总。
+
+        只取需要解析的大世界任务（见 is_opsi_drop_genre），侵蚀1练级的历史行
+        即使存在也不会被算进来。查询条件里的任务范围直接由那套常量生成，
+        避免在 SQL 里再抄一份规则。
+
+        Args:
+            instance (str): ALAS 实例名；None 表示不限实例。
+            start (int): 起始时间戳（含，秒）；None 表示不限。
+            end (int): 结束时间戳（不含，秒）；None 表示不限。
+            task (str): 只看某个大世界任务（genre，如 'opsi_abyssal'）；None 表示全部。
+            device_id (str): 设备标识，默认当前设备。
+
+        Returns:
+            list[dict]: opsi_items 明细行，按记录时间升序。
+        """
+        if device_id is None:
+            device_id = get_device_id()
+        AzurStats._ensure_local_db()
+        pattern = OPSI_DROP_GENRE_PREFIX.replace('_', r'\_') + '%'
+        query = "SELECT * FROM opsi_items WHERE device_id = ? AND genre LIKE ? ESCAPE '\\'"
+        params = [device_id, pattern]
+        for excluded in sorted(OPSI_DROP_GENRE_EXCLUDE):
+            query += ' AND genre <> ?'
+            params.append(excluded)
+        if instance is not None:
+            query += ' AND instance = ?'
+            params.append(instance)
+        if task:
+            query += ' AND genre = ?'
+            params.append(str(task))
+        if start is not None:
+            query += ' AND created_at >= ?'
+            params.append(int(start))
+        if end is not None:
+            query += ' AND created_at < ?'
+            params.append(int(end))
+        query += ' ORDER BY created_at ASC, id ASC'
+        try:
+            with closing(sqlite3.connect(AzurStats.LOCAL_DB, timeout=30)) as conn:
+                conn.row_factory = sqlite3.Row
+                return [dict(row) for row in conn.execute(query, params).fetchall()]
+        except sqlite3.Error:
+            logger.warning('[统计-大世界] 读取掉落明细失败', exc_info=True)
+            return []
 
     @staticmethod
     def _write_meowofficer_farming(data, instance=None):
@@ -710,7 +780,10 @@ class AzurStats:
             logger.info(f'发现未识别物品，截图已保存: {", ".join(saved)}')
 
     def _record_local(self, image, genre, filename, combat_count, save=False, page_count=1):
-        if genre not in ['opsi_meowfficer_farming']:
+        # 融合：记录范围采用上游 2026-09-25 的口径（除侵蚀1练级外的全部大世界任务，
+        # 「保存」与「上传」都解析入库），本地「仅耄耋相接允许落盘」的保护改由
+        # opsi_save_method() 在取值处收口，不再用这里的 genre 白名单实现。
+        if not is_opsi_drop_genre(genre):
             return False
 
         imgid = f"{os.path.splitext(os.path.basename(filename))[0][:8]}{uuid.uuid4().hex[:8]}"
@@ -721,7 +794,10 @@ class AzurStats:
                 logger.warning('本地碧蓝统计解析跳过, no opsi item rows extracted')
                 return False
             inserted = self._insert_local_opsi_items(rows)
-            self.get_meowofficer_farming(instance=self.config.config_name)
+            # 短猫的收益汇总只认自己那一类记录，其他大世界任务入库时不重算，
+            # 免得每来一条要塞/每日记录都把整表重跑一遍。
+            if genre == 'opsi_meowfficer_farming':
+                self.get_meowofficer_farming(instance=self.config.config_name)
             logger.info(f'本地碧蓝统计解析成功，行数={inserted}')
             if save:
                 # 按高价值物品把结算截图归入对应文件夹，便于人工查阅；
@@ -824,7 +900,9 @@ class AzurStats:
         Returns:
             list[np.ndarray]: 待保存的图像，每页一张。
         """
-        if genre not in AzurStats.LOCAL_GENRES or len(images) <= 1:
+        # 融合：上游已删除 LOCAL_GENRES（改按 is_opsi_drop_genre 判定大世界掉落分类），
+        # 这里跟着换成同一个判定，保持「只保留结算页」的行为不变。
+        if not is_opsi_drop_genre(genre) or len(images) <= 1:
             return [pack(images)]
 
         # is_opsi_reward() 会把匹配位置缓存在按钮对象上，而该位置随后会
@@ -926,10 +1004,13 @@ class AzurStats:
             method_value = str(method)
             save = save or 'save' in method_value
         if local is None:
-            if method_value is None:
-                local = genre in self.LOCAL_GENRES
+            if is_opsi_drop_genre(genre):
+                # 大世界掉落统计（2026-09-25 用户定，与科研同口径）：
+                # 「保存」与「上传」都解析入库，区别只在要不要把截图落盘；
+                # 只有「不记录」才不统计。侵蚀1练级不适用（见 is_opsi_drop_genre）。
+                local = method_value != 'do_not'
             else:
-                local = 'upload' in method_value and genre in self.LOCAL_GENRES
+                local = False
         # 科研掉落走独立解析链路（写 cl1_record.db）：只要用户没有显式关掉记录，
         # 存图与否都统计——save 档事后要能核对，upload 档就是不落盘只要数据。
         analyze = genre == 'research' and method_value != 'do_not'

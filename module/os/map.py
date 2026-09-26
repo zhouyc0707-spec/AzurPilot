@@ -48,6 +48,7 @@ from module.map.map import Map
 from module.map.map_base import location2node
 from module.os.assets import FLEET_EMP_DEBUFF, MAP_GOTO_GLOBE_FOG
 from module.handler.assets import POPUP_CONFIRM
+from module.os.config import opsi_drop_record
 from module.os.fleet import OSFleet, BossFleet
 from module.os.globe_camera import GlobeCamera
 from module.os.globe_operation import RewardUncollectedError
@@ -1492,9 +1493,11 @@ class OSMap(OSFleet, Map, GlobeCamera, StorageHandler, StrategicSearchHandler):
         finished_combat = 0
         with self.stat.new(
             genre=inflection.underscore(self.config.task.command),
+            # 融合：记录方式取上游按任务拆分的开关，再经本地 opsi_save_method 收口
+            # （非耄耋相接任务只上传/不落盘，统计入库不受影响）。
             method=self.stat.opsi_save_method(
                 self.config.task.command,
-                self.config.DropRecord_OpsiRecord,
+                opsi_drop_record(self.config),
             ),
         ) as drop:
             while 1:
@@ -1561,9 +1564,10 @@ class OSMap(OSFleet, Map, GlobeCamera, StorageHandler, StrategicSearchHandler):
 
         with self.stat.new(
             genre=inflection.underscore(self.config.task.command),
+            # 融合：同上（战略搜索）。
             method=self.stat.opsi_save_method(
                 self.config.task.command,
-                self.config.DropRecord_OpsiRecord,
+                opsi_drop_record(self.config),
             ),
         ) as drop:
             try:

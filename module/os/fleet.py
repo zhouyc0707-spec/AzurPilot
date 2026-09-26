@@ -40,6 +40,7 @@ from module.map_detection.utils import area2corner, corner2inner
 from module.ocr.ocr import Ocr
 from module.os.assets import FLEET_EMP_DEBUFF, MAP_EXIT, MAP_GOTO_GLOBE, STRONGHOLD_PERCENTAGE, TEMPLATE_EMPTY_HP
 from module.os.camera import OSCamera
+from module.os.config import opsi_drop_record
 from module.os.map_base import OSCampaignMap
 from module.os_ash.ash import OSAsh
 from module.os_combat.combat import Combat
@@ -970,9 +971,12 @@ class OSFleet(OSCamera, Combat, Fleet, OSAsh):
         fleets = self.parse_fleet_filter()
         with self.stat.new(
                 genre=inflection.underscore(self.config.task.command),
+                # 融合：记录方式取上游按任务拆分的开关（opsi_drop_record），
+                # 再经本地 opsi_save_method 收口 —— 非耄耋相接任务即使选了「保存」
+                # 也只上传/不落盘（磁盘保护），统计入库不受影响。
                 method=self.stat.opsi_save_method(
                     self.config.task.command,
-                    self.config.DropRecord_OpsiRecord,
+                    opsi_drop_record(self.config),
                 )
         ) as drop:
             for fleet in fleets:

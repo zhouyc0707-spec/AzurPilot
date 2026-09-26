@@ -18,7 +18,7 @@ export interface Parameters {
   "logs.get": { instance: string; after?: number }
   "preview.capture": { instance: string }
   "statistics.refreshLoot": { instance: string }
-  "statistics.report": { instance: string; category?: "resources" | "action" | "opsi" | "commission" | "ships" | "loot" | "research"; month?: string | null; days?: number; period?: "day" | "week" | "month"; series?: number }
+  "statistics.report": { instance: string; category?: "resources" | "action" | "opsi" | "commission" | "ships" | "loot" | "research"; month?: string | null; days?: number; period?: "day" | "week" | "month"; series?: number; scope?: "series" | "consumable"; task?: string | null }
   "statistics.legacy": { instance: string; month?: string | null }
   "meowfficer.scoreReport": { instance: string; limit?: number }
   "meowfficer.clearReport": { instance: string }
@@ -32,6 +32,7 @@ export interface Parameters {
   "updater.fetch": Record<string, never>
   "updater.apply": Record<string, never>
   "updater.cancel": Record<string, never>
+  "announcement.get": { force?: boolean }
   "auth.login": { password?: string }
   "events.subscribe": { instance?: string | null; topics: Array<"instances" | "overview" | "logs" | "preview"> }
 }
