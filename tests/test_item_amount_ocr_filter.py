@@ -1,12 +1,43 @@
 """remove_small_fragments 单元测试。
 
-覆盖：图标碎块过滤、数字笔画保留、空白图像、全碎块图像等场景。
+覆盖：图标碎块过滤、数字笔画保留、空白图像、全碎块图像等场景，
+以及数量上限（含前缀表）的取值。
 """
 import unittest
 
 import numpy as np
 
-from module.statistics.item import remove_small_fragments
+from module.statistics.item import (
+    DEFAULT_AMOUNT_MAX, ITEM_AMOUNT_MAX, ITEM_AMOUNT_MAX_PREFIX,
+    remove_small_fragments, resolve_amount_max)
+
+
+class TestResolveAmountMax(unittest.TestCase):
+    def test_exact_name_wins(self):
+        for name, expected in ITEM_AMOUNT_MAX.items():
+            self.assertEqual(resolve_amount_max(name), expected, name)
+
+    def test_prefix_table_matches_design_plans_and_reports(self):
+        # 图纸 / 报告 / 坐标 / 猫箱都是稀有掉落，一次 1~2 个
+        for name in ('GearDesignPlanGunT5', 'GearDesignPlanTorpedoT5',
+                     'GearDesignPlanAntiAirT4', 'OrdnanceTestingReportT3',
+                     'OrdnanceTestingReportT4', 'CoordinateObscure',
+                     'CoordinateAbyssal', 'CatT2', 'CatT3'):
+            self.assertEqual(resolve_amount_max(name), 5, name)
+
+    def test_plate_keeps_loose_limit(self):
+        # 金板一次可以掉十几块，上限放宽
+        self.assertEqual(resolve_amount_max('PlateTorpedoT4'), 50)
+
+    def test_unknown_item_falls_back_to_default(self):
+        self.assertEqual(resolve_amount_max('OperationCoin'), DEFAULT_AMOUNT_MAX)
+        self.assertEqual(resolve_amount_max(None), DEFAULT_AMOUNT_MAX)
+
+    def test_prefix_table_is_ordered_and_non_empty(self):
+        self.assertTrue(ITEM_AMOUNT_MAX_PREFIX)
+        for prefix, value in ITEM_AMOUNT_MAX_PREFIX:
+            self.assertTrue(prefix)
+            self.assertGreater(value, 0)
 
 
 class TestRemoveSmallFragments(unittest.TestCase):

@@ -35,6 +35,18 @@ ITEM_AMOUNT_MAX = {
     # 会触发抹灰版兜底重试修正
     'Consumer_Grade_Electronic_Components': 50,
 }
+# 前缀上限：物品名没在上表单独列出时按前缀匹配。装备设计图 / 军械测试报告 /
+# 坐标 / 猫箱都是稀有掉落，一次通常 1~2 个，而它们的数量区域容易被图标边缘的
+# 碎块污染（彩舰炮图纸的「1」被拼成 521、报告的「1」被拼成 41）；给一个贴近
+# 真实掉落的上限，这类虚高读数就会触发抹灰版兜底重试。金板一次可以掉十几块，
+# 上限给宽一些。
+ITEM_AMOUNT_MAX_PREFIX = (
+    ('GearDesignPlan', 5),
+    ('OrdnanceTestingReport', 5),
+    ('Coordinate', 5),
+    ('CatT', 5),
+    ('Plate', 50),
+)
 DEFAULT_AMOUNT_MAX = 2147483645
 
 
@@ -61,7 +73,12 @@ def resolve_amount_max(item_name, amount_max=None, amount_default_max=None):
         if callable(amount_default_max):
             return amount_default_max(item_name)
         return amount_default_max
-    return ITEM_AMOUNT_MAX.get(item_name, DEFAULT_AMOUNT_MAX)
+    if item_name in ITEM_AMOUNT_MAX:
+        return ITEM_AMOUNT_MAX[item_name]
+    for prefix, value in ITEM_AMOUNT_MAX_PREFIX:
+        if str(item_name or '').startswith(prefix):
+            return value
+    return DEFAULT_AMOUNT_MAX
 
 
 def remove_small_fragments(image, min_height=6, min_area=10, keep_margin=3,
