@@ -64,6 +64,11 @@ class SceneOperationSiren(SceneBase, OpsiReward, GetItems, OpsiZone):
         if zone is None:
             return
 
+        # 奖励页可能有多页（面板放不下时脚本会滑动并逐页截图），
+        # 同一次结算的多页需要按行对齐合并，避免重叠行重复计数
+        reward_before = [image for image in self.images[:cleared] if self.is_opsi_reward(image)]
+        reward_after = [image for image in self.images[cleared + 1:] if self.is_opsi_reward(image)]
+
         for index, image in enumerate(self.images):
             if index == cleared:
                 continue
@@ -72,8 +77,8 @@ class SceneOperationSiren(SceneBase, OpsiReward, GetItems, OpsiZone):
                     items = self.parse_get_items(image)
                     for item in self._operation_siren_product(zone, items):
                         yield item
-                if self.is_opsi_reward(image):
-                    items = self.parse_auto_search_reward(image)
+                if self.is_opsi_reward(image) and image is reward_before[0]:
+                    items = self.parse_auto_search_reward_pages(reward_before)
                     for item in self._operation_siren_product(zone, items):
                         yield item
             elif index > cleared:
@@ -81,8 +86,8 @@ class SceneOperationSiren(SceneBase, OpsiReward, GetItems, OpsiZone):
                     items = self.parse_get_items(image)
                     for item in self._operation_siren_product(zone, items, tag='log'):
                         yield item
-                if self.is_opsi_reward(image):
-                    items = self.parse_auto_search_reward(image)
+                if self.is_opsi_reward(image) and image is reward_after[0]:
+                    items = self.parse_auto_search_reward_pages(reward_after)
                     for item in self._operation_siren_product(zone, items, tag='scan'):
                         yield item
 

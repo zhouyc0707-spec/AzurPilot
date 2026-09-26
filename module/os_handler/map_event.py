@@ -224,6 +224,7 @@ class MapEventHandler(EnemySearchingHandler):
                     cleared = True
                 if drop:
                     drop.handle_add(main=self, before=4)
+                    self.os_auto_search_capture_reward_pages(drop)
                 self.device.click(AUTO_SEARCH_REWARD)
                 self.interval_reset([
                     AUTO_SEARCH_REWARD,
@@ -258,6 +259,60 @@ class MapEventHandler(EnemySearchingHandler):
                 confirm_timer.reset()
 
         return cleared
+
+    # 结算奖励面板滑动截图：约两行（行高 75.33px），取整数倍便于解析端按行对齐
+    OS_REWARD_SCROLL_STEP = 151
+    OS_REWARD_SCROLL_MAX = 4
+
+    def os_auto_search_capture_reward_pages(self, drop):
+        """奖励面板放不下时，向上滑动并逐页截图。
+
+        结算面板的奖励列表是固定高度的滚动列表，物品多时最下面一行会被裁掉，
+        只截第一屏会漏掉下方的物品。这里在列表已经占满可见行（可能还有内容）
+        时于列表区域内慢速上滑，每滑一次补一张截图，直到列表不再移动（到底）
+        或达到页数上限。滑动量取行高的整数倍，便于解析端按「绝对行号 + 列号」
+        合并去重。
+
+        Args:
+            drop (DropImage): 掉落图像对象，额外页会追加到同一次掉落记录。
+
+        Pages:
+            游戏页面：委托完成确认（合计获得奖励）。
+        """
+        from module.azur_stats.scene.operation_siren import SceneOperationSiren
+
+        scene = SceneOperationSiren()
+        try:
+            scene.load_file(self.device.image)
+            scene._auto_search_get_items_load(self.device.image)
+        except Exception as e:
+            logger.info(f'[大世界-奖励] 溢出检测跳过, {e}')
+            return
+
+        grid = scene.auto_search_item_group.grids
+        if grid is None or not grid.buttons or grid.grid_shape[1] < 5:
+            # 可见行还没占满，下面不会再有物品
+            return
+
+        for page in range(2, self.OS_REWARD_SCROLL_MAX + 2):
+            before = self.device.image
+            self.device.swipe(
+                (640, 520), (640, 520 - self.OS_REWARD_SCROLL_STEP),
+                duration=(0.4, 0.6), name='OS_REWARD_SCROLL')
+            self.device.sleep(0.6)
+            self.device.screenshot()
+            after = self.device.image
+
+            measured = scene.reward_list_shift(before, after, grid)
+            if measured is None or abs(measured[0]) < 20:
+                # 列表已经到底，画面不再变化
+                logger.info(f'[大世界-奖励] 第 {page} 页无变化，滚动结束，共 {page - 1} 页')
+                break
+
+            logger.info(f'[大世界-奖励] 补截第 {page} 页，滚动 {measured[0]:.1f}px')
+            drop.add(after)
+        else:
+            logger.warning(f'[大世界-奖励] 滚动截图达到上限 {self.OS_REWARD_SCROLL_MAX} 页')
 
     def handle_os_auto_search_map_option(self, drop=None, enable: Optional[bool] = True):
         """

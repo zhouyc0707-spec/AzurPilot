@@ -709,7 +709,7 @@ class AzurStats:
         if saved:
             logger.info(f'发现未识别物品，截图已保存: {", ".join(saved)}')
 
-    def _record_local(self, image, genre, filename, combat_count, save=False):
+    def _record_local(self, image, genre, filename, combat_count, save=False, page_count=1):
         if genre not in ['opsi_meowfficer_farming']:
             return False
 
@@ -725,15 +725,15 @@ class AzurStats:
             logger.info(f'本地碧蓝统计解析成功，行数={inserted}')
             if save:
                 # 按高价值物品把结算截图归入对应文件夹，便于人工查阅；
-                # 归类失败不影响统计入库
+                # 归类失败不影响统计入库。滚动补截的多页各归各的
                 try:
                     folder = os.path.join(str(self.config.DropRecord_SaveFolder), genre)
-                    targets = self.classify_meow_screenshot(
-                        folder, filename,
-                        [(row['item'], row['amount']) for row in rows])
-                    if targets:
-                        logger.info('结算截图已归类: %s' % ', '.join(
-                            os.path.relpath(target, folder) for target in targets))
+                    items = [(row['item'], row['amount']) for row in rows]
+                    for name in self._drop_page_filenames(filename, max(1, int(page_count or 1))):
+                        targets = self.classify_meow_screenshot(folder, name, items)
+                        if targets:
+                            logger.info('结算截图已归类: %s' % ', '.join(
+                                os.path.relpath(target, folder) for target in targets))
                 except Exception as e:
                     logger.warning(f'结算截图归类失败, {e}')
             return True
@@ -765,23 +765,67 @@ class AzurStats:
         return False
 
     @staticmethod
-    def _drop_save_image(images, genre):
-        """选取落盘用的掉落截图。
+    def _drop_page_filenames(filename, count):
+        """给出同一次掉落各页的文件名：第 1 页原名，其后追加 ``_p2``、``_p3``。
 
-        耄耋相接的掉落记录由两张截图组成：结算奖励页（掉落内容）与
-        大世界区域页（仅提供区域名、危险等级）。区域信息在 commit()
-        解析时从内存中的截图取得，落盘只需保留结算页，避免截图文件里
-        混入区域页、打开时看到两张拼在一起的画面。
+        Args:
+            filename (str): 第一页的文件名，如 '1789.png'。
+            count (int): 页数。
+
+        Returns:
+            list[str]: 文件名列表；count<=1 时只含原名。
+        """
+        stem, ext = os.path.splitext(filename)
+        if count <= 1:
+            return [filename]
+        return [filename] + [f'{stem}_p{index + 1}{ext}' for index in range(1, count)]
+
+    def _save_pages(self, frames, genre, filename):
+        """保存掉落截图的各页。
+
+        结算奖励面板放不下时脚本会滚动补截多页，这里逐页落盘：第一页用原
+        文件名，其后为 ``_p2``、``_p3``，便于逐页查看又不会互相覆盖。
+
+        Args:
+            frames (list[np.ndarray]): 待保存的图像，每页一张。
+            genre (str): Name of sub folder.
+            filename (str): 第一页的文件名。
+
+        Returns:
+            bool: If success
+        """
+        try:
+            folder = os.path.join(str(self.config.DropRecord_SaveFolder), genre)
+            os.makedirs(folder, exist_ok=True)
+            names = self._drop_page_filenames(filename, len(frames))
+            for frame, name in zip(frames, names):
+                file = os.path.join(folder, name)
+                save_image(frame, file)
+                logger.info(f'图片保存成功，文件: {file}')
+            return True
+        except Exception as e:
+            logger.exception(e)
+
+        return False
+
+    @staticmethod
+    def _drop_save_images(images, genre):
+        """选取落盘用的掉落截图（可能有多页）。
+
+        耄耋相接的掉落记录由若干张截图组成：结算奖励页（掉落内容，物品多时
+        会有滚动补截的多页）与大世界区域页（仅提供区域名、危险等级）。区域
+        信息在 commit() 解析时从内存中的截图取得，落盘只需保留结算页，避免
+        截图文件里混入区域页、打开时看到两张拼在一起的画面。
 
         Args:
             images (list[np.ndarray]): 本次掉落记录收集到的截图。
             genre (str): 掉落记录分类。
 
         Returns:
-            np.ndarray: 待保存的图像。
+            list[np.ndarray]: 待保存的图像，每页一张。
         """
         if genre not in AzurStats.LOCAL_GENRES or len(images) <= 1:
-            return pack(images)
+            return [pack(images)]
 
         # is_opsi_reward() 会把匹配位置缓存在按钮对象上，而该位置随后会
         # 被解析路径用作物品网格的下边界，因此这里用完立即还原。
@@ -793,17 +837,19 @@ class AzurStats:
             reward = [image for image in images if scene.is_opsi_reward(image)]
         except Exception as e:
             logger.warning(f'结算页筛选失败，保存完整掉落截图, {e}')
-            return pack(images)
+            return [pack(images)]
         finally:
             AUTO_SEARCH_REWARD._button_offset = prev_offset
 
         if not reward:
             logger.warning('未识别到结算奖励页，保存完整掉落截图')
-            return pack(images)
+            return [pack(images)]
 
         if len(reward) < len(images):
             logger.info(f'掉落截图落盘仅保留结算页 {len(reward)}/{len(images)} 帧')
-        return pack(reward)
+        if len(reward) > 1:
+            logger.info(f'掉落截图包含 {len(reward)} 页结算奖励（滚动补截）')
+        return reward
 
     def commit(self, images, genre, save=False, local=False, info='', combat_count=0,
                analyze=False):
@@ -833,16 +879,17 @@ class AzurStats:
         else:
             filename = f'{now}.png'
 
+        frames = self._drop_save_images(images, genre) if save else []
         if save:
             save_thread = threading.Thread(
-                target=self._save,
-                args=(self._drop_save_image(images, genre), genre, filename))
+                target=self._save_pages, args=(frames, genre, filename))
             save_thread.start()
 
         if local:
             logger.info(f'本地碧蓝统计解析开始，类型={genre}')
             with self._record_lock:
-                self._record_local(image, genre, filename, combat_count, save=save)
+                self._record_local(image, genre, filename, combat_count, save=save,
+                                   page_count=len(frames))
 
         if analyze and genre == 'research':
             # 同步解析：一次约 1 秒，发生在领奖之后，不打断任何状态循环。
