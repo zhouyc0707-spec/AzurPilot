@@ -361,3 +361,6 @@ frontend/*.tsbuildinfo
 
 # OCR 运行时下载到仓库根目录的模型（rapidocr 缺模型时自行下载，不入库）
 /*.onnx
+
+# �ϲ�ʱ�õ���ʱ�ύ��Ϣ�ļ����������ύ��
+/.merge-msg.txt
