@@ -305,8 +305,13 @@ class RewardDorm(UI):
 
         self.ensure_no_info_bar()
 
-        # 设置计时器，防止 Alas 偶尔未能检测到 info_bar
-        timeout = Timer(1.5, count=3).start()
+        # 慢模拟器/云机上后宅页面要过一会儿才出现快捷收取按钮，而原实现只等约 2~4 秒
+        # 就放弃，并把「本来就没东西可收」和「点了没收成」都记成同一条「收取超时」警告，
+        # 日志上看起来像宿舍任务什么都没做（实测 2026-09-28 07:22：按钮一次都没出现就
+        # 结束；近十天里每天 0~3 次）。这里放宽到一个统一的窗口——刻意不在每次点击后
+        # 重置：按钮一直存在而信息栏迟迟不出现时，重置会让循环永不结束。
+        timeout = Timer(6, count=3).start()
+        clicked = False
 
         for _ in self.loop():
             # 处理所有弹窗
@@ -315,6 +320,7 @@ class RewardDorm(UI):
 
             # 通过快捷收取按钮收取金币和爱心
             if self.appear_then_click(DORM_QUICK_COLLECT, offset=(20, 20), interval=1):
+                clicked = True
                 continue
 
             # 正常结束
@@ -323,7 +329,10 @@ class RewardDorm(UI):
 
             # 超时结束
             if timeout.reached():
-                logger.warning('[宿舍-收取] 收取超时，可能未检测到信息栏')
+                if clicked:
+                    logger.warning('[宿舍-收取] 点击快捷收取后未检测到信息栏，本次可能未收取')
+                else:
+                    logger.info('[宿舍-收取] 没有可收取的东西（快捷收取按钮未出现）')
                 break
 
     @cached_property
