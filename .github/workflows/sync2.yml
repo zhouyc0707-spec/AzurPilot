@@ -8,12 +8,15 @@ on:
 jobs:
   repo-sync:
     env:
-      gitcode_key: ${{ secrets.GITCODE_PRIVATE_KEY }}
       gitcode_token: ${{ secrets.GITCODE_TOKEN }}
       gitcode_user: ${{ secrets.GITCODE_USER }}
+      gitcode_repo: ${{ secrets.GITCODE_REPO_NAME }}
     runs-on: ubuntu-latest
+    concurrency:
+      group: gitcode-sync-${{ github.ref }}
+      cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -29,11 +32,25 @@ jobs:
           echo "::add-mask::${MASK_TARGET}"
 
       - name: sync
-        if: env.gitcode_key && env.gitcode_token && env.gitcode_user
+        if: env.gitcode_token && env.gitcode_user && env.gitcode_repo
         run: |
+          # 直接同步源提交，GitHub、GitCode 与 CDN 使用相同 SHA。
           git remote remove upstream-mirror 2>/dev/null || true
           git remote add upstream-mirror "https://${GITCODE_USER}:${GITCODE_TOKEN}@gitcode.com/${GITCODE_USER}/${REPO_NAME}.git"
-          git push --force --progress upstream-mirror "HEAD:${GITHUB_REF_NAME}"
+          # GitCode 会对默认 Git UA 返回 418，与本地更新器采用相同的 UA 重试方式。
+          for attempt in 1 2 3 4 5; do
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/$((120 + RANDOM % 20)).0.$RANDOM.0 Safari/537.36"
+            if git -c "http.userAgent=$user_agent" push --force --progress upstream-mirror "HEAD:refs/heads/${GITHUB_REF_NAME}"; then
+              exit 0
+            else
+              status=$?
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              exit "$status"
+            fi
+            echo "GitCode 推送失败，准备第 $((attempt + 1))/5 次尝试"
+            sleep "$((attempt * 2))"
+          done
         env:
           GITCODE_USER: ${{ secrets.GITCODE_USER }}
           GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}

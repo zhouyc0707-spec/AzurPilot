@@ -7,6 +7,7 @@ import copy
 # 包含彩色实时日志渲染器（RichLog）、状态感知切换按钮以及图标按钮组等高度定制化的可视化组件。
 import html
 from html import escape
+import io
 import json
 import pywebio.pin
 import random
@@ -172,14 +173,24 @@ class RichLog:
         return self.render_many((renderable,))
 
     def render_many(self, renderables) -> str:
-        """一次性把一批 Rich 日志转换为 HTML，减少重复导出开销。"""
+        """一次性把一批 Rich 日志转换为 HTML，减少重复导出开销。
+
+        rich 15 起 ``Console.capture()`` 内的 ``print`` 不再写入记录缓冲
+        （实测 export_html 恒为空串），因此这里改为临时把输出重定向到一个丢弃流：
+        录制照常进行、文本不会真的打到服务端控制台，导出后再还原 file。
+        """
         renderables = list(renderables)
         if not renderables:
             return ""
 
-        with self.console.capture():
+        sink = io.StringIO()
+        previous_file = self.console.file
+        self.console.file = sink
+        try:
             for renderable in renderables:
                 self.console.print(renderable)
+        finally:
+            self.console.file = previous_file
 
         html = self.console.export_html(
             theme=self.terminal_theme,
@@ -187,7 +198,6 @@ class RichLog:
             code_format=LOG_CODE_FORMAT,
             inline_styles=True,
         )
-        # 调试：打印生成的 HTML
         return html
 
     def extend(self, text):

@@ -38,6 +38,10 @@ jobs:
           sudo apt-get update && sudo apt-get install -y libgl1 libglib2.0-0 libgomp1
           uv sync --frozen
           npm ci --prefix frontend
+      - name: 校验 Git over CDN 更新
+        run: |
+          npm install --prefix .github/scripts --no-audit --no-fund --no-package-lock
+          uv run python -m unittest tests.test_git_over_cdn tests.test_git_over_cdn_build tests.test_gitcode_sync
       - name: 校验 API 契约
         run: |
           uv run python -m dev_tools.export_api_schema

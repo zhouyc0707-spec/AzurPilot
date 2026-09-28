@@ -90,6 +90,14 @@ class CommissionAmount(AmountOcr):
     fragment_min_height = 10
 
     def pre_process(self, image):
+        """图像预处理：放大2倍后进行基类预处理。
+
+        Args:
+            image (np.ndarray): 输入图像。
+
+        Returns:
+            np.ndarray: 放大并预处理后的图像。
+        """
         import cv2
 
         # INTER_NEAREST（=0）：必须用最近邻。双三次/线性插值会把 1px 宽的
@@ -1559,6 +1567,14 @@ class RewardCommission(UI, InfoHandler):
         }.get(hour, '未知')
 
     def _get_remaining_time(self, comm):
+        """计算委托对象的剩余完成时间文本。
+
+        Args:
+            comm (Commission): 目标委托对象。
+
+        Returns:
+            str: 格式化的剩余时间字符串（如 '1小时30分钟' 或 '已完成'）。
+        """
         remaining = comm.finish_time - current_time()
 
         if remaining.total_seconds() <= 0:
@@ -1572,6 +1588,14 @@ class RewardCommission(UI, InfoHandler):
         return f'{minutes}分钟'
 
     def _get_remaining_time_str(self, finish_time_str):
+        """根据 ISO 格式的完成时间字符串计算剩余时间文本。
+
+        Args:
+            finish_time_str (str): ISO 格式时间字符串。
+
+        Returns:
+            str: 格式化的剩余时间字符串。
+        """
         finish_time = datetime.fromisoformat(finish_time_str)
         remaining = finish_time - current_time()
 
@@ -1586,6 +1610,14 @@ class RewardCommission(UI, InfoHandler):
         return f'{minutes}分钟'
 
     def _get_gem_reward_str(self, duration_hour):
+        """根据时长小时数获取预计钻石收益描述。
+
+        Args:
+            duration_hour (int): 委托耗时（小时）。
+
+        Returns:
+            str: 收益描述文本，如 '钻石 10~20'。
+        """
         return {
             2: '钻石 10~20',
             4: '钻石 25~40',

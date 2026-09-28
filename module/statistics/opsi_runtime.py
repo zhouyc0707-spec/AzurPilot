@@ -20,6 +20,15 @@ MEOW_HAZARD_LEVELS = {2, 3, 4, 5, 6}
 
 
 def instance_name_from_config(config: Any, default: str = "default") -> str:
+    """从配置对象中提取实例名称。
+
+    Args:
+        config (Any): 配置对象。
+        default (str): 未找到时的默认实例名称。默认为 "default"。
+
+    Returns:
+        str: 实例标识名。
+    """
     return getattr(config, "config_name", None) or default
 
 

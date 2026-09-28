@@ -99,9 +99,10 @@ class DropImage:
         self.combat_count = 0
 
     def add(self, image):
-        """
+        """添加单张掉落截图到暂存列表。
+
         Args:
-            image (np.ndarray):
+            image (np.ndarray): 截图图像。
         """
         if self:
             self.images.append(image)
@@ -109,15 +110,19 @@ class DropImage:
                 f'Drop record added, genre={self.genre}, amount={self.count}')
 
     def set_combat_count(self, count):
+        """设置当前关联的战斗场次计数。
+
+        Args:
+            count (int): 战斗场次数。
+        """
         self.combat_count = count
 
     def handle_add(self, main, before=None):
-        """
-        Handle wait before and after adding screenshot.
+        """在添加截图前后执行等待，并截取当前屏幕保存。
 
         Args:
-            main (ModuleBase):
-            before (int, float, tuple): Sleep before adding.
+            main (ModuleBase): 游戏主模块对象。
+            before (int | float | tuple, optional): 截图前的等待时间。默认为 None（使用配置值）。
         """
         if before is None:
             before = main.config.WAIT_BEFORE_SAVING_SCREEN_SHOT
@@ -129,10 +134,16 @@ class DropImage:
             self.add(main.device.image)
 
     def clear(self):
+        """清空已缓存的截图列表。"""
         self.images = []
 
     @property
     def count(self):
+        """获取当前暂存截图数量。
+
+        Returns:
+            int: 截图张数。
+        """
         return len(self.images)
 
     def __bool__(self):
@@ -473,6 +484,9 @@ class AzurStats:
         AzurStats._ensure_local_db()
 
         # 分类规则统一在 AzurStats.classify_meow_loot（截图归类复用同一口径）
+        # 上游此处曾内联一份等价的 classify()，规则已并入 MEOW_LOOT_RULES：
+        # Plate / GearDesignPlanT5 / OrdnanceTestingReportT4 /
+        # CoordinateObscure / CoordinateAbyssal / CatT3，谓词完全相同。
         keys = (
             "Plate",
             "GearDesignPlanT5",
@@ -818,14 +832,15 @@ class AzurStats:
             return False
 
     def _save(self, image, genre, filename):
-        """
+        """将截图保存到指定类别的本地文件夹中。
+
         Args:
-            image: Image to save.
-            genre (str): Name of sub folder.
-            filename (str): 'xxx.png'
+            image (np.ndarray): 待保存图像。
+            genre (str): 子文件夹名称（分类）。
+            filename (str): 保存的文件名。
 
         Returns:
-            bool: If success
+            bool: 保存成功返回 True，失败返回 False。
         """
         try:
             folder = os.path.join(
@@ -931,17 +946,19 @@ class AzurStats:
 
     def commit(self, images, genre, save=False, local=False, info='', combat_count=0,
                analyze=False):
-        """
+        """提交并处理一组掉落截图，执行保存、本地入库或专用解析。
+
         Args:
-            images (list): List of images in numpy array.
-            genre (str):
-            save (bool): If save image to local file system.
-            local (bool): If parse image into local AzurStats storage.
-            info (str): Extra info append to filename.
-            analyze (bool): 是否交给分类自己的解析链路入库（目前是科研掉落）。
+            images (list[np.ndarray]): 截图图像列表。
+            genre (str): 掉落类型。
+            save (bool): 是否将合并后的截图保存到本地硬盘。默认为 False。
+            local (bool): 是否将截图解析存入本地 AzurStats 数据库。默认为 False。
+            info (str): 附加到文件名中的额外说明信息。默认为空。
+            combat_count (int): 战斗场次计数。默认为 0。
+            analyze (bool): 是否交给分类专用的解析链路入库（如科研掉落）。默认为 False。
 
         Returns:
-            bool: If commit.
+            bool: 是否成功提交处理。
         """
         if len(images) == 0:
             return False
@@ -981,16 +998,17 @@ class AzurStats:
         return True
 
     def new(self, genre, method=None, save=False, local=None, info=''):
-        """
+        """创建新的掉落图片上下文管理器。
+
         Args:
-            genre (str):
-            method (str): The method about save and upload image.
-            save (bool): Whether to save the image.
-            local (bool): Whether to use local processing. If None, determined by genre.
-            info (str): Extra info append to filename.
+            genre (str): 掉落类型（如 'campaign', 'research', 'opsi_obscure'）。
+            method (str | bool, optional): 截图保存与上传方式。默认为 None。
+            save (bool): 是否将图像保存至磁盘。默认为 False。
+            local (bool | None): 是否解析存入本地数据库。为 None 时根据 genre 自动判定。
+            info (str): 附加到文件名的字符串。默认为空。
 
         Returns:
-            DropImage:
+            DropImage: 掉落图片收集与提交上下文对象。
         """
         # 掉落记录的每个提交周期都会走到这里，用它作为过期截图的清理时机
         # （内部有节流，不会每场战斗都扫目录）
