@@ -99,7 +99,19 @@ export function readBackgroundPreference(material: Material): BackgroundPreferen
     source, kind: 'image', urls: source === 'url' ? [...DEFAULT_BACKGROUND_URLS] : [], active: 0, name: '',
   }
   try {
-    const raw = JSON.parse(localStorage.getItem(backgroundStorageKey(material)) ?? 'null') as Record<string, unknown> | null
+    /* 旧版只有一条共用记录，新版按材质分开（玻璃沿用旧键、普通是新键）。
+       普通材质因此读不到老用户的旧记录，切过去就像"背景没了"——这里回落读一次旧键，
+       并把结果复制到新键，后续都按新键走。 */
+    const key = backgroundStorageKey(material)
+    let stored = localStorage.getItem(key)
+    if (stored === null && key !== STORAGE_KEY) {
+      const legacy = localStorage.getItem(STORAGE_KEY)
+      if (legacy !== null) {
+        stored = legacy
+        try { localStorage.setItem(key, legacy) } catch { /* 存不下也不影响本次生效。 */ }
+      }
+    }
+    const raw = JSON.parse(stored ?? 'null') as Record<string, unknown> | null
     const kind = raw?.kind === 'image' || raw?.kind === 'video' ? raw.kind : 'image'
     if (raw?.source === 'off') return {...fallback, source: 'off'}
     /* 旧记录：'default' 就是「用内置 API」，折成 URL 模式的一条。 */
@@ -279,19 +291,35 @@ export async function loadUploadedBackground() {
 /** 把当前生效的那条 API 交给服务端解析成真实直链（跨域时浏览器读不到最终地址）。 */
 export async function resolveActiveBackground() {
   if (snapshot.source !== 'url') return
-  const url = activeBackgroundUrl(snapshot)
-  if (!url) return
+  const urls = snapshot.urls.length ? snapshot.urls : [...DEFAULT_BACKGROUND_URLS]
+  const start = snapshot.active >= 0 && snapshot.active < urls.length ? snapshot.active : 0
+  /* 记住发起时的档位，用来判断等待期间用户有没有改设置（换列表或换生效项）。 */
+  const originalUrls = snapshot.urls
+  const originalActive = snapshot.active
   publish({resolving: true, resolveError: ''})
-  try {
-    const result = await api.request('background.resolve', {url})
-    if (activeBackgroundUrl(snapshot) !== url) return
-    /* 解析成功：壁纸改用直链 —— 同一个地址同时用于预览与"存入图库"，不会出现两次随机。 */
-    lastGoodAssetUrl = proxyUrl(result.final_url)
-    publish({assetUrl: lastGoodAssetUrl, directUrl: result.final_url, resolving: false, resolveError: ''})
-  } catch (error) {
-    /* 解析失败就退回原地址直接当图片用（很多 API 本身就是图片），并把原因留给界面显示。 */
-    publish({assetUrl: lastGoodAssetUrl, resolving: false, resolveError: (error as Error).message})
+  let lastError = ''
+  /* 一个源失败就顺次换下一个：内置随机图列表里有长期失效的站点（实测 loliapi 的
+     某些路径返回 404），旧逻辑随机挑中它就把壁纸留空，表现就是"背景图没了"。
+     全部失败才把错误交给界面显示。 */
+  for (let offset = 0; offset < urls.length; offset++) {
+    const index = (start + offset) % urls.length
+    const url = urls[index]
+    try {
+      const result = await api.request('background.resolve', {url})
+      /* 期间用户改过设置：放弃本次结果，交给新的解析去处理。 */
+      if (snapshot.source !== 'url' || snapshot.urls !== originalUrls || snapshot.active !== originalActive) return
+      /* 解析成功：壁纸改用直链 —— 同一个地址同时用于预览与"存入图库"，不会出现两次随机。 */
+      lastGoodAssetUrl = proxyUrl(result.final_url)
+      /* 换过源就把生效位置记下来，避免每次刷新都重新试一遍失效站点。 */
+      if (index !== originalActive) savePreference({...snapshot, active: index})
+      publish({active: index, assetUrl: lastGoodAssetUrl, directUrl: result.final_url, resolving: false, resolveError: ''})
+      return
+    } catch (error) {
+      lastError = (error as Error).message
+    }
   }
+  /* 全部失败：退回上一次成功的地址（可能为空），并把原因留给界面显示。 */
+  publish({assetUrl: lastGoodAssetUrl, resolving: false, resolveError: lastError})
 }
 
 export function setBackgroundUrls(values: string[], kind: BackgroundKind) {
