@@ -66,5 +66,23 @@ class PQStatus(ShopStatus):
         Pages:
             in: 私人宿舍主页
         """
-        count, _, _ = OCR_DAILY_COUNT.ocr(self.device.image)
+        count, _ = self.status_get_daily_count_detail()
         return count
+
+    def status_get_daily_count_detail(self):
+        """OCR 识别每日互动剩余次数，并告知徽章是否真的被识别到。
+
+        `DigitCounter.ocr()` 返回 `(current, remain, total)`：徽章正常显示时
+        `total` 是上限（如 3），而**完全没读到文字**时三项都是 0。因此可以用
+        `total > 0` 区分「徽章显示 0（真的用完）」与「徽章没读出来（被动画遮挡、
+        页面还没就绪）」—— 后者当成 0 会让整天的互动被静默跳过
+        （2026-09-27/29 实例：徽章实际是 3/3 却读到 0）。
+
+        Returns:
+            tuple[int, bool]: (剩余互动次数, 徽章是否被识别到)。
+
+        Pages:
+            in: 私人宿舍主页
+        """
+        count, remain, total = OCR_DAILY_COUNT.ocr(self.device.image)
+        return count, total > 0

@@ -33,7 +33,6 @@ Pages:
 """
 
 import module.config.server as server
-from module.base.timer import Timer
 from module.logger import logger
 from module.private_quarters.assets import *
 from module.private_quarters.interact import PQInteract
@@ -71,39 +70,42 @@ class PrivateQuarters(PQInteract, PQShop):
     }
 
     def _pq_get_daily_count(self, retry=3):
-        """
-        获取每日互动剩余次数，带重试缓冲。
+        """获取每日互动剩余次数；徽章读不出来时返回 None（未知），不再当成 0。
 
-        高性能 PC 上初始截图可能模糊或滞后，
-        因此通过有限次数的重读来确保结果准确。
+        原实现把「徽章没读出来」也当成 0，调用方据此判定「次数耗尽」并整天不做互动
+        （2026-09-27/29 实例：徽章实际是 3/3，只因刚买完每周物品、购买动画压住左上角
+        的徽章，三次重试全读到空 → 0）。这里：
+
+        - 用 DigitCounter 的 total 判断徽章是否真的被识别，读不到就重试；
+        - 连续读到两次有效的 0（徽章显示 0/3）才认定耗尽；
+        - 始终读不到徽章则返回 None，由调用方决定（不再静默跳过互动）。
 
         Args:
-            retry (int): 最大重试次数
+            retry (int): 最大重试次数。
 
         Returns:
-            int: 剩余互动次数，0 表示已耗尽
+            int | None: 剩余互动次数；徽章始终读不出来时返回 None。
 
         Pages:
             in: 私人宿舍主页
         """
-        count = self.status_get_daily_count()
-        get_timer = Timer(1.5, count=3).start()
-        skip_first_screenshot = True
-        while 1:
-            if skip_first_screenshot:
-                skip_first_screenshot = False
-            else:
-                self.device.screenshot()
+        zero_reads = 0
+        for attempt in range(retry + 1):
+            if attempt:
+                # 等一个截图周期再读：购买动画、页面切换会让徽章短暂读不出来
+                for _ in self.loop(timeout=1.5, skip_first=False):
+                    pass
 
-            # 结束条件：成功获取非零次数，或重试耗尽确认为零
-            if count != 0 or retry == 0:
+            count, recognized = self.status_get_daily_count_detail()
+            if not recognized:
+                continue
+            if count != 0:
                 return count
+            zero_reads += 1
+            if zero_reads >= 2:
+                return 0
 
-            # 计时器到期，重新读取每日次数
-            if get_timer.reached():
-                count = self.status_get_daily_count()
-                get_timer.reset()
-                retry -= 1
+        return 0 if zero_reads else None
 
     def _pq_shop_enter(self):
         """
@@ -214,6 +216,13 @@ class PrivateQuarters(PQInteract, PQShop):
                     f'舰娘互动={target_interact}, '
                     f'目标舰娘={target_title}')
 
+        # 先读每日互动次数：购买每周物品后会有购买动画/物品提示压住左上角的次数徽章，
+        # 那时读会读到空，历史上会被误判成「次数耗尽」而整天不做互动
+        # （2026-09-27/29 实例：徽章实际是 3/3）。放在购买之前读，并保留重试。
+        count = None
+        if target_interact and target_ship not in self.not_supported_filter[server.server]:
+            count = self._pq_get_daily_count(retry=3)
+
         # 进入商店购买每周物品
         if self.shop_filter or self.shop_strategy_enabled():
             if server.server not in ['tw']:
@@ -229,9 +238,11 @@ class PrivateQuarters(PQInteract, PQShop):
                 logger.info(f'[私人休息室] 目标舰娘 {target_ship} 在 {server.server} 服务器不可用')
                 return
 
-            # 获取每日剩余次数，为 0 则退出
-            count = self._pq_get_daily_count(retry=3)
-            if count == 0:
+            # 次数未知（徽章一直读不出来）时不再直接跳过：真的没次数时互动流程自己会
+            # 退出，代价只是几秒，比整天漏掉互动好。
+            if count is None:
+                logger.warning('[私人休息室] 未能读到每日互动次数徽章，仍按有次数处理')
+            elif count == 0:
                 logger.info('每日亲密度次数耗尽，退出子任务')
                 return
 
