@@ -816,6 +816,25 @@ class RewardCommission(UI, InfoHandler):
         self.device.click_record_clear()
         return False
 
+    def _commission_stop_requested(self) -> bool:
+        """用户是否请求停止（温柔停止的检查点）。
+
+        接取委托是逐个进行的，收到停止事件后应该在**当前这一单**结束时退出，
+        而不是把整批接完才停（温柔停止最多只等 60 秒）。
+
+        Returns:
+            bool: 已请求停止返回 True。
+
+        Pages:
+            in: 任意页面
+            out: 任意页面
+        """
+        stop_event = getattr(self.config, 'stop_event', None)
+        if stop_event is not None and stop_event.is_set():
+            logger.info('[委托-开始] 收到停止请求，结束本次委托接取')
+            return True
+        return False
+
     def commission_start(self):
         """
         扫描并启动所有选定的委托。
@@ -829,6 +848,8 @@ class RewardCommission(UI, InfoHandler):
         logger.hr('执行委托', level=1)
         if self.daily_choose:
             for comm in self.daily_choose:
+                if self._commission_stop_requested():
+                    break
                 self._commission_ensure_mode('daily')
                 self._commission_swipe_to_top()
                 self.handle_info_bar()
@@ -837,6 +858,8 @@ class RewardCommission(UI, InfoHandler):
                 self._commission_mode_reset()
         if self.urgent_choose:
             for comm in self.urgent_choose:
+                if self._commission_stop_requested():
+                    break
                 self._commission_ensure_mode('urgent')
                 self._commission_swipe_to_top()
                 self.handle_info_bar()

@@ -66,6 +66,10 @@ class ProcessManager:
     _lifecycle_locks: Dict[str, threading.RLock] = {}
     _lifecycle_locks_lock = threading.Lock()
     MANUAL_STOP_ACTION_TIMEOUT = 30
+    # 温柔停止：用户点停止按钮后，先通知 worker 让当前任务在安全点退出，最多等这么久；
+    # 等待期间再点一次停止则立即强制终止（见 stop_by_user）。
+    SOFT_STOP_TIMEOUT = 60
+    SOFT_STOP_POLL_INTERVAL = 0.5
 
     def __init__(self, config_name: str = DEFAULT_CONFIG_NAME) -> None:
         """初始化实例进程管理器。
@@ -94,6 +98,11 @@ class ProcessManager:
         self._log_handler_stop = threading.Event()
         self._state_override: int | None = None
         self._state_override_deadline: float | None = None
+        # 温柔停止相关状态：worker 的停止通知事件（启动时传入，见 start），
+        # 等待线程，以及「用户又点了一次停止」的强制信号。
+        self._notify_event = None
+        self._soft_stop_thread: threading.Thread | None = None
+        self._soft_stop_force = threading.Event()
 
     @classmethod
     def _get_lifecycle_lock(cls, config_name: str) -> threading.RLock:
@@ -188,6 +197,14 @@ class ProcessManager:
                         return
                     if func is None:
                         func = get_config_mod(self.config_name)
+                    # 新 worker 不能继承上一次的停止信号：这里清一次，并记下事件对象，
+                    # 供「温柔停止」（stop_by_user）置位。事件由调用方创建并跨进程传入，
+                    # WebUI 置位后 worker 里的 task_switched()/stop_event 即可看到。
+                    self._notify_event = ev
+                    self._soft_stop_force.clear()
+                    self._soft_stop_thread = None
+                    if ev is not None:
+                        ev.clear()
                     from module.api.account_service import prepare_worker
                     account_key = prepare_worker(self.config_name)
                     self.started_func = func
@@ -258,15 +275,79 @@ class ProcessManager:
             logger.warning(f"[{self.config_name}] worker 未完全停止")
         return stopped
 
-    def stop_by_user(self, action: object = _STOP_ACTION_UNSET) -> bool:
+    def stop_by_user(self, action: object = _STOP_ACTION_UNSET, *, soft: bool = True) -> bool:
         """停止 worker 后执行用户配置的收尾动作。
 
         该入口仅供 WebUI 的停止按钮使用。更新、WebUI 清理和 MCP 仍调用
         ``stop()``，从而避免非用户停止意外关闭游戏或模拟器。
 
+        默认走**温柔停止**：先置位停止事件通知 worker，让当前任务在安全点退出
+        （长任务沿用它们被高优先级任务打断时的那套逻辑，例如大世界搜索的
+        ``interrupt_auto_search``），最多等 ``SOFT_STOP_TIMEOUT`` 秒；等待期间用户
+        又点了一次停止，则立即强制终止。MCP 等非按钮入口传 ``soft=False`` 保持
+        原来的「立即终止」语义。
+
         ``stay_there`` 直接复用最初的强制停止路径，不启动收尾进程，确保
         停止行为和响应速度与未引入停止后动作前完全一致。未传入动作时保留
         旧调用行为，由独立收尾进程重新读取配置。
+
+        Args:
+            action: 可选的停止收尾动作（如 'stay_there', 'close_game' 等）。
+            soft: 是否走温柔停止（仅停止按钮用；其余入口保持立即终止）。
+
+        Returns:
+            bool: 温柔停止模式下返回是否已受理；立即模式下返回是否确认全部结束。
+        """
+        if not soft or self._notify_event is None:
+            return self._stop_immediately(action)
+
+        if self.stopping:
+            logger.warning(f"[{self.config_name}] 停止等待中再次收到停止请求，立即强制停止")
+            self._soft_stop_force.set()
+            return self._stop_immediately(action)
+
+        logger.info(
+            f"[{self.config_name}] 收到停止请求：等待当前任务在安全点退出"
+            f"（最长 {self.SOFT_STOP_TIMEOUT} 秒；再点一次停止可立即强制停止）"
+        )
+        self._soft_stop_force.clear()
+        self._notify_event.set()
+        worker = threading.Thread(
+            target=self._soft_stop_worker,
+            args=(action,),
+            name=f"soft-stop-{self.config_name}",
+            daemon=True,
+        )
+        self._soft_stop_thread = worker
+        worker.start()
+        return True
+
+    def _soft_stop_worker(self, action: object) -> None:
+        """等待 worker 自行退出；超时或被要求强制时改走立即终止。
+
+        Args:
+            action: 停止收尾动作，直接透传给立即终止路径。
+        """
+        deadline = time.monotonic() + self.SOFT_STOP_TIMEOUT
+        while time.monotonic() < deadline:
+            if self._soft_stop_force.is_set():
+                logger.warning(f"[{self.config_name}] 收到强制停止请求，立即终止 worker")
+                break
+            if not self.alive:
+                logger.info(f"[{self.config_name}] 当前任务已在安全点退出")
+                break
+            time.sleep(self.SOFT_STOP_POLL_INTERVAL)
+        else:
+            logger.warning(
+                f"[{self.config_name}] 等待 {self.SOFT_STOP_TIMEOUT} 秒后当前任务仍未退出，强制停止"
+            )
+        try:
+            self._stop_immediately(action)
+        finally:
+            self._soft_stop_thread = None
+
+    def _stop_immediately(self, action: object = _STOP_ACTION_UNSET) -> bool:
+        """立即终止 worker 并执行收尾动作（引入温柔停止之前的 stop_by_user 行为）。
 
         Args:
             action: 可选的停止收尾动作（如 'stay_there', 'close_game' 等）。
@@ -290,6 +371,16 @@ class ProcessManager:
         else:
             logger.warning(f"[{self.config_name}] worker 未完全停止")
         return stopped
+
+    @property
+    def stopping(self) -> bool:
+        """是否正在温柔停止（已通知 worker，等待当前任务在安全点退出）。
+
+        Returns:
+            bool: 等待线程仍在运行返回 True。
+        """
+        thread = self._soft_stop_thread
+        return thread is not None and thread.is_alive()
 
     def stop_log_queue_handler(self) -> None:
         """请求日志队列处理线程退出并回收它。

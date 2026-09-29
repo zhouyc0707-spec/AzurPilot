@@ -166,7 +166,8 @@ class Tools:
 
     def tool_stop_instance(self, arguments):
         instance = arguments['instance']
-        self.runtime.stop(instance)
+        # MCP 入口保持「立即终止」：温柔停止只用于界面上的停止按钮（见 stop_by_user）。
+        self.runtime.stop(instance, soft=False)
         return f'Success: Stopped {instance}'
 
     def tool_get_current_running_task(self, arguments):

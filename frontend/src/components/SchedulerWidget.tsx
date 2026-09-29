@@ -4,7 +4,7 @@
 
 import type { ReactNode } from 'react'
 import { useState } from 'react'
-import { CalendarClock, CirclePlay, Play, Square, TriangleAlert } from 'lucide-react'
+import { CalendarClock, CirclePlay, Loader2, Play, Square, TriangleAlert } from 'lucide-react'
 import { api } from '../api/client'
 import type { Overview } from '../api/types'
 import { useApp, useConnection } from '../app/context'
@@ -26,9 +26,11 @@ export function SchedulerWidget({instance, data, onData, action}: {instance: str
     setBusy(true)
     try {
       if (data.status !== 'running') await editor(`config:${instance}`).settled()
+      // 停止是「温柔停止」：后端先让当前任务在安全点退出（最长 60 秒）。
+      // 等待期间再点一次，后端会立即强制终止，所以这里用 stopping 区分两条提示。
       const next = await api.request(data.status === 'running' ? 'scheduler.stop' : 'scheduler.start', {instance})
       onData(next)
-      notify(data.status === 'running' ? ui('scheduler.stoppedNotice') : ui('scheduler.started'))
+      notify(data.status === 'running' ? (data.stopping ? ui('scheduler.stoppingForced') : ui('scheduler.stoppedNotice')) : ui('scheduler.started'))
     } catch (error) {
       notify((error as Error).message, true)
     } finally {
@@ -54,11 +56,12 @@ export function SchedulerWidget({instance, data, onData, action}: {instance: str
       <div><span>{ui('scheduler.waiting')}</span><strong>{waiting}</strong></div>
     </div>
     <button
-      className={`button scheduler-toggle ${data?.status === 'running' ? 'danger' : 'primary'}`}
+      className={`button scheduler-toggle ${data?.status === 'running' ? 'danger' : 'primary'}${data?.stopping ? ' is-stopping' : ''}`}
       onClick={toggleScheduler}
       disabled={!data || busy || connection !== 'ready'}
+      data-tip={data?.stopping ? ui('scheduler.stoppingHint') : undefined}
     >
-      {data?.status === 'running' ? <Square size={14}/> : <Play size={14}/>} {busy ? ui('scheduler.processing') : data?.status === 'running' ? ui('scheduler.stop') : ui('scheduler.start')}
+      {data?.stopping ? <Loader2 size={14} className="spin"/> : data?.status === 'running' ? <Square size={14}/> : <Play size={14}/>} {busy ? ui('scheduler.processing') : data?.stopping ? ui('scheduler.stopping') : data?.status === 'running' ? ui('scheduler.stop') : ui('scheduler.start')}
     </button>
   </section>
 }

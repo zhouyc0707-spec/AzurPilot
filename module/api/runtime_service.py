@@ -141,8 +141,11 @@ class RuntimeService:
                       'record': values.get('Record')}
                      for name, values in data.get('Dashboard', {}).items() if 'Value' in values]
         resources.extend(monthly_statistics_resources(instance))
+        # stopping：用户点了停止、正在等当前任务在安全点退出（温柔停止）。
+        # 前端据此把启停按钮显示成「停止中…」，再点一次即强制停止。
         return {'instance': instance, 'revision': revision,
                 'status': STATES.get(manager.state, 'stopped') if manager else 'stopped',
+                'stopping': bool(getattr(manager, 'stopping', False)) if manager else False,
                 'tasks': tasks, 'resources': resources,
                 'emulator': data.get('Alas', {}).get('Emulator', {})}
 
@@ -174,11 +177,14 @@ class RuntimeService:
                 raise ApiError('START_FAILED', '任务未启动，请检查服务是否正在重启')
         return self.overview(instance)
 
-    def stop(self, instance: str) -> dict:
+    def stop(self, instance: str, *, soft: bool = True) -> dict:
         """停止实例的运行。
 
         Args:
             instance: 实例名称。
+            soft: 是否温柔停止（界面停止按钮用）。True 时先通知 worker，让当前任务
+                在安全点退出（最长 60 秒），等待期间再次调用即强制终止；MCP 等
+                非界面入口传 False，保持立即终止。
 
         Returns:
             dict: 停止后的最新实例总览数据。
@@ -187,7 +193,7 @@ class RuntimeService:
             ApiError: 进程未能全部正常终止时抛出 STOP_FAILED。
         """
         with ProcessManager._get_lifecycle_lock(instance):
-            if not self.manager(instance).stop_by_user():
+            if not self.manager(instance).stop_by_user(soft=soft):
                 raise ApiError('STOP_FAILED', '尚未确认全部工作进程停止，请检查日志后重试')
         return self.overview(instance)
 

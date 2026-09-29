@@ -1056,7 +1056,10 @@ class OSMap(OSFleet, Map, GlobeCamera, StorageHandler, StrategicSearchHandler):
             if self.combat_appear():
                 self.on_auto_search_battle_count_add()
                 stop_event = self.config.stop_event
-                if strategic and stop_event is not None and stop_event.is_set():
+                if stop_event is not None and stop_event.is_set():
+                    # 停止 / 更新事件：无论是否战略搜索都优雅打断。原先这一支被
+                    # `strategic` 挡住，侵蚀1练级这类非战略搜索不认停止事件，
+                    # 用户点停止只能等强杀（温柔停止依赖这里及时退出）。
                     self.interrupt_auto_search()
                 elif (
                     strategic

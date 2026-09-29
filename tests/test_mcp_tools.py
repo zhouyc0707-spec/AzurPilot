@@ -126,7 +126,8 @@ class McpToolsTest(unittest.IsolatedAsyncioTestCase):
             self.assertIn('START_FAILED', await self.invoke('start_instance', instance='demo'))
             self.assertIn('STOP_FAILED', await self.invoke('stop_instance', instance='demo'))
         manager.start.assert_called_once_with('alas', ev=None)
-        manager.stop_by_user.assert_called_once_with()
+        # MCP 入口保持立即终止：温柔停止只用于界面上的停止按钮
+        manager.stop_by_user.assert_called_once_with(soft=False)
 
     async def test_update_uses_shared_service_and_propagates_busy(self):
         with patch.object(State, 'restart_event', threading.Event()), \

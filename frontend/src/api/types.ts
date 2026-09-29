@@ -27,6 +27,8 @@ export interface ScheduledTask { name: string; nextRun: string; pending: boolean
 export interface Resource { name: string; label: string; value: number | null; limit?: number; total?: number | null; record?: string }
 export interface Overview {
   instance: string; revision: string; status: Status; tasks: ScheduledTask[]
+  /** 已请求停止、正在等当前任务在安全点退出（温柔停止）；此时再点一次停止即强制终止。 */
+  stopping?: boolean
   resources: Resource[]; emulator: Record<string, Value>
 }
 export interface LogEntry { id: number; level: string; text: string }
