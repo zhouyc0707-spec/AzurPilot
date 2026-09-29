@@ -26,7 +26,7 @@ export function SchedulerWidget({instance, data, onData, action}: {instance: str
     setBusy(true)
     try {
       if (data.status !== 'running') await editor(`config:${instance}`).settled()
-      // 停止是「温柔停止」：后端先让当前任务在安全点退出（最长 60 秒）。
+      // 停止是「温柔停止」：后端先让当前任务在安全点退出（最长 5 分钟）。
       // 等待期间再点一次，后端会立即强制终止，所以这里用 stopping 区分两条提示。
       const next = await api.request(data.status === 'running' ? 'scheduler.stop' : 'scheduler.start', {instance})
       onData(next)

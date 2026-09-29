@@ -66,9 +66,9 @@ class ProcessManager:
     _lifecycle_locks: Dict[str, threading.RLock] = {}
     _lifecycle_locks_lock = threading.Lock()
     MANUAL_STOP_ACTION_TIMEOUT = 30
-    # 温柔停止：用户点停止按钮后，先通知 worker 让当前任务在安全点退出，最多等这么久；
-    # 等待期间再点一次停止则立即强制终止（见 stop_by_user）。
-    SOFT_STOP_TIMEOUT = 60
+    # 温柔停止：用户点停止按钮后，先通知 worker 让当前任务在安全点退出，最多等这么久
+    # （5 分钟：足够长任务跑到安全点；卡住时等待期间再点一次停止即可立即强制终止）。
+    SOFT_STOP_TIMEOUT = 300
     SOFT_STOP_POLL_INTERVAL = 0.5
 
     def __init__(self, config_name: str = DEFAULT_CONFIG_NAME) -> None:
@@ -283,9 +283,9 @@ class ProcessManager:
 
         默认走**温柔停止**：先置位停止事件通知 worker，让当前任务在安全点退出
         （长任务沿用它们被高优先级任务打断时的那套逻辑，例如大世界搜索的
-        ``interrupt_auto_search``），最多等 ``SOFT_STOP_TIMEOUT`` 秒；等待期间用户
-        又点了一次停止，则立即强制终止。MCP 等非按钮入口传 ``soft=False`` 保持
-        原来的「立即终止」语义。
+        ``interrupt_auto_search``），最多等 ``SOFT_STOP_TIMEOUT`` 秒（5 分钟）；
+        等待期间用户又点了一次停止，则立即强制终止。MCP 等非按钮入口传
+        ``soft=False`` 保持原来的「立即终止」语义。
 
         ``stay_there`` 直接复用最初的强制停止路径，不启动收尾进程，确保
         停止行为和响应速度与未引入停止后动作前完全一致。未传入动作时保留

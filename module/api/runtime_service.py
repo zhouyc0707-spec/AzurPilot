@@ -183,7 +183,7 @@ class RuntimeService:
         Args:
             instance: 实例名称。
             soft: 是否温柔停止（界面停止按钮用）。True 时先通知 worker，让当前任务
-                在安全点退出（最长 60 秒），等待期间再次调用即强制终止；MCP 等
+                在安全点退出（最长 5 分钟），等待期间再次调用即强制终止；MCP 等
                 非界面入口传 False，保持立即终止。
 
         Returns:

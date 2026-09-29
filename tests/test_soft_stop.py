@@ -1,7 +1,7 @@
 """「温柔停止」的离线回归测试。
 
 需求：点「停止调度器」时不要立刻杀进程，而是先通知 worker 让当前任务在安全点退出
-（长任务沿用它们被高优先级任务打断时的那套逻辑），最多等 60 秒；等待期间再点一次
+（长任务沿用它们被高优先级任务打断时的那套逻辑），最多等 5 分钟；等待期间再点一次
 停止则立即强制终止；更新/重启/WebUI 清理/MCP 等入口保持原来的立即终止。
 
 覆盖：
@@ -137,6 +137,11 @@ class SoftStopTest(unittest.TestCase):
             self.manager._soft_stop_thread.join(timeout=5)
 
         self.assertEqual(calls, [], '新一轮运行不应被上一轮的停止收尾误杀')
+
+    def test_timeout_is_five_minutes(self):
+        """等待上限固定为 5 分钟（用户要求；等待期间可再点一次强制停止）。"""
+        self.assertEqual(ProcessManager.SOFT_STOP_TIMEOUT, 300)
+        self.assertLessEqual(ProcessManager.SOFT_STOP_POLL_INTERVAL, 1)
 
 
 if __name__ == '__main__':
