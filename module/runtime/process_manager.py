@@ -314,7 +314,7 @@ class ProcessManager:
         self._notify_event.set()
         worker = threading.Thread(
             target=self._soft_stop_worker,
-            args=(action,),
+            args=(action, self.run_id),
             name=f"soft-stop-{self.config_name}",
             daemon=True,
         )
@@ -322,11 +322,12 @@ class ProcessManager:
         worker.start()
         return True
 
-    def _soft_stop_worker(self, action: object) -> None:
+    def _soft_stop_worker(self, action: object, run_id: str | None = None) -> None:
         """等待 worker 自行退出；超时或被要求强制时改走立即终止。
 
         Args:
             action: 停止收尾动作，直接透传给立即终止路径。
+            run_id: 发起停止时的运行标识；用于避免误停等待期间新启动的 worker。
         """
         deadline = time.monotonic() + self.SOFT_STOP_TIMEOUT
         while time.monotonic() < deadline:
@@ -342,6 +343,10 @@ class ProcessManager:
                 f"[{self.config_name}] 等待 {self.SOFT_STOP_TIMEOUT} 秒后当前任务仍未退出，强制停止"
             )
         try:
+            if run_id is not None and self.run_id != run_id:
+                # 等待期间用户已经重新启动：要停的那一轮早已退出，别去动新进程。
+                logger.info(f"[{self.config_name}] 停止等待期间已启动新的运行，跳过终止与收尾")
+                return
             self._stop_immediately(action)
         finally:
             self._soft_stop_thread = None

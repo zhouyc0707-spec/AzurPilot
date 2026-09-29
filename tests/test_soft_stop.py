@@ -123,6 +123,21 @@ class SoftStopTest(unittest.TestCase):
         self.manager._soft_stop_thread.is_alive.return_value = True
         self.assertTrue(self.manager.stopping)
 
+    def test_new_run_during_wait_is_not_killed(self):
+        """等待期间用户重新启动：不能把新 worker 停掉、也不跑收尾动作。"""
+        calls = []
+        self.manager.run_id = 'old-run'
+
+        with patch.object(ProcessManager, 'alive', alive_sequence([True, False])), \
+                patch.object(self.manager, '_stop_immediately',
+                             side_effect=lambda action=None: calls.append(action) or True):
+            self.manager.stop_by_user('goto_main')
+            # 任务退出、等待线程尚未收尾时，用户点了启动（run_id 变化）
+            self.manager.run_id = 'new-run'
+            self.manager._soft_stop_thread.join(timeout=5)
+
+        self.assertEqual(calls, [], '新一轮运行不应被上一轮的停止收尾误杀')
+
 
 if __name__ == '__main__':
     unittest.main()
