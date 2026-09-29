@@ -2077,8 +2077,9 @@ class AzurLaneAutoScript:
                 return True
             if self.stop_event is not None:
                 if self.stop_event.is_set():
-                    logger.info('[Alas] 检测到更新事件')
-                    logger.info(f'[{self.config_name}] 已退出。原因: 更新 | Reason: Update')
+                    # 同一个事件既用于更新，也用于界面的「温柔停止」，文案覆盖两者
+                    logger.info('[Alas] 检测到停止或更新事件')
+                    logger.info(f'[{self.config_name}] 已退出。原因: 停止或更新 | Reason: Stop or update')
                     exit(0)
 
             time.sleep(5)
@@ -2325,11 +2326,11 @@ class AzurLaneAutoScript:
 
         while 1:
             try:
-                # 检查来自GUI的更新事件
+                # 检查来自 GUI 的停止/更新事件（界面「温柔停止」也走这个事件）
                 if self.stop_event is not None:
                     if self.stop_event.is_set():
-                        logger.info('[Alas] 检测到更新事件')
-                        logger.info(f"[Alas] [{self.config_name}] 已退出。原因: 更新 | Reason: Update")
+                        logger.info('[Alas] 检测到停止或更新事件')
+                        logger.info(f"[Alas] [{self.config_name}] 已退出。原因: 停止或更新 | Reason: Stop or update")
                         self._stop_daily_summary_scheduler()
                         break
                 # 检查游戏服务器维护
