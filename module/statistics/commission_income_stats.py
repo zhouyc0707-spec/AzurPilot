@@ -280,20 +280,29 @@ def get_commission_income_interval_summary(
 def get_recent_commission_entries(
     instance: str,
     limit: int = 10,
+    cross_month: bool = False,
 ) -> List[Dict[str, Any]]:
-    """获取最近 N 条委托收益记录（按时间降序）。
+    """获取最近 N 条委托收益记录（按时间倒序）。
+
+    旧界面（PyWebIO 与 React 旧版统计页）原本会依次读「当前月」「32 天前所在月」
+    「64 天前所在月」三个归档桶来补足条数，于是新月份开始后仍会显示上个月的记录
+    （2026-09 月初实测：本月不足 50 条时把 8 月的记录一起列出来）。按用户要求改为
+    **只读当前自然月**，与「每月清空、只看本月」的预期一致；需要旧行为时传
+    ``cross_month=True``。
 
     Args:
-        instance: 实例名称
-        limit: 返回条数上限，默认 10
+        instance: 实例名称。
+        limit: 返回条数上限，默认 10。
+        cross_month: 是否回溯前两个月的归档桶补足条数（旧界面行为，默认关闭）。
 
     Returns:
-        最近 N 条委托记录，每条包含 ts, items, commission_count
+        最近 N 条委托记录，每条包含 ts, items, commission_count。
     """
     now = datetime.now()
+    offsets = (0, 32, 64) if cross_month else (0,)
     all_entries = []
-    for offset in range(3):
-        dt = now - timedelta(days=offset * 32)
+    for offset in offsets:
+        dt = now - timedelta(days=offset)
         entries = cl1_db.get_commission_income(instance, dt.year, dt.month)
         for entry in entries:
             ts = _parse_ts(entry.get('ts', ''))
