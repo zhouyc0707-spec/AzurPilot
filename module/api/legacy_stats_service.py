@@ -18,7 +18,7 @@
 两边任何一边改了统计口径，都要同步另一边。这里只返回**数据与 i18n 键**，不做
 翻译与文案拼接 —— 文案由前端用 ``Gui.Stat.*`` 的既有翻译渲染，语言与旧界面一致。
 """
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from module.api.protocol import ApiError
 
@@ -87,20 +87,17 @@ def _parse_month(month):
 def _ap_panel(instance):
     """体力变化图表的序列。
 
-    旧界面的时间范围按钮（近24小时/近七天/本月，默认近七天）只在已有数据上过滤，
-    因此这里一次给出「上个月 + 本月」的点，由前端按范围裁剪：跨月的近七天不需要
-    再请求一次。序列与旧图例一致：行动力 / 黄币 / 紫币 / 海里数 / 资产。
+    只给「当前自然月」的点：旧界面的数据源本身就是当前月这一份 blob（PyWebIO 路径
+    调用的 `get_ap_timeline()` 也只取当前年月），所以月初天然是重置状态、近七天也跨不到
+    上个月。移植时曾额外取上个月以支持"跨月的近七天"，结果 9 月初仍能看到 8 月曲线
+    （用户反馈"每月应该重置"），这里改回旧口径。序列与旧图例一致：
+    行动力 / 黄币 / 紫币 / 海里数 / 资产。
     """
     from module.statistics.opsi_month import get_ap_timeline, get_coins_timeline
 
     now = datetime.now()
-    previous = now.replace(day=1) - timedelta(days=1)
-    months = [(previous.year, previous.month), (now.year, now.month)]
-
-    ap_rows, coin_rows = [], []
-    for year, month in months:
-        ap_rows.extend(get_ap_timeline(year, month, instance))
-        coin_rows.extend(get_coins_timeline(year, month, instance))
+    ap_rows = get_ap_timeline(now.year, now.month, instance)
+    coin_rows = get_coins_timeline(now.year, now.month, instance)
 
     def points(rows, key, transform=None, fallback_key=None, extra_key=None):
         result = []

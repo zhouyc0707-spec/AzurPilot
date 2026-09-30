@@ -5,7 +5,7 @@
 """
 
 from contextlib import ExitStack, contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 import unittest
 from unittest.mock import MagicMock, patch
@@ -53,7 +53,7 @@ def patch_sources(ship_exp=None, meow=None, summary=None, ap_bought=0, ap_rows=N
                   meow_raises=False):
     """装配面板依赖的打桩集合；返回 patch 列表与 cl1_db 假实例。
 
-    体力序列同时取上月与本月，这里只在当前月给出打桩数据，避免同一条记录被算两次。
+    体力序列只取当前月（2026-09-29 起与旧界面口径一致），这里也只给当前月打桩数据。
     """
     meow = meow or {}
     summary = summary or {'month': '2026-09', 'total_battles': 0}
@@ -176,6 +176,27 @@ class ApPanelTests(unittest.TestCase):
         # 紫币只保留大于 0 的点
         self.assertEqual([point['value'] for point in series['purple_coins']['points']], [3])
         self.assertEqual(len(series['yellow_coins']['points']), 2)
+
+    def test_only_current_month_is_requested(self):
+        """体力序列只读当前自然月（旧界面口径），月初不显示上月曲线。"""
+        now = datetime.now()
+        previous = (now.replace(day=1) - timedelta(days=1))
+        calls = []
+
+        def timeline(year, month, instance):
+            calls.append((year, month))
+            if (year, month) == (previous.year, previous.month):
+                return [{'ts': f'{previous:%Y-%m}-15 10:00:00', 'ap': 999}]
+            return [{'ts': f'{now:%Y-%m}-02 10:00:00', 'ap': 100}]
+
+        with patch('module.statistics.opsi_month.get_ap_timeline', timeline), \
+                patch('module.statistics.opsi_month.get_coins_timeline', lambda year, month, instance: []):
+            panel = _ap_panel('alas')
+
+        self.assertEqual(calls, [(now.year, now.month)], '只应请求当前月的时间线')
+        ap_points = next(item for item in panel['series'] if item['key'] == 'ap')['points']
+        self.assertEqual([point['value'] for point in ap_points], [100],
+                         '上月记录不应出现在体力序列里')
 
 
 class ShipPanelTests(unittest.TestCase):
