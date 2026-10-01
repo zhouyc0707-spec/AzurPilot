@@ -368,3 +368,7 @@ frontend/*.tsbuildinfo
 
 # 合并时写提交信息用的临时文件（勿提交）
 /.merge-msg*.txt
+
+# 提交信息临时文件（各种写法都不要提交）
+/*-msg.txt
+/.commit-msg*.txt
