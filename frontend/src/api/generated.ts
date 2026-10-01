@@ -22,6 +22,8 @@ export interface Parameters {
   "scheduler.program.apply": { instance: string; revision: string; mode: "native" | "enhance" | "takeover" }
   "scheduler.program.state": { instance: string }
   "system.restart": Record<string, never>
+  "island.suspend.state": { instance: string }
+  "island.suspend.toggle": { instance: string }
   "tasks.run": { instance: string; task: string }
   "logs.get": { instance: string; after?: number }
   "preview.capture": { instance: string }

@@ -25,6 +25,7 @@ import { useInstanceOverview } from '../components/useInstanceOverview'
 import { editor, prepareValue } from '../config/editors'
 import { EditStatus } from '../components/EditStatus'
 import { AccountPanel } from '../components/AccountPanel'
+import { IslandSuspendControl } from '../components/IslandSuspendControl'
 import { isFieldVisible } from './configVisibility'
 
 export function TaskConfig() {
@@ -232,6 +233,9 @@ export function TaskConfig() {
           </div>
         )
       })}
+      {/* 本地定制：岛屿计划「全局配置」组（当前只有季节一项）下面再加一栏，
+          一键关闭/恢复该组下全部岛屿任务。搜索时只显示匹配项，这里不参与搜索。 */}
+      {task === 'IslandPlan' && group === 'IslandPlan' && !search && <IslandSuspendControl instance={instance} onChanged={reload}/>}
     </section>
   ))}    {search && !visibleGroups.length && <Empty icon={<Search size={26} />} title={ui('task.noConfigFound')}>{ui('task.tryOtherKeyword')}</Empty>}
   </>

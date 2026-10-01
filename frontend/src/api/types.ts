@@ -33,6 +33,17 @@ export interface Overview {
   stopping?: boolean
   resources: Resource[]; emulator: Record<string, Value>
 }
+export interface IslandSuspendState {
+  /** 岛屿组下的任务总数。 */
+  total: number
+  /** 当前处于启用状态的数量。 */
+  enabledCount: number
+  /** 被「一键关闭」关掉、等待恢复的任务名。 */
+  suspended: string[]
+  suspendedCount: number
+  /** 记录时间（空串表示没有暂停中的任务）。 */
+  at: string
+}
 export interface LogEntry { id: number; level: string; text: string }
 export interface Logs { instance: string; cursor: number; reset: boolean; entries: LogEntry[] }
 export interface Preview { instance: string; image: string | null; capturedAt: string | null }
@@ -157,6 +168,8 @@ export interface Results {
   'updater.apply': {accepted: boolean}
   'updater.cancel': {accepted: boolean}
   'system.ping': {pong: boolean}
+  'island.suspend.state': IslandSuspendState
+  'island.suspend.toggle': IslandSuspendState
   'auth.login': {authenticated: boolean}
   'events.subscribe': {topics: string[]; instance: string | null}
   'schema.get': Schema

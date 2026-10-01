@@ -39,6 +39,7 @@ class Router:
         self.configs, self.runtime = configs, runtime
         self._accounts = None
         self._scheduler_programs = None
+        self._island_suspend = None
         self.access_password = ''
         self.background_token = secrets.token_urlsafe(32)
         self.methods = {
@@ -65,6 +66,9 @@ class Router:
             'scheduler.program.state': Method(p.InstanceParams, lambda x: self.programs.state(x.instance)),
             # 本地定制：更新页的「重启服务」按钮（上游没有这个入口，合并时保留）
             'system.restart': Method(p.Params, self.system_restart, True),
+            # 本地定制：岛屿计划全局配置的「一键关闭/恢复全部岛屿任务」
+            'island.suspend.state': Method(p.InstanceParams, lambda x: self.island_suspend.state(x.instance)),
+            'island.suspend.toggle': Method(p.InstanceParams, lambda x: self.island_suspend.toggle(x.instance), True),
             'tasks.run': Method(p.TaskParams, lambda x: runtime.start(x.instance, x.task), True),
             'logs.get': Method(p.LogsParams, lambda x: runtime.logs(x.instance, x.after)),
             'preview.capture': Method(p.InstanceParams, lambda x: runtime.capture(x.instance)),
@@ -103,6 +107,18 @@ class Router:
             from module.api.scheduler_service import SchedulerService
             self._scheduler_programs = SchedulerService(self.configs, self.runtime)
         return self._scheduler_programs
+
+    @property
+    def island_suspend(self):
+        """岛屿计划一键暂停/恢复服务（本地定制）。
+
+        Returns:
+            IslandSuspendService: 岛屿批量开关服务实例。
+        """
+        if self._island_suspend is None:
+            from module.api.island_suspend import IslandSuspendService
+            self._island_suspend = IslandSuspendService(self.configs)
+        return self._island_suspend
 
     @property
     def accounts(self):
