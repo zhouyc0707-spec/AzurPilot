@@ -1,9 +1,28 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { defaultMaterial, hasMaterialAxis, readThemePreference, showsRightRail, showsWallpaper, supportsBackground, usesGlassLayer, usesLegacyLayout, usesLegacyShell, usesMaterial, type Material, type Theme } from './theme'
+import { defaultMaterial, hasMaterialAxis, readThemePreference, showsRightRail, showsWallpaper, supportsBackground, themeFamilyTarget, usesGlassLayer, usesLegacyLayout, usesLegacyShell, usesMaterial, type Material, type Theme } from './theme'
 
 afterEach(() => vi.unstubAllGlobals())
 
 const ALL_THEMES: Theme[] = ['light', 'dark', 'minimal', 'legacy-light', 'legacy-dark']
+
+describe('新旧 UI 切换（顶栏快捷按钮）', () => {
+  it('新版按当前明暗切到对应旧版主题', () => {
+    expect(themeFamilyTarget({theme: 'light', resolvedMode: 'light'})).toBe('legacy-light')
+    expect(themeFamilyTarget({theme: 'dark', resolvedMode: 'dark'})).toBe('legacy-dark')
+    // 简约/紧凑的明暗由解析结果决定，切换后也应落到对应的旧版主题
+    expect(themeFamilyTarget({theme: 'minimal', resolvedMode: 'dark'})).toBe('legacy-dark')
+    expect(themeFamilyTarget({theme: 'extreme', resolvedMode: 'light'})).toBe('legacy-light')
+  })
+  it('旧版切回记住的新版主题，没有记录时按明暗回退', () => {
+    expect(themeFamilyTarget({theme: 'legacy-light', resolvedMode: 'light'}, 'minimal')).toBe('minimal')
+    expect(themeFamilyTarget({theme: 'legacy-dark', resolvedMode: 'dark'}, 'extreme')).toBe('extreme')
+    expect(themeFamilyTarget({theme: 'legacy-light', resolvedMode: 'light'})).toBe('light')
+    expect(themeFamilyTarget({theme: 'legacy-dark', resolvedMode: 'dark'})).toBe('dark')
+  })
+  it('记住的值若本身是旧版主题则忽略，避免来回切不动', () => {
+    expect(themeFamilyTarget({theme: 'legacy-light', resolvedMode: 'light'}, 'legacy-dark')).toBe('light')
+  })
+})
 
 describe('主题偏好恢复', () => {
   it('保留旧版浅深色偏好，并为缺少的配色提供默认值', () => {

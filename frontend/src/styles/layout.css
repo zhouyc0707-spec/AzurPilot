@@ -7,6 +7,13 @@
 .sidebar-brand {height: 72px; flex-shrink: 0; padding: 24px 9px 0; display: flex; align-items: center; justify-content: space-between}
 .brand-title {display: inline-flex; align-items: center; gap: 9px; font-size: 22px; font-weight: 750; letter-spacing: -.8px}
 .brand-logo {width: 28px; height: 28px; border-radius: 6px; flex-shrink: 0}
+/* 本地定制：招牌旁的快捷按钮（重启服务 / 新旧 UI 切换）。
+   与 .icon-button 的移动端加大档位无关，这里固定成紧凑尺寸并禁止收缩。 */
+.brand-quick-actions {display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; margin-left: 2px}
+.brand-quick-actions .brand-quick-button {width: 26px; height: 26px; flex-shrink: 0}
+.brand-quick-actions .brand-quick-button svg {width: 15px; height: 15px}
+.brand-quick-actions .brand-quick-button:disabled {opacity: .55}
+@media (max-width: 950px) {.brand-quick-actions .brand-quick-button {width: 34px; height: 34px}}
 .instance-picker {position: relative; margin: 2px 0 26px; flex-shrink: 0}
 .instance-switcher {display: flex; width: 100%; gap: 10px; align-items: center; text-align: left; padding: 12px 9px; background: var(--surface-muted); border: 1px solid var(--border); border-radius: 9px}
 .instance-switcher:hover, .instance-switcher[aria-expanded='true'] {border-color: var(--accent)}

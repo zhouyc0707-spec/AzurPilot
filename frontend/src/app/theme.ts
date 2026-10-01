@@ -191,8 +191,7 @@ function skinFor(theme: Theme): Skin {
 }
 
 /** 样式作为惰性文本模块加载，切换时替换唯一节点，避免旧主题规则驻留。 */
-export async function applyTheme(next: Preference) {
-  const request = ++revision
+export async function applyTheme(next: Preference) {  const request = ++revision
   const skin = skinFor(next.theme)
   let css: string | undefined
   if (activeSkin !== skin) {
@@ -243,4 +242,38 @@ export async function applyTheme(next: Preference) {
   } catch { /* 存储不可用时仍允许切换，本次会话内生效。 */ }
   preference = {...next, resolvedMode}
   listeners.forEach(listener => listener())
+}
+
+/** 顶部快捷按钮用「上次用的新版主题」键：从旧版切回来时保持原来的新版主题（简约/紧凑不丢）。 */
+const NEW_FAMILY_KEY = 'azurpilot.theme.new-family'
+
+/**
+ * 计算「新旧 UI 切换」的目标主题（纯函数，便于测试）。
+ *
+ * - 新版 → 旧版：按当前解析出的明暗切到 `legacy-light` / `legacy-dark`；
+ * - 旧版 → 新版：优先回到记住的那个新版主题（简约、紧凑都能还原），
+ *   没有记录时按明暗回退到 `light` / `dark`。
+ */
+export function themeFamilyTarget(current: {theme: Theme; resolvedMode: ResolvedMode}, remembered?: Theme): Theme {
+  const dark = current.resolvedMode === 'dark'
+  if (usesLegacyLayout(current.theme)) {
+    return remembered && !usesLegacyLayout(remembered) ? remembered : (dark ? 'dark' : 'light')
+  }
+  return dark ? 'legacy-dark' : 'legacy-light'
+}
+
+/** 在新版与旧版两族主题之间切换（顶部快捷按钮），并把新版主题记下来以便切回。 */
+export function toggleThemeFamily() {
+  const current = getThemePreference()
+  let remembered: Theme | undefined
+  try {
+    const saved = localStorage.getItem(NEW_FAMILY_KEY) as Theme | null
+    if (saved) remembered = saved
+  } catch { /* 存储不可用时按明暗回退。 */ }
+  if (!usesLegacyLayout(current.theme)) {
+    try {
+      localStorage.setItem(NEW_FAMILY_KEY, current.theme)
+    } catch { /* 存储不可用时只是失去记忆，切换本身照常。 */ }
+  }
+  void applyTheme({...current, theme: themeFamilyTarget(current, remembered)})
 }

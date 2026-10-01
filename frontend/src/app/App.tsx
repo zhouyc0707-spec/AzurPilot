@@ -6,8 +6,8 @@ import { PasswordInput, Select } from '../components/FormControls'
 import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type MouseEvent, type ChangeEvent } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { getLayout, setSidebarCollapsed, subscribeLayout } from './layout'
-import { getThemePreference, supportsBackground } from './theme'
-import { ArrowRight, CalendarClock, ChartNoAxesCombined, CirclePause, CirclePlay, Code2, Compass, Download, ExternalLink, FileJson, GalleryHorizontal, Globe, House, LayoutDashboard, LoaderCircle, Maximize2, Megaphone, Menu, Minimize2, Palette, PanelTop, Settings2, WifiOff, X, ChevronRight } from 'lucide-react'
+import { getThemePreference, supportsBackground, toggleThemeFamily } from './theme'
+import { ArrowRight, CalendarClock, ChartNoAxesCombined, CirclePause, CirclePlay, Code2, Compass, Download, ExternalLink, FileJson, GalleryHorizontal, Globe, House, LayoutDashboard, LayoutTemplate, LoaderCircle, Maximize2, Megaphone, Menu, Minimize2, Palette, PanelTop, Power, Settings2, WifiOff, X, ChevronRight } from 'lucide-react'
 import { api } from '../api/client'
 import { editor } from '../config/editors'
 import {bulkAction, bulkTargets} from './instanceBulk'
@@ -207,6 +207,41 @@ export function App() {
   // 开发者工具可以预览「有可用更新」的角标，这里统一算一次。
   const updateAvailable = Boolean(update.data?.available) || devOverride.updatePreview
   const brand = <><Link to="/" className="brand-title" aria-label={`AzurPilot ${ui('nav.home')}`}><img src={`${import.meta.env.BASE_URL}azurpilot.svg`} alt="" className="brand-logo" onClick={handleBrandLogoClick}/><span>AzurPilot</span></Link>{updateAvailable && <Link className="update-notice sidebar-update-notice" to="/updater" aria-label={ui('nav.newVersion')} title={ui('nav.newVersion')}><span>{ui('nav.newBadge')}</span></Link>}</>
+  /* 本地定制：招牌旁的两枚快捷按钮 —— 重启服务、新旧 UI 切换。
+     原先它们分别藏在更新页与界面设置页里，这里放到全页面最上方随手可达。
+     重启会中断正在运行的任务，因此先弹窗确认；切换 UI 明暗沿用当前解析结果。 */
+  const [restarting, setRestarting] = useState(false)
+  const [confirmRestart, setConfirmRestart] = useState(false)
+  async function restartService() {
+    setRestarting(true)
+    try {
+      await api.request('system.restart', {})
+      notify(ui('nav.restartSent'))
+    } catch (error) {
+      notify((error as Error).message, true)
+    } finally {
+      setRestarting(false)
+      setConfirmRestart(false)
+    }
+  }
+  const brandActions = <span className="brand-quick-actions">
+    <button
+      type="button"
+      className="icon-button brand-quick-button"
+      aria-label={ui('nav.restartService')}
+      title={`${ui('nav.restartService')} · ${ui('nav.restartServiceHint')}`}
+      disabled={restarting || connection !== 'ready'}
+      aria-busy={restarting}
+      onClick={() => setConfirmRestart(true)}
+    >{restarting ? <LoaderCircle size={16} className="spin"/> : <Power size={16}/>}</button>
+    <button
+      type="button"
+      className="icon-button brand-quick-button"
+      aria-label={ui('nav.toggleTheme')}
+      title={`${ui('nav.toggleTheme')} · ${usesLegacyLayout(theme) ? ui('nav.toggleThemeToNew') : ui('nav.toggleThemeToLegacy')}`}
+      onClick={toggleThemeFamily}
+    ><LayoutTemplate size={16}/></button>
+  </span>
   // 旧版顶栏的第三列是居中的页面名：实例页写任务名，无实例时写导航项名。
   const pageTitle = instance
     ? currentTask ? currentTaskLabel : location.pathname.endsWith('/statistics') ? ui('nav.statistics') : ui('nav.overview')
@@ -267,7 +302,7 @@ export function App() {
   const tabStrip = <InstanceTabs onCreate={() => setCreating(true)}/>
   const breadcrumbInner = <>{topbarActions}{instance ? (tabsShown ? null : <><span>/</span><InstanceSwitcher onCreate={() => setCreating(true)}/></>) : activeSection !== ui('nav.home') && <><span>/</span><strong>{activeSection}</strong></>}{tabsShown && tabStrip}{instance && (currentTask ? <><span>/</span><Link to={`${base}/task/Alas`}>{ui('nav.taskConfig')}</Link><span>/</span><Link className="breadcrumb-current" to={`${base}/task/${currentTask}`}><strong>{currentTaskLabel}</strong></Link></> : location.pathname.endsWith('/statistics') && !tabsMode && <><span>/</span><strong>{ui('nav.statistics')}</strong></>)}</>
   const topbar = <header className="topbar">
-    {(legacyShell || legacyHomeShell) && <div className="sidebar-brand legacy-topbar-brand"><div className="sidebar-brand-left">{brand}</div></div>}
+    {(legacyShell || legacyHomeShell) && <div className="sidebar-brand legacy-topbar-brand"><div className="sidebar-brand-left">{brand}{brandActions}</div></div>}
     <GlassMaterial/><button className="mobile-toggle icon-button" aria-label={ui('nav.open')} onClick={() => setMobileOpen(true)}><Menu size={20}/></button>{showRail && <button className="mobile-rail-toggle icon-button" aria-label={railOpen ? ui('nav.closeRail') : ui('nav.openRail')} aria-expanded={railOpen} aria-controls="right-rail-menu" title={railOpen ? ui('nav.closeRail') : ui('nav.openRail')} onClick={() => setRailOpen(open => !open)}><CalendarClock size={18}/></button>}
     {legacyShell || legacyHomeShell
       ? <span className="legacy-topbar-title">{pageTitle}</span>
@@ -288,7 +323,7 @@ export function App() {
     <NavHandle/>
     <aside className="sidebar">
       {/* 旧版把招牌放进顶栏，桌面端这一行隐藏；窄屏侧栏是抽屉，招牌回抽屉里。 */}
-      <div className={`sidebar-brand ${legacyShell || legacyHomeShell ? 'legacy-sidebar-actions' : ''}`.trim()}><div className="sidebar-brand-left">{brand}</div><button className="mobile-close icon-button" aria-label={ui('nav.close')} onClick={() => setMobileOpen(false)}><X size={18}/></button></div>
+      <div className={`sidebar-brand ${legacyShell || legacyHomeShell ? 'legacy-sidebar-actions' : ''}`.trim()}><div className="sidebar-brand-left">{brand}{brandActions}</div><button className="mobile-close icon-button" aria-label={ui('nav.close')} onClick={() => setMobileOpen(false)}><X size={18}/></button></div>
       <SidebarTransition viewKey={instance ? `instance:${instance}` : 'global'}>
         <nav className="primary-nav" aria-label={ui('nav.primary')}>
           {instance ? <><NavLink to={`${base}/overview`} onClick={closeDrawer}><LayoutDashboard size={17}/>{ui('nav.overview')}</NavLink><NavLink to={`${base}/statistics`} onClick={closeDrawer}><ChartNoAxesCombined size={17}/>{ui('nav.statistics')}</NavLink></> : <><NavLink to="/" end onClick={closeDrawer}><House size={17}/>{ui('nav.home')}</NavLink><NavLink to="/announcement" onClick={closeDrawer}><Megaphone size={17}/>{ui('nav.announcement')}{announcement.unread && <span className="tiny-dot red"/>}</NavLink><NavLink to="/updater" onClick={closeDrawer}><Download size={17}/>{ui('nav.updater')}{updateAvailable && <span className="tiny-dot teal"/>}</NavLink><NavLink to="/interface" onClick={closeDrawer}><Palette size={17}/>{ui('nav.interface')}</NavLink><NavLink to="/remote" onClick={closeDrawer}><Globe size={17}/>{ui('nav.remote')}</NavLink><NavLink to="/configs" onClick={closeDrawer}><FileJson size={17}/>{ui('nav.configs')}</NavLink><NavLink to="/settings" onClick={closeDrawer}><Settings2 size={17}/>{ui('nav.settings')}</NavLink><NavLink to="/dev" onClick={closeDrawer}><Code2 size={17}/>{ui('nav.developer')}</NavLink><a className="nav-open-source" href="https://github.com/wess09/AzurPilot" target="_blank" rel="noreferrer" onClick={closeDrawer}><ExternalLink size={17}/>{ui('nav.openSource')}</a></>}
@@ -308,6 +343,15 @@ export function App() {
     {!railFirst && instance && showRail && <RightRail instance={instance} onMobileClose={() => setRailOpen(false)}/>}
     <CompactScrollbars/>
     {creating && <CreateInstance onClose={() => setCreating(false)}/>}
+    {confirmRestart && <Modal title={ui('nav.restartConfirmTitle')} onClose={() => setConfirmRestart(false)}>
+      <div className="form-stack">
+        <p className="muted">{ui('nav.restartConfirmBody')}</p>
+        <div className="dev-button-row">
+          <button className="button secondary" onClick={() => setConfirmRestart(false)}>{ui('common.cancel')}</button>
+          <button className="button primary" disabled={restarting} onClick={() => void restartService()}>{ui('nav.restartConfirmAction')}</button>
+        </div>
+      </div>
+    </Modal>}
     <MaterialInspector/>
   </div>
 }
