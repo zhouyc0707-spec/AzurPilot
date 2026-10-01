@@ -10,6 +10,7 @@ config/*.ini
 config/*.yaml
 !config/deploy.*.yaml
 config/*.json
+config/scheduler/
 config/*.db
 # 数据库备份（如 cl1_data.db.bak-<标签>-<时间戳>）：既不以 .db 也不以 .bak 结尾，
 # 需单独忽略，避免个人统计数据被提交并推送到公开仓库
@@ -364,3 +365,6 @@ frontend/*.tsbuildinfo
 
 # �ϲ�ʱ�õ���ʱ�ύ��Ϣ�ļ����������ύ��
 /.merge-msg.txt
+
+# 合并时写提交信息用的临时文件（勿提交）
+/.merge-msg*.txt

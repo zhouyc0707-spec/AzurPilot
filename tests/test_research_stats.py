@@ -141,13 +141,24 @@ class ResearchStatsScopeTest(unittest.TestCase):
 
 
 class ResearchStatsTodayMonthTest(unittest.TestCase):
-    """今日 / 本月计数：按记录时间戳分桶，时间戳缺失时不计入任何一桶。"""
+    """今日 / 本月计数：按记录时间戳分桶，时间戳缺失时不计入任何一桶。
+
+    时间必须冻结在**月中某天**：本测试要区分「今天」与「本月 1 号」两条记录，
+    若在每月 1 号运行，"本月首日"就是今天，两条会落进同一桶（today 变 5 而非 2），
+    测试假失败。上游给日报/月末测试修过同类日期漂移（355364238），这里同一手法。
+    """
+
+    FIXED_NOW = datetime(2026, 6, 15, 12, 0, 0)
 
     def setUp(self):
-        now = datetime.now()
+        now = self.FIXED_NOW
         first_this_month = now.replace(day=1, hour=0, minute=0)
         old = now - timedelta(days=200)
         self.now = now
+        # 冻结被测模块看到的时间（wraps 保留 fromisoformat 等真实行为）
+        self.clock = patch.object(RESEARCH_STATS, 'datetime', wraps=datetime)
+        self.clock.start().now.return_value = now
+        self.addCleanup(self.clock.stop)
         entries = [
             entry({CHIPS: 2}, 9, now),
             entry({CHIPS: 3}, 9, first_this_month),
