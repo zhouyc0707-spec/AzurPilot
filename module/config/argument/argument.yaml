@@ -1452,6 +1452,9 @@ IslandPlan:
   Season:
     value: spring
     option: [ spring, summer, autumn, winter ]
+  TaskAlignment:
+    value: half_hour
+    option: [ half_hour, hour, disabled ]
 IslandFarm:
   Positions:
     value: 3

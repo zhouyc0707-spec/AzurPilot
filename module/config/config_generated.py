@@ -761,6 +761,7 @@ class GeneratedConfig:
 
     # 配置组 `IslandPlan`
     IslandPlan_Season = 'spring'  # spring, summer, autumn, winter
+    IslandPlan_TaskAlignment = 'half_hour'  # half_hour, hour, disabled
 
     # 配置组 `IslandFarm`
     IslandFarm_Positions = 3  # 1, 2, 3, 4

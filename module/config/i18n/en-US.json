@@ -3946,6 +3946,13 @@
       "summer": "Summer",
       "autumn": "Autumn",
       "winter": "Winter"
+    },
+    "TaskAlignment": {
+      "name": "Task time alignment",
+      "help": "Round up the next run time of all island tasks.\nHalf-hour: round up to :00 or :30 of each hour.\nHour: round up to :00 of each hour.\nDisabled: keep the time calculated by each task.\nChanges apply the next time a task is scheduled; existing scheduled times remain unchanged.",
+      "half_hour": "Half-hour (:00 / :30)",
+      "hour": "Hour (:00)",
+      "disabled": "Disabled"
     }
   },
   "IslandFarm": {

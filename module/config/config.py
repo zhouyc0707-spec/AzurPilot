@@ -87,6 +87,12 @@ def _round_up_half_hour(dt: datetime) -> datetime:
     return (dt + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
 
 
+def _round_up_hour(dt: datetime) -> datetime:
+    """将时间向上取整到整点，已在整点时保持不变。"""
+    boundary = dt.replace(minute=0, second=0, microsecond=0)
+    return boundary if dt == boundary else boundary + timedelta(hours=1)
+
+
 def name_to_function(name):
     """
     根据任务名称创建 Function 对象。
@@ -544,6 +550,7 @@ class AzurLaneConfig(ConfigUpdater, ManualConfig, GeneratedConfig, ConfigWatcher
         """设置 Scheduler.NextRun，延迟任务的下次运行时间。
 
         至少需要设置一个参数。如果设置了多个参数，取最近的时间。
+        岛屿任务按全局配置向上对齐到半点或整点；不启用时保留原计算时间。
 
         Args:
             success (bool):
@@ -596,11 +603,18 @@ class AzurLaneConfig(ConfigUpdater, ManualConfig, GeneratedConfig, ConfigWatcher
             if task is None:
                 task = self.task.command
             if _is_island_task(task):
+                alignment = self.cross_get(
+                    'IslandPlan.IslandPlan.TaskAlignment', default=self.IslandPlan_TaskAlignment
+                )
                 original_run = run
-                run = _round_up_half_hour(run)
+                if alignment == 'half_hour':
+                    run = _round_up_half_hour(run)
+                elif alignment == 'hour':
+                    run = _round_up_hour(run)
                 if run != original_run:
+                    label = '半点' if alignment == 'half_hour' else '整点'
                     logger.info(
-                        f"[配置] 岛屿任务 `{task}` 对齐到半点: {original_run} -> {run}"
+                        f"[配置] 岛屿任务 `{task}` 对齐到{label}: {original_run} -> {run}"
                     )
             logger.info(f"[配置] 延迟任务 `{task}` 到 {run} ({kv})")
             self.cross_set(f'{task}.Scheduler.NextRun', run)

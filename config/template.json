@@ -3032,7 +3032,8 @@
   },
   "IslandPlan": {
     "IslandPlan": {
-      "Season": "spring"
+      "Season": "spring",
+      "TaskAlignment": "half_hour"
     },
     "Storage": {
       "Storage": {}

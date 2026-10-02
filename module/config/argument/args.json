@@ -15242,6 +15242,15 @@
           "autumn",
           "winter"
         ]
+      },
+      "TaskAlignment": {
+        "type": "select",
+        "value": "half_hour",
+        "option": [
+          "half_hour",
+          "hour",
+          "disabled"
+        ]
       }
     },
     "Storage": {
