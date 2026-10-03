@@ -132,6 +132,8 @@ ACTION_POINTS_BUY = {
     4: 1000,
     5: 1000,
 }
+ACTION_POINT_BUY_MAX = 5
+OIL_PURCHASE_EXHAUSTED_WEEK_PATH = 'OpsiGeneral.Storage.Storage.OilPurchaseExhaustedWeek'
 ACTION_POINT_BOX = {
     0: 0,
     1: 20,
@@ -198,7 +200,7 @@ class ActionPointHandler(UI, MapEventHandler):
     def _is_in_month_end_purchase_block_week():
         """判断当前是否处于月末购买封锁周。
 
-        在包含下个服务器月第一天的自然周（周一至周日）内，封锁每周行动力购买。
+        在服务器当月最后一天所在的自然周内，从周一到当月末封锁石油购买。
         进入下个服务器月后，购买将重新可用。
 
         Returns:
@@ -210,9 +212,24 @@ class ActionPointHandler(UI, MapEventHandler):
             hour=0, minute=0, second=0, microsecond=0
         )
         next_month_start = next_month.replace(day=1)
-        current_week_start = server_now.date() - timedelta(days=server_now.weekday())
-        next_month_week_start = next_month_start.date() - timedelta(days=next_month_start.weekday())
-        return current_week_start == next_month_week_start
+        last_day = next_month_start.date() - timedelta(days=1)
+        last_week_start = last_day - timedelta(days=last_day.weekday())
+        return server_now.date() >= last_week_start
+
+    @staticmethod
+    def _get_oil_purchase_week():
+        """以服务器和服务器周一日期标识购买周期，周重置后旧记录自动失效。"""
+        server_now = current_time() - server_time_offset()
+        week_start = server_now.date() - timedelta(days=server_now.weekday())
+        return f'{server.server}:{week_start.isoformat()}'
+
+    def _is_oil_purchase_exhausted(self, week):
+        """读取本实例的共享状态，兼容 multi_set 尚未落盘的本轮确认。"""
+        recorded_week = self.config.modified.get(
+            OIL_PURCHASE_EXHAUSTED_WEEK_PATH,
+            self.config.cross_get(OIL_PURCHASE_EXHAUSTED_WEEK_PATH),
+        )
+        return recorded_week == week
 
     def _is_in_action_point(self):
         """判断是否处于行动力使用弹窗。
@@ -415,25 +432,28 @@ class ActionPointHandler(UI, MapEventHandler):
         获取行动力剩余购买次数。
 
         Returns:
-            int: 剩余购买次数。
+            int | None: 有效的剩余购买次数；无法确认时为 None，不作为耗尽记录。
 
         Pages:
             in: ACTION_POINT_USE
         """
-        current = 0
+        confirmed_zero = 0
         for _ in self.loop(timeout=1):
 
             current, _, total = OCR_ACTION_POINT_BUY_REMAIN.ocr(self.device.image)
 
-            # 可能的结果: 0/5, 05
-            if total == 0:
+            # 每周总次数必须为 5；零值须连续两帧确认，避免一次误读封锁整周。
+            if total != ACTION_POINT_BUY_MAX or not 0 <= current <= ACTION_POINT_BUY_MAX:
+                confirmed_zero = 0
                 continue
+            if current > 0:
+                return current
+            confirmed_zero += 1
+            if confirmed_zero >= 2:
+                return 0
 
-            break
-        else:
-            logger.warning('[大世界-行动点] 获取行动点购买剩余超时')
-
-        return current
+        logger.warning('[大世界-行动点] 获取有效购买剩余次数超时，本次跳过石油购买')
+        return None
 
     def action_point_buy(self, preserve=1000):
         """
@@ -448,14 +468,31 @@ class ActionPointHandler(UI, MapEventHandler):
         Pages:
             in: ACTION_POINT_USE
         """
-        self.action_point_set_button(0)
-        current = self.action_point_get_buy_remain()
-        buy_max = 5  # 当前版本中，玩家每周可购买 5 次行动力
-        buy_count = buy_max - current
         buy_limit = self.config.OpsiGeneral_BuyActionPointLimit
+        if buy_limit <= 0:
+            return False
+        # 禁购与耗尽状态先于任何石油选项点击及 OCR，补给可直接走行动力箱。
         if self._is_in_month_end_purchase_block_week():
             logger.info('[大世界-行动点] 跳过本周购买行动点，因为是月末封锁周')
             return False
+        week = self._get_oil_purchase_week()
+        if self._is_oil_purchase_exhausted(week):
+            logger.info('[大世界-行动点] 本周石油购买次数已确认用完，直接使用行动力箱')
+            return False
+        if not self.action_point_set_button(0):
+            return False
+        current = self.action_point_get_buy_remain()
+        if current is None:
+            return False
+        if self._get_oil_purchase_week() != week:
+            # 读取期间跨过周重置，旧画面的 0/5 不得写到新周。
+            logger.info('[大世界-行动点] 读取购买次数期间跨周，本次跳过石油购买')
+            return False
+        if current == 0:
+            self.config.cross_set(OIL_PURCHASE_EXHAUSTED_WEEK_PATH, week)
+            logger.info('[大世界-行动点] 本周石油购买次数已用完，已保存本实例状态')
+            return False
+        buy_count = ACTION_POINT_BUY_MAX - current
         if buy_count >= buy_limit:
             logger.info('[大世界-行动点] 达到本周购买行动点上限')
             return False

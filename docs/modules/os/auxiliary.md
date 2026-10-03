@@ -97,6 +97,12 @@ module/os_simulator/
 | `MissionHandler` | `os_mission_overview_accept`（任务总览接取）、`MissionAtCurrentZone` 异常；`is_in_opsi_explore()` 在此定义（OpsiExplore 启用且 next_run 早于重置前 12 小时） |
 | `StrategicSearchHandler` / `MapOrderHandler` / `OSTargetHandler` | 战略搜索流程、作战指令冷却、海域成就（`TARGET_SWITCH` 为三态选择器：all/unfinished） |
 
+石油购买行动力在切换石油选项前，先检查月末禁购与本周耗尽记录。**月末禁购取服务器当月最后一天所在自然周，从周一至当月末；新月开始后重新判断**。以最后一天定位可覆盖下月 1 日为周一的边界；若当月最后一天恰好为周一，则该月只在最后一天禁购。禁购与耗尽均只跳过石油购买，正常行动力箱补给不受影响。
+
+购买次数只有总数为 5、剩余数在 0–5 内才有效；`0/5` 需要连续两帧确认，异常读数会中断零值确认。有效确认耗尽后，将服务器及该周周一日期写入本实例的 `OpsiGeneral.Storage.Storage.OilPurchaseExhaustedWeek`，供所有大世界任务共享，重启和配置迁移仍保留。下一服务器周或切换服务器时，旧记录不再匹配；跨月本身不重置同一周的耗尽状态。读取期间跨过周重置时，本次结果不写入新周。
+
+识别失败、石油不足以及达到用户自设的较低购买上限均不记录为“5 次用完”。状态沿用已有通用 Storage 与配置事务，不增加可修改参数或改写其他运行状态。离线回归见 `tests/test_action_point_oil_purchase.py`。
+
 ### os_ash
 
 | 类 | 要点 |
