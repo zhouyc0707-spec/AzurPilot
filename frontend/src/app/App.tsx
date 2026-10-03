@@ -190,11 +190,15 @@ export function App() {
   }, [instancesLoaded, instances, navigate])
   /* 点导航里当前页的链接不产生 pathname 变化，抽屉得自己关。 */
   const closeDrawer = () => setMobileOpen(false)
+  const showEmulatorStatus = location.pathname.endsWith('/task/Alas')
   useEffect(() => { setMobileOpen(false); setRailOpen(false) }, [location.pathname])
   useEffect(() => {
     if (connection !== 'ready') return
-    void api.request('events.subscribe', {instance: instance ?? null, topics: instance ? previewEnabled ? ['instances', 'overview', 'logs', 'preview'] : ['instances', 'overview', 'logs'] : ['instances']}).catch(error => notify(error.message, true))
-  }, [instance, connection, notify, previewEnabled])
+    const topics: Array<'instances' | 'overview' | 'logs' | 'preview' | 'emulator'> = instance ? ['instances', 'overview', 'logs'] : ['instances']
+    if (instance && previewEnabled) topics.push('preview')
+    if (instance && showEmulatorStatus) topics.push('emulator')
+    void api.request('events.subscribe', {instance: instance ?? null, topics}).catch(error => notify(error.message, true))
+  }, [instance, connection, notify, previewEnabled, showEmulatorStatus])
   // 旧版主题下点进实例后，外壳回到「顶栏跨全宽 + 单列侧栏」；主页视图一律沿用新版外壳。
   const legacyShell = usesLegacyShell(theme, instance)
   /* 主页与五个二级菜单也走旧版外壳：它们没有实例内容，顶栏只写居中的页名。 */

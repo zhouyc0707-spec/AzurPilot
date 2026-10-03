@@ -375,6 +375,10 @@
 .field-label label > span {margin-left: 6px}
 .field-label p {font-size: 12px; color: var(--muted); line-height: 1.9; white-space: pre-line; overflow-wrap: anywhere; margin-top: 5px}
 .field-control {width: 260px; flex-shrink: 0; text-align: right}
+.emulator-runtime-status {border-bottom: 1px solid var(--border)}
+.emulator-runtime-status .field-row:last-child {border-bottom: 0}
+.emulator-status-value {font-size: 14px; font-weight: 550; line-height: 1.7; font-variant-numeric: tabular-nums; overflow-wrap: anywhere}
+.emulator-runtime-status .emulator-status-warning {color: var(--warning, var(--muted))}
 .field-control > input, .field-control > select, .field-control > textarea {width: 100%; font-size: 13px}
 .field-control textarea {resize: none; overflow-y: hidden; min-height: 0; line-height: 1.9}
 .field-actions {display: flex; justify-content: flex-end; margin-top: 7px}

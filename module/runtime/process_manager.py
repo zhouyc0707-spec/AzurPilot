@@ -21,7 +21,7 @@ from module.config.utils import DEFAULT_CONFIG_NAME
 from module.logger import logger, set_file_logger, set_func_logger
 from module.runtime.process_control import is_process_alive, stop_process, stop_process_tree
 from module.runtime.setting import State
-from module.runtime.worker_events import ExitEvent, TaskEvent, WorkerResult
+from module.runtime.worker_events import EmulatorUptimeEvent, ExitEvent, TaskEvent, WorkerResult
 from module.runtime.worker_registry import (
     get_workers,
     is_current_owner,
@@ -78,10 +78,11 @@ class ProcessManager:
             config_name: 配置实例名称。
         """
         self.config_name = config_name
-        self._renderable_queue: queue.Queue[ConsoleRenderable | TaskEvent | ExitEvent] = State.manager.Queue()
+        self._renderable_queue: queue.Queue[ConsoleRenderable | TaskEvent | ExitEvent | EmulatorUptimeEvent] = State.manager.Queue()
         self._preview_queue = None
         self._program_queue = None
         self.program_state = None
+        self.emulator_uptime = None
         self.current_task = None
         self.started_func = None
         self.run_id = None
@@ -215,6 +216,7 @@ class ProcessManager:
                         self.run_id = uuid.uuid4().hex
                         self.exit_result = None
                         self.program_state = None
+                        self.emulator_uptime = None
                         # 每轮独立队列，旧读线程不会消费新 worker 的事件。
                         self._renderable_queue = State.manager.Queue()
                         self._queue_lock = threading.Lock()
@@ -716,18 +718,37 @@ class ProcessManager:
         with self._runtime_lock:
             if run_id != self.run_id:
                 return
-            if isinstance(message, (TaskEvent, ExitEvent)):
+            if isinstance(message, (TaskEvent, ExitEvent, EmulatorUptimeEvent)):
                 if message.run_id != self.run_id:
                     return
                 if self.exit_result is not None:
                     return
-                if isinstance(message, TaskEvent):
+                if isinstance(message, EmulatorUptimeEvent):
+                    previous = self.emulator_uptime or {}
+                    if previous.get('serial') != message.serial:
+                        previous = {}
+                    if message.checked_at < previous.get('lastAttemptAt', 0):
+                        return
+                    available = message.uptime_seconds is not None
+                    self.emulator_uptime = {
+                        'serial': message.serial,
+                        'uptimeSeconds': message.uptime_seconds if available else previous.get('uptimeSeconds'),
+                        'checkedAt': message.checked_at if available else previous.get('checkedAt'),
+                        'lastAttemptAt': message.checked_at,
+                        'available': available,
+                    }
+                elif isinstance(message, TaskEvent):
                     self.current_task = message.command
                 else:
                     self.exit_result = message.result
                     self.current_task = None
                 return
         self._append_renderable(message)
+
+    def emulator_uptime_snapshot(self) -> dict:
+        """读取检测快照，不暴露可变共享状态，也不连接模拟器。"""
+        with self._runtime_lock:
+            return dict(self.emulator_uptime or {})
 
     def _append_renderable(self, renderable) -> None:
         """保存一条日志并在锁外通知订阅者，避免 UI 轮询造成批量刷新。
@@ -887,7 +908,7 @@ class ProcessManager:
     def run_process(
         config_name: str,
         func: str,
-        q: queue.Queue[ConsoleRenderable | TaskEvent | ExitEvent],
+        q: queue.Queue[ConsoleRenderable | TaskEvent | ExitEvent | EmulatorUptimeEvent],
         e: threading.Event | None = None,
         preview_queue=None,
         run_id: str = None,

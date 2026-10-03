@@ -95,7 +95,7 @@ export function createMockServer({password = '', empty = false} = {}) {
         try {
           if (topic === 'preview' && session.last.has(topic) && Date.now() - (session.previewAt ?? 0) < 3000) continue
           if (topic === 'preview') session.previewAt = Date.now()
-          const method = {instances: 'instances.list', overview: 'overview.get', logs: 'logs.get', preview: 'preview.capture'}[topic]
+          const method = {instances: 'instances.list', overview: 'overview.get', logs: 'logs.get', preview: 'preview.capture', emulator: 'emulator.status'}[topic]
           const data = state.dispatch(method, topic === 'instances' ? {} : {instance: session.instance})
           const serialized = JSON.stringify(data)
           if (session.last.get(topic) !== serialized) {session.event(topic, data); session.last.set(topic, serialized)}

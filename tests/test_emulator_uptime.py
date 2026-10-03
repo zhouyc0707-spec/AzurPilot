@@ -94,6 +94,42 @@ class TestSchedulerUptimeReader(unittest.TestCase):
             self.assertIsNone(self.script._get_emulator_uptime())
         self.logger.warning.assert_called_once()
 
+    def test_reads_are_published_with_instance_serial_and_time(self):
+        self.script.config.Emulator_Serial = '127.0.0.1:16480'
+        self.script.device = Mock()
+        self.script.device.get_emulator_uptime.side_effect = [3600, None]
+        with (
+            patch('module.runtime.worker_events.set_emulator_uptime') as publish,
+            patch('alas.time.time', side_effect=[1000, 1001]),
+        ):
+            self.assertEqual(self.script._get_emulator_uptime(), 3600)
+            self.assertIsNone(self.script._get_emulator_uptime())
+        self.assertEqual(publish.call_args_list, [
+            call('127.0.0.1:16480', 3600, 1000), call('127.0.0.1:16480', None, 1001),
+        ])
+
+    def test_closed_ui_channel_cannot_change_valid_restart_reading(self):
+        self.script.device = Mock()
+        self.script.device.get_emulator_uptime.return_value = 3600
+        with (
+            patch('module.runtime.worker_events._sink', Mock(side_effect=BrokenPipeError('通道关闭'))),
+            patch('module.logger.logger.warning'),
+        ):
+            self.assertEqual(self.script._get_emulator_uptime(), 3600)
+
+    def test_status_publication_does_not_initialize_missing_config(self):
+        self.script.__dict__.pop('config')
+        self.script.device = Mock()
+        self.script.device.get_emulator_uptime.return_value = 3600
+        with (
+            patch.object(AzurLaneAutoScript, 'config', new_callable=PropertyMock,
+                         side_effect=RuntimeError('配置不可用')) as config,
+            patch('module.runtime.worker_events.set_emulator_uptime') as publish,
+        ):
+            self.assertEqual(self.script._get_emulator_uptime(), 3600)
+        config.assert_not_called()
+        publish.assert_not_called()
+
 
 class TestForceScheduledUptime(unittest.TestCase):
     def setUp(self):

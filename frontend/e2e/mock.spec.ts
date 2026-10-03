@@ -1,4 +1,108 @@
 import { expect, test } from '@playwright/test'
+import type { EmulatorStatus } from '../src/api/types'
+
+for (const theme of ['light', 'legacy-light']) {
+  test(`${theme} 模拟器运行状态实时更新、失败提示与窄屏布局`, async ({page}) => {
+    test.setTimeout(60000)
+    const errors: string[] = []
+    page.on('pageerror', error => errors.push(error.message))
+    await page.addInitScript(value => {
+      localStorage.setItem('azurpilot.theme', value)
+      localStorage.setItem('azurpilot.language', 'zh-CN')
+      localStorage.setItem('azurpilot.background', JSON.stringify({source: 'off'}))
+    }, theme)
+    const checkedAt = Date.now() / 1000
+    let uptime = 3665, available = true, scheduled = true, interval = 12
+    let eventInstance: string | undefined
+    let pushes = 0
+    const subscriptions: string[][] = []
+    const status = (instance: string): EmulatorStatus => {
+      const seconds = instance === 'demo-alt' ? 300 : uptime
+      return {instance, uptimeSeconds: seconds, checkedAt, lastAttemptAt: checkedAt,
+        available, scheduled, force: false, intervalHours: interval,
+        nextRestartAt: available && scheduled ? checkedAt + interval * 3600 - seconds : null,
+        serverTime: Date.now() / 1000, schedulerRunning: true}
+    }
+    await page.routeWebSocket('**/api/v1/ws', socket => {
+      const server = socket.connectToServer()
+      const requests = new Map<string, string>()
+      const configs = new Set<string>()
+      socket.onMessage(message => {
+        const request = JSON.parse(String(message))
+        if (request.method === 'emulator.status') requests.set(request.id, request.params.instance)
+        if (request.method === 'config.get') configs.add(request.id)
+        if (request.method === 'events.subscribe') subscriptions.push(request.params.topics)
+        if (request.method === 'config.patch') {
+          for (const change of request.params.changes) {
+            if (change.path === 'Alas.EmulatorManagement.RestartIntervalHours') interval = change.value
+            if (change.path === 'Alas.EmulatorManagement.ScheduledEmulatorRestart') scheduled = change.value
+          }
+        }
+        server.send(message)
+      })
+      server.onMessage(message => {
+        const response = JSON.parse(String(message))
+        const instance = requests.get(response.id)
+        if (instance) response.result = status(instance)
+        if (configs.has(response.id)) response.result.values.Alas.EmulatorManagement = {
+          ...response.result.values.Alas.EmulatorManagement,
+          ScheduledEmulatorRestart: scheduled, RestartIntervalHours: interval,
+        }
+        if (response.topic === 'emulator') {
+          response.data = status(eventInstance ?? response.data.instance)
+          pushes++
+        }
+        socket.send(JSON.stringify(response))
+      })
+    })
+    await page.goto('/#/i/demo-main/task/Alas')
+    const card = page.locator('.config-group').filter({has: page.locator('.emulator-runtime-status')})
+    const value = page.getByTestId('emulator-uptime')
+    const next = page.getByTestId('emulator-next-restart')
+    const hint = page.getByTestId('emulator-restart-hint')
+    await expect(value).toHaveText('1小时 1分 5秒')
+    await expect(hint).toContainText('剩余')
+    const initialHint = await hint.innerText()
+    await expect(hint).not.toHaveText(initialHint)
+    expect(subscriptions.at(-1)).toContain('emulator')
+    await card.scrollIntoViewIfNeeded()
+    await card.screenshot({path: `test-results/emulator-status-${theme}.png`, animations: 'disabled'})
+
+    available = false
+    await expect(next).toHaveText('最近检测失败，暂无法预计')
+    await expect(value).toHaveText('1小时 1分 5秒')
+    await expect(card).toContainText('显示上次成功检测的结果')
+
+    available = true
+    uptime = 12 * 3600 + 60
+    await expect(next).toHaveText('已达到重启条件')
+    await expect(hint).toContainText('当前任务结束后')
+    await expect(hint).not.toContainText('还有')
+    await page.setViewportSize({width: 390, height: 844})
+    await page.locator('.emulator-runtime-status').scrollIntoViewIfNeeded()
+    await expect(value).toBeInViewport({ratio: 1})
+    await expect(next).toBeInViewport({ratio: 1})
+    await page.screenshot({path: `test-results/emulator-status-${theme}-narrow.png`, animations: 'disabled'})
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+
+    scheduled = false
+    await expect(next).toHaveText('未启用定时重启')
+    scheduled = true
+    uptime = 60
+    await expect(value).toHaveText('0小时 1分 0秒')
+    eventInstance = 'demo-alt'
+    pushes = 0
+    await expect.poll(() => pushes).toBeGreaterThan(0)
+    await expect(value).toHaveText('0小时 1分 0秒')
+    eventInstance = undefined
+    await page.goto('/#/i/demo-alt/task/Alas')
+    await expect(value).toHaveText('0小时 5分 0秒')
+    await page.goto('/#/interface')
+    await expect(page.getByLabel('界面主题')).toBeVisible()
+    await expect.poll(() => subscriptions.at(-1)?.includes('emulator')).toBe(false)
+    expect(errors).toEqual([])
+  })
+}
 
 test('PR1096 模拟预览焦点、区域键盘与窄屏布局回归', async ({page}) => {
   await page.addInitScript(() => {

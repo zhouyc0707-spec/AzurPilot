@@ -26,6 +26,7 @@ import { editor, prepareValue } from '../config/editors'
 import { EditStatus } from '../components/EditStatus'
 import { AccountPanel } from '../components/AccountPanel'
 import { IslandSuspendControl } from '../components/IslandSuspendControl'
+import { EmulatorRuntimeStatus } from '../components/EmulatorRuntimeStatus'
 import { isFieldVisible } from './configVisibility'
 
 export function TaskConfig() {
@@ -145,6 +146,7 @@ export function TaskConfig() {
           <h2 data-text={t(`${group}._info.name`)}>{t(`${group}._info.name`)}</h2>
         </div>
       </div>
+      {task === 'Alas' && group === 'EmulatorManagement' && <EmulatorRuntimeStatus instance={instance}/>}
       {group === 'ShopAdvanced' && (
         <ShopStrategyHelp task={task} language={language}/>
       )}

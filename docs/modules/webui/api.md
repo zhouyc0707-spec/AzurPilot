@@ -144,7 +144,7 @@ flowchart TD
 2. **认证判定**：`Session.authorized = 本机直连 or 密码为空`。本机判定由 `is_local_client` 完成：来源地址、Host 头、Origin 三者都必须是 `127.0.0.1/::1/localhost`，且未命中远程访问隧道标记头 `x-azurpilot-remote-access`（隧道流量同样来自回环，靠标记头区分）。
 3. **登录退避**：`auth.login` 用 `secrets.compare_digest` 比对；失败按来源 IP 记数，锁定 `min(60, 次数×2)` 秒。
 4. **业务执行**：除 `auth.login` 与 `events.subscribe` 外，所有方法经 `asyncio.to_thread` 在工作线程执行（阻塞 IO 不阻塞事件循环），`Semaphore(8)` 限制全局并发。
-5. **订阅推送**：`producer` 只以各 topic 间隔（overview 1s、instances 2s）采样重主题，序列化指纹与上次相同则跳过。日志与截图都不轮询：worker 日志队列每接收一条日志就通过 `log_hub` 唤醒 `log_producer`，截图继续由 `preview` hub 唤醒。用户切换实例时，旧订阅尚未完成的结果按对象身份比对丢弃。
+5. **订阅推送**：`producer` 以各 topic 间隔（overview 1s、instances 2s、emulator 1s）采样缓存状态，序列化指纹与上次相同则跳过。`emulator` 含服务器当前时间，供设置页每秒更新倒计时；它不访问模拟器。日志与截图都不轮询：worker 日志队列每接收一条日志就通过 `log_hub` 唤醒 `log_producer`，截图继续由 `preview` hub 唤醒。用户切换实例时，旧订阅尚未完成的结果按对象身份比对丢弃。
 6. **发送**：所有出站消息经单条发送队列；事件按实际发送顺序获得单调递增 `seq`。`send_json` 带 10 秒超时，写死循环即断开。
 
 ## 7. 调用关系
@@ -339,6 +339,7 @@ lifespan 关闭（顺序有讲究，测试固化）：
 - **读操作不得触发配置写回**：`ConfigService.read` 若发现磁盘配置与模板合并后有差异，只在内存补齐，不落盘——迁移写回是核心运行器的职责。
 - **实例名规则与上游一致**：`config/` 下除 `template` 外任何含 `Alas` 段的 `*.json` 都算实例；收紧 `validate_name` 会让上游认可的名字在 WebUI 里消失。
 - **`preview.capture` 与 `preview` topic 都只读 hub**：任何「顺手截一张」的改动都会让浏览器流量变成设备负载，破坏 7×24 运行假设。
+- **`emulator.status` 与 `emulator` topic 只读取检测快照和实例配置**：返回上次成功的 `uptimeSeconds` / `checkedAt`、最近尝试的 `lastAttemptAt` / `available`、当前开关与间隔、调度器状态、`nextRestartAt` 和 `serverTime`（时间戳均为 Unix 秒）。更换模拟器序列号后旧结果不可复用；未启用或最近检测失败时不提供预计时间。预计时间是达到重启条件的时间，实际动作仍由调度器决定。页面离开实例系统设置时取消该主题订阅。
 - **错误详情不回显输入**：`ValidationError` 的 details 只含 loc/type；新增错误分支时保持这一约定。
 - **关闭顺序不能颠倒**：MCP 在途操作引用共享运行时，必须先 `tools.close()` 再 clearup，否则会留下孤儿 worker（有测试固化顺序）。
 

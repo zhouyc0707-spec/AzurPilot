@@ -2,6 +2,7 @@
 import io
 import re
 import threading
+import time
 from datetime import datetime, timedelta
 
 from rich.console import Console
@@ -176,6 +177,41 @@ class RuntimeService:
             if not manager.alive:
                 raise ApiError('START_FAILED', '任务未启动，请检查服务是否正在重启')
         return self.overview(instance)
+
+    def emulator_status(self, instance: str) -> dict:
+        """按最近检测结果和当前配置计算重启预计时间，只读取缓存与配置。"""
+        data, _ = self.configs.read(instance)
+        alas = data.get('Alas', {})
+        settings = alas.get('EmulatorManagement', {})
+        manager = ProcessManager._processes.get(instance)
+        running = bool(manager and manager.state == 1 and manager.started_func == 'alas')
+        sample = manager.emulator_uptime_snapshot() if manager else {}
+        if sample.get('serial') != str(alas.get('Emulator', {}).get('Serial', '')):
+            sample = {}
+        scheduled = bool(settings.get('ScheduledEmulatorRestart', False))
+        try:
+            interval = int(settings.get('RestartIntervalHours', 4))
+        except (ValueError, TypeError):
+            interval = 4
+        if not 1 <= interval <= 24:
+            interval = 4
+        available = bool(sample.get('available', False))
+        next_restart = None
+        if scheduled and available:
+            next_restart = sample['checkedAt'] + interval * 3600 - sample['uptimeSeconds']
+        return {
+            'instance': instance,
+            'uptimeSeconds': sample.get('uptimeSeconds'),
+            'checkedAt': sample.get('checkedAt'),
+            'lastAttemptAt': sample.get('lastAttemptAt'),
+            'available': available,
+            'scheduled': scheduled,
+            'force': bool(settings.get('ForceScheduledRestart', False)),
+            'intervalHours': interval,
+            'nextRestartAt': next_restart,
+            'serverTime': time.time(),
+            'schedulerRunning': running,
+        }
 
     def stop(self, instance: str, *, soft: bool = True) -> dict:
         """停止实例的运行。

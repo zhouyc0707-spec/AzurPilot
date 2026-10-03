@@ -16,7 +16,7 @@ from module.logger import logger
 from module.runtime.password_utils import REMOTE_ACCESS_HEADER, is_local_client
 
 # 重主题仍按各自节奏采样；日志由 worker 队列逐条到达事件直接唤醒。
-TOPIC_INTERVAL = {'overview': 1, 'instances': 2}
+TOPIC_INTERVAL = {'overview': 1, 'instances': 2, 'emulator': 1}
 TICK = min(TOPIC_INTERVAL.values())
 
 
@@ -320,6 +320,8 @@ class Session:
                         action = runtime.instances
                     elif topic == 'overview':
                         action = lambda: runtime.overview(subscription.instance)
+                    elif topic == 'emulator':
+                        action = lambda: runtime.emulator_status(subscription.instance)
                     async with self.gateway.workers:
                         data = await asyncio.to_thread(action)
                     # 用户切换实例期间完成的旧结果不允许覆盖新工作区。

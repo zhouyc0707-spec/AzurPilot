@@ -11,7 +11,7 @@ from rich.text import Text
 
 from module.runtime.process_manager import ProcessManager
 from module.runtime.setting import State
-from module.runtime.worker_events import ExitEvent, TaskEvent, WorkerResult
+from module.runtime.worker_events import EmulatorUptimeEvent, ExitEvent, TaskEvent, WorkerResult
 
 
 def emit_final_messages(output):
@@ -46,6 +46,33 @@ class TestWorkerEvents(unittest.TestCase):
                 self.assertEqual(self.manager.state, state)
                 self.manager.renderables = [Text("所有日志措辞均已替换")] * 20
                 self.assertEqual(self.manager.state, state)
+
+    def test_uptime_failure_keeps_last_success_and_old_checks_are_ignored(self):
+        self.manager._consume_worker_message(EmulatorUptimeEvent('run', 'serial', 3600, 1000), 'run')
+        self.manager._consume_worker_message(EmulatorUptimeEvent('run', 'serial', None, 1005), 'run')
+        self.manager._consume_worker_message(EmulatorUptimeEvent('run', 'serial', 2000, 1002), 'run')
+        sample = self.manager.emulator_uptime_snapshot()
+        self.assertEqual(sample['uptimeSeconds'], 3600)
+        self.assertEqual(sample['checkedAt'], 1000)
+        self.assertEqual(sample['lastAttemptAt'], 1005)
+        self.assertFalse(sample['available'])
+        sample['uptimeSeconds'] = 99
+        self.assertEqual(self.manager.emulator_uptime_snapshot()['uptimeSeconds'], 3600)
+        self.assertEqual(self.manager.renderables, [])
+
+    def test_uptime_from_previous_run_or_after_exit_cannot_override_snapshot(self):
+        self.manager._consume_worker_message(EmulatorUptimeEvent('old', 'serial', 3600, 1000), 'run')
+        self.assertEqual(self.manager.emulator_uptime_snapshot(), {})
+        self.manager._consume_worker_message(EmulatorUptimeEvent('run', 'serial', 60, 1001), 'run')
+        self.manager.exit_result = WorkerResult.MANUAL_STOP
+        self.manager._consume_worker_message(EmulatorUptimeEvent('run', 'serial', 3600, 1002), 'run')
+        self.assertEqual(self.manager.emulator_uptime_snapshot()['uptimeSeconds'], 60)
+
+    def test_changed_device_does_not_reuse_old_success_when_reading_fails(self):
+        self.manager._consume_worker_message(EmulatorUptimeEvent('run', 'old-serial', 3600, 1000), 'run')
+        self.manager._consume_worker_message(EmulatorUptimeEvent('run', 'new-serial', None, 1001), 'run')
+        self.assertIsNone(self.manager.emulator_uptime_snapshot()['uptimeSeconds'])
+        self.assertIsNone(self.manager.emulator_uptime_snapshot()['checkedAt'])
 
     def test_missing_exit_event_is_error_even_with_finish_log(self):
         self.manager.renderables.append(Text("Reason: Finish"))

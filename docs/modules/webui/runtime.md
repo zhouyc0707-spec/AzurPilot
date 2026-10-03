@@ -130,6 +130,8 @@ WebUI 侧的后台任务调度器（与游戏侧的任务调度无关）。单�
 
 `TaskEvent(run_id, command)` 与 `ExitEvent(run_id, result)` 经日志队列传递。worker 侧 `initialize(sink, run_id)` 安装输出通道，`alas.py` 每次执行任务前 `set_task(命令名)`、finally `set_task(None)`——WebUI 的 `current_task` 由此而来，是从结构化事件而非日志文字推测的可靠边界。
 
+`EmulatorUptimeEvent(run_id, serial, uptime_seconds, checked_at)` 复用同一队列发布模拟器系统运行时长检测结果；`checked_at` 是 Unix 秒，`uptime_seconds=None` 表示本轮读取失败。父进程在运行状态锁内更新快照，拒绝旧运行批次、退出后的事件和时间倒退的检测结果。失败时保留同一序列号的上次成功值并标记不可用；更换序列号或启动新 worker 时清空历史。`emulator_uptime_snapshot()` 返回副本，供 API 只读访问，状态事件不混入用户日志。
+
 ### 进程身份与终止（process_control.py）
 
 `process_matches(record)` 用 psutil 比对 `pid + create_time`（0.01 秒容差），三值语义避免了「只看 PID」在复用场景下的误杀。`stop_process_tree` 先记录后代再逐个 `_kill_record`（每次发信号前重验创建时间），Windows 根进程用 `taskkill /T /F`，本地句柄保留 terminate→kill 升级与 `join` 回收语义。它不调用 `wait()`，避免抢走 multiprocessing 的 `waitpid` 结果。

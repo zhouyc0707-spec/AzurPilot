@@ -145,6 +145,7 @@ export interface BackgroundGalleryEntry {
 }
 
 export interface Results {
+  'emulator.status': EmulatorStatus
   'config.export': Values & {_schedulerProgram?: Pick<ProgramSaved, 'mode' | 'draft' | 'active'>}
   'scheduler.program.catalog': Catalog
   'scheduler.program.get': ProgramSaved
@@ -198,6 +199,21 @@ export interface Results {
   'settings.patch': {updated: string[]}
   'startup.get': {enabled: boolean; remember: boolean}
   'startup.set': {enabled: boolean; remember: boolean}
+}
+
+/** 最近一次系统时长检测快照；所有时间戳使用 Unix 秒，页面读取不会访问设备。 */
+export interface EmulatorStatus {
+  instance: string
+  uptimeSeconds: number | null
+  checkedAt: number | null
+  lastAttemptAt: number | null
+  available: boolean
+  scheduled: boolean
+  force: boolean
+  intervalHours: number
+  nextRestartAt: number | null
+  serverTime: number
+  schedulerRunning: boolean
 }
 
 export interface AccountStatus {

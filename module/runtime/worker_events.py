@@ -44,6 +44,16 @@ class ExitEvent:
     result: WorkerResult
 
 
+@dataclass(frozen=True)
+class EmulatorUptimeEvent:
+    """当前实例最近一次系统运行时长检测结果，时间戳单位为 Unix 秒。"""
+
+    run_id: Optional[str]
+    serial: str
+    uptime_seconds: Optional[float]
+    checked_at: float
+
+
 _sink: Optional[Callable[[Any], None]] = None
 _run_id: Optional[str] = None
 
@@ -68,3 +78,13 @@ def set_task(command: Optional[str]) -> None:
     """
     if _sink is not None:
         _sink(TaskEvent(_run_id, command))
+
+
+def set_emulator_uptime(serial: str, uptime_seconds: Optional[float], checked_at: float) -> None:
+    """发布只读检测结果；界面通道关闭不能影响调度器的重启判断。"""
+    if _sink is not None:
+        try:
+            _sink(EmulatorUptimeEvent(_run_id, serial, uptime_seconds, checked_at))
+        except (OSError, EOFError):
+            from module.logger import logger
+            logger.warning('[运行状态] 界面通道已关闭，无法发布模拟器运行时长')

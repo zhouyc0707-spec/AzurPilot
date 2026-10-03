@@ -597,6 +597,15 @@ export function createMockState({ empty = false } = {}) {
         return snapshot(name)
       }
       case 'overview.get': return overview(name)
+      case 'emulator.status': {
+        const settings = get(name).values.Alas?.EmulatorManagement ?? {}
+        return {
+          instance: name, uptimeSeconds: null, checkedAt: null, lastAttemptAt: null, available: false,
+          scheduled: Boolean(settings.ScheduledEmulatorRestart), force: Boolean(settings.ForceScheduledRestart),
+          intervalHours: Number(settings.RestartIntervalHours ?? 4), nextRestartAt: null,
+          serverTime: Date.now() / 1000, schedulerRunning: get(name).status === 'running',
+        }
+      }
       case 'scheduler.start': case 'tasks.run':
         if (get(name).status === 'running') fail('INSTANCE_RUNNING', '实例已在运行')
         if (method === 'tasks.run' && params.task !== 'FleetScan' && !Object.values(menu).some(group => group.page === 'tool' && group.tasks.includes(params.task))) fail('INVALID_PARAMS', '该任务不支持单独运行')

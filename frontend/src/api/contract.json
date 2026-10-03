@@ -316,6 +316,26 @@
         "type": "object"
       }
     },
+    "emulator.status": {
+      "mutates": false,
+      "params": {
+        "additionalProperties": false,
+        "description": "单实例操作通用入参模型。",
+        "properties": {
+          "instance": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Instance",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instance"
+        ],
+        "title": "InstanceParams",
+        "type": "object"
+      }
+    },
     "scheduler.start": {
       "mutates": true,
       "params": {
@@ -2258,11 +2278,12 @@
                 "instances",
                 "overview",
                 "logs",
-                "preview"
+                "preview",
+                "emulator"
               ],
               "type": "string"
             },
-            "maxItems": 4,
+            "maxItems": 5,
             "title": "Topics",
             "type": "array"
           }

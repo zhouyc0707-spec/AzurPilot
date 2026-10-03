@@ -618,15 +618,21 @@ class AzurLaneAutoScript:
 
     def _get_emulator_uptime(self) -> float | None:
         """读取实际系统运行时长，设备尚未初始化时使用不连接设备的轻量入口。"""
+        uptime = None
         try:
             device = self.__dict__.get('device')
             if device is None:
                 from module.device.platform import Platform
                 device = Platform(self.config, connect=False)
-            return device.get_emulator_uptime()
+            uptime = device.get_emulator_uptime()
         except Exception as e:
             logger.warning(f'[Alas] 无法读取模拟器系统运行时长，跳过本轮定时重启判断: {e}')
-            return None
+        # 状态展示复用已加载配置，不能因发布界面结果再次初始化失败的配置。
+        config = self.__dict__.get('config')
+        if config is not None:
+            from module.runtime.worker_events import set_emulator_uptime
+            set_emulator_uptime(str(config.Emulator_Serial), uptime, time.time())
+        return uptime
 
     def _watchdog_loop(self):
         """看门狗主循环：检测任务运行时间超时和强制定时重启。
