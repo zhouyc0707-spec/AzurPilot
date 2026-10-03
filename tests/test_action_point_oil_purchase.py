@@ -209,19 +209,20 @@ class TestActionPointOilPurchase(unittest.TestCase):
             for month in range(1, 13):
                 last = datetime(year, month, calendar.monthrange(year, month)[1])
                 start = last - timedelta(days=last.weekday())
+                blocked = last.weekday() != 6
                 with self.subTest(year=year, month=month, weekday=last.weekday()):
                     self.now = start - timedelta(microseconds=1)
                     self.assertFalse(self.runner._is_in_month_end_purchase_block_week())
                     self.now = start
-                    self.assertTrue(self.runner._is_in_month_end_purchase_block_week())
+                    self.assertEqual(self.runner._is_in_month_end_purchase_block_week(), blocked)
                     self.now = last.replace(hour=23, minute=59, second=59)
-                    self.assertTrue(self.runner._is_in_month_end_purchase_block_week())
+                    self.assertEqual(self.runner._is_in_month_end_purchase_block_week(), blocked)
                     self.now = last + timedelta(days=1)
                     self.assertFalse(self.runner._is_in_month_end_purchase_block_week())
 
     def test_last_week_is_blocked_before_oil_selection_and_ocr(self):
-        # 下月 1 日为周一曾导致漏禁购；月末为周一时只禁购当月最后一天。
-        for day in (datetime(2027, 2, 22), datetime(2027, 2, 28), datetime(2026, 11, 30)):
+        # 仅跨月的最后自然周禁购；月末为周一时只禁购当月最后一天。
+        for day in (datetime(2026, 10, 26), datetime(2026, 10, 31), datetime(2026, 11, 30)):
             with self.subTest(day=day):
                 self.now = day
                 self.assertFalse(self.runner.action_point_buy())
@@ -229,6 +230,20 @@ class TestActionPointOilPurchase(unittest.TestCase):
         self.runner.action_point_get_buy_remain.assert_not_called()
         self.runner.action_point_use.assert_not_called()
         self.assertEqual(self.config.modified, {})
+
+    def test_last_week_entirely_in_month_allows_oil_purchases(self):
+        self.runner.action_point_get_buy_remain.return_value = 5
+        for day in range(22, 29):
+            with self.subTest(day=day):
+                self.now = datetime(2027, 2, day)
+                self.runner.action_point_set_button.reset_mock()
+                self.runner.action_point_get_buy_remain.reset_mock()
+                self.runner.action_point_use.reset_mock()
+                self.assertTrue(self.runner.action_point_buy())
+                self.runner.action_point_set_button.assert_called_once_with(0)
+                self.runner.action_point_get_buy_remain.assert_called_once()
+                self.runner.action_point_use.assert_called_once()
+                self.assertEqual(self.config.modified, {})
 
     def test_month_end_boundary_uses_server_date(self):
         self.offset = timedelta(hours=-1)

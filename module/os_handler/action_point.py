@@ -200,8 +200,8 @@ class ActionPointHandler(UI, MapEventHandler):
     def _is_in_month_end_purchase_block_week():
         """判断当前是否处于月末购买封锁周。
 
-        在服务器当月最后一天所在的自然周内，从周一到当月末封锁石油购买。
-        进入下个服务器月后，购买将重新可用。
+        仅当服务器当月最后一天所在的自然周跨月时，从周一到当月末封锁石油购买。
+        若该周完整落在当月，则不封锁；进入下个服务器月后重新判断。
 
         Returns:
             bool: 是否处于月末封锁周。
@@ -213,6 +213,9 @@ class ActionPointHandler(UI, MapEventHandler):
         )
         next_month_start = next_month.replace(day=1)
         last_day = next_month_start.date() - timedelta(days=1)
+        # 月末为周日时，最后一个周一至周日完整落在当月，无需禁购。
+        if last_day.weekday() == 6:
+            return False
         last_week_start = last_day - timedelta(days=last_day.weekday())
         return server_now.date() >= last_week_start
 
