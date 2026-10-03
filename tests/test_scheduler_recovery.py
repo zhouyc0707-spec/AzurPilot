@@ -67,6 +67,72 @@ class TestSchedulerRecovery(unittest.TestCase):
         script.stop_event.is_set.side_effect = [False] * len(tasks) + [True]
         return script.loop()
 
+    def test_scheduled_restart_uses_uptime_even_when_scheduler_just_started(self):
+        script = self.make_script()
+        script.is_first_task = True
+        script.config.EmulatorManagement_ScheduledEmulatorRestart = True
+        script.config.EmulatorManagement_RestartIntervalHours = 8
+        script._get_emulator_uptime = Mock(side_effect=[8 * 3600, 60.0])
+
+        self.run_tasks(script, ['Restart', 'Commission'])
+
+        script._try_restart_emulator.assert_called_once_with()
+        script.config.task_call.assert_called_once_with('Restart')
+        script.restart.assert_called_once_with()
+        script.commission.assert_not_called()
+        self.assertFalse(script.is_first_task)
+
+    def test_scheduled_restart_skips_low_uptime_and_failed_reads(self):
+        for uptime in (0.0, 8 * 3600 - 1, None):
+            with self.subTest(uptime=uptime):
+                script = self.make_script()
+                script.config.EmulatorManagement_ScheduledEmulatorRestart = True
+                script.config.EmulatorManagement_RestartIntervalHours = 8
+                script._get_emulator_uptime = Mock(return_value=uptime)
+                self.run_tasks(script, ['Commission'])
+                script._try_restart_emulator.assert_not_called()
+                script.config.task_call.assert_not_called()
+                script.commission.assert_called_once_with()
+
+    def test_scheduled_restart_waits_for_current_task_to_finish(self):
+        script = self.make_script()
+        script.config.EmulatorManagement_ScheduledEmulatorRestart = True
+        script.config.EmulatorManagement_RestartIntervalHours = 8
+        events = []
+        script._get_emulator_uptime = Mock(side_effect=[8 * 3600 - 1, 8 * 3600])
+
+        def task():
+            events.append('任务开始')
+            script._try_restart_emulator.assert_not_called()
+            events.append('任务结束')
+
+        script.commission.side_effect = task
+        script._try_restart_emulator.side_effect = lambda: events.append('重启模拟器') or True
+        self.run_tasks(script, ['Commission', 'Restart'])
+
+        self.assertEqual(events, ['任务开始', '任务结束', '重启模拟器'])
+        script._try_restart_emulator.assert_called_once_with()
+
+    def test_failed_scheduled_restart_keeps_task_running_and_retries(self):
+        script = self.make_script()
+        script.config.EmulatorManagement_ScheduledEmulatorRestart = True
+        script.config.EmulatorManagement_RestartIntervalHours = 8
+        script._get_emulator_uptime = Mock(return_value=9 * 3600)
+        script._try_restart_emulator.side_effect = [False, True]
+        self.run_tasks(script, ['Commission', 'Restart'])
+
+        self.assertEqual(script._try_restart_emulator.call_count, 2)
+        script.commission.assert_called_once_with()
+        script.config.task_call.assert_called_once_with('Restart')
+
+    def test_disabled_scheduled_restart_does_not_read_uptime(self):
+        script = self.make_script()
+        script._get_emulator_uptime = Mock()
+        self.run_tasks(script, ['Commission'])
+
+        script._get_emulator_uptime.assert_not_called()
+        script._try_restart_emulator.assert_not_called()
+
     def test_unhandled_task_failure_returns_false_when_recovery_is_disabled(self):
         script = self.make_script()
         script.config.Error_HandleError = False

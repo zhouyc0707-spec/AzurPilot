@@ -4,6 +4,7 @@
 import ipaddress
 import json
 import logging
+import math
 import re
 import socket
 import subprocess
@@ -304,6 +305,28 @@ class Connection(ConnectionAttr):
             str: 属性值。
         """
         return self.adb_shell(['getprop', name]).strip()
+
+    def get_emulator_uptime(self) -> float | None:
+        """读取当前实例 Android 系统自启动以来的运行秒数。
+
+        只读取系统状态，不重连设备、不启动模拟器，也不触发设备恢复。
+        /proc/uptime 的第二项是所有 CPU 的累计空闲时间，不能用于重启判断。
+
+        Returns:
+            float | None: 系统运行秒数；连接失败或数据无效时返回 None。
+        """
+        try:
+            output = self.adb_shell(['cat', '/proc/uptime'], timeout=5)
+            fields = output.split()
+            if len(fields) != 2:
+                raise ValueError('系统运行时长数据格式无效')
+            uptime, idle = map(float, fields)
+            if not all(math.isfinite(value) and value >= 0 for value in (uptime, idle)):
+                raise ValueError('系统运行时长数据不是有效的非负数')
+            return uptime
+        except Exception as e:
+            logger.warning(f'[设备-连接] 读取模拟器系统运行时长失败，跳过本轮定时重启判断: {e}')
+            return None
 
     @cached_property
     @retry

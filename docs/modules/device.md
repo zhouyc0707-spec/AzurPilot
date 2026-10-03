@@ -79,11 +79,14 @@ module/device/
 | `Device(config)` | 标准构造：连接设备 + 自动启动模拟器（最多 4 次尝试）+ 基准测试 + 控制预热 |
 | `Device.for_existing_device(config)` | 收尾专用：不启动模拟器、不改配置，连不上直接抛 `EmulatorNotRunningError` |
 | `Platform(config, connect=False)` | 模拟器离线时的轻量入口：只解析 serial 与模拟器实例，供调度器重启模拟器 |
+| `Connection.get_emulator_uptime()` | 通过当前实例的 ADB / HTTP shell 读取 Android 系统运行秒数；读取失败或数据无效时返回 `None`，不触发设备恢复 |
 | `self.device.screenshot()` / `click()` / `swipe()` / `app_start()` | 业务模块经 `ModuleBase` 使用的日常接口 |
 | `device.dump_hierarchy()` | UI 层级树获取，配合 `xpath_to_button()` |
 | `WORKER_POOL.start_thread_soon()` | 供 nemu_ipc 等需要超时强杀的阻塞调用使用 |
 
 追代码建议从 `Device.__init__` → `Connection.__init__` → `screenshot()` 这条线开始，它覆盖了连接、检测、分发三个核心环节。
+
+定时重启使用 `/proc/uptime` 第一项（系统自启动以来的秒数），不使用第二项的多 CPU 累计空闲时间，也不使用模拟器管理器窗口或 Windows 共享进程的创建时间。读取不缓存，单次 shell 设置 5 秒超时，失败时记录日志并跳过本轮定时判断。关闭脚本或重启游戏应用不会重置系统运行时长；模拟器只隐藏窗口而保留 Android 系统时，也会继续累计。
 
 ## 5. 核心组件
 

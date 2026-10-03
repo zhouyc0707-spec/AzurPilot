@@ -99,11 +99,11 @@ AUTO-MAS 一类外部调度器把 AzurPilot 当黑箱驱动，只用以下四个
 | --- | --- | --- |
 | `config_name` | str | 实例配置名，决定读写哪份用户配置 |
 | `config` / `device` / `checker` | cached_property | 三大资源，惰性构造；通过 `del_cached_property` 失效重载（见第 13 节） |
-| `is_first_task` | bool | 调度器启动后的首个 `Restart` 直接跳过——进程刚启动时游戏通常已就绪，无需重启 |
+| `is_first_task` | bool | 调度器启动后的首个 `Restart` 通常直接跳过；如果启动时已按系统运行时长重启模拟器，则保留登录任务 |
 | `failure_record` | dict[str, int] | 每任务连续失败计数；仅存内存，进程重启即清零 |
 | `consecutive_game_stuck` / `consecutive_adb_offline` / `consecutive_unexpected_error` | int | 各类连续故障计数，驱动「重启游戏 → 重启模拟器」的升级 |
 | `script_error_count` | int | `ScriptError` 连续计数，达到 3 次退出（代码 bug 重试无意义） |
-| `last_emulator_restart_time` | float | 上次计划重启模拟器的 `time.monotonic()`，用于定时重启间隔 |
+| `_watchdog_scheduled_restart_task` | tuple/None | 已成功请求强制定时重启的任务名与开始时间，防止同一次任务恢复期间反复关闭实例 |
 | `_watchdog_*` | 线程与标志 | 看门狗线程及其「激活」标志，仅任务执行期间激活 |
 | `_warmup_measured_cold_seconds` 等 | float/None | 预热实测耗时，用于动态计算下次提前量 |
 | `_daily_summary_*` | 线程与服务 | 日报定时检查，默认关闭且完全不创建 |
@@ -129,7 +129,7 @@ flowchart TD
     D --> E{服务器刚恢复?}
     E -- 是 --> E1[失效 config 缓存<br>task_call Restart]
     E -- 否 --> F
-    E1 --> F{到达计划重启间隔?}
+    E1 --> F{模拟器系统运行时长<br>达到计划重启间隔?}
     F -- 是且重启成功 --> F1[task_call Restart<br>进入下一轮]
     F -- 否 --> G
     F1 --> G[get_next_task 选任务<br>含空闲等待与预热]
@@ -157,7 +157,7 @@ flowchart TD
 
 1. **停止检查**：`stop_event` 置位（WebUI 要求更新或停止）则退出循环，进程正常收尾。
 2. **维护等待**：`checker.wait_until_available()` 在服务器维护或状态 API 与网关都不可达时反复退避查询，不推进任务。恢复瞬间（`is_recovered`）刷新配置并注入 `Restart`，因为阻塞期间游戏状态必然已失效。
-3. **计划重启**：`EmulatorManagement_ScheduledEmulatorRestart` 开启时，距上次重启超过 `RestartIntervalHours`（默认 4 小时）就在任务间隙重启模拟器——刻意放在任务之间而非中断正在运行的任务。
+3. **计划重启**：`EmulatorManagement_ScheduledEmulatorRestart` 开启时，通过当前设备的 `Connection.get_emulator_uptime()` 读取 Android 的 `/proc/uptime` 第一项，系统连续运行达到 `RestartIntervalHours`（默认 4 小时）就在任务间隙重启模拟器。重新启动脚本不会清零；模拟器系统真正重启后自然重新计时。读取失败只跳过本轮定时判断，不改用调度器启动时间，也不影响正常任务与故障恢复。启动时已达到阈值的实例也会重启，并保留后续 `Restart` 登录任务。
 4. **选任务**：`get_next_task()`（见下）。
 5. **执行**：刷新 `device.config` 指向最新配置，清除卡死与连点记录，置看门狗为活跃，然后 `run(inflection.underscore(task))`。
 6. **结果结算**：更新失败计数、触发敏感任务停机判断或连续失败强制恢复、按结果重置各计数器，进入下一轮。
@@ -334,6 +334,7 @@ stateDiagram-v2
 关键约定：
 
 - **看门狗激活窗口**。`_watchdog_active` 仅在 `run()` 前后置位/复位，空闲等待与退避 `sleep` 期间自动暂停，避免把正常的长等待误判为卡死。
+- **强制定时重启**。同样读取模拟器系统运行时长，仅在非敏感任务执行期间检查；读取后重新核对任务名、开始时间和激活状态，防止旧任务的检查中断刚切换的任务。成功请求停止后，同一次任务不再重复触发，等待主线程进入原有恢复流程；停止失败时允许后续检查重试。读取失败不关闭独立的任务超时检测。
 - **看门狗为什么杀模拟器而不是杀任务**：任务主线程可能阻塞在 uiohook 级的底层 I/O（uiautomator2 HTTP、ADB shell）中，Python 层无法安全中断线程；杀死模拟器进程会让主线程的下一次 I/O 调用失败并抛异常，从而自然汇入统一的异常恢复流程。这比从外部强杀线程安全得多。
 - **模拟器启停的并发保护**：`_emulator_op_with_timeout` 用独立线程执行操作并设硬超时（600 秒，覆盖模拟器完整冷启动预算）；超时放弃的线程仍在真实操作模拟器并持有平台层启停互斥锁，后续任何启停请求都会收到 `EmulatorOpBusy` 而被跳过，防止「一个线程正在启动、另一个随即关闭」的踩踏。
 - **跨进程停止信号**：WebUI 生命周期通过 `State.manager.Event()` 创建事件代理并交给 `ProcessManager`，worker 将其挂到 `AzurLaneConfig.stop_event` 与 `AzurLaneAutoScript.stop_event`。主循环和 `wait_until()` 轮询该代理，在检查点响应停止请求；普通 `threading.Event` 不能替代这条跨进程信号链。看门狗自身的 `_watchdog_stop` 才是进程内线程事件。

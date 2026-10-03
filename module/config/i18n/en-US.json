@@ -6350,15 +6350,15 @@
     },
     "ScheduledEmulatorRestart": {
       "name": "Restart the emulator regularly",
-      "help": "Restart the emulator every so often to prevent it from getting slow or leaky after running for a long time.\nNote: By default, it waits for the current task to finish before restarting."
+      "help": "Read the Android system uptime of the current emulator instance and restart when it reaches the configured interval to prevent slowdowns or memory leaks.\nRestarting the script does not reset the timer. By default, wait for the current task to finish. Skip the scheduled check if uptime cannot be read."
     },
     "ForceScheduledRestart": {
       "name": "Restart on schedule (don't wait for task)",
-      "help": "When enabled, restarts the emulator right on schedule, without waiting for the current task to finish.\nBut if a sensitive task is currently running, it will still wait for it to finish.\nRequires 'Restart the emulator regularly' above to be on. Default off."
+      "help": "Use the actual emulator system uptime to restart when the interval is reached, without waiting for the current task to finish.\nSensitive tasks still finish before restarting. Requires scheduled emulator restarts to be enabled. Disabled by default."
     },
     "RestartIntervalHours": {
       "name": "How often to restart (hours)",
-      "help": "How many hours between emulator restarts."
+      "help": "Restart when the Android system of the current emulator instance has run continuously for this many hours. Rebooting the emulator system resets uptime; restarting the script does not."
     },
     "DeepRestartAfterFailures": {
       "name": "Deep restart after N failures",

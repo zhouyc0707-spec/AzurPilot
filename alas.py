@@ -124,8 +124,6 @@ class AzurLaneAutoScript:
         self.consecutive_unexpected_error = 0
         # ScriptError 连续计数，达到阈值后退出（代码 bug 重试无意义）
         self.script_error_count = 0
-        # 上次计划重启模拟器的时间戳
-        self.last_emulator_restart_time = time.monotonic()
         # 渠道服悬浮球会话标志：调度器启动/游戏重启后仅处理一次
         self._channel_float_done = False
         # 看门狗状态
@@ -134,6 +132,8 @@ class AzurLaneAutoScript:
         self._watchdog_thread = None
         self._watchdog_task_start = 0.0  # 当前任务开始时间（monotonic）
         self._watchdog_task_name = ''    # 当前任务名
+        # 同一次任务已请求强制定时重启时，等待主线程恢复，避免反复关闭实例。
+        self._watchdog_scheduled_restart_task = None
         # 任务预热实测耗时（秒）；None 表示尚无实测，用配置 WarmupMinutes 兜底。
         # 「冷启动（模拟器曾关闭）」与「仅启动游戏（模拟器保持运行）」耗时差异大，分别记录。
         self._warmup_measured_cold_seconds = None       # 模拟器曾关闭（冷启动）
@@ -616,6 +616,18 @@ class AzurLaneAutoScript:
             self._watchdog_thread = None
         logger.info('[Alas][看门狗] 看门狗已停止')
 
+    def _get_emulator_uptime(self) -> float | None:
+        """读取实际系统运行时长，设备尚未初始化时使用不连接设备的轻量入口。"""
+        try:
+            device = self.__dict__.get('device')
+            if device is None:
+                from module.device.platform import Platform
+                device = Platform(self.config, connect=False)
+            return device.get_emulator_uptime()
+        except Exception as e:
+            logger.warning(f'[Alas] 无法读取模拟器系统运行时长，跳过本轮定时重启判断: {e}')
+            return None
+
     def _watchdog_loop(self):
         """看门狗主循环：检测任务运行时间超时和强制定时重启。
 
@@ -645,7 +657,9 @@ class AzurLaneAutoScript:
             except Exception:
                 scheduled = False
                 force = False
-            if scheduled and force and self._watchdog_task_name:
+            task_token = (self._watchdog_task_name, self._watchdog_task_start)
+            if (scheduled and force and self._watchdog_task_name
+                    and task_token != self._watchdog_scheduled_restart_task):
                 # 检查当前任务是否为敏感任务
                 task_name_camelize = inflection.camelize(self._watchdog_task_name)
                 try:
@@ -660,8 +674,14 @@ class AzurLaneAutoScript:
                         interval = int(self.config.EmulatorManagement_RestartIntervalHours)
                     except Exception:
                         interval = 4
-                    elapsed_hours = (time.monotonic() - self.last_emulator_restart_time) / 3600
-                    if elapsed_hours >= interval:
+                    uptime = self._get_emulator_uptime()
+                    # 读取期间主线程可能已经结束任务或切换到敏感任务，不能用旧任务判断。
+                    task_unchanged = (
+                        self._watchdog_active
+                        and task_token == (self._watchdog_task_name, self._watchdog_task_start)
+                    )
+                    if uptime is not None and uptime >= interval * 3600 and task_unchanged:
+                        elapsed_hours = uptime / 3600
                         logger.critical(
                             f'[Alas][看门狗] 模拟器已运行 {elapsed_hours:.1f} 小时'
                             f'（超过 {interval} 小时），开启强制定时重启，'
@@ -669,7 +689,7 @@ class AzurLaneAutoScript:
                             f'强制杀死模拟器进程以中断任务'
                         )
                         self._watchdog_recover(
-                            elapsed_hours * 3600,
+                            uptime,
                             reason='force_scheduled_restart',
                             task_name=self._watchdog_task_name,
                         )
@@ -710,11 +730,11 @@ class AzurLaneAutoScript:
 
         emulator_stop() 本身也可能卡住（如 psutil 遍历缓慢或 subprocess
         不返回），因此用 _emulator_op_with_timeout 包装，超时后放弃本轮
-        恢复，等待下一个阈值周期重试。
+        恢复，等待后续检查重试，仍由平台启停互斥锁保护未结束的操作。
 
         Args:
             elapsed (float): 已经过的秒数。
-            reason (str): 触发原因，当前仅支持 'task_timeout'。
+            reason (str): 触发原因，支持 'task_timeout' 和 'force_scheduled_restart'。
             task_name (str): 当前任务名。
         """
         if reason == 'task_timeout':
@@ -732,22 +752,28 @@ class AzurLaneAutoScript:
                 f'[Alas][看门狗] 任务 `{task_name}` 执行期间触发强制定时重启，'
                 f'强制杀死模拟器进程以中断任务'
             )
-            # 更新重启时间戳，避免恢复后立即重复触发
-            self.last_emulator_restart_time = time.monotonic()
+            self._watchdog_scheduled_restart_task = (
+                self._watchdog_task_name, self._watchdog_task_start
+            )
         else:
             logger.critical(
                 f'[Alas][看门狗] 检测到异常（reason={reason}），'
                 f'强制杀死模拟器进程以中断任务'
             )
 
+        stopped = False
         try:
             from module.device.platform import Platform
             platform = Platform(self.config, connect=False)
-            self._emulator_op_with_timeout(
+            result = self._emulator_op_with_timeout(
                 platform.emulator_stop,
                 timeout=RESTART_EMULATOR_OP_TIMEOUT,
                 operation_name='[看门狗] 强制停止模拟器',
             )
+            if result is False:
+                logger.warning('[Alas][看门狗] 未能停止模拟器，等待下个周期重试')
+                return
+            stopped = True
             logger.info(
                 '[Alas][看门狗] 已强制停止模拟器，主线程的下次 I/O 调用将失败并触发恢复'
             )
@@ -761,6 +787,10 @@ class AzurLaneAutoScript:
             )
         except Exception as e:
             logger.warning(f'[Alas][看门狗] 强制停止模拟器失败: {e}')
+        finally:
+            if reason == 'force_scheduled_restart' and not stopped:
+                # 失败时允许下一轮重试，启停互斥锁继续保护仍在执行的操作。
+                self._watchdog_scheduled_restart_task = None
 
     def _start_emulator_after_long_wait(self):
         """
@@ -2365,14 +2395,16 @@ class AzurLaneAutoScript:
                     self.config.task_call('Restart')
                 # 检查计划的模拟器重启（在任务之间，不会中断正在运行的任务）
                 if self.config.EmulatorManagement_ScheduledEmulatorRestart:
-                    elapsed_hours = (time.monotonic() - self.last_emulator_restart_time) / 3600
+                    uptime = self._get_emulator_uptime()
                     interval = self.config.EmulatorManagement_RestartIntervalHours
-                    if elapsed_hours >= interval:
+                    if uptime is not None and uptime >= interval * 3600:
+                        elapsed_hours = uptime / 3600
                         logger.hr('[Alas] 计划的模拟器重启', level=1)
                         logger.info(f'[Alas] 模拟器已运行 {elapsed_hours:.1f} 小时, '
                                     f'计划重启间隔为 {interval} 小时')
                         if self._try_restart_emulator():
-                            self.last_emulator_restart_time = time.monotonic()
+                            # 启动调度器时就可能达到阈值；冷启动后仍需执行登录任务。
+                            self.is_first_task = False
                             self.config.task_call('Restart')
                             del_cached_property(self, 'config')
                             continue
