@@ -186,6 +186,18 @@ class CommissionIncomeRecordHarness(unittest.TestCase):
 
         self.assertEqual([({"Oil": 282}, 1, [])], self._records(db))
 
+    def test_uncertain_quantity_is_archived_without_an_empty_record(self):
+        image = object()
+        stub, db = self._run(images=[image], results=[[_item("Oil", 0)]])
+        self.assertEqual([], self._records(db))
+        self.assertEqual([(image, "alas")], stub.saved_screenshots)
+
+    def test_bad_quantity_does_not_merge_or_lose_another_harvest(self):
+        bad, good = object(), object()
+        stub, db = self._run(images=[bad, good], results=[[_item("Oil", 0)], [_item("Oil", 79)]])
+        self.assertEqual([({"Oil": 79}, 1, ["alas/2026-09/shot_1.png"])], self._records(db))
+        self.assertEqual([(bad, "alas"), (good, "alas")], stub.saved_screenshots)
+
 
 class TestCommissionIncomeScreenshotInvariant(unittest.TestCase):
     """存储边界兜底：一条委托记录最多只留一张截图。"""

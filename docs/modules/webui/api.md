@@ -48,7 +48,7 @@ module/api/
 ├── socket.py              Gateway（连接准入/认证/退避）+ Session（会话/订阅/背压）
 ├── config_service.py      实例白名单、配置读取与跨进程事务写
 ├── runtime_service.py     实例状态/总览/增量日志/被动截图适配层
-├── statistics_service.py  六类统计报告的聚合
+├── statistics_service.py  分类统计报告的聚合（含只读仓库快照）
 ├── meowfficer_service.py  指挥喵评分报告的只读读取与清理
 ├── update_service.py      Git 快照/提交历史与后台 fetch/apply（模块级单例）
 ├── static.py              FrontendFiles：MIME 修正、SPA 回退、隐藏文件拦截
@@ -56,6 +56,8 @@ module/api/
 ```
 
 配套生成产物与契约：`dev_tools/export_api_schema.py` 从 `protocol.py` + `router.py` 生成 `frontend/src/api/generated.ts`（参数类型）与 `frontend/src/api/contract.json`（机器可审契约）。
+
+仓库报告使用 `statistics.report(category='storage', days=7)` 只读查询最近完整快照及时间窗口内成功扫描的历史序列。序列的可选 `icon` 在逐点与共用时间轴两种格式中保留，物品图标由 `/storage-items/` 静态挂载提供。主动扫描沿用 `tasks.run(task='StorageStatistics')` 与实例运行互斥；页面刷新不启动扫描。
 
 ## 4. 核心入口
 

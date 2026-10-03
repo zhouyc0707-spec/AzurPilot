@@ -45,6 +45,19 @@ _STOP_ACTION_UNSET = object()
 LOG_QUEUE_HANDLER_JOIN_TIMEOUT = 1
 
 
+def memory_governs(instance: str) -> bool:
+    """该实例是否由「记忆运行」接管。
+
+    读取失败时按未开启处理，保持原有的缓存清单恢复行为。
+    """
+    try:
+        from module.runtime.startup_memory import get_startup_remember
+        return get_startup_remember(instance)
+    except Exception:
+        logger.warning(f'[WebUI-进程管理] 读取 [{instance}] 的记忆运行开关失败，按缓存清单恢复')
+        return False
+
+
 class ProcessManager:
     """单个 Alas 配置实例的进程生命周期管理器。
 
@@ -1110,6 +1123,10 @@ class ProcessManager:
             with open("./config/reloadalas", mode="r", encoding="utf-8") as f:
                 for line in f.readlines():
                     line = line.strip()
+                    if line and memory_governs(line):
+                        # 开了记忆运行的实例由启动清单按记忆决定，不由这份更新前缓存恢复
+                        logger.info(f'[WebUI-进程管理] [{line}] 已开启记忆运行，交由启动清单恢复')
+                        continue
                     _instances.add(ProcessManager.get_manager(line))
         except FileNotFoundError:
             pass

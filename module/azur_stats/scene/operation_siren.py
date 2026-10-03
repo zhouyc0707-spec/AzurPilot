@@ -8,12 +8,25 @@
 import typing as t
 from dataclasses import dataclass
 
-from module.azur_stats.image.auto_search_reward import AutoSearchItem
+from module.azur_stats.image.auto_search_reward import AutoSearchItem, AutoSearchItemGrid
 from module.azur_stats.image.get_items import GetItems
 from module.azur_stats.image.opsi_reward import OpsiReward
 from module.azur_stats.image.opsi_zone import OpsiZone, DataOpsiZone
 from module.azur_stats.scene.base import SceneBase
 from module.logger import logger
+from module.base.decorator import cached_property
+from module.statistics.utils import ImageError
+
+# 上限限制的是单格掉落；多格、多帧的同类材料仍按实数累加。
+OPSI_AMOUNT_MAX = {
+    'PrototypeGearPartsT5': 2,
+    # 保留本地图纸数量校准；原始字形匹配与严格超限拒绝仍负责排除虚高读数。
+    'GearDesignPlanT5': 5,
+    'GearDesignPlanGunT5': 5,
+    'GearDesignPlanTorpedoT5': 5,
+    'GearDesignPlanAntiAirT5': 5,
+    'GearDesignPlanPlaneT5': 5,
+}
 
 
 @dataclass
@@ -52,6 +65,22 @@ class SceneOperationSiren(SceneBase, OpsiReward, GetItems, OpsiZone):
 
     AUTO_SEARCH_ITEM_TEMPLATE_FOLDER = './assets/stats/opsi_reward_items'
     ITEM_TEMPLATE_FOLDER = './assets/stats/opsi_items'
+    ITEM_GRID_CLASS = AutoSearchItemGrid
+
+    @cached_property
+    def item_grid(self):
+        """弹窗也按底色区分金/彩图纸，应用彩色研发材料的单格数量上限。"""
+        grid = super().item_grid
+        grid.amount_max = dict(OPSI_AMOUNT_MAX)
+        return grid
+
+    @cached_property
+    def auto_search_item_group(self):
+        """奖励汇总页保留完整数字，避免四、五位凭证数量丢掉首位。"""
+        grid = super().auto_search_item_group
+        grid.amount_area = (15, 49, 63, 63)
+        grid.amount_max = dict(OPSI_AMOUNT_MAX)
+        return grid
 
     def extract_assets(self):
         """提取大型作战掉落截图中的未知物品模板。"""
@@ -96,30 +125,26 @@ class SceneOperationSiren(SceneBase, OpsiReward, GetItems, OpsiZone):
 
         # 奖励页可能有多页（面板放不下时脚本会滑动并逐页截图），
         # 同一次结算的多页需要按行对齐合并，避免重叠行重复计数
-        reward_before = [image for image in self.images[:cleared] if self.is_opsi_reward(image)]
+        reward_before = [image for image in self.images[:cleared] if self.is_opsi_reward(image)] if cleared >= 0 else []
         reward_after = [image for image in self.images[cleared + 1:] if self.is_opsi_reward(image)]
 
         for index, image in enumerate(self.images):
             if index == cleared:
                 continue
-            elif index < cleared:
+            try:
+                # 领奖前后的标签口径保持一致；单张奖励帧不可解析时仍保留同包其他奖励。
+                after_cleared = index > cleared
                 if self.is_get_items(image):
                     items = self.parse_get_items(image)
-                    for item in self._operation_siren_product(zone, items):
+                    for item in self._operation_siren_product(zone, items, tag='log' if after_cleared else None):
                         yield item
-                if self.is_opsi_reward(image) and image is reward_before[0]:
-                    items = self.parse_auto_search_reward_pages(reward_before)
-                    for item in self._operation_siren_product(zone, items):
+                reward_pages = reward_after if after_cleared else reward_before
+                if self.is_opsi_reward(image) and reward_pages and image is reward_pages[0]:
+                    items = self.parse_auto_search_reward_pages(reward_pages)
+                    for item in self._operation_siren_product(zone, items, tag='scan' if after_cleared else None):
                         yield item
-            elif index > cleared:
-                if self.is_get_items(image):
-                    items = self.parse_get_items(image)
-                    for item in self._operation_siren_product(zone, items, tag='log'):
-                        yield item
-                if self.is_opsi_reward(image) and image is reward_after[0]:
-                    items = self.parse_auto_search_reward_pages(reward_after)
-                    for item in self._operation_siren_product(zone, items, tag='scan'):
-                        yield item
+            except ImageError as error:
+                logger.warning(f'[统计-大世界] 奖励截图第 {index + 1} 帧无法解析，保留其他帧: {error}')
 
     def _operation_siren_product(self, zone: DataOpsiZone, items: t.Iterable[AutoSearchItem], tag: str = None) \
             -> t.Iterable[DataOpsiItems]:

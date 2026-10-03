@@ -267,7 +267,7 @@ stateDiagram-v2
 | `General.YukikazeTaskManager.TaskPriorityAdjustment` | 用户优先级文本，`SCHEDULER_PRIORITY` 将其与 args.json 默认值合并（新任务按默认邻位插入） |
 | `Alas.Emulator.PackageName` | 决定 `to_server()` → 全局 server → 资源目录与 i18n 活动 option 的选取 |
 | `Alas.Optimization.TaskHoardingDuration` | 调度器空闲时的「囤积」时长，影响 `get_next` 的等待策略 |
-| `OpsiScheduling.OperationCoinsPreserve` ↔ `OpsiHazard1Leveling.OperationCoinsPreserve` | 智能调度与侵蚀 1 的黄币保留；运行时按 `UseSmartSchedulingOperationCoinsPreserve` 开关择一读取（见第 15 节的联动说明） |
+| `OpsiScheduling.OperationCoinsPreserve` / `OpsiHazard1Leveling.OperationCoinsPreserve` | 两个配置独立保存；智能调度两种模式均读取自身配置，侵蚀 1 独立运行时读取自身配置。`UseSmartSchedulingOperationCoinsPreserve` 只切换黄币目标调度与体力调度（见第 15 节的联动说明） |
 | `<Task>.Emotion.*Value / *Record` | 成对字段：改 Value 必须同步刷新 Record 时间戳，否则情绪恢复量被重复计入（API 层 `_sync_record_time` 负责） |
 | `Dashboard.*`（Oil/Coin/Gem 等） | 仪表盘资源，由 dashboard.yaml 定义、任务运行时写回 Value/Record |
 | `Storage.Storage` | 生成器给每个任务附加的 `storage` 类型组，WebUI 禁止编辑，运行时当作键值状态区使用 |
@@ -344,7 +344,7 @@ stateDiagram-v2
 
 ### 保存联动
 
-历史上 `ConfigUpdater.save_callback(key, value)` 以生成器模式返回联动写入（Emotion `Value`→`Record`；`OpsiScheduling` 与 `OpsiHazard1Leveling` 的 `OperationCoinsPreserve` 互相同步）。**截至 2026-09，旧 WebUI 移除后该方法已无调用方**：新 API 层在 `ConfigService._sync_record_time` 内等价实现了 Value→Record 刷新；黄币保留的运行时取值改为 `OpsiScheduling` 侧按开关在两个配置间选择（`module/os/tasks/scheduling.py`），不再双向写回。新增保存联动应优先在 `ConfigService.patch` 的事务内实现。
+历史上 `ConfigUpdater.save_callback(key, value)` 以生成器模式返回联动写入（Emotion `Value`→`Record`；`OpsiScheduling` 与 `OpsiHazard1Leveling` 的 `OperationCoinsPreserve` 互相同步）。**截至 2026-09，旧 WebUI 移除后该方法已无调用方**：新 API 层在 `ConfigService._sync_record_time` 内等价实现了 Value→Record 刷新；黄币保留不再双向写回，智能调度两种模式均读取 `OpsiScheduling` 自身配置（`module/os/tasks/scheduling.py`）。新增保存联动应优先在 `ConfigService.patch` 的事务内实现。
 
 ## 16. 修改注意事项
 

@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from rich.console import Console
 
 from module.api.protocol import ApiError
+from module.logger import logger
 from module.runtime.process_manager import ProcessManager
 
 STATES = {1: 'running', 2: 'stopped', 3: 'error', 4: 'updating'}
@@ -80,7 +81,34 @@ class RuntimeService:
         self.configs = configs
         self.logs_cache = {}
         self.lock = threading.RLock()
+        # 启动时补齐凭证历史；按版本号与进程内缓存只执行一次。
+        try:
+            from module.config.utils import alas_instance
+            from module.statistics.cl1_database import db as cl1_db
+            for name in alas_instance():
+                with cl1_db._stats_transaction() as conn:
+                    cl1_db.ensure_coins_history(name, conn)
+                    cl1_db.ensure_coins_cleanup(name, conn)
+        except Exception as error:
+            logger.warning(f'[统计] 启动时补齐凭证历史失败，写入快照时会再试: {error}')
 
+    def _record_running_now(self) -> None:
+        """把当前的运行集合立刻落盘。
+
+        启停即写，不再只在退出时写一次：这样即使之后进程被直接杀掉，记忆里也已经
+        是杀掉之前的状态，不会退回更早的一次记录。
+
+        """
+        try:
+            running = ProcessManager.running_instances()
+        except Exception:
+            logger.exception('无法枚举运行实例，运行状态未记录')
+            return
+        try:
+            from module.runtime.startup_memory import record_running
+            record_running(instance.config_name for instance in running)
+        except Exception:
+            logger.exception('记录运行状态失败，记忆运行可能不准确')
     def manager(self, instance: str) -> ProcessManager:
         """获取指定实例的进程管理器。
 
@@ -176,6 +204,7 @@ class RuntimeService:
             manager.start(task or 'alas', ev=updater.event)
             if not manager.alive:
                 raise ApiError('START_FAILED', '任务未启动，请检查服务是否正在重启')
+        self._record_running_now()
         return self.overview(instance)
 
     def emulator_status(self, instance: str) -> dict:
@@ -231,6 +260,7 @@ class RuntimeService:
         with ProcessManager._get_lifecycle_lock(instance):
             if not self.manager(instance).stop_by_user(soft=soft):
                 raise ApiError('STOP_FAILED', '尚未确认全部工作进程停止，请检查日志后重试')
+        self._record_running_now()
         return self.overview(instance)
 
     def logs(self, instance: str, after: int = 0) -> dict:

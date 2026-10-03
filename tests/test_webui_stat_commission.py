@@ -2,6 +2,7 @@ import re
 import unittest
 from contextlib import nullcontext
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import module.webui.lang as lang
@@ -268,8 +269,23 @@ class TestShipExpTitleRefreshIcon(unittest.TestCase):
     def test_render_output_puts_the_button_in_the_title_row(self):
         captured = []
         harness = ShipExperienceStatisticsMixin()
+        # 使用固定统计夹具，不依赖工作区中真实账号是否已有舰船经验记录。
+        stats = SimpleNamespace(
+            data={"ships": [{"position": "测试旗舰"}], "last_check_time": "2026-10-03 00:00:00"},
+            get_exp_per_hour=lambda: 100,
+            get_today_stats=lambda: {},
+            calculate_progress=lambda *_: {
+                "position": "测试旗舰", "level": 100, "current_exp": 1, "total_exp": 1,
+                "target_exp": 2, "exp_needed": 1, "battles_needed": 1, "time_needed": "1分钟",
+            },
+        )
 
         with patch(
+            "module.statistics.ship_exp_stats.get_ship_exp_stats", return_value=stats,
+        ), patch(
+            "module.statistics.opsi_month.get_opsi_stats",
+            return_value=SimpleNamespace(summary=lambda: {"total_battles": 0}),
+        ), patch(
             "module.webui.app_stat_ship.build_simple_table",
             return_value="<table></table>",
         ), patch(

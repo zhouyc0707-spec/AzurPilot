@@ -13,7 +13,7 @@ import re
 
 from module.azur_stats.image.base import CLASSIFY_CACHE
 from module.azur_stats.image.base import ImageBase
-from module.azur_stats.image.get_items import AutoSearchAmount, GetItems, TooManyNewTemplate, ZeroAmountError
+from module.azur_stats.image.get_items import AutoSearchAmount, GetItems, TooManyNewTemplate
 from module.azur_stats.assets import AUTO_SEARCH_REWARD_TITLE
 from module.base.button import ButtonGrid
 from module.base.decorator import cached_property
@@ -129,6 +129,7 @@ class AutoSearchItemGrid(ItemGrid):
             tuple[list[str], float]: 过滤后的候选与阈值。
         """
         tier = self.TIER_BY_COLOR.get(self.frame_color(image))
+        self._matching_tier = tier
         if tier is None:
             return names, similarity
 
@@ -136,11 +137,14 @@ class AutoSearchItemGrid(ItemGrid):
             name for name in names
             if self.template_tier(name) in (None, tier)
         ]
-        if not filtered:
-            # 该等级尚无模板（新形态）时不做限制，仍按默认阈值识别
-            return names, similarity
+        # 没有本级模板时保持未知，不能重新放回其他稀有度的纸类候选。
+        return filtered, similarity
 
-        return filtered, min(similarity, self.TIER_SIMILARITY)
+    def template_similarity_for(self, name, similarity):
+        # 仅白纸类模板有缩放动画，不能同时降低金材料等其他物品的匹配门槛。
+        if getattr(self, '_matching_tier', None) is not None and self.template_tier(name) is not None:
+            return min(similarity, self.TIER_SIMILARITY)
+        return similarity
 
     @staticmethod
     def predict_tag(image):
@@ -193,8 +197,7 @@ class AutoSearchReward(ImageBase):
         Yields:
             AutoSearchItem: 解析出的掉落物品对象。
 
-        Raises:
-            ZeroAmountError: 物品数量识别为 0 时抛出。
+        数量无法确认的单格保留日志并跳过，其他已确认物品照常返回。
         """
         self._auto_search_get_items_load(image)
 
@@ -209,8 +212,9 @@ class AutoSearchReward(ImageBase):
                 after = str(item)
                 if before != after:
                     logger.info(f'[统计-物品] 物品 {before} 修正为 {after}')
-                if item.amount == 0:
-                    raise ZeroAmountError(f'Invalid item amount: {item}')
+                if item.amount <= 0:
+                    logger.warning(f'[统计-物品] {item.name} 数量无法确认，跳过本格并保留其他物品')
+                    continue
                 yield item
 
     @staticmethod
@@ -320,8 +324,16 @@ class AutoSearchReward(ImageBase):
 
         merged = {}
         delta_total = 0.0
-        # 先用第一页确定网格与列表区，后续每页都按同一网格换算行号
-        self._auto_search_get_items_load(images[0])
+        # 使用首张可解析的奖励页确定网格；某一页异常时继续保留其余页。
+        for first_valid, image in enumerate(images):
+            try:
+                self._auto_search_get_items_load(image)
+                break
+            except ImageError as error:
+                logger.warning(f'奖励页第 {first_valid + 1} 页无法建立网格，保留其他页: {error}')
+        else:
+            return
+        images = images[first_valid:]
         for index, image in enumerate(images):
             if index > 0:
                 measured = self.reward_list_shift(
@@ -341,7 +353,11 @@ class AutoSearchReward(ImageBase):
                     page = self.realign_reward_page(page, self.auto_search_item_group.grids, residual)
                     logger.info(f'奖励页第 {index + 1} 页滚动量不是行高整数倍，已平移 {residual:.1f}px 对齐')
 
-            items = list(self.parse_auto_search_reward(page, name=name, amount=amount, tag=tag))
+            try:
+                items = list(self.parse_auto_search_reward(page, name=name, amount=amount, tag=tag))
+            except ImageError as error:
+                logger.warning(f'奖励页第 {index + first_valid + 1} 页无法解析，保留其他页: {error}')
+                continue
             grid = self.auto_search_item_group.grids
             if grid is None or not grid.buttons:
                 continue

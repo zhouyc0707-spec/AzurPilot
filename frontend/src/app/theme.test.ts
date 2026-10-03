@@ -3,7 +3,7 @@ import { defaultMaterial, hasMaterialAxis, readThemePreference, showsRightRail, 
 
 afterEach(() => vi.unstubAllGlobals())
 
-const ALL_THEMES: Theme[] = ['light', 'dark', 'minimal', 'legacy-light', 'legacy-dark']
+const NON_COMPACT_THEMES: Theme[] = ['light', 'dark', 'minimal', 'legacy-light', 'legacy-dark']
 
 describe('新旧 UI 切换（顶栏快捷按钮）', () => {
   it('新版按当前明暗切到对应旧版主题', () => {
@@ -78,14 +78,14 @@ describe('紧凑布局偏好', () => {
 // 白名单与装饰层判定共同决定毛玻璃、壁纸、标题遮罩与图表取色，改动主题集合时这两处必须同步。
 describe('旧版主题注册与装饰层判定', () => {
   it('五个主题都能从存储里恢复', () => {
-    for (const theme of ALL_THEMES) {
+    for (const theme of NON_COMPACT_THEMES) {
       vi.stubGlobal('localStorage', {getItem: (key: string) => key === 'azurpilot.theme' ? theme : null})
       expect(readThemePreference().theme).toBe(theme)
     }
     vi.unstubAllGlobals()
   })
   it('只有 Apple 玻璃系主题使用材质装饰', () => {
-    const material = ALL_THEMES.filter(usesMaterial)
+    const material = NON_COMPACT_THEMES.filter(usesMaterial)
     expect(material).toEqual(['light', 'dark'])
   })
 })
@@ -93,14 +93,14 @@ describe('旧版主题注册与装饰层判定', () => {
 // 旧版版式只在实例视图生效：主页要留新版外壳，总览页要收起右栏免得调度器出现两处。
 describe('旧版版式的生效范围', () => {
   it('只有两个旧版主题在实例视图里换外壳', () => {
-    for (const theme of ALL_THEMES) {
+    for (const theme of NON_COMPACT_THEMES) {
       expect(usesLegacyShell(theme, 'alas')).toBe(usesLegacyLayout(theme))
     }
     expect(usesLegacyLayout('light')).toBe(false)
     expect(usesLegacyLayout('minimal')).toBe(false)
   })
   it('主页视图不换外壳', () => {
-    for (const theme of ALL_THEMES) expect(usesLegacyShell(theme, undefined)).toBe(false)
+    for (const theme of NON_COMPACT_THEMES) expect(usesLegacyShell(theme, undefined)).toBe(false)
     expect(usesLegacyShell('legacy-light', '')).toBe(false)
   })
   it('旧版主题的实例视图收起右栏，调度器与任务计划改由页内左列承载', () => {
@@ -116,7 +116,7 @@ describe('旧版版式的生效范围', () => {
     }
   })
   it('主页没有实例时不渲染右栏', () => {
-    for (const theme of ALL_THEMES) expect(showsRightRail(theme, undefined)).toBe(false)
+    for (const theme of NON_COMPACT_THEMES) expect(showsRightRail(theme, undefined)).toBe(false)
   })
 })
 

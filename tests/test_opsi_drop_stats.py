@@ -243,6 +243,30 @@ class TestCollect(unittest.TestCase):
         # 时间倒序；只列口径内的物品
         self.assertEqual(summary['records'][0][3], '防空炮部件T4 x1')
 
+    def test_filter_keeps_other_task_options_and_counts(self):
+        self.insert('opsi_stronghold', {'PlateGeneralT4': 4}, self.now - timedelta(hours=1), 'filter-a')
+        self.insert('opsi_month_boss', {'GearDesignPlanT5': 1}, self.now - timedelta(hours=2), 'filter-b')
+        summary = self.collect(task='opsi_stronghold')
+        self.assertEqual(summary['total'], 4)
+        self.assertEqual(summary['record_count'], 1)
+        options = {item['key']: item['count'] for item in summary['tasks']}
+        self.assertEqual(options['opsi_stronghold'], 1)
+        self.assertEqual(options['opsi_month_boss'], 1)
+
+    def test_shared_tasks_and_generic_design_plan_are_always_visible(self):
+        summary = self.collect()
+        options = {item['key'] for item in summary['tasks']}
+        self.assertTrue({'opsi_month_boss', 'opsi_archive', 'opsi_cross_month'} <= options)
+        self.assertIn('GearDesignPlanT5', {item['name'] for item in summary['items']})
+
+    def test_unknown_month_boss_zone_uses_known_task_type(self):
+        self.insert('opsi_month_boss', {'GearDesignPlanT5': 1}, self.now - timedelta(hours=1), 'boss')
+        with closing(sqlite3.connect(AzurStats.LOCAL_DB)) as connection, connection:
+            connection.execute("UPDATE opsi_items SET zone='', zone_type='UNKNOWN', hazard_level=0 WHERE imgid='boss'")
+        summary = self.collect()
+        self.assertEqual(summary['records'][0][2], '月度Boss海域')
+        self.assertEqual(summary['total'], 1)
+
     def test_task_label_falls_back_to_genre(self):
         self.assertEqual(opsi_drop_stats.task_label('opsi_month_boss'), '月度Boss')
         self.assertEqual(opsi_drop_stats.task_label('opsi_unknown_task'), 'opsi_unknown_task')

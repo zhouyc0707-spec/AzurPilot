@@ -29,6 +29,16 @@
   "rarity": 5,
   "zh": "舰载机研发图纸UR型"
  },
+ "GearDesignPlanT4": {
+  "zh": "装备研发图纸SSR型",
+  "en": "SR Gear Design Plans",
+  "rarity": 4
+ },
+ "GearDesignPlanT5": {
+  "zh": "装备研发图纸UR型",
+  "en": "UR Gear Design Plans",
+  "rarity": 5
+ },
  "GearDesignPlanTorpedoT4": {
   "en": "SR Torpedo Design Plans",
   "rarity": 4,

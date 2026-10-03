@@ -67,19 +67,11 @@ COMMISSION_REWARD_SCREENSHOT_KEEP = 50
 
 
 class CommissionAmount(AmountOcr):
-    """委托收益数量 OCR：碎片过滤 + 3 倍最近邻放大。
+    """委托收益先匹配原始数量字形，不确定时放大并过滤碎片交给 OCR。
 
-    委托页数字很小（高约 14px），直接识别有多处系统性误读。50 张留存结算截图
-    的回归显示，「碎片过滤 + 3 倍**最近邻**放大」是唯一同时修好下面几类误读、
-    又不引入新错误的组合（相对原先的「2 倍双三次」只改动 5 张，且全部是修正）：
-
-    - 末位被吞：71 → 7（1 的笔画只有 1px 宽，双三次插值会把它糊掉；最近邻
-      保留原始像素边界，模型才能分辨出第二位）；
-    - 前位被吞：24 → 4（同上，实际值 4，与数据库记录一致）；
-    - 数量首位丢失：75 → 5。
-
-    放大倍率取 3 而不是 2：2 倍最近邻仍读不出 71，3 倍与 4 倍效果相同，
-    取小的那个省一点开销。
+    加宽数量框保留完整数位，原始字形匹配避免小数字误读。OCR 兜底保留本地
+    的 3 倍最近邻放大及碎片过滤：最近邻保留 1px 笔画与数字间隙，修正 71 → 7、
+    75 → 5；过滤图标白边避免将数量 4 误读为 24。超限时不截断猜值。
     """
 
     remove_fragments = True
@@ -88,9 +80,11 @@ class CommissionAmount(AmountOcr):
     # （数字本身高约 42px），使 4 被读成 24、2 被读成 22。抬高到 10px 后
     # 它们按碎片处理：离数字远则删除，属于字形本身的部件仍因贴近数字保留。
     fragment_min_height = 10
+    use_digit_templates = True
+    strict_amount_max = True
 
     def pre_process(self, image):
-        """图像预处理：放大2倍后进行基类预处理。
+        """图像预处理：最近邻放大 3 倍后进行基类预处理。
 
         Args:
             image (np.ndarray): 输入图像。
@@ -877,6 +871,9 @@ class RewardCommission(UI, InfoHandler):
         try:
             merged_items, reward_images = self._recognize_commission_income()
             if not merged_items:
+                # 未确认数量不写入收益，但保留原图供核对。
+                for image in reward_images:
+                    self._save_commission_reward_screenshot(image, self.config.config_name)
                 logger.info('[委托-收入] 所有截图都没有识别到已知物品')
                 return True
             self._persist_commission_income(merged_items, reward_images)
@@ -920,11 +917,10 @@ class RewardCommission(UI, InfoHandler):
             logger.info('[委托-收入] 模板文件夹不存在，跳过')
             return {}, []
 
-        grid = ItemGrid(None, {}, template_area=(40, 21, 89, 70), amount_area=(50, 71, 91, 92))
+        grid = ItemGrid(None, {}, template_area=(40, 21, 89, 70), amount_area=(50, 72, 94, 94))
         grid.item_class = Item
         grid.similarity = 0.92
-        # 数量 OCR 由 CommissionAmount 做碎片过滤后 3 倍最近邻放大：
-        # 放大不足或插值糊化都会吞掉数字（71 → 7、24 → 4）
+        # 先匹配原始字形；OCR 兜底保留 3 倍最近邻与碎片过滤，避免吞位或误读图标白边。
         grid.amount_ocr = CommissionAmount([], threshold=96, name='Amount_ocr')
         grid.load_template_folder(template_folder)
 
@@ -964,26 +960,33 @@ class RewardCommission(UI, InfoHandler):
                 else:
                     logger.info(f'[委托-收入] 截图[{idx}] 不是获取物品页面，跳过')
                     continue
-                # 数量 OCR 由 CommissionAmount 先做 3 倍最近邻放大再提白字：
-                # 放大不足或插值糊化都会吞掉数字（71 → 7、24 → 4）
+                reward_images.append(image)
+                # 先匹配原始字形，配置中的 OCR 后端只处理不确定的数量。
                 grid.predict(image, amount_trim=True)
                 items = {}
                 recognized = []
+                uncertain = False
                 for item in grid.items:
                     if item.is_known_item() and item.name not in ('DefaultItem',):
                         mapped_name = COMMISSION_ITEM_NAME_MAP.get(item.name, item.name)
                         if mapped_name not in COMMISSION_TRACKED_ITEMS:
                             logger.info(f'[委托-收入] 截图[{idx}] 忽略 {item.name} (未跟踪)')
                             continue
+                        if item.amount <= 0:
+                            uncertain = True
+                            logger.warning(f'[委托-收入] 截图[{idx}] {item.name} 数量无法确认，保留截图供核对')
+                            continue
                         items[mapped_name] = items.get(mapped_name, 0) + item.amount
                         recognized.append(f'{mapped_name}x{item.amount}')
                 if not recognized:
+                    if not uncertain:
+                        # 仅有未跟踪物品时沿用本地规则，不留下无关收益截图。
+                        reward_images.pop()
                     logger.info(f'[委托-收入] 截图[{idx}] 没有识别到已知物品')
                     continue
                 logger.info(f'[委托-收入] 截图[{idx}] 识别到 {len(recognized)} 个物品: {", ".join(recognized)}')
                 # 一个「获得道具」弹窗就是一次委托收获：记入逐次收获明细，
                 # 由 _persist_commission_income 各写一条记录、各带自己那张截图
-                reward_images.append(image)
                 self._commission_income_harvests.append((items, image))
                 for name, amount in items.items():
                     merged_items[name] = merged_items.get(name, 0) + amount
@@ -1011,6 +1014,13 @@ class RewardCommission(UI, InfoHandler):
             fallback_screenshots = self._save_commission_reward_screenshots(
                 reward_images, instance)
             harvests = [(merged_items, None)]
+        else:
+            # 逐次记录只关联本次收获截图；识别失败的其他页独立存档，不增加收获次数。
+            for image in reward_images:
+                if not any(image is harvest_image for _, harvest_image in harvests):
+                    path = self._save_commission_reward_screenshot(image, instance)
+                    if path:
+                        logger.info(f'[委托-收入] 未确认物品的截图已保留: {path}')
 
         gem_count = merged_items.get("Gem", 0)
         target_duration = self._guess_gem_duration(gem_count) if gem_count > 0 else None

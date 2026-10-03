@@ -63,9 +63,13 @@
 | `scheduler.stop` | instance | 停止调度器并执行配置的收尾动作 |
 | `tasks.run` | instance、task | 运行允许单独执行的工具 |
 | `logs.get` | instance、可选 after | 游标之后的日志，有界保留 |
+| `opsi.simulator.status` | instance、可选 after | 离线模拟状态、进度、结果、图表标识及独立日志增量 |
+| `opsi.simulator.start` | instance | 按当前实例配置快照启动后台模拟，返回模拟状态 |
+| `opsi.simulator.stop` | instance | 请求中断模拟，返回模拟状态；等待当前计算批次结束 |
+| `opsi.simulator.figure` | instance | 最近生成的 PNG 图表，image 为 data URL；无图时为 null |
 | `preview.capture` | instance | 读取最近一张缓存 JPEG；不主动截图，无缓存时 image/capturedAt 为 null |
 | `statistics.resources` | instance、days、resource | 兼容资源时间线，支持全部 12 种资源，最多 5,000 点 |
-| `statistics.report` | instance、category、month、days、period | 六类统计，返回 metrics、series、tables 和 notes |
+| `statistics.report` | instance、category、month、days、period | 分类统计，含只读仓库快照，返回 metrics、series、tables 和 notes |
 | `statistics.refreshLoot` | instance | 重新聚合本设备已有本地短猫掉落记录，不访问游戏 |
 | `settings.get` | 无 | 部署设置定义及值，密码只写不读 |
 | `settings.patch` | values | 校验并保存部署设置，重启生效 |
@@ -78,9 +82,17 @@
 | `updater.cancel` | 无 | 仅在等待任务结束阶段取消更新 |
 | `events.subscribe` | topics、可选 instance | 原子替换当前连接的订阅集合 |
 
+仓库统计使用 `category: 'storage'` 查询最近完整扫描，`days` 限定成功扫描历史的时间窗口。`series` 提供各物品已确认数量的趋势与原始记录，复用资源趋势控件；未扫描或未发现的数量在最新清单中为 `null`，历史序列不补零。序列可选 `icon` 在逐点和共用时间轴格式中均保留，例如 `storage:opsi_items/PrototypeGearPartsT5`，从 `/storage-items/opsi_items/PrototypeGearPartsT5.png` 加载。`tasks.run` 的 `task: 'StorageStatistics'` 主动进入材料仓库扫描，沿用实例运行互斥；刷新报告不启动扫描。
+
 `instance` 必须指向 config 目录内已存在的实例，禁止路径分隔符、符号链接和系统保留名称。创建实例名称以字母或汉字开头，可包含字母、数字、汉字、短横线和下划线，总长不超过 64。运行实例禁止删除，已有运行实例禁止重复启动。
 
 状态枚举：`running`、`stopped`、`error`、`updating`。枚举表示工作进程状态，不能据此推断游戏中的具体画面。
+
+大世界模拟器沿用原蒙特卡洛收益模型，独立于游戏进程。启动不修改实例配置，也不调用调度器。
+模拟状态为 `idle`、`running`、`stopping`、`completed`、`interrupted`、`failed`；`completedSamples/totalSamples` 为采样进度，
+`runId` 随每次启动递增，防止旧响应覆盖新模拟；`result` 包含刷图次数、坠机概率、总时长（秒）、最终行动力与黄币，未汇总时为 null。
+日志结构与 `logs.get` 一致但缓冲独立，重跑或游标过旧时返回 reset；页面每 500 毫秒查询状态，图表标识变化后单独读取图片。
+刷新或切换页面不终止模拟；启动和中断受认证及 DEMO 只读限制，模拟运行期间禁止删除对应实例。
 
 更新器接口不接收实例名；三个写方法沿用认证和 DEMO 只读限制。前端每三秒读取一次更新状态，重连后重新读取；后台操作立即响应，不占用 WebSocket 请求等待时间。HEAD 变化时提交列表返回第一页。`upstreamHead` 指配置分支的 `origin/<Branch>` 远程跟踪引用，获取更新后刷新；未获取时为 null。本地与上游分叉、没有新提交、更新器忙碌或监督器重启/依赖同步事件不可用时，`canApply` 为 false。
 
@@ -116,7 +128,7 @@ API 和核心运行器共用跨进程事务锁。API 只合并请求指定的字
 
 每个字段显示保存中、已保存或错误状态。格式错误只阻止该字段写入，原文保留用于修正；其他字段照常保存。连接和临时服务错误自动重试；页面切换不停止队列。未确认的输入保存在当前标签页的 sessionStorage，刷新并重新认证后恢复所有作用域的待提交项，已确认项不再重放。浏览器禁用或耗尽存储时明确提示，并继续在内存中保留输入。关闭标签页前应确认已保存；离线期间无法使服务端立即生效。游戏任务在下一次读取或绑定配置时使用新值，部署设置仍按各项既有规则在重启服务后生效。直接绕开配置服务的外部脚本不受事务锁约束。
 
-隐藏、固定和只读字段由服务端强制拒绝修改；`storage` 的唯一例外是通过 `config.patch` 将值清空为 `{}`，用于恢复旧版清除内部任务状态的按钮，其他状态内容仍禁止写入。布尔值必须是真正的 JSON boolean；数值范围来自参数定义；日期格式为 `YYYY-MM-DD HH:mm:ss`；多选值必须来自声明的候选项。YAML 字段使用安全解析器校验语法和顶层映射结构，并返回可定位的行列错误；保留原始文本存储。受限 Lua 字段在写入时会再次静态校验，不能通过只调用前端检查接口来绕过；同一事务合并后的 `ShopAdvanced.Mode=advanced` 必须配套非空且有效的 `ShopAdvanced.Script`。简单模式允许清空脚本。
+隐藏、固定和只读字段由服务端强制拒绝修改；`storage` 允许通过 `config.patch` 将值清空为 `{}`，用于清除内部任务状态，其他状态内容仍禁止写入。另允许将 `OpsiExplore.OpsiExplore.ExploreProgress` 和 `OpsiScheduling.OpsiSmartExplore.Progress` 清空为 `""`，同一事务重置对应开荒断点；不允许写入任意进度，不清除本月行动力购买记录或另一种开荒进度。清空前应停止正在运行的任务，调度时间保持原值。布尔值必须是真正的 JSON boolean；数值范围来自参数定义；日期格式为 `YYYY-MM-DD HH:mm:ss`；多选值必须来自声明的候选项。YAML 字段使用安全解析器校验语法和顶层映射结构，并返回可定位的行列错误；保留原始文本存储。受限 Lua 字段在写入时会再次静态校验，不能通过只调用前端检查接口来绕过；同一事务合并后的 `ShopAdvanced.Mode=advanced` 必须配套非空且有效的 `ShopAdvanced.Script`。简单模式允许清空脚本。
 
 ## 订阅与恢复
 

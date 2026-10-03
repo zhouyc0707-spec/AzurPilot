@@ -46,9 +46,3 @@ export function simulateStatus(status: Status | null, seconds = 10) {
 export function previewUpdate(active: boolean) {
   publish({...snapshot, updatePreview: active})
 }
-
-/** 清掉全部模拟状态。 */
-export function clearDevOverride() {
-  stopTimer()
-  publish(OFF)
-}

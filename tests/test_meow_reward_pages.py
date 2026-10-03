@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from module.azur_stats.image.auto_search_reward import AutoSearchReward
 from module.base.button import ButtonGrid
 from module.statistics.azurstats import AzurStats
+from module.statistics.utils import ImageError
 
 ORIGIN = (397, 183)
 DELTA = (72.67, 75.33)
@@ -99,6 +100,31 @@ class TestMergeRewardPages(unittest.TestCase):
 
     def test_empty_images(self):
         self.assertEqual(list(self.reward.parse_auto_search_reward_pages([])), [])
+
+    def test_bad_later_page_keeps_deduplicated_valid_pages(self):
+        page1 = [make_item(0, 0, 'plate', 1)]
+        page2 = [make_item(0, 1, 'plan', 2)]
+        self.patch([page1, page2, []], [0, 0])
+        parse = self.reward.parse_auto_search_reward
+
+        def with_bad_page(image, **kwargs):
+            if image == 2:
+                raise ImageError('bad reward frame')
+            return parse(image, **kwargs)
+
+        self.reward.parse_auto_search_reward = with_bad_page
+        self.assertEqual([i.name for i in self.reward.parse_auto_search_reward_pages([0, 1, 2])],
+                         ['plate', 'plan'])
+
+    def test_bad_first_page_uses_the_next_valid_grid(self):
+        self.patch([[], [make_item(0, 0, 'plate', 1)]], [])
+
+        def load(image):
+            if image == 0:
+                raise ImageError('covered first frame')
+
+        self.reward._auto_search_get_items_load = load
+        self.assertEqual([i.name for i in self.reward.parse_auto_search_reward_pages([0, 1])], ['plate'])
 
 
 class TestDropPageFilenames(unittest.TestCase):

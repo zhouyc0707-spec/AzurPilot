@@ -21,12 +21,61 @@ from module.config.time_source import now as current_time
 from module.logger import logger
 
 
+# 凭证快照的抽取粒度与历史迁移版本。
+COINS_EXACT_DAYS = 3
+COINS_HISTORY_VERSION = 2
+COINS_CLEANUP_VERSION = 1
+
+
+def thin_coins_snapshots(snapshots: List[Dict[str, Any]], *, enabled: bool = False) -> List[Dict[str, Any]]:
+    """默认保留全部原始凭证点；显式启用时执行上游按小时抽稀。
+
+    凭证写入很频繁（约 3 分钟一条），逐条无限增长会让月度 JSON 越来越大；
+    本地旧统计曲线依赖完整历史细节，因此运行期关闭有损抽稀，查询和传输仍使用
+    上游优化。保留抽稀算法供明确需要压缩的离线调用使用。
+
+    Args:
+        snapshots: 凭证快照列表，元素含 ts 等字段。
+        enabled: 是否启用有损抽稀；运行期调用默认关闭。
+
+    Returns:
+        list[dict]: 未启用时原样保留；启用时按时间升序整理后的快照列表。
+    """
+    if not enabled or not snapshots:
+        return snapshots
+    cutoff = datetime.now() - timedelta(days=COINS_EXACT_DAYS)
+    kept: List[Dict[str, Any]] = []
+    last_hour = None
+    for snapshot in sorted(snapshots, key=lambda item: str(item.get('ts', ''))):
+        try:
+            stamp = datetime.fromisoformat(str(snapshot['ts']))
+        except (KeyError, ValueError):
+            kept.append(snapshot)
+            last_hour = None
+            continue
+        if stamp >= cutoff:
+            kept.append(snapshot)
+            last_hour = None
+            continue
+        hour = stamp.strftime('%Y-%m-%dT%H')
+        if hour == last_hour:
+            kept[-1] = snapshot
+        else:
+            kept.append(snapshot)
+            last_hour = hour
+    return kept
+
+
 class Cl1Database:
     # 只读缓存的存活时间（秒）。同一个渲染周期内的连续读取会命中同一份解析结果，
     # 而跨周期的读取必然重新查库 —— 窗口很短，外部（worker 进程）刚写入的数据
     # 最多多显示这么久。
     READ_CACHE_TTL = 2.0
 
+    # 已补齐凭证历史的实例。
+    _coins_history_checked: set = set()
+    # 已清理过月初紫币残留的实例。
+    _coins_cleanup_checked: set = set()
     @staticmethod
     def _coerce_int(value: Any) -> int:
         """严格转换为 int；无效输入由调用方按上下文捕获处理。"""
@@ -789,13 +838,15 @@ class Cl1Database:
             data["battle_count"] = data.get("battle_count", 0) + delta
             self._save_stats_in_connection(conn, instance, month, data)
 
-    def increment_akashi_encounter(self, instance: str):
-        """增加明石奇遇次数"""
-        month = datetime.now().strftime("%Y-%m")
+    def increment_akashi_encounter(self, instance: str, month: Optional[str] = None) -> int:
+        """增加明石奇遇次数，返回事务提交后的累计值。"""
+        month = month or datetime.now().strftime("%Y-%m")
         with self._stats_transaction() as conn:
             data = self._get_stats_in_connection(conn, instance, month)
             data["akashi_encounters"] = data.get("akashi_encounters", 0) + 1
             self._save_stats_in_connection(conn, instance, month, data)
+            encounters = data["akashi_encounters"]
+        return encounters
 
     def add_akashi_ap_entry(
         self, instance: str, amount: int, base: int, count: int, source: str
@@ -832,6 +883,8 @@ class Cl1Database:
         """
         month = datetime.now().strftime("%Y-%m")
         with self._stats_transaction() as conn:
+            # 补齐必须先于本次读取。
+            self.ensure_coins_history(instance, conn)
             data = self._get_stats_in_connection(conn, instance, month)
             now = datetime.now()
 
@@ -868,6 +921,117 @@ class Cl1Database:
             snapshots.append(snapshot)
             data["ap_snapshots"] = snapshots
             self._save_stats_in_connection(conn, instance, month, data)
+
+    def ensure_coins_cleanup(self, instance: str, conn) -> None:
+        """清掉月初残留的紫币读数，按版本号只执行一次。
+
+        早期写入没有跨月比较，游戏尚未刷新前的上月读数会成为当月最初的点，把小轴整体抬高。
+        将各月开头与上月最后一条紫币相同的连续记录移入原始残留档案，
+        显示用序列从数值真正变化的位置开始；整月都没有变化时不移动，避免空曲线。
+
+        Args:
+            instance: 实例名称。
+            conn: 复用的数据库连接。
+        """
+        if instance in self._coins_cleanup_checked:
+            return
+        try:
+            stored: Dict[str, Dict[str, Any]] = {}
+            with closing(sqlite3.connect(self.db_path)) as reader:
+                for month, blob in reader.execute(
+                    'select month, data_json from cl1_data where instance = ? order by month', (instance,)
+                ):
+                    try:
+                        stored[month] = json.loads(blob)
+                    except (TypeError, ValueError):
+                        logger.warning(f'[统计] 月初紫币清理跳过 {instance} {month}：该月数据无法解析')
+            if any(data.get('coins_cleanup_version') == COINS_CLEANUP_VERSION for data in stored.values()):
+                self._coins_cleanup_checked.add(instance)
+                return
+            previous = None
+            for month in sorted(stored):
+                data = stored[month]
+                snapshots = data.get('coins_snapshots', [])
+                if previous is not None and snapshots:
+                    head = 0
+                    while head < len(snapshots) and snapshots[head].get('purple_coins') == previous:
+                        head += 1
+                    if 0 < head < len(snapshots):
+                        # 修正显示时保留被判定为上月残留的原始记录，便于复核与恢复。
+                        data.setdefault('coins_month_start_residue', []).extend(snapshots[:head])
+                        data['coins_snapshots'] = snapshots[head:]
+                        snapshots = data['coins_snapshots']
+                if snapshots:
+                    previous = snapshots[-1].get('purple_coins')
+                data['coins_cleanup_version'] = COINS_CLEANUP_VERSION
+                self._save_stats_in_connection(conn, instance, month, data)
+            self._coins_cleanup_checked.add(instance)
+        except Exception as error:
+            logger.warning(f'[统计] 月初紫币残留清理失败，下次再试: {error}')
+
+    def _get_previous_coins_snapshot(self, conn, instance: str, month: str) -> Optional[Dict[str, Any]]:
+        """取上个月的最后一条凭证快照，用于判断月初读数是否为上月残留。"""
+        try:
+            year, number = (int(part) for part in month.split('-'))
+            previous_month = f'{year - 1:04d}-12' if number == 1 else f'{year:04d}-{number - 1:02d}'
+        except (ValueError, AttributeError):
+            return None
+        snapshots = self._get_stats_in_connection(conn, instance, previous_month).get('coins_snapshots') or []
+        return snapshots[-1] if snapshots else None
+
+    def ensure_coins_history(self, instance: str, conn) -> None:
+        """用资源快照补齐凭证历史，按版本号只执行一次。
+
+        早期实现按 500 条上限丢弃最旧的凭证记录，历史因此只剩几天；资源快照同一读数并无此上限，
+        故首次运行到这里时把缺口补回月度存储，之后凭版本号跳过。
+
+        读写都直接针对该月的原始 JSON：只改凭证与版本号两个键，其余键原样写回，
+        避免经过任何可能返回降级数据的读取路径而抹掉同月其它键。整段失败不影响快照写入本身。
+
+        Args:
+            instance: 实例名称。
+            conn: 复用的数据库连接。
+        """
+        if instance in self._coins_history_checked:
+            return
+        try:
+            stored: Dict[str, Dict[str, Any]] = {}
+            with closing(sqlite3.connect(self.db_path)) as reader:
+                for month, blob in reader.execute(
+                    'select month, data_json from cl1_data where instance = ?', (instance,)
+                ):
+                    try:
+                        stored[month] = json.loads(blob)
+                    except (TypeError, ValueError):
+                        logger.warning(f'[统计] 凭证历史补齐跳过 {instance} {month}：该月数据无法解析')
+            if any(data.get('coins_history_version') == COINS_HISTORY_VERSION for data in stored.values()):
+                self._coins_history_checked.add(instance)
+                return
+            from module.statistics.resource_stats import get_resource_timeline
+            timeline = get_resource_timeline(instance, limit=200000)
+            grouped: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+            for row in timeline:
+                if row.get('yellow_coin') is None and row.get('purple_coin') is None:
+                    continue
+                grouped[str(row['ts'])[:7]].append(row)
+            for month_key, rows in grouped.items():
+                data = stored.get(month_key) or self._empty_data(month_key)
+                snapshots = data.get('coins_snapshots', [])
+                known = {str(item.get('ts')) for item in snapshots}
+                for row in rows:
+                    stamp = str(row['ts'])
+                    if stamp in known:
+                        continue
+                    snapshot = {'ts': stamp, 'yellow_coins': row.get('yellow_coin'), 'source': 'cl1'}
+                    if row.get('purple_coin') is not None:
+                        snapshot['purple_coins'] = row.get('purple_coin')
+                    snapshots.append(snapshot)
+                data['coins_snapshots'] = thin_coins_snapshots(snapshots)
+                data['coins_history_version'] = COINS_HISTORY_VERSION
+                self._save_stats_in_connection(conn, instance, month_key, data)
+            self._coins_history_checked.add(instance)
+        except Exception as error:
+            logger.warning(f'[统计] 凭证历史补齐失败，下次再试: {error}')
 
     def get_last_ap_snapshot(self, instance: str) -> Optional[Dict[str, Any]]:
         """获取最近一次行动力快照，优先读取当前月份，必要时回退到历史月份。"""
@@ -965,6 +1129,8 @@ class Cl1Database:
         """
         month = datetime.now().strftime("%Y-%m")
         with self._stats_transaction() as conn:
+            # 补齐必须先于本次读取。
+            self.ensure_coins_history(instance, conn)
             data = self._get_stats_in_connection(conn, instance, month)
             yellow_coins = self._coerce_int(yellow_coins)
             purple_coins = self._coerce_int(purple_coins) if purple_coins is not None else None
@@ -978,6 +1144,18 @@ class Cl1Database:
                 snapshot["purple_coins"] = purple_coins
 
             snapshots = data.get("coins_snapshots", [])
+            if not snapshots and purple_coins is not None:
+                # 月初紫币仍是上月读数时不抬高新月曲线，但保留原始读数供复核。
+                previous = self._get_previous_coins_snapshot(conn, instance, month)
+                if previous is not None and self._coerce_int(previous.get('purple_coins', -1)) == purple_coins:
+                    residue = data.setdefault('coins_month_start_residue', [])
+                    if not residue or (
+                        residue[-1].get('yellow_coins') != yellow_coins
+                        or residue[-1].get('purple_coins') != purple_coins
+                    ):
+                        residue.append(snapshot)
+                        self._save_stats_in_connection(conn, instance, month, data)
+                    return
             if snapshots:
                 with suppress(ValueError, TypeError, IndexError, KeyError):
                     last = snapshots[-1]
@@ -990,10 +1168,7 @@ class Cl1Database:
                         if purple_coins is None and "purple_coins" not in last:
                             return
             snapshots.append(snapshot)
-            # 保留最近 500 条记录，避免数据过大
-            if len(snapshots) > 500:
-                snapshots = snapshots[-500:]
-            data["coins_snapshots"] = snapshots
+            data["coins_snapshots"] = thin_coins_snapshots(snapshots)
             self._save_stats_in_connection(conn, instance, month, data)
 
     def async_add_coins_snapshot(
@@ -1228,25 +1403,30 @@ class Cl1Database:
 
             self._save_stats_in_connection(conn, instance, month, data)
 
-    def increment_meow_akashi_encounter(self, instance: str, hazard_level: int):
-        """记录一次耄耋相接明石事件（按侵蚀等级拆分）。
+    def increment_meow_akashi_encounter(
+        self, instance: str, hazard_level: int, month: Optional[str] = None,
+    ) -> Optional[int]:
+        """提交一次耄耋相接明石事件，返回该侵蚀等级的实际累计次数。
 
         Args:
             instance: 实例名称
             hazard_level: 侵蚀等级（2-6）
+            month: 事件发生月份；不传时使用当前月份。
         """
         if hazard_level not in {2, 3, 4, 5, 6}:
             logger.debug(f"Invalid hazard_level {hazard_level}, ignoring")
             return
 
-        month = datetime.now().strftime("%Y-%m")
+        month = month or datetime.now().strftime("%Y-%m")
         with self._stats_transaction() as conn:
             data = self._get_stats_in_connection(conn, instance, month)
             hazard_stats = self._normalize_meow_hazard_stats(data)
             bucket = self._ensure_meow_hazard_bucket(hazard_stats, hazard_level)
             bucket["akashi_encounters"] = bucket.get("akashi_encounters", 0) + 1
+            count = bucket["akashi_encounters"]
             data["meow_hazard_stats"] = hazard_stats
             self._save_stats_in_connection(conn, instance, month, data)
+        return count
 
     def add_meow_akashi_ap(self, instance: str, hazard_level: int, amount: int):
         """记录耄耋相接明石商店购买的体力（按侵蚀等级拆分）。
@@ -1479,11 +1659,11 @@ class Cl1Database:
 
         return async_executor.submit(self.increment_battle_count, instance, delta)
 
-    def async_increment_akashi_encounter(self, instance: str):
+    def async_increment_akashi_encounter(self, instance: str, month: Optional[str] = None):
         """异步增加明石遭遇次数。"""
         from module.base.async_executor import async_executor
 
-        return async_executor.submit(self.increment_akashi_encounter, instance)
+        return async_executor.submit(self.increment_akashi_encounter, instance, month)
 
     def async_add_akashi_ap_entry(
         self, instance: str, amount: int, base: int, count: int, source: str
@@ -1581,12 +1761,14 @@ class Cl1Database:
             self.add_siren_research_device, instance, source, hazard_level
         )
 
-    def async_increment_meow_akashi_encounter(self, instance: str, hazard_level: int):
+    def async_increment_meow_akashi_encounter(
+        self, instance: str, hazard_level: int, month: Optional[str] = None,
+    ):
         """异步增加短猫相接明石遭遇计数。"""
         from module.base.async_executor import async_executor
 
         return async_executor.submit(
-            self.increment_meow_akashi_encounter, instance, hazard_level
+            self.increment_meow_akashi_encounter, instance, hazard_level, month
         )
 
     def async_add_meow_akashi_ap(self, instance: str, hazard_level: int, amount: int):

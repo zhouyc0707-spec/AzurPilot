@@ -7,7 +7,7 @@ WebUI 统计页「大世界掉落」分类展示。数据入口在 module/statis
 
 展示口径（2026-09-25 用户定，暂时只看两类，其余物品照常入库、只是不展示）：
     - 金菜：通用/主炮/鱼雷/防空炮/舰载机 部件T4（Plate*T4）；
-    - 彩图纸：舰炮/鱼雷/防空炮/舰载机 研发图纸UR型（GearDesignPlan*T5）。
+    - 彩图纸：舰炮/鱼雷/防空炮/舰载机及通用装备研发图纸UR型（GearDesignPlan*T5）。
 
 要放开口径：在 should_show() 里加规则、往 assets/stats/opsi_item_names.json
 补中文名与稀有度，再把要固定显示（没掉过也占一行）的物品加进 SHOW_ITEMS 即可。
@@ -35,6 +35,7 @@ SHOW_ITEMS = (
     'PlateGeneralT4', 'PlateGunT4', 'PlateTorpedoT4', 'PlateAntiAirT4', 'PlatePlaneT4',
     'GearDesignPlanGunT5', 'GearDesignPlanTorpedoT5', 'GearDesignPlanAntiAirT5',
     'GearDesignPlanPlaneT5',
+    'GearDesignPlanT5',
 )
 
 # 海域类型 -> 中文标签，取值同 module/azur_stats/image/opsi_zone.py 的 zone_type
@@ -45,7 +46,17 @@ ZONE_LABELS = {
     'ABYSSAL': '深渊海域',
     'STRONGHOLD': '要塞海域',
     'ARCHIVE': '档案海域',
+    'MONTH_BOSS': '月度Boss海域',
     'UNKNOWN': '未知海域',
+}
+
+# 截图海域名不可读时，仍可确定独立任务的来源类型；不猜海域编号与侵蚀等级。
+TASK_ZONE_TYPES = {
+    'opsi_obscure': 'OBSCURE',
+    'opsi_abyssal': 'ABYSSAL',
+    'opsi_stronghold': 'STRONGHOLD',
+    'opsi_archive': 'ARCHIVE',
+    'opsi_month_boss': 'MONTH_BOSS',
 }
 
 _name_table: t.Optional[dict] = None
@@ -158,7 +169,7 @@ def task_label(genre: str) -> str:
 
 
 def _pinned_tasks() -> frozenset:
-    """有独立掉落截图开关的大世界任务（侵蚀1除外，它不做掉落统计）。
+    """有独立或共用掉落截图开关的大世界任务（侵蚀1不做掉落统计）。
 
     直接取配置侧那份任务清单，避免两处各维护一份。「大世界商店」「白票商店」
     这类没有开关、也不掉东西的任务不会进下拉。
@@ -168,11 +179,13 @@ def _pinned_tasks() -> frozenset:
     """
     import inflection
 
-    from module.os.config import OPSI_DROP_RECORD_TASKS
+    from module.os.config import OPSI_DROP_RECORD_SHARED, OPSI_DROP_RECORD_TASKS
     from module.statistics.azurstats import is_opsi_drop_genre
 
     return frozenset(
-        genre for genre in (inflection.underscore(task) for task in OPSI_DROP_RECORD_TASKS)
+        genre for genre in (
+            inflection.underscore(task) for task in (*OPSI_DROP_RECORD_TASKS, *OPSI_DROP_RECORD_SHARED)
+        )
         if is_opsi_drop_genre(genre)
     )
 
@@ -180,8 +193,7 @@ def _pinned_tasks() -> frozenset:
 def available_tasks(counts: t.Optional[dict] = None, selected: t.Optional[str] = None) -> t.List[dict]:
     """统计页任务筛选下拉的选项。
 
-    固定列出有掉落开关的任务，其余任务（每月开荒、月度Boss、档案坐标、跨月每日…）
-    只有真的留下记录、或正被选中时才出现。
+    固定列出有独立或共用掉落开关的任务；其他任务只有留下记录或正被选中时才出现。
 
     Args:
         counts (dict): {任务标识: 窗口内掉落记录数}，缺省为空。
@@ -258,7 +270,7 @@ def collect(
     from module.statistics.azurstats import AzurStats
 
     rows = AzurStats.load_opsi_drop_rows(
-        instance, int(start.timestamp()), int(end.timestamp()), task=task)
+        instance, int(start.timestamp()), int(end.timestamp()))
 
     # 一条记录 = 一次掉落截图（imgid），记录内的物品在解析时就已按 imgid 归好组
     records: t.Dict[str, dict] = {}
@@ -266,11 +278,15 @@ def collect(
         key = _record_key(row)
         record = records.get(key)
         if record is None:
+            genre = str(row.get('genre') or '')
+            zone_type = str(row.get('zone_type') or '').upper()
+            if zone_type in ('', 'UNKNOWN'):
+                zone_type = TASK_ZONE_TYPES.get(genre, 'UNKNOWN')
             record = {
                 'ts': row.get('created_at') or 0,
-                'genre': str(row.get('genre') or ''),
+                'genre': genre,
                 'zone': str(row.get('zone') or ''),
-                'zone_type': str(row.get('zone_type') or ''),
+                'zone_type': zone_type,
                 'hazard_level': int(row.get('hazard_level') or 0),
                 'items': {},
             }
@@ -288,6 +304,10 @@ def collect(
     task_count: t.Dict[str, int] = {}
     for record in picked:
         task_count[record['genre']] = task_count.get(record['genre'], 0) + 1
+    # 筛选只影响当前收获，任务选项与次数始终取整个窗口，切换任务不会丢掉其他选项。
+    if task:
+        picked = [record for record in picked if record['genre'] == task]
+    for record in picked:
         for name, amount in record['items'].items():
             amount_by_item[name] = amount_by_item.get(name, 0) + amount
             count_by_item[name] = count_by_item.get(name, 0) + 1

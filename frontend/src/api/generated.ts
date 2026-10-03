@@ -27,9 +27,13 @@ export interface Parameters {
   "island.suspend.toggle": { instance: string }
   "tasks.run": { instance: string; task: string }
   "logs.get": { instance: string; after?: number }
+  "opsi.simulator.status": { instance: string; after?: number }
+  "opsi.simulator.start": { instance: string }
+  "opsi.simulator.stop": { instance: string }
+  "opsi.simulator.figure": { instance: string }
   "preview.capture": { instance: string }
   "statistics.refreshLoot": { instance: string }
-  "statistics.report": { instance: string; category?: "resources" | "action" | "opsi" | "commission" | "ships" | "loot" | "research"; month?: string | null; days?: number; period?: "day" | "week" | "month"; series?: number; scope?: "series" | "consumable"; task?: string | null }
+  "statistics.report": { instance: string; category?: "resources" | "action" | "opsi" | "commission" | "ships" | "loot" | "research" | "storage"; month?: string | null; days?: number; period?: "day" | "week" | "month"; series?: number; scope?: "series" | "consumable"; task?: string | null }
   "statistics.legacy": { instance: string; month?: string | null }
   "meowfficer.scoreReport": { instance: string; limit?: number }
   "meowfficer.clearReport": { instance: string }

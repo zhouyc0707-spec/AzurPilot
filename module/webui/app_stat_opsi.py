@@ -466,7 +466,7 @@ class OpsiStatisticsMixin(WebUIMixinBase):
                         else dash
                     )
                 elif label in meow_columns and data:
-                    row.append(data[meow_columns[label]])
+                    row.append(data.get(meow_columns[label], dash))
                 else:
                     # 该等级无数据，或该列在耄耋相接里不统计
                     row.append(dash)

@@ -260,6 +260,18 @@ def func(
     Raises:
         Exception: WebUI 启动失败时向外抛出。
     """
+    # 子进程的 stdout/stderr 落到独立日志。
+    from module.logger import get_log_file_path
+    try:
+        webui_log = get_log_file_path('webui')
+        webui_log.parent.mkdir(parents=True, exist_ok=True)
+        stream = open(webui_log, 'a', encoding='utf-8', buffering=1)
+        os.dup2(stream.fileno(), 1)
+        os.dup2(stream.fileno(), 2)
+        sys.stdout = sys.stderr = stream
+    except OSError:
+        pass
+
     import argparse
     import asyncio
     import uvicorn
@@ -1054,7 +1066,7 @@ def run_webui_supervisor() -> int:
                         logger.error_context(
                             title='AzurPilot Web 服务反复意外退出',
                             reason=(
-                                f'已连续 {runtime_failures} 次在稳定运行前退出，'
+                                f'已连续 {runtime_failures} 次在稳定运行前退出（最近退出码 {process.exitcode}），'
                                 '且没有收到正常重启事件。'
                             ),
                             impact='WebUI 不再提供服务，父进程将退出以避免无限崩溃循环。',
@@ -1067,7 +1079,7 @@ def run_webui_supervisor() -> int:
                         )
                     else:
                         logger.warning(
-                            f"[GUI] WebUI 意外退出，将在 {runtime_failures} 秒后重试 "
+                            f"[GUI] WebUI 意外退出（退出码 {process.exitcode}），将在 {runtime_failures} 秒后重试 "
                             f"({runtime_failures}/{WEBUI_RUNTIME_RETRY_LIMIT})"
                         )
                         time.sleep(runtime_failures)
