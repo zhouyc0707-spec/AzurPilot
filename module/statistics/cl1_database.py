@@ -39,14 +39,18 @@ def thin_coins_snapshots(snapshots: List[Dict[str, Any]], *, enabled: bool = Fal
         enabled: 是否启用有损抽稀；运行期调用默认关闭。
 
     Returns:
-        list[dict]: 未启用时原样保留；启用时按时间升序整理后的快照列表。
+        list[dict]: 按时间升序整理的快照列表；未启用时保留全部原始记录。
     """
-    if not enabled or not snapshots:
+    if not snapshots:
         return snapshots
+    ordered = sorted(snapshots, key=lambda item: str(item.get('ts', '')))
+    # 历史补齐会把更早的读数追加到现有记录之后，排序独立于有损抽稀。
+    if not enabled:
+        return ordered
     cutoff = datetime.now() - timedelta(days=COINS_EXACT_DAYS)
     kept: List[Dict[str, Any]] = []
     last_hour = None
-    for snapshot in sorted(snapshots, key=lambda item: str(item.get('ts', ''))):
+    for snapshot in ordered:
         try:
             stamp = datetime.fromisoformat(str(snapshot['ts']))
         except (KeyError, ValueError):

@@ -57,6 +57,12 @@ def test_runtime_default_preserves_every_original_old_point():
     assert len(thin_coins_snapshots(snapshots)) == 6
 
 
+def test_runtime_default_sorts_backfilled_points_without_discarding_them():
+    snapshots = [_at(30, 9, minute) for minute in (55, 5, 45, 15, 35, 25)]
+    assert thin_coins_snapshots(snapshots) == sorted(snapshots, key=lambda point: point['ts'])
+    assert len(thin_coins_snapshots(snapshots)) == 6
+
+
 def test_database_write_preserves_all_old_points_and_custom_fields(coins_database):
     original = [
         {'ts': f'2026-08-12T09:{minute:02d}:00', 'yellow_coins': minute, 'purple_coins': 10}
@@ -79,7 +85,7 @@ def test_database_write_preserves_all_old_points_and_custom_fields(coins_databas
 
 
 def test_history_backfill_keeps_every_same_hour_point(coins_database):
-    original = {'ts': '2026-08-12T09:05:00', 'yellow_coins': 5, 'source': 'custom'}
+    original = {'ts': '2026-08-12T09:55:00', 'yellow_coins': 55, 'source': 'custom'}
     coins_database.save_stats('probe', '2026-08', {
         'coins_snapshots': [original], 'custom_marker': 'keep',
     })
@@ -93,7 +99,7 @@ def test_history_backfill_keeps_every_same_hour_point(coins_database):
 
     stored = coins_database.get_stats('probe', '2026-08')
     assert len(stored['coins_snapshots']) == 6
-    assert stored['coins_snapshots'][0] == original
+    assert stored['coins_snapshots'][-1] == original
     assert [point['yellow_coins'] for point in stored['coins_snapshots']] == [5, 15, 25, 35, 45, 55]
     assert stored['custom_marker'] == 'keep'
 
