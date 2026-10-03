@@ -8,6 +8,7 @@
 Pages: in: PRIVATE_QUARTERS_SHOP, PRIVATE_QUARTERS_MAIN
 """
 import module.config.server as server
+from module.logger import logger
 from module.ocr.ocr import Digit, DigitCounter
 from module.private_quarters.assets import *
 from module.shop.shop_status import ShopStatus
@@ -73,9 +74,9 @@ class PQStatus(ShopStatus):
         """OCR 识别每日互动剩余次数，并告知徽章是否真的被识别到。
 
         `DigitCounter.ocr()` 返回 `(current, remain, total)`：徽章正常显示时
-        `total` 是上限（如 3），而**完全没读到文字**时三项都是 0。因此可以用
-        `total > 0` 区分「徽章显示 0（真的用完）」与「徽章没读出来（被动画遮挡、
-        页面还没就绪）」—— 后者当成 0 会让整天的互动被静默跳过
+        `total` 应是固定的每日精力上限 3，且当前值应在 0 到 3 之间；未读到文字时
+        三项都是 0。上限被误读为 1 或 31 等数值也不能作为有效精力读数。
+        将这些异常当成 0 会让整天的互动被静默跳过
         （2026-09-27/29 实例：徽章实际是 3/3 却读到 0）。
 
         Returns:
@@ -85,4 +86,6 @@ class PQStatus(ShopStatus):
             in: 私人宿舍主页
         """
         count, remain, total = OCR_DAILY_COUNT.ocr(self.device.image)
-        return count, total > 0
+        recognized = total == 3 and 0 <= count <= total
+        logger.attr('宿舍精力徽章', f'{count}/{total}, 有效={recognized}')
+        return count, recognized

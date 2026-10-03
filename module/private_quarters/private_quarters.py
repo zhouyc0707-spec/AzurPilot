@@ -76,15 +76,15 @@ class PrivateQuarters(PQInteract, PQShop):
         （2026-09-27/29 实例：徽章实际是 3/3，只因刚买完每周物品、购买动画压住左上角
         的徽章，三次重试全读到空 → 0）。这里：
 
-        - 用 DigitCounter 的 total 判断徽章是否真的被识别，读不到就重试；
+        - 校验徽章的每日精力上限，读不到或上限异常就重试，并打断连续零值确认；
         - 连续读到两次有效的 0（徽章显示 0/3）才认定耗尽；
-        - 始终读不到徽章则返回 None，由调用方决定（不再静默跳过互动）。
+        - 重试后仍未确认次数（含只读到一次零值）则返回 None，不再静默跳过互动。
 
         Args:
             retry (int): 最大重试次数。
 
         Returns:
-            int | None: 剩余互动次数；徽章始终读不出来时返回 None。
+            int | None: 剩余互动次数；无法可靠确认时返回 None。
 
         Pages:
             in: 私人宿舍主页
@@ -97,7 +97,9 @@ class PrivateQuarters(PQInteract, PQShop):
                     pass
 
             count, recognized = self.status_get_daily_count_detail()
+            logger.attr('宿舍精力读取', f'{attempt + 1}/{retry + 1}: 剩余={count}, 有效={recognized}')
             if not recognized:
+                zero_reads = 0
                 continue
             if count != 0:
                 return count
@@ -105,7 +107,7 @@ class PrivateQuarters(PQInteract, PQShop):
             if zero_reads >= 2:
                 return 0
 
-        return 0 if zero_reads else None
+        return None
 
     def _pq_shop_enter(self):
         """
@@ -238,10 +240,10 @@ class PrivateQuarters(PQInteract, PQShop):
                 logger.info(f'[私人休息室] 目标舰娘 {target_ship} 在 {server.server} 服务器不可用')
                 return
 
-            # 次数未知（徽章一直读不出来）时不再直接跳过：真的没次数时互动流程自己会
+            # 次数未知（包括零值未能连续确认）时不再直接跳过：真的没次数时互动流程自己会
             # 退出，代价只是几秒，比整天漏掉互动好。
             if count is None:
-                logger.warning('[私人休息室] 未能读到每日互动次数徽章，仍按有次数处理')
+                logger.warning('[私人休息室] 未能可靠确认每日互动次数，继续尝试互动')
             elif count == 0:
                 logger.info('每日亲密度次数耗尽，退出子任务')
                 return
