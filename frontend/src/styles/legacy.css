@@ -155,6 +155,9 @@ main:focus {outline: none}
 .title-actions {position: relative; gap: 8px; padding: 4px}
 .panel-heading h2 {font-size: 15px}
 .panel, .resource-card, .instance-card {border-radius: var(--theme-radius-panel)}
+/* 旧版浅色仪表盘用纯白卡片，避免内层沿用普通材质的浅灰底色。 */
+:root[data-theme='legacy-light'] .resource-card,
+:root[data-theme='legacy-light'] .resource-card-body {background: #ffffff}
 
 /* MD3 按钮规范：高度 40px，全胶囊圆角 20px，文字 14px Medium，标准状态层 */
 .button {

@@ -84,6 +84,7 @@ Node.js >= 22.12（推荐 24），首次准备用 `npm ci --prefix frontend`。
 - 新增选择器使用 `FormControls.tsx` 的 `Select`，配置字段使用 `FieldInput`，不要在各页面单独绘制箭头、勾选等图标。
 - 控制台固定文案在 `src/i18n.ts`（五种语言）；游戏任务配置的名称与说明翻译在 `module/config/i18n/`，二者独立，别改错位置。
 - 主题与背景偏好只存浏览器（localStorage / IndexedDB），不写入服务端部署配置；上传背景保存在 IndexedDB（最大 200 MB）。
+- 旧版浅色仪表盘的资源卡片由 `styles/legacy.css` 单独设为纯白，覆盖外层和 `.resource-card-body` 内层，适用于独立与合并卡片。
 
 ## 19. 调试方法
 
