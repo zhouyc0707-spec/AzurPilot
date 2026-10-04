@@ -68,8 +68,14 @@ test('金融图表、股票详情、全屏与平移、杠杆交易、验证码�
   await expect(terminal.getByRole('button',{name:'行动力同步',exact:true})).toHaveCount(0);await expect(terminal.getByRole('link',{name:'交易所控制台'})).toHaveCount(0)
   await expect(terminal.locator('.mmex-sidebar nav button')).toHaveCount(5)
   await terminal.locator('.stock-row').filter({hasText:'MM000001'}).click()
+  const initialMarket=await (await page.request.get('http://127.0.0.1:8088/api/market')).json(),initialStock=initialMarket.stocks.find((s:{id:number})=>s.id===1)
+  const openingChange=initialStock.open>0?`${initialStock.quote.price>=initialStock.open?'+':''}${((initialStock.quote.price-initialStock.open)/initialStock.open*100).toFixed(2)}%`:'—'
+  await expect(terminal.locator('.quote-price')).toContainText(openingChange);await expect(terminal.locator('.quote-price')).toContainText('较今日开盘')
+  await expect(terminal.locator('.stock-row').filter({hasText:'MM000001'})).toContainText(openingChange)
+  await expect(terminal.locator('.market-ticker button').filter({hasText:'MM000001'})).toContainText(openingChange)
   await terminal.getByRole('button',{name:'查看证券详情'}).click()
   await expect(terminal.locator('.stock-detail-page')).toBeVisible()
+  await expect(terminal.locator('.stock-detail-price')).toContainText(openingChange);await expect(terminal.locator('.stock-detail-price')).toContainText('较今日开盘')
   await expect(terminal.locator('.execution-panel tbody tr')).not.toHaveCount(0)
   const financial=terminal.locator('.financial-chart'),range=financial.getByLabel('图表可视范围')
   for(const period of ['日K','M5','M10','M20','M30','M60','分时']){

@@ -32,7 +32,7 @@ export const useAPI=()=>useExchange().api
 export const money=(n:number,digits=2)=>new Intl.NumberFormat('zh-CN',{minimumFractionDigits:digits,maximumFractionDigits:digits}).format(n/100)
 export const compact=(n:number)=>Math.abs(n)>=10000000000?`${(n/10000000000).toFixed(2)} 亿`:Math.abs(n)>=1000000?`${(n/1000000).toFixed(2)} 万`:money(n)
 export const percent=(ppm:number)=>`${ppm>=0?'+':''}${(ppm/10000).toFixed(2)}%`
-export const quoteChange=(price:number,previous:number)=>previous>0?Math.round((price-previous)/previous*1000000):0
+export const quoteChange=(price:number,open:number)=>open>0?Math.round((price-open)/open*1000000):0
 export const datetime=(t:number)=>new Date(t*1000).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false})
 export const feesTotal=(f:{commission:number;stamp:number;levy:number;borrow:number;financing?:number})=>f.commission+f.stamp+f.levy+f.borrow+(f.financing??0)
 export const sideName:Record<string,string>={buy:'买入',sell:'卖出',short:'卖空',cover:'回补'}

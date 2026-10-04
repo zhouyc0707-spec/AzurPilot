@@ -85,9 +85,9 @@ class StockExchangeService:
                 and all(isinstance(value.get(field), str) and value[field] for field in ('bindingKey', 'username', 'uploadToken', 'url')))
 
     def _storage_stamp(self):
-        paths = [self.path, self.protection.marker, self.protection.state_path]
+        paths = [self.path, self.protection.marker, self.protection.legacy_marker,
+                 self.protection.state_path, self.protection.key_path]
         paths.extend(sorted((Path(self.configs.root) / 'config').glob('*.json')))
-        paths.extend(sorted(self.protection.state_path.parent.glob(self.protection.protector.context + '-*.key')))
         result = []
         for path in paths:
             try:

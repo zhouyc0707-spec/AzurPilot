@@ -7,10 +7,17 @@ import {useConnection} from '../app/context'
 import {ErrorBox,Loading} from '../components/ui'
 import {ExchangeProvider} from '../stock/api'
 import {App as TradingTerminal} from '../stock/App'
+import {StockThemeProvider,useStockTheme} from '../stock/theme'
 import '../stock/styles.css'
 import './stock-exchange.css'
+import '../stock/theme.css'
 
 export function StockExchange(){
+  return <StockThemeProvider><StockExchangeContent/></StockThemeProvider>
+}
+
+function StockExchangeContent(){
+  const {theme}=useStockTheme()
   const {instance=''}=useParams(),connection=useConnection()
   const [status,setStatus]=useState<StockExchangeStatus>(),[error,setError]=useState('')
   const current=useRef(instance);current.current=instance
@@ -20,5 +27,5 @@ export function StockExchange(){
     void load();const timer=setInterval(()=>{if(document.visibilityState==='visible')void load()},5000)
     return ()=>{active=false;clearInterval(timer)}
   },[instance,connection])
-  return <section className="stock-exchange-page">{!status?<div className="stock-exchange-loading">{error?<><Link className="overview-link" to={`/i/${encodeURIComponent(instance)}/overview`}>返回总览</Link><ErrorBox message={error}/></>:<Loading/>}</div>:<div className="stock-terminal"><ExchangeProvider key={instance} instance={instance} status={status} onSessionChanged={sessionChanged}><TradingTerminal/></ExchangeProvider></div>}</section>
+  return <section className="stock-exchange-page" data-stock-theme={theme}>{!status?<div className="stock-exchange-loading">{error?<><Link className="overview-link" to={`/i/${encodeURIComponent(instance)}/overview`}>返回总览</Link><ErrorBox message={error}/></>:<Loading/>}</div>:<div className="stock-terminal" data-stock-theme={theme}><ExchangeProvider key={instance} instance={instance} status={status} onSessionChanged={sessionChanged}><TradingTerminal/></ExchangeProvider></div>}</section>
 }

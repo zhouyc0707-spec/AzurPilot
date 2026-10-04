@@ -1,10 +1,12 @@
-"""交易游戏文件的本机认证存储，复用账号保险库的密钥保护。"""
+"""交易游戏文件的持久化认证存储，密钥随部署数据迁移。"""
 import base64
 import hashlib
 import hmac
 import json
 import os
+import re
 import sqlite3
+import stat
 import uuid
 from contextlib import contextmanager, closing
 from pathlib import Path
@@ -14,7 +16,7 @@ from Crypto.Cipher import AES
 from deploy.atomic import atomic_write
 from module.api.protocol import ApiError
 from module.config.transaction import config_transaction
-from module.runtime.account_local import LocalProtector
+from module.runtime.account_local import LocalProtector, dpapi
 from module.runtime.account_vault import SecretKey
 
 INSTANCE_FIELD = '_stockInstance'
@@ -29,14 +31,16 @@ def canonical(value):
 
 
 class GameDataProtector:
-    """项目外保存认证密钥、实例登记与检查点，项目文件回滚不能重置检查点。"""
+    """独立保存认证密钥、实例登记与检查点，不绑定主机、用户或项目路径。"""
 
     def __init__(self, root):
         self.root = Path(root).resolve()
         self.directory = self.root / 'cache' / 'stock-exchange'
-        self.protector = LocalProtector(self.root, 'stock-exchange-files-v1')
-        self.state_path = self.protector.key_directory() / (self.protector.context + '.game')
-        self.marker = self.directory / 'protected-v1'
+        self.state_path = self.root / 'config' / 'stock-exchange' / 'registry.json'
+        self.key_path = self.state_path.with_name('game.key')
+        self.context = None
+        self.marker = self.directory / 'protected-v2'
+        self.legacy_marker = self.directory / 'protected-v1'
 
     @staticmethod
     def _safe(path):
@@ -45,44 +49,167 @@ class GameDataProtector:
                 raise damaged('交易游戏文件路径包含链接，已停止使用')
 
     def initialized(self):
-        return self.marker.exists() or self.state_path.exists()
+        if any(path.exists() for path in (self.marker, self.legacy_marker, self.state_path, self.key_path)):
+            return True
+        legacy = self._legacy_location()
+        return legacy is not None and legacy[1].exists()
+
+    def _legacy_location(self):
+        """只为升级查找旧登记；新部署不依赖本机保护能力。"""
+        protector = LocalProtector(self.root, 'stock-exchange-files-v1')
+        try:
+            return protector, protector.key_directory() / (protector.context + '.game')
+        except ApiError:
+            return None
+
+    def _load_key(self, path, local=False):
+        self._safe(path)
+        flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_BINARY', 0)
+        with os.fdopen(os.open(path, flags), 'rb') as file:
+            info = os.fstat(file.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_size > 4096:
+                raise ValueError()
+            raw = file.read(4097)
+        # 旧版 Windows 密钥仍需由原用户的 DPAPI 解封；Linux 仅依赖文件访问权限。
+        key = SecretKey(dpapi(raw, decrypt=True) if local and os.name == 'nt' else raw)
+        if len(key.value) != 32:
+            key.clear()
+            raise ValueError()
+        return key
+
+    def _write_key(self, key):
+        """临时文件创建时就限制权限，再原子替换，避免写入半个密钥。"""
+        temporary = self.key_path.with_name('game.' + uuid.uuid4().hex + '.tmp')
+        try:
+            with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL
+                                  | getattr(os, 'O_BINARY', 0), 0o600), 'wb') as file:
+                file.write(key.value)
+                file.flush()
+                os.fsync(file.fileno())
+            os.replace(temporary, self.key_path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    def _legacy_state(self, protector, path):
+        """认证旧封装后迁移原密钥；不以易变的容器身份拒绝可解密数据。"""
+        self._safe(path)
+        envelope = json.loads(path.read_bytes())
+        binding = json.loads(base64.b64decode(envelope['wrapped'], validate=True))
+        if binding['provider'] != 'local' or binding['version'] != 1 or not isinstance(binding['host'], str):
+            raise ValueError()
+        local = self._load_key(protector.path(binding['id']), local=True)
+        try:
+            cipher = AES.new(local.value, AES.MODE_GCM, nonce=base64.b64decode(binding['nonce'], validate=True))
+            cipher.update(f"AzurPilot/local/v1/{binding['host']}/{protector.context}/{binding['id']}".encode())
+            key = SecretKey(cipher.decrypt_and_verify(base64.b64decode(binding['payload'], validate=True),
+                                                     base64.b64decode(binding['tag'], validate=True)))
+        finally:
+            local.clear()
+        try:
+            if len(key.value) != 32:
+                raise ValueError()
+            self.context = protector.context
+            data = self._decrypt(key, envelope, 'registry')
+            self._validate_state(data)
+            return data, key
+        except BaseException:
+            key.clear()
+            raise
+
+    @staticmethod
+    def _validate_state(data):
+        if (not isinstance(data, dict) or data.get('version') != 1
+                or any(not isinstance(data.get(name), dict) for name in ('instances', 'files', 'anchors'))):
+            raise ValueError()
+
+    def _save_state(self, data, key):
+        envelope = self._encrypt(key, data, 'registry')
+        # 保留旧认证上下文，使现有密文和历史无需重写；新位置从登记中恢复上下文。
+        envelope['context'] = self.context
+        atomic_write(str(self.state_path), canonical(envelope))
+        self.state_path.chmod(0o600)
+
+    def _initialize(self):
+        if self.marker.exists():
+            raise damaged('交易游戏保护登记丢失，请恢复 config/stock-exchange/ 完整备份，不能自动重建身份')
+        legacy = self._legacy_location()
+        if legacy is not None and legacy[1].exists():
+            protector, path = legacy
+            self._safe(path)
+            with config_transaction(path):
+                try:
+                    data, key = self._legacy_state(protector, path)
+                except (ApiError, OSError, ValueError, TypeError, KeyError):
+                    raise damaged('旧版交易游戏密钥或登记不可用，请恢复原密钥与完整备份后升级，不能自动重建身份') from None
+        else:
+            if self.legacy_marker.exists():
+                raise damaged('旧版交易游戏保护登记丢失，请恢复原密钥与完整备份后升级，不能自动重建身份')
+            data = {'version': 1, 'instances': {}, 'files': {}, 'anchors': {}}
+            self.context = os.urandom(32).hex()
+            if self.key_path.exists():
+                # 首次初始化先保存密钥再保存空登记；中断时尚未登记身份或游戏文件。
+                if (any(identity is not None for identity in self._configs().values())
+                        or any(path.is_symlink() or path.is_file() and not path.name.endswith('.lock')
+                               for path in self.directory.rglob('*'))):
+                    raise damaged('交易游戏保护登记丢失，请恢复 config/stock-exchange/ 完整备份')
+                key = self._load_key(self.key_path)
+            else:
+                key = SecretKey(os.urandom(32))
+        created = False
+        try:
+            if self.key_path.exists():
+                # 初始化或迁移中断只复用已确认属于当前登记的密钥。
+                existing = self._load_key(self.key_path)
+                try:
+                    if not hmac.compare_digest(existing.value, key.value):
+                        raise damaged('交易游戏保护登记丢失，请恢复 config/stock-exchange/ 完整备份')
+                finally:
+                    existing.clear()
+            else:
+                self._write_key(key)
+                created = True
+            self._save_state(data, key)
+            return data, key
+        except BaseException:
+            try:
+                if created and not self.state_path.exists():
+                    self.key_path.unlink(missing_ok=True)
+            finally:
+                key.clear()
+            raise
 
     @contextmanager
     def transaction(self):
         """登记与检查点跨进程串行更新；每次重新解封，缓存不能绕过密钥丢失。"""
         self._safe(self.state_path)
+        self._safe(self.key_path)
         self._safe(self.marker)
+        self._safe(self.legacy_marker)
+        self.state_path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
         with config_transaction(self.state_path):
             key = None
             try:
                 if self.state_path.exists():
                     envelope = json.loads(self.state_path.read_bytes())
-                    wrapped = base64.b64decode(envelope['wrapped'], validate=True)
-                    key = SecretKey(self.protector.unwrap(wrapped))
-                    data = self._decrypt(key, envelope, 'registry')
-                    if data.get('version') != 1 or any(not isinstance(data.get(k), dict) for k in ('instances', 'files', 'anchors')):
+                    self.context = envelope['context']
+                    if not isinstance(self.context, str) or not re.fullmatch(r'[0-9a-f]{64}', self.context):
                         raise ValueError()
+                    try:
+                        key = self._load_key(self.key_path)
+                    except (OSError, ValueError):
+                        raise damaged('交易游戏密钥丢失、损坏或无法读取，请恢复 config/stock-exchange/ 完整备份') from None
+                    data = self._decrypt(key, envelope, 'registry')
                 else:
-                    if self.marker.exists():
-                        raise damaged('本机游戏保护登记丢失，请恢复完整备份，不能自动重建身份')
-                    key = SecretKey(os.urandom(32))
-                    wrapped = self.protector.wrap(key.value)
-                    data = {'version': 1, 'instances': {}, 'files': {}, 'anchors': {}}
-                before = canonical(data)
-                yield data, key
-                if not self.state_path.exists() or canonical(data) != before:
-                    envelope = self._encrypt(key, data, 'registry')
-                    envelope['wrapped'] = base64.b64encode(wrapped).decode()
-                    atomic_write(str(self.state_path), canonical(envelope))
-                    self.state_path.chmod(0o600)
+                    data, key = self._initialize()
+                self._validate_state(data)
                 self.directory.mkdir(parents=True, mode=0o700, exist_ok=True)
                 if not self.marker.exists():
-                    atomic_write(str(self.marker), 'AzurPilot game protection v1\n')
+                    atomic_write(str(self.marker), 'AzurPilot game protection v2\n')
                     self.marker.chmod(0o600)
-            except ApiError as error:
-                if error.code.startswith('LOCAL_'):
-                    raise damaged('本机游戏密钥不可用或主机/用户不匹配，请恢复原保护环境和完整备份') from None
-                raise
+                before = canonical(data)
+                yield data, key
+                if canonical(data) != before:
+                    self._save_state(data, key)
             except (OSError, ValueError, TypeError, KeyError, sqlite3.Error):
                 raise damaged() from None
             finally:
@@ -91,7 +218,7 @@ class GameDataProtector:
 
     def _encrypt(self, key, data, purpose):
         cipher = AES.new(key.value, AES.MODE_GCM, nonce=os.urandom(12))
-        cipher.update(f'AzurPilot/game/v1/{self.protector.context}/{purpose}'.encode())
+        cipher.update(f'AzurPilot/game/v1/{self.context}/{purpose}'.encode())
         payload, tag = cipher.encrypt_and_digest(canonical(data))
         return {'version': 1, 'nonce': base64.b64encode(cipher.nonce).decode(),
                 'tag': base64.b64encode(tag).decode(), 'payload': base64.b64encode(payload).decode()}
@@ -100,7 +227,7 @@ class GameDataProtector:
         if envelope['version'] != 1:
             raise ValueError()
         cipher = AES.new(key.value, AES.MODE_GCM, nonce=base64.b64decode(envelope['nonce'], validate=True))
-        cipher.update(f'AzurPilot/game/v1/{self.protector.context}/{purpose}'.encode())
+        cipher.update(f'AzurPilot/game/v1/{self.context}/{purpose}'.encode())
         return json.loads(cipher.decrypt_and_verify(base64.b64decode(envelope['payload'], validate=True),
                                                    base64.b64decode(envelope['tag'], validate=True)))
 

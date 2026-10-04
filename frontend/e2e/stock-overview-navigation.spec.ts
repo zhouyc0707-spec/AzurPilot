@@ -9,11 +9,11 @@ async function isolatedExchange(page: Page) {
   const errors: string[] = []
   const held: Array<{kind: 'overview' | 'stock'; send: () => void}> = []
   const sockets: WebSocketRoute[] = []
-  const gate = {overview: false, stock: false, oil: 14200}
+  const gate = {overview: false, stock: false, oil: 14200, open: 9800, delisted: false}
   const now = Date.now()
   const fees: Fees = {commission: 0, stamp: 0, levy: 0, borrow: 0, financing: 0}
   const quote = {price: 10000, previous: 9800, observedAt: Math.floor(now / 1000), uploadedAt: Math.floor(now / 1000)}
-  const stock: Stock = {id: 2, symbol: 'MM000002', username: '验收证券', quote, stale: false, disabled: false}
+  const stock: Stock = {id: 2, symbol: 'MM000002', username: '验收证券', quote, stale: false, disabled: false, delisted: false, open: 9800}
   const rules: Rules = {
     id: 'test', name: '隔离验收', description: '', commissionPPM: 0, minCommission: 0,
     stampPPM: 0, stampSide: 'sell', stampRound: 1, levyPPM: 0, borrowAnnualPPM: 0,
@@ -24,11 +24,12 @@ async function isolatedExchange(page: Page) {
   const market: Market = {
     revision: 1, serverTime: Math.floor(now / 1000),
     season: {id: '2026-10', startsAt: Math.floor(now / 1000) - 86400, endsAt: Math.floor(now / 1000) + 86400, settled: false, revenue: fees},
-    rules, open: true, reason: '', stocks: [stock], rankings: [], lifetimeRevenue: fees, participants: 1,
+    rules, delistThreshold: 500, open: true, reason: '', stocks: [stock], rankings: [], lifetimeRevenue: fees, participants: 1,
   }
   const meta: Meta = {name: '茗喵证券交易所', domain: 'test.invalid', mock: true, allowedOrigins: [], initialCash: 2000000000, noticeVersion: 'test'}
   function stockResult(request: Request) {
     const instance = request.params.instance ?? ''
+    const currentStock = {...stock, open: gate.open, delisted: gate.delisted}
     if (request.method === 'stock.status') return {
       url: 'https://test.invalid', instance, instanceId: instance, bindingKey: 'test',
       bound: true, boundUsername: `验收账号-${instance}`, authenticated: true, message: '',
@@ -38,18 +39,18 @@ async function isolatedExchange(page: Page) {
     const path = request.params.path ?? ''
     let data: unknown
     if (path === '/meta') data = meta
-    else if (path === '/market') data = market
+    else if (path === '/market') data = {...market, stocks: [currentStock]}
     else if (path === '/account') {
       data = {
         player: {id: 1, username: `验收账号-${instance}`, identityCode: 'TEST', joinedAt: quote.observedAt,
-          cash: 2000000000, quote, positions: {}, orders: [], realized: 0, fees, disabled: false},
+          cash: 2000000000, quote, positions: {}, orders: [], realized: 0, fees, disabled: false, delisted: false},
         equity: 2000000000, available: 2000000000, frozen: 0, shortLiability: 0,
         initialMargin: 0, maintenanceMargin: 0, unsettled: 0, borrowAccrued: 0,
       } satisfies Account
     } else if (path.startsWith('/stocks/')) {
       const query = new URL(path, 'https://test.invalid').searchParams
       data = {
-        stock, period: query.get('period') as StockDetail['period'], month: query.get('month') ?? '', day: '', displayFrom: now - 3600000,
+        stock: currentStock, period: query.get('period') as StockDetail['period'], month: query.get('month') ?? '', day: '', displayFrom: now - 3600000,
         bars: Array.from({length: 30}, (_, index) => ({time: now - (30 - index) * 60000, open: 9800 + index * 5,
           high: 10100 + index * 5, low: 9700 + index * 5, close: 10000 + index * 5,
           samples: 1, volume: 100, turnover: 1000000, buyVolume: 50, sellVolume: 50})),
@@ -58,7 +59,7 @@ async function isolatedExchange(page: Page) {
         coverage: {count: 30, firstObservedAt: now - 1800000, lastObservedAt: now, reconciledAt: now},
       } satisfies StockDetail
     } else throw new Error(`未预期的交易所请求：${path}`)
-    const etag = `"test-${path}"`
+    const etag = `"test-${path}-${gate.open}-${gate.delisted}"`
     return {status: request.params.etag === etag ? 304 : 200, data: request.params.etag === etag ? null : data, etag, serverTime: quote.observedAt}
   }
   function logs(instance: string) {
@@ -261,5 +262,76 @@ test('直接打开交易所路由也能进入总览并再次恢复交易页面',
   fixture.gate.stock = true
   await page.locator('.primary-nav').getByRole('link', {name: '茗喵证券交易所', exact: true}).click()
   await expect(page.locator('.exchange')).toBeVisible({timeout: 1000})
+  expect(fixture.errors).toEqual([])
+})
+
+for (const theme of ['light', 'legacy-light']) {
+  test(`${theme} 上游交易亮色主题、全屏图表与本地切换缓存共存`, async ({page}, testInfo) => {
+    const fixture = await isolatedExchange(page)
+    await preferences(page, theme)
+    await page.goto('/#/i/testpilot/overview')
+    await expect(page.getByText('14,200', {exact: true})).toBeVisible()
+    await page.locator('.primary-nav').getByRole('link', {name: '茗喵证券交易所', exact: true}).click()
+    const terminal = page.locator('.stock-terminal').first()
+    await expect(terminal).toHaveAttribute('data-stock-theme', 'dark')
+    await expect(page.locator('.financial-chart-state')).toHaveCount(0)
+    await page.getByLabel('委托数量').fill('42')
+    await page.getByRole('button', {name: '放大走势图', exact: true}).click()
+    const range = await page.getByRole('note', {name: '图表可视范围'}).getAttribute('data-start')
+    await page.getByRole('button', {name: '切换到亮色主题', exact: true}).click()
+    await expect(terminal).toHaveAttribute('data-stock-theme', 'light')
+    await expect(page.locator('.stock-exchange-page')).toHaveCSS('background-color', 'rgb(243, 246, 244)')
+    await expect(page.getByLabel('委托数量')).toHaveValue('42')
+    await expect(page.getByRole('note', {name: '图表可视范围'})).toHaveAttribute('data-start', range!)
+    await page.getByRole('button', {name: '全屏走势图', exact: true}).click()
+    const full = page.getByRole('dialog', {name: '验收证券全屏走势图'})
+    await expect(full).toHaveAttribute('data-stock-theme', 'light')
+    await expect(full.getByRole('img')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(full).toHaveCount(0)
+    await page.screenshot({path: testInfo.outputPath(`${theme}-上游亮色交易所.png`), fullPage: true})
+    fixture.gate.overview = true
+    await page.getByRole('link', {name: '返回总览', exact: true}).click()
+    await expect(page.getByText('14,200', {exact: true})).toBeVisible({timeout: 1000})
+    await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+    if (theme === 'legacy-light') await expect(page.locator('.resource-card-body').first()).toHaveCSS('background-color', 'rgb(255, 255, 255)')
+    fixture.gate.stock = true
+    await page.locator('.primary-nav').getByRole('link', {name: '茗喵证券交易所', exact: true}).click()
+    await expect(terminal).toHaveAttribute('data-stock-theme', 'light')
+    await expect(page.getByLabel('委托数量')).toHaveValue('42')
+    await expect(page.getByRole('note', {name: '图表可视范围'})).toHaveAttribute('data-start', range!)
+    fixture.release('stock')
+    fixture.release('overview')
+    await page.reload()
+    await expect(terminal).toHaveAttribute('data-stock-theme', 'light')
+    expect(fixture.errors).toEqual([])
+  })
+}
+
+test('上游涨跌幅使用开盘价，退市股票禁止委托，缺少开盘价显示空值', async ({page}) => {
+  const fixture = await isolatedExchange(page)
+  fixture.gate.open = 10500
+  await preferences(page, 'light')
+  await page.clock.install()
+  await page.goto('/#/i/testpilot/stock-exchange')
+  // 现价 100、前次价 98、开盘价 105，必须显示 -4.76%，不能使用前次价的 +2.04%。
+  await expect(page.locator('.stock-row').getByText('-4.76%', {exact: true})).toBeVisible()
+  await expect(page.locator('.market-ticker').getByText('-4.76%', {exact: true})).toBeVisible()
+  await page.getByRole('button', {name: '查看证券详情', exact: true}).click()
+  await expect(page.locator('.stock-detail-price')).toContainText('-4.76%')
+  await page.getByRole('button', {name: '日K', exact: true}).click()
+  await expect(page.locator('.stock-detail-price')).toContainText('-4.76%')
+  fixture.gate.delisted = true
+  await page.clock.fastForward(16000)
+  await expect(page.locator('.stock-detail-quote')).toContainText('本月已退市')
+  await page.getByRole('button', {name: '返回市场', exact: true}).click()
+  await expect(page.locator('.stock-row')).toContainText('退市')
+  await expect(page.getByRole('button', {name: '提交买入委托', exact: true})).toBeDisabled()
+  await expect(page.locator('.ticket-warning')).toContainText('股票本月已退市')
+  fixture.gate.open = 0
+  fixture.gate.delisted = false
+  await page.clock.fastForward(16000)
+  await expect(page.locator('.stock-row').getByText('—', {exact: true})).toBeVisible()
+  await expect(page.getByRole('button', {name: '提交买入委托', exact: true})).toBeEnabled()
   expect(fixture.errors).toEqual([])
 })

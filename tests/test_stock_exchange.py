@@ -1,6 +1,5 @@
 """交易所实例代理测试：隔离配置、身份和网络，不运行真实游戏。"""
 import json
-import os
 import hashlib
 import sqlite3
 import tempfile
@@ -15,7 +14,6 @@ from unittest.mock import Mock, patch
 from module.api.protocol import ApiError
 from module.api.stock_exchange_identity import binding_key, load_identity, make_report
 from module.api.stock_exchange_service import StockExchangeService, action_snapshot, exchange_url
-from module.runtime.account_local import LocalProtector
 from module.scheduler.store import ProgramStore
 
 
@@ -23,16 +21,8 @@ class StockExchangeTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name) / 'project'
+        self.root = (Path(self.temp.name) / 'project').resolve()
         self.root.mkdir()
-        for context in (
-            patch.object(LocalProtector, 'key_directory', return_value=Path(self.temp.name) / 'keys'),
-            patch.object(LocalProtector, 'host_identity', return_value='isolated-test-host'),
-            patch.object(LocalProtector, 'prepare_directory', new=lambda _, path: path.mkdir(parents=True, exist_ok=True)),
-            patch('module.runtime.account_local.dpapi', side_effect=lambda data, decrypt=False: bytes(data)),
-        ):
-            context.start()
-            self.addCleanup(context.stop)
         (self.root / 'config').mkdir()
         self.config = self.root / 'config' / 'test.json'
         self.row = {'Alas': {}, 'Dashboard': {'ActionPoint': {'Total': 8000, 'Value': 100, 'Record': datetime.now().isoformat()}}}
@@ -331,11 +321,11 @@ class StockExchangeTests(unittest.TestCase):
         with self.assertRaises(ApiError):
             self.service.status('test')
 
-    def test_local_key_or_registry_loss_never_recreates_identity(self):
+    def test_persistent_key_or_registry_loss_never_recreates_identity(self):
         self.register()
         identity = self.service.status('test')['instanceId']
         protected = self.service.protection.file_path('identities/' + identity + '.json').read_bytes()
-        key_path = next((Path(self.temp.name) / 'keys').glob('*.key'))
+        key_path = self.service.protection.key_path
         key = key_path.read_bytes()
         key_path.unlink()
         with self.assertRaises(ApiError):
@@ -473,26 +463,6 @@ class StockExchangeTests(unittest.TestCase):
         replacement, _ = load_identity(root, 'testpilot')
         self.assertNotEqual(identity, replacement)
         self.assertFalse(store.path('testpilot').exists())
-
-
-class HostProtectionTests(unittest.TestCase):
-    @unittest.skipUnless(os.name == 'nt', '此用例验证真实 Windows DPAPI，Linux 权限由账号保护测试覆盖')
-    def test_real_dpapi_protects_game_identity_and_checks_missing_key(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory) / 'project'
-            (root / 'config').mkdir(parents=True)
-            (root / 'config' / 'test.json').write_text(json.dumps({'Alas': {}}), encoding='utf-8')
-            with patch.object(LocalProtector, 'key_directory', return_value=Path(directory) / 'keys'):
-                from module.runtime.game_data import GameDataProtector
-                identity, key = load_identity(root, 'test')
-                again, same = load_identity(root, 'test')
-                self.assertEqual(binding_key(identity, key), binding_key(again, same))
-                protection = GameDataProtector(root)
-                original = protection.file_path('identities/' + identity + '.json').read_bytes()
-                next((Path(directory) / 'keys').glob('*.key')).unlink()
-                with self.assertRaises(ApiError):
-                    load_identity(root, 'test')
-                self.assertEqual(original, protection.file_path('identities/' + identity + '.json').read_bytes())
 
 
 if __name__ == '__main__':
