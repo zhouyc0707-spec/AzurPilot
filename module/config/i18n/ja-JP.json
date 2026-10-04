@@ -3150,15 +3150,16 @@
       "help": "選択した艦娘と対話して今日のコンディションを消費します"
     },
     "TargetShip": {
-      "name": "毎日対話する艦娘を選択してください",
-      "help": "毎日交流したい艦娘を選択してください",
-      "anchorage": "アンカレッジ",
-      "noshiro": "能代",
-      "sirius": "シリウス",
-      "new_jersey": "ニュージャージー",
-      "taihou": "大鳳",
-      "aegir": "エーギル",
-      "nakhimov": "ナヒーモフ"
+      "name": "PrivateQuarters.TargetShip.name",
+      "help": "PrivateQuarters.TargetShip.help",
+      "anchorage": "anchorage",
+      "noshiro": "noshiro",
+      "sirius": "sirius",
+      "new_jersey": "new_jersey",
+      "taihou": "taihou",
+      "aegir": "aegir",
+      "nakhimov": "nakhimov",
+      "implacable": "implacable"
     }
   },
   "Daily": {

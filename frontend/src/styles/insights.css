@@ -427,3 +427,6 @@
 /* 表格设置控件：编辑模式下跟在标题右侧，与收获的模式开关同一排布。 */
 .statistics-table-settings {display: inline-flex; align-items: center; flex-wrap: wrap; gap: 10px}
 .statistics-table-settings input {width: 58px}
+
+/* 掉落统计说明较长，允许窄屏换行。 */
+.statistics-hints {white-space:normal;line-height:1.5;max-width:100%}

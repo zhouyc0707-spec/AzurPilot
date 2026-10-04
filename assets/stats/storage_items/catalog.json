@@ -156,8 +156,7 @@
       "name": "通用部件T4",
       "group": "强化部件",
       "templates": [
-        "assets/stats/opsi_items/PlateGeneralT4.png",
-        "assets/stats/opsi_items/PlateGeneralT4_2.png"
+        "assets/stats/opsi_items/PlateGeneralT4.png"
       ],
       "reference": {
         "page": 3,

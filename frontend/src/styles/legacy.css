@@ -656,7 +656,7 @@ button:disabled, input:disabled, textarea:disabled, select:disabled, .select-tri
   @media (prefers-reduced-motion: reduce) {.task-rail-scheduler, .task-rail-directory {animation: none}}
   /* 参数列给宽度上限：宽屏下与输入框等宽的控件会被拉到读不过来的一整行。
      只限定这一列，不动外壳，所以中列填满视口的行为不受影响。 */
-  .task-config-settings {min-width: 0; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; max-width: 1108px; margin-inline: auto}
+  .task-config-settings {width: 100%; min-width: 0; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; max-width: 1108px; margin-inline: auto}
   .task-config-legacy .group-nav {max-height: 100%}
   /* 参数列自己滚，锚点跳转不需要再给吸顶的顶栏留出 72px。 */
   .task-config-legacy .config-group {scroll-margin-top: 0}

@@ -61,8 +61,8 @@ class AutoSearchItemGrid(ItemGrid):
 
     # 图标底色 -> 等级后缀
     TIER_BY_COLOR = {'purple': 'T3', 'gold': 'T4', 'rainbow': 'T5'}
-    # 需要按底色限定等级的物品种类（白纸类，底色即稀有度）
-    TIER_ITEM_PREFIXES = ('GearDesignPlan', 'OrdnanceTestingReport')
+    # 这些物品的中央图案相近，需要按底色限定稀有度。
+    TIER_ITEM_PREFIXES = ('GearDesignPlan', 'OrdnanceTestingReport', 'PrototypeGearParts')
     # 同等级候选之间只比图案，底纸缩放会拉低相似度，故放宽阈值
     TIER_SIMILARITY = 0.6
 
@@ -142,7 +142,9 @@ class AutoSearchItemGrid(ItemGrid):
 
     def template_similarity_for(self, name, similarity):
         # 仅白纸类模板有缩放动画，不能同时降低金材料等其他物品的匹配门槛。
-        if getattr(self, '_matching_tier', None) is not None and self.template_tier(name) is not None:
+        if (getattr(self, '_matching_tier', None) is not None
+                and name.startswith(('GearDesignPlan', 'OrdnanceTestingReport'))
+                and self.template_tier(name) is not None):
             return min(similarity, self.TIER_SIMILARITY)
         return similarity
 

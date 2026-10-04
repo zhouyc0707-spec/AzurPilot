@@ -5,9 +5,10 @@ WebUI 统计页「大世界掉落」分类展示。数据入口在 module/statis
 除侵蚀1练级外的大世界任务，只要掉落记录开关不是「不记录」（保存与上传都算），
 任务跑完就会把掉落解析入库，本模块只负责读和汇总。
 
-展示口径（2026-09-25 用户定，暂时只看两类，其余物品照常入库、只是不展示）：
+展示口径（其余物品照常入库、只是不展示）：
     - 金菜：通用/主炮/鱼雷/防空炮/舰载机 部件T4（Plate*T4）；
-    - 彩图纸：舰炮/鱼雷/防空炮/舰载机及通用装备研发图纸UR型（GearDesignPlan*T5）。
+    - 舰炮/鱼雷/防空炮/舰载机研发图纸 SSR/UR 型及通用装备研发图纸 UR 型；
+    - 六种金色装备研发材料、机密/绝密实验计划、特装型突破部件。
 
 要放开口径：在 should_show() 里加规则、往 assets/stats/opsi_item_names.json
 补中文名与稀有度，再把要固定显示（没掉过也占一行）的物品加进 SHOW_ITEMS 即可。
@@ -22,21 +23,37 @@ from module.logger import logger
 # 模板名 -> 中文名/稀有度的静态表，中文名按游戏数据（sharecfgdata/item_data_statistics.lua）核对
 NAME_TABLE_PATH = './assets/stats/opsi_item_names.json'
 
-# 口径：金菜 = 金色强化部件（T4），彩图纸 = UR 研发图纸（T5）
+# 研发图纸与实验计划的 T 后缀沿用模板库的稀有度编号，与英文名称中的等级不同。
 KIND_PLATE = 'plate'
 KIND_DESIGN = 'design'
-KIND_LABELS = {KIND_PLATE: '金菜', KIND_DESIGN: '彩图纸'}
+KIND_MATERIAL = 'material'
+KIND_REPORT = 'report'
+KIND_PROTOTYPE = 'prototype'
+KIND_LABELS = {
+    KIND_PLATE: '金菜', KIND_DESIGN: '研发图纸', KIND_MATERIAL: '研发材料',
+    KIND_REPORT: '实验计划', KIND_PROTOTYPE: '突破部件',
+}
 PLATE_PREFIX = 'Plate'
 PLATE_TIER = 'T4'
 DESIGN_PREFIX = 'GearDesignPlan'
-DESIGN_TIER = 'T5'
-# 固定显示顺序：金菜在前、彩图纸在后；没掉过的也留一行（与科研统计的固定清单一致）
+DESIGN_TIERS = ('T4', 'T5')
+MATERIAL_ITEMS = (
+    'Ultra_High_Purity_Metals', 'Military_Grade_Electronic_Components', 'HBX_Blend_Gunpowder',
+    'High_Durability_Elastomers', 'Superconductive_Metals', 'Corrosion_Resistant_Alloys',
+)
+REPORT_ITEMS = ('OrdnanceTestingReportT4', 'OrdnanceTestingReportT5')
+PROTOTYPE_ITEMS = ('PrototypeGearPartsT5',)
+# 获得道具页旧模板按英文 T2 命名，实际为金色机密计划；只归一展示，不改历史库。
+ITEM_ALIASES = {'OrdnanceTestingReportT2': 'OrdnanceTestingReportT4'}
+# 固定显示顺序；没掉过的也留一行（与科研统计的固定清单一致）。
 SHOW_ITEMS = (
     'PlateGeneralT4', 'PlateGunT4', 'PlateTorpedoT4', 'PlateAntiAirT4', 'PlatePlaneT4',
+    'GearDesignPlanGunT4', 'GearDesignPlanTorpedoT4', 'GearDesignPlanAntiAirT4',
+    'GearDesignPlanPlaneT4',
     'GearDesignPlanGunT5', 'GearDesignPlanTorpedoT5', 'GearDesignPlanAntiAirT5',
     'GearDesignPlanPlaneT5',
     'GearDesignPlanT5',
-)
+) + MATERIAL_ITEMS + REPORT_ITEMS + PROTOTYPE_ITEMS
 
 # 海域类型 -> 中文标签，取值同 module/azur_stats/image/opsi_zone.py 的 zone_type
 ZONE_LABELS = {
@@ -89,6 +106,7 @@ def item_info(template_name: str) -> dict:
     Returns:
         dict: {'zh': 中文名, 'en': 英文名, 'rarity': 稀有度}；查不到时用模板名兜底。
     """
+    template_name = ITEM_ALIASES.get(template_name, template_name)
     info = load_name_table().get(template_name)
     if info:
         return info
@@ -102,13 +120,20 @@ def kind_of(template_name: str) -> t.Optional[str]:
         template_name (str): 模板名。
 
     Returns:
-        str: KIND_PLATE（金菜）/ KIND_DESIGN（彩图纸）；口径外的物品返回 None。
+        str: 金菜、研发图纸、研发材料、实验计划或突破部件的分类；口径外返回 None。
     """
     name = str(template_name or '')
+    name = ITEM_ALIASES.get(name, name)
     if name.startswith(PLATE_PREFIX) and name.endswith(PLATE_TIER):
         return KIND_PLATE
-    if name.startswith(DESIGN_PREFIX) and name.endswith(DESIGN_TIER):
+    if name.startswith(DESIGN_PREFIX) and name.endswith(DESIGN_TIERS):
         return KIND_DESIGN
+    if name in MATERIAL_ITEMS:
+        return KIND_MATERIAL
+    if name in REPORT_ITEMS:
+        return KIND_REPORT
+    if name in PROTOTYPE_ITEMS:
+        return KIND_PROTOTYPE
     return None
 
 
@@ -292,6 +317,7 @@ def collect(
             }
             records[key] = record
         name = str(row.get('item') or '')
+        name = ITEM_ALIASES.get(name, name)
         if not should_show(name):
             continue
         record['items'][name] = record['items'].get(name, 0) + int(row.get('amount') or 0)

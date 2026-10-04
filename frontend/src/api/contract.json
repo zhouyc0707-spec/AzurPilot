@@ -34,6 +34,26 @@
         "type": "object"
       }
     },
+    "search.content": {
+      "mutates": false,
+      "params": {
+        "additionalProperties": false,
+        "description": "侧栏内容检索请求参数模型。",
+        "properties": {
+          "query": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "SearchContentParams",
+        "type": "object"
+      }
+    },
     "instances.list": {
       "mutates": false,
       "params": {
@@ -333,6 +353,82 @@
           "instance"
         ],
         "title": "InstanceParams",
+        "type": "object"
+      }
+    },
+    "stock.status": {
+      "mutates": false,
+      "params": {
+        "additionalProperties": false,
+        "description": "单实例操作通用入参模型。",
+        "properties": {
+          "instance": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Instance",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instance"
+        ],
+        "title": "InstanceParams",
+        "type": "object"
+      }
+    },
+    "stock.request": {
+      "mutates": true,
+      "params": {
+        "additionalProperties": false,
+        "description": "实例专属交易请求；实例身份和远端凭据由后端补充。",
+        "properties": {
+          "instance": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Instance",
+            "type": "string"
+          },
+          "path": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          },
+          "method": {
+            "default": "GET",
+            "enum": [
+              "GET",
+              "POST",
+              "DELETE"
+            ],
+            "title": "Method",
+            "type": "string"
+          },
+          "body": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Body"
+          },
+          "etag": {
+            "default": "",
+            "maxLength": 128,
+            "title": "Etag",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instance",
+          "path"
+        ],
+        "title": "StockRequestParams",
         "type": "object"
       }
     },

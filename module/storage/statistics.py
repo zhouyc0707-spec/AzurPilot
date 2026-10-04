@@ -47,9 +47,12 @@ class StorageStatistics(StorageUI):
         recovery_count = 0
         stable = Timer(.4, count=1)
         action = Timer(2, count=2)
-        timeout = Timer(20, count=40).start()
+        # 慢截图不能把 20 秒读取窗口延长到数十帧；仍给随后截图机会。
+        timeout = Timer(20, count=2).start()
         last_error = '等待材料仓库稳定'
         for image in self.loop(skip_first=False):
+            # 访问计数对应截图帧；不能只在首次失败时才开始累计恢复间隔。
+            action_ready = action.reached()
             if timeout.reached():
                 raise StorageRecognitionError(last_error)
             if self.handle_info_bar():
@@ -81,7 +84,7 @@ class StorageStatistics(StorageUI):
                     if not recovery_count:
                         timeout.reset()
                     continue
-                if action.reached():
+                if action_ready:
                     if 0. < target < 1. or target == 1. and not at_bottom:
                         # 滑块的长度和响应会变化，不能用百分比保证重叠。
                         # 拖动一行并在松手前停住，避免快速滑动的惯性跨过未读行。
@@ -124,7 +127,7 @@ class StorageStatistics(StorageUI):
                     logger.warning(f'仓库当前页待重读：{error}')
                 last_error = str(error)
                 previous = None
-                if action.reached():
+                if action_ready:
                     if recovery_count >= 4 or scroll.length == scroll.total:
                         raise
                     if recovery_origin is None:
@@ -147,6 +150,8 @@ class StorageStatistics(StorageUI):
                     recovery_count += 1
                     logger.attr('仓库重读', f'第 {recovery_count} 次微调，向{"下" if delta > 0 else "上"}滚动 {abs(delta)}px')
                     action.reset()
+                    # 微调后的画面必须获得独立读取窗口，最后一次恢复也须先观察再判失败。
+                    timeout.reset()
                 continue
             recovery_origin, recovery_count = None, 0
             # 只有完整页面经稳定复读和拼接确认后才重置防连点记录。

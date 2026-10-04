@@ -7,6 +7,7 @@ from typing import Callable
 
 from module.api import background_service as background
 from module.api import protocol as p
+from module.api import search_service as search
 from module.runtime.process_manager import ProcessManager
 
 
@@ -43,11 +44,14 @@ class Router:
         self._island_suspend = None
         self._opsi_simulator = None
         self._opsi_simulator_lock = threading.Lock()
+        self._stock_exchange = None
+        self._stock_exchange_lock = threading.Lock()
         self.access_password = ''
         self.background_token = secrets.token_urlsafe(32)
         self.methods = {
             'system.ping': Method(p.Params, lambda _: {'pong': True}),
             'schema.get': Method(p.SchemaParams, lambda x: configs.schema(x.language)),
+            'search.content': Method(p.SearchContentParams, lambda x: search.search_content(x.query)),
             'instances.list': Method(p.Params, lambda _: runtime.instances()),
             'instances.create': Method(p.CreateParams, lambda x: configs.create(x.name, x.source, x.import_file), True),
             'instances.importable': Method(p.Params, lambda _: configs.importable()),
@@ -59,6 +63,8 @@ class Router:
             'shop_strategy.validate': Method(p.ShopStrategyValidateParams, self.validate_shop_strategy),
             'overview.get': Method(p.InstanceParams, lambda x: runtime.overview(x.instance)),
             'emulator.status': Method(p.InstanceParams, lambda x: runtime.emulator_status(x.instance)),
+            'stock.status': Method(p.InstanceParams, lambda x: self.stock_exchange.status(x.instance)),
+            'stock.request': Method(p.StockRequestParams, lambda x: self.stock_exchange.request(x.instance, x.path, x.method, x.body, x.etag), True),
             'scheduler.start': Method(p.InstanceParams, lambda x: runtime.start(x.instance), True),
             'scheduler.stop': Method(p.InstanceParams, lambda x: runtime.stop(x.instance), True),
             'scheduler.program.catalog': Method(p.InstanceParams, lambda x: self.programs.catalog(x.instance)),
@@ -122,6 +128,18 @@ class Router:
         """回收离线模拟线程，不触发游戏任务。"""
         if self._opsi_simulator is not None:
             self._opsi_simulator.manager.close()
+        if self._stock_exchange is not None:
+            self._stock_exchange.close()
+
+    @property
+    def stock_exchange(self):
+        """按需加载行动力同步服务，普通页面不会发起远端请求。"""
+        with self._stock_exchange_lock:
+            if self._stock_exchange is None:
+                from module.api.stock_exchange_service import StockExchangeService
+                self._stock_exchange = StockExchangeService(self.configs)
+                self._stock_exchange.start()
+            return self._stock_exchange
 
     @property
     def island_suspend(self):
@@ -312,6 +330,13 @@ class Router:
             if self._opsi_simulator is not None and self._opsi_simulator.manager.status(params.instance)['running']:
                 raise p.ApiError('SIMULATOR_RUNNING', '请先中断大世界模拟器再删除实例')
             result = self.configs.delete(params.instance, params.revision)
+            if self._stock_exchange is not None:
+                try:
+                    self._stock_exchange._refresh()
+                except p.ApiError as error:
+                    self._stock_exchange.storage_error = error
+                    self._stock_exchange.sessions.pop(params.instance, None)
+                    self._stock_exchange.monitors.discard(params.instance)
             if self._opsi_simulator is not None:
                 self._opsi_simulator.manager.discard(params.instance)
             from module.runtime.account_vault import OPERATIONS

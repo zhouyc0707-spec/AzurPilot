@@ -269,6 +269,8 @@ class ConfigService:
             raise ApiError('CONFIG_INVALID', '配置文件损坏，请从备份恢复') from exc
         # 旧配置缺失的参数在读时补齐，完整迁移仍由核心运行器负责。
         merged = copy.deepcopy(self.template)
+        if '_stockInstance' in data:
+            merged['_stockInstance'] = data['_stockInstance']
         for task, groups in data.items():
             if isinstance(groups, dict):
                 for group, fields in groups.items():
@@ -310,12 +312,16 @@ class ConfigService:
             dict: 包含 instance, revision, values 的字典。
         """
         data, revision = self.read(name)
+        # 内部身份不属于参数契约，编辑界面只接收参数组。
+        data.pop('_stockInstance', None)
         return {'instance': name, 'revision': revision, 'values': data}
 
     def export(self, name):
         """配置导出携带方案，排除调度运行变量和资源历史。"""
         from module.scheduler.store import ProgramStore
         data, _ = self.read(name)
+        from module.runtime.game_data import INSTANCE_FIELD
+        data.pop(INSTANCE_FIELD, None)
         store = ProgramStore(self.directory)
         if store.exists(name):
             data['_schedulerProgram'] = store.export(name)
@@ -345,6 +351,9 @@ class ConfigService:
             else:
                 data = copy.deepcopy(self.template)
             bundle = data.pop('_schedulerProgram', None)
+            from module.runtime.game_data import GameDataProtector, INSTANCE_FIELD
+            # 空占位表示新实例，首次使用时登记 UUID，禁止把复制的仪表盘当迁移来源。
+            data[INSTANCE_FIELD] = None
             from module.scheduler.store import ProgramStore
             store = ProgramStore(self.directory)
             if bundle is not None:
@@ -364,6 +373,9 @@ class ConfigService:
                     store.copy(source, name)
                 elif bundle is not None:
                     store.import_program(name, {key: bundle[key] for key in ('mode', 'draft', 'active')})
+                protection = GameDataProtector(self.root)
+                if protection.initialized():
+                    protection.resolve(name, fresh=True)
             except Exception:
                 path.unlink(missing_ok=True)
                 raise
@@ -572,6 +584,11 @@ class ConfigService:
         with self.lock, config_transaction(self.path(name)):
             if self.read(name)[1] != revision:
                 raise ApiError('CONFLICT', '配置已变化，请重新加载后删除')
+            from module.runtime.game_data import GameDataProtector
+            protection = GameDataProtector(self.root)
+            if protection.initialized():
+                with protection.transaction():
+                    pass
             # 删除操作保留备份，用户可从 config/backup 手动恢复。
             backup = self.directory / 'backup'
             backup.mkdir(exist_ok=True)
@@ -579,4 +596,5 @@ class ConfigService:
             self.path(name).replace(target)
             from module.scheduler.store import ProgramStore
             ProgramStore(self.directory).archive(name, backup / target.stem)
+            protection.retire(name)
             return {'deleted': name}

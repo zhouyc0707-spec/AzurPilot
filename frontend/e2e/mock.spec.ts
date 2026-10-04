@@ -514,6 +514,42 @@ test('统计与监控复用分段控件的样式及键盘切换', async ({page})
   })).toEqual(appearance)
 })
 
+test('大世界掉落展示新增研发材料、实验计划与突破部件', async ({page}) => {
+  await page.addInitScript(() => localStorage.setItem('azurpilot.language', 'zh-CN'))
+  await page.goto('/#/i/demo-main/statistics')
+  await page.getByRole('tablist', {name: '统计分类'}).getByRole('tab', {name: '大世界掉落', exact: true}).click()
+  const items = [
+    ['GearDesignPlanGunT4', '舰炮研发图纸SSR型'],
+    ['GearDesignPlanTorpedoT4', '鱼雷研发图纸SSR型'],
+    ['GearDesignPlanAntiAirT4', '防空炮研发图纸SSR型'],
+    ['GearDesignPlanPlaneT4', '舰载机研发图纸SSR型'],
+    ['Ultra_High_Purity_Metals', '特种钢材'],
+    ['Military_Grade_Electronic_Components', '军工级电子元件'],
+    ['HBX_Blend_Gunpowder', 'HBX炸药'],
+    ['High_Durability_Elastomers', '氟橡胶'],
+    ['Superconductive_Metals', '超导铜'],
+    ['Corrosion_Resistant_Alloys', '钛合金'],
+    ['OrdnanceTestingReportT4', '机密实验计划'],
+    ['OrdnanceTestingReportT5', '绝密实验计划'],
+    ['PrototypeGearPartsT5', '特装型突破部件'],
+  ]
+  for (const [key, name] of items) {
+    const card = page.locator('.summary-metrics').getByText(name, {exact: true})
+    await expect(card).toBeVisible()
+    const response = await page.request.get(`/opsi-items/${key}.png`)
+    expect(response.ok(), key).toBe(true)
+    const icon = page.locator(`.summary-metrics img[src="/opsi-items/${key}.png"]`)
+    await expect.poll(() => icon.evaluate(image => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
+  }
+  const detail = page.locator('.statistics-table').filter({has: page.getByRole('heading', {name: '大世界掉落明细', exact: true})})
+  await expect(detail).toContainText('六种金色研发材料')
+  await page.screenshot({path: 'test-results/opsi-requested-items.png', fullPage: true})
+  await page.setViewportSize({width: 390, height: 844})
+  await page.getByRole('button', {name: '打开导航', exact: true}).waitFor()
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+  await page.screenshot({path: 'test-results/opsi-requested-items-mobile.png', fullPage: true})
+})
+
 test('统计分类、K 线、时间过滤、表格导出与移动端布局', async ({page}) => {
   test.setTimeout(60000)
   await page.setViewportSize({width: 1920, height: 1100})

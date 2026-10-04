@@ -12,13 +12,11 @@ from contextlib import closing, contextmanager, suppress
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Tuple
-from Crypto.Cipher import AES
-from Crypto.Protocol.KDF import PBKDF2
-from Crypto.Hash import SHA256
 from collections import defaultdict
 from module.base.device_id import get_device_id, get_old_device_id
 from module.config.time_source import now as current_time
 from module.logger import logger
+from module.statistics.cl1_legacy import derive_legacy_key, decrypt_legacy_payload
 
 
 # 凭证快照的抽取粒度与历史迁移版本。
@@ -237,10 +235,7 @@ class Cl1Database:
 
     def _derive_key(self, device_id: str) -> bytes:
         """基于 device_id 派生 256 位 AES 密钥"""
-        salt = b"AlasCl1SecureStorage"  # 固定盐
-        return PBKDF2(
-            device_id.encode(), salt, dkLen=32, count=1000, hmac_hash_module=SHA256
-        )
+        return derive_legacy_key(device_id)
 
     def _get_legacy_decryption_keys(self) -> List[bytes]:
         """生成旧密文迁移时可尝试的解密密钥。"""
@@ -357,12 +352,7 @@ class Cl1Database:
         return data if isinstance(data, dict) else None
 
     def _decrypt_payload(self, blob: bytes, key: bytes) -> Dict[str, Any]:
-        nonce = blob[:16]
-        tag = blob[16:32]
-        ciphertext = blob[32:]
-        cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
-        plaintext = cipher.decrypt_and_verify(ciphertext, tag)
-        return json.loads(plaintext.decode("utf-8"))
+        return decrypt_legacy_payload(blob, key)
 
     def _decrypt_with_key(self, blob: bytes, key: bytes) -> Optional[Dict[str, Any]]:
         """辅助方法：使用指定密钥进行解密"""

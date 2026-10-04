@@ -9,6 +9,7 @@ import { NavLink, useLocation, useParams } from 'react-router-dom'
 import { Anchor, CalendarDays, ChevronRight, Compass, Gift, Palmtree, Search, Settings2, Ship, Sparkles, Swords, Wrench, type LucideIcon } from 'lucide-react'
 import { useApp } from '../app/context'
 import { taskNavItems, taskLabel } from './taskNavItems'
+import { SearchHits } from './SearchHits'
 
 const groupIcons: Record<string, LucideIcon> = {
   Alas: Settings2, Farm: Swords, Event: Sparkles, EventDaily: CalendarDays,
@@ -242,6 +243,8 @@ export function TaskNavFlyout({ defaultOpenKey, onNavigate }: { defaultOpenKey?:
             )
           })}
       </nav>
+
+      <SearchHits search={search} onNavigate={onNavigate}/>
 
       {openMenuKey && activeGroup && (() => {
         const flyout = (

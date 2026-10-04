@@ -12,6 +12,7 @@ import { usesLegacyLayout } from '../app/theme'
 import { htmlToPlainText } from '../app/htmlText'
 import { readRailView, setRailView, subscribeRailView } from '../app/railPrefs'
 import { smoothScrollToElement } from '../app/scroll'
+import { clearSearchTarget, peekSearchTarget, subscribeSearchTarget } from '../app/searchTarget'
 import { Empty, ErrorBox, Loading, Modal, PageTitle } from '../components/ui'
 import { LogPanel } from '../components/LogPanel'
 import { MeowfficerScorePanel } from '../components/MeowfficerScorePanel'
@@ -127,6 +128,44 @@ export function TaskConfig() {
   // 指挥喵评分保留参数卡（评分来源、截图目录等），报告面板挂在参数卡上方。
   const scorePanel = task === 'MeowfficerScore' ? <MeowfficerScorePanel instance={instance}/> : null
   const showConfigToolbar = task !== 'FleetInfo' && Boolean(groups) && (visibleGroups.length > 0 || Boolean(search))
+
+  // 侧栏搜索点进来的定位：字段要等配置加载、分组渲染完才存在，所以轮询等它出现。
+  // 挂载时查一次，覆盖从别的任务跳过来的情形；订阅覆盖命中项就在本页的情形，那时路由没变。
+  useEffect(() => {
+    let find: number | undefined
+
+    const locate = () => {
+      const path = peekSearchTarget()
+      if (!path || !path.startsWith(`${task}.`)) return
+      if (find) window.clearInterval(find)
+      let attempts = 0
+      find = window.setInterval(() => {
+        const field = document.getElementById(path)
+        attempts += 1
+        if (field) {
+          window.clearInterval(find)
+          find = undefined
+          clearSearchTarget()
+          const row = field.closest('.field-row') ?? field
+          row.scrollIntoView({block: 'center'})
+          row.classList.add('is-search-target')
+          window.setTimeout(() => row.classList.remove('is-search-target'), 3000)
+        } else if (attempts > 20) {
+          // 等不到字段（被隐藏或该任务下没有这一项）就放弃，不再重试
+          window.clearInterval(find)
+          find = undefined
+          clearSearchTarget()
+        }
+      }, 150)
+    }
+
+    locate()
+    const unsubscribe = subscribeSearchTarget(locate)
+    return () => {
+      unsubscribe()
+      if (find) window.clearInterval(find)
+    }
+  }, [config, task])
 
   if (!config) return error ? <ErrorBox message={error} retry={reload} /> : <Loading />
 

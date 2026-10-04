@@ -2,6 +2,7 @@
 export interface Parameters {
   "system.ping": Record<string, never>
   "schema.get": { language?: "zh-CN" | "zh-MIAO" | "en-US" | "ja-JP" | "zh-TW" }
+  "search.content": { query: string }
   "instances.list": Record<string, never>
   "instances.create": { name: string; source?: string | null; import_file?: string | null }
   "instances.importable": Record<string, never>
@@ -13,6 +14,8 @@ export interface Parameters {
   "shop_strategy.validate": { instance: string; task: "EventShop" | "ShopFrequent" | "ShopOnce" | "PrivateQuarters" | "OpsiShop" | "OpsiVoucher"; script: string }
   "overview.get": { instance: string }
   "emulator.status": { instance: string }
+  "stock.status": { instance: string }
+  "stock.request": { instance: string; path: string; method?: "GET" | "POST" | "DELETE"; body?: Record<string, unknown> | null; etag?: string }
   "scheduler.start": { instance: string }
   "scheduler.stop": { instance: string }
   "scheduler.program.catalog": { instance: string }

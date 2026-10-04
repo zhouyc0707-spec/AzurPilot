@@ -75,7 +75,7 @@ export function createMockServer({password = '', empty = false} = {}) {
     }
     session.event = (topic, data) => send({v: 1, type: 'event', topic, seq: ++session.seq, data})
     session.event('session', {authRequired: !!password, protocolVersion: 1})
-    socket.on('message', raw => {
+    socket.on('message', async raw => {
       let request
       try {
         request = JSON.parse(raw.toString())
@@ -89,7 +89,7 @@ export function createMockServer({password = '', empty = false} = {}) {
           session.authenticated = true; result = {authenticated: true}
         } else {
           if (!session.authenticated) fail('UNAUTHORIZED', '请先登录')
-          result = state.dispatch(request.method, request.params)
+          result = await state.dispatch(request.method, request.params)
           if (request.method === 'events.subscribe') {session.topics = result.topics; session.instance = result.instance; session.last.clear()}
         }
         send({v: 1, type: 'response', id: request.id, ok: true, result})

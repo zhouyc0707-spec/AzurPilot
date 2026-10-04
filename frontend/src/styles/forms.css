@@ -60,7 +60,7 @@ input[aria-invalid='true']:focus, select[aria-invalid='true']:focus, textarea[ar
 .form-stack label.file-button > input {position: absolute; width: 1px; height: 1px; opacity: 0}
 .input-icon {border-radius: var(--theme-radius-control); border-color: var(--form-edge); color: var(--theme-muted); box-shadow: var(--form-shadow); transition: border-color .16s, box-shadow .16s}
 .input-icon:focus-within {border-color: var(--theme-focus); box-shadow: 0 0 0 3px var(--theme-focus-ring)}
-.input-icon > input, .input-icon > input:focus {background: transparent; border: 0; box-shadow: none; padding-left: 0}
+.input-icon > input, .input-icon > input:focus {background: transparent; border: 0; box-shadow: none; outline: none; padding-left: 0}
 .field-control textarea {min-height: var(--form-height); font-family: var(--theme-font-sans); line-height: 1.9}
 .yaml-editor {border: 1px solid var(--form-edge); border-radius: var(--theme-radius-control); box-shadow: var(--form-shadow); overflow: hidden}
 .yaml-editor:focus-within {border-color: var(--theme-focus); box-shadow: 0 0 0 3px var(--theme-focus-ring)}
@@ -124,7 +124,7 @@ input[type='radio'] {accent-color: var(--theme-primary-bg); width: 18px; height:
 .statistics-controls select, .statistics-controls input {min-height: var(--form-height)}
 .statistics-table th button {display: inline-flex; align-items: center; gap: 6px; min-height: 32px}
 .nav-search:focus-within {border-color: var(--theme-focus); box-shadow: 0 0 0 3px var(--theme-focus-ring)}
-.nav-search input, .nav-search input:focus {border: 0; background: transparent; box-shadow: none; padding-left: 0}
+.nav-search input, .nav-search input:focus {border: 0; background: transparent; box-shadow: none; outline: none; padding-left: 0}
 
 /* 原生滑块保留方向键、Home/End 和触控拖动。 */
 input[type='range'] {appearance: none; width: 100%; min-height: 32px; margin: 0; padding: 0; border: 0; box-shadow: none; background: transparent; accent-color: var(--theme-primary-bg); cursor: pointer}

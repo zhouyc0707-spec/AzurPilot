@@ -1292,3 +1292,15 @@
 .inspector-body .field-row {padding: 12px 0; gap: 10px}
 .inspector-body .field-label {flex: 0 0 62px; min-width: 0}
 .inspector-body .field-control {width: auto; flex: 1 1 auto; min-width: 0}
+
+/* 侧栏搜索命中的配置项列表：任务树之外的第二组结果。 */
+.nav-search-hits { display: flex; flex-direction: column; gap: 2px; padding: 4px 8px 8px; overflow-y: auto; }
+.nav-search-hit { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; padding: 6px 8px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.nav-search-hit:hover { background: var(--theme-inset-bg, var(--theme-plate-bg)); border-color: var(--theme-inset-edge, transparent); }
+.nav-search-hit-label { font-size: 13px; }
+.nav-search-hit-path { font-size: 11px; opacity: 0.6; }
+.nav-search-hit-help { font-size: 11px; opacity: 0.72; white-space: pre-wrap; }
+.nav-search-empty { padding: 6px 8px; font-size: 12px; opacity: 0.6; }
+
+/* 从搜索跳进来的那一项：短暂描边，说明"就是这一项"。 */
+.field-row.is-search-target { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }

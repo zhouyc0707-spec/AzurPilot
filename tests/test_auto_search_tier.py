@@ -1,4 +1,4 @@
-"""图纸/报告等级按底色判定的单元测试。
+"""图纸、报告和突破部件等级按底色判定的单元测试。
 
 覆盖 ``AutoSearchItemGrid.frame_color`` 的底色分类与
 ``AutoSearchItemGrid.template_tier`` 的模板等级提取，避免同种物品
@@ -59,6 +59,8 @@ class TestTemplateTier(unittest.TestCase):
             AutoSearchItemGrid.template_tier('GearDesignPlanAntiAirT5_2'), 'T5')
         self.assertEqual(
             AutoSearchItemGrid.template_tier('OrdnanceTestingReportT3_5'), 'T3')
+        self.assertEqual(
+            AutoSearchItemGrid.template_tier('PrototypeGearPartsT5'), 'T5')
 
     def test_other_items_are_unrestricted(self):
         # 非白纸类物品（强化板、猫箱等）不受等级限制
@@ -74,10 +76,16 @@ class TestMatchCandidates(unittest.TestCase):
     def test_gold_image_only_keeps_t4_templates(self):
         image = build_image((230, 190, 110))
         names = ['GearDesignPlanGunT5', 'GearDesignPlanGunT4',
-                 'OrdnanceTestingReportT3_2', 'Coins']
+                 'OrdnanceTestingReportT3_2', 'PrototypeGearPartsT4',
+                 'PrototypeGearPartsT5', 'Coins']
         filtered, similarity = self.grid.match_candidates(image, names, 0.85)
-        self.assertEqual(filtered, ['GearDesignPlanGunT4', 'Coins'])
-        self.assertLessEqual(similarity, AutoSearchItemGrid.TIER_SIMILARITY)
+        self.assertEqual(filtered, ['GearDesignPlanGunT4', 'PrototypeGearPartsT4', 'Coins'])
+        self.assertEqual(similarity, 0.85)
+        # 仅纸类同级模板放宽，突破部件和凭证继续使用原门槛。
+        self.assertLessEqual(self.grid.template_similarity_for('GearDesignPlanGunT4', similarity),
+                             AutoSearchItemGrid.TIER_SIMILARITY)
+        self.assertEqual(self.grid.template_similarity_for('PrototypeGearPartsT4', similarity), similarity)
+        self.assertEqual(self.grid.template_similarity_for('Coins', similarity), similarity)
 
     def test_unknown_color_keeps_everything(self):
         image = np.full((96, 96, 3), 250, dtype=np.uint8)
@@ -86,12 +94,12 @@ class TestMatchCandidates(unittest.TestCase):
         self.assertEqual(filtered, names)
         self.assertEqual(similarity, 0.85)
 
-    def test_missing_tier_falls_back_to_all_candidates(self):
-        # 该等级尚无模板时不限制候选，仍按原阈值识别
+    def test_missing_tier_remains_unknown(self):
+        # 缺少本级模板时保持未知，不能把紫色物品识别成金色或彩色。
         image = build_image((150, 120, 220))
         names = ['GearDesignPlanGunT4', 'GearDesignPlanGunT5']
         filtered, similarity = self.grid.match_candidates(image, names, 0.85)
-        self.assertEqual(filtered, names)
+        self.assertEqual(filtered, [])
         self.assertEqual(similarity, 0.85)
 
 

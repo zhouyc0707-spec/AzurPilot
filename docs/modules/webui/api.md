@@ -112,6 +112,8 @@ module/api/
 
 把 `ProcessManager` 的进程世界翻译成前端视图：`STATES = {1: running, 2: stopped, 3: error, 4: updating}` 是进程状态与前端枚举的唯一映射；`logs()` 用对象身份匹配 `renderables` 的裁剪重叠区，保证游标单调递增；`capture()` 只读 `preview.hub` 的最新帧，**绝不主动触发截图**。
 
+`overview()` 枚举任务时跳过非字典根节点，例如内部身份 `_stockInstance`。该字段仍由 `ConfigService.read()` 保留，不能当作任务参数组；总览请求、订阅推送以及启停后返回的总览共用这一读取路径。
+
 ## 6. 工作流程
 
 ```mermaid

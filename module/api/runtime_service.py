@@ -155,6 +155,9 @@ class RuntimeService:
         now = current_time().isoformat(sep=' ')
         running = getattr(manager, 'current_task', None) if manager and manager.state == 1 else None
         for task, groups in data.items():
+            # 根节点也包含实例身份等内部元数据，只有参数组字典才属于任务。
+            if not isinstance(groups, dict):
+                continue
             scheduler = groups.get('Scheduler', {})
             if scheduler.get('Enable') or task == running:
                 next_run = str(scheduler.get('NextRun', ''))

@@ -63,6 +63,11 @@ class SchemaParams(Params):
     language: Literal['zh-CN', 'zh-MIAO', 'en-US', 'ja-JP', 'zh-TW'] = 'zh-CN'
 
 
+class SearchContentParams(Params):
+    """侧栏内容检索请求参数模型。"""
+    query: StrictStr = Field(min_length=1, max_length=64)
+
+
 class BackgroundUrlParams(Params):
     url: StrictStr = Field(min_length=8, max_length=2048)
 
@@ -78,6 +83,14 @@ class BackgroundGalleryRemoveParams(Params):
 class InstanceParams(Params):
     """单实例操作通用入参模型。"""
     instance: StrictStr = Field(min_length=1, max_length=64)
+
+
+class StockRequestParams(InstanceParams):
+    """实例专属交易请求；实例身份和远端凭据由后端补充。"""
+    path: StrictStr = Field(min_length=1, max_length=100)
+    method: Literal['GET', 'POST', 'DELETE'] = 'GET'
+    body: dict[str, Any] | None = None
+    etag: StrictStr = Field(default='', max_length=128)
 
 
 class CreateParams(Params):

@@ -52,6 +52,15 @@ class RecognitionTests(unittest.TestCase):
         self.assertIsNone(result[0][0].identifier)
         self.assertEqual((result[1][6].identifier, result[1][6].amount), ('GearDesignPlanGunT4', 699))
 
+    def test_directed_parts_are_not_a_general_part_variant(self):
+        # 定向部件是未使用的选择道具，不能折算或合并成通用强化部件。
+        icon = load_image(str(FIXTURES / 'live_directed_parts_t4.png'))
+        self.assertIsNone(self.catalog.identify(icon))
+        general = recognize_rows(self.images[2], self.catalog)[0][5]
+        directed = StorageCard((0, 0, 128, 128), icon)
+        items = {item['id']: item['amount'] for item in self.catalog.snapshot_items([[general, directed]])}
+        self.assertEqual(items['PlateGeneralT4'], 881)
+
     def test_live_clipped_viewport_keeps_only_complete_rows_and_reads_new_glyphs(self):
         image = load_image(str(FIXTURES / 'partial_rows.png'))
         rows = recognize_rows(image, self.catalog)

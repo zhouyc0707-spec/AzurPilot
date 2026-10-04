@@ -11,6 +11,7 @@ import numpy as np
 
 from module.base.utils import extract_white_letters, load_image
 from module.statistics.amount_digits import DigitTemplates
+from module.storage.amount_glyphs import StorageAmountGlyphs, native_glyph
 
 ROOT = Path(__file__).resolve().parents[2]
 CATALOG = ROOT / 'assets/stats/storage_items/catalog.json'
@@ -38,6 +39,7 @@ class StorageCard:
     present: bool = True
     identifier: str | None = None
     amount: int | None = None
+    comparison_amount: int | None = None
 
 
 class StorageCatalog:
@@ -51,6 +53,7 @@ class StorageCatalog:
         self.templates = []
         fingerprint = hashlib.sha256(self.path.read_bytes())
         fingerprint.update((self.path.parent / 'amount_digits.png').read_bytes())
+        fingerprint.update((self.path.parent / 'amount_glyphs.png').read_bytes())
         for item in self.items:
             for relative in item['templates']:
                 path = ROOT / relative
@@ -95,12 +98,22 @@ class StorageCatalog:
             raise StorageRecognitionError('仓库数字模板缺失')
         return DigitTemplates(image)
 
+    @cached_property
+    def gray_digits(self):
+        return StorageAmountGlyphs(self.path.parent / 'amount_glyphs.png')
+
     def read_amount(self, icon):
         """只读取右下角原始像素；失败不回退为零，不截断猜数。"""
         image = extract_white_letters(icon[99:126, 25:127], threshold=96)
         try:
             return self._read_amount_mask(image < 100)
         except StorageAmountGlyphError:
+            # 完整数字的灰边承载采样相位信息，二值化会把相同数字变成不同形状。
+            # 固定原生字高的灰度模板另有严格误差/次优差距，不改变通用字形门槛。
+            try:
+                return self._read_amount_gray(image)
+            except StorageAmountGlyphError:
+                pass
             # 滚动停在亚像素位置时，抗锯齿灰边会改变二值字形。
             # 只接受至少两种有限阈值一致的完整读数，字形置信度与截断检查不变。
             candidates = []
@@ -113,8 +126,9 @@ class StorageCatalog:
                 return candidates[0]
             raise
 
-    def _read_amount_mask(self, binary):
-        """核对完整字形、基线和间距后逐位读取。"""
+    @staticmethod
+    def _amount_parts(binary):
+        """先确认所有首末位、基线与间距，残缺数量不得进入任何字形兜底。"""
         binary = binary.astype(np.uint8)
         _, labels, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
         parts = [(label, int(x), int(y), int(width), int(height))
@@ -137,11 +151,17 @@ class StorageCatalog:
                     raise StorageRecognitionError('仓库数量首位可能残缺')
                 break
             selected.append(part)
-        result = ''
         for label, x, y, width, height in reversed(selected):
             # 仓库数量字高为 18–19px；破损首位不能被当成图标残影删掉。
             if not 17 <= height <= 21 or x == 0 or x + width >= binary.shape[1]:
                 raise StorageRecognitionError('仓库数量存在截断或残缺字形')
+        return labels, list(reversed(selected)), baseline
+
+    def _read_amount_mask(self, binary):
+        """核对完整字形、基线和间距后逐位读取。"""
+        labels, parts, _ = self._amount_parts(binary)
+        result = ''
+        for label, x, y, width, height in parts:
             mask = (labels[y:y + height, x:x + width] == label).astype(np.uint8)
             digit, error, margin = self.digits.classify(mask)
             scores = [(error, margin)]
@@ -152,6 +172,21 @@ class StorageCatalog:
             if not text or not self.digits.confident(scores):
                 raise StorageAmountGlyphError('仓库数量字形无法确认')
             result += text
+        if not result or result.startswith('0'):
+            raise StorageRecognitionError('仓库数量格式无效')
+        return int(result)
+
+    def _read_amount_gray(self, image):
+        """只匹配几何完整的单字形；粘连数字仍由既有有界拆分处理。"""
+        _, parts, baseline = self._amount_parts(image < 100)
+        result = ''
+        for _, x, y, width, height in parts:
+            if width > height * .85:
+                raise StorageAmountGlyphError('仓库粘连数量字形无法确认')
+            digit = self.gray_digits.classify(native_glyph(image, x, width, baseline))
+            if digit is None:
+                raise StorageAmountGlyphError('仓库灰度数量字形无法确认')
+            result += str(digit)
         if not result or result.startswith('0'):
             raise StorageRecognitionError('仓库数量格式无效')
         return int(result)
@@ -224,6 +259,13 @@ def same_card(left, right):
     """重叠核对包含未知物品，不能只比较已知目标的名字。"""
     if left.present != right.present or left.identifier != right.identifier or left.amount != right.amount:
         return False
+    if left.identifier is not None:
+        # 已知格已经通过图标模板、次优差距及全部数量字形确认。
+        # 虹彩或闪光不能推翻相同身份和完整数量；尚未读出数量的格子不能通过。
+        return left.amount is not None
+    if (left.comparison_amount is not None and right.comparison_amount is not None
+            and left.comparison_amount != right.comparison_amount):
+        return False
     # 方框轮廓可能因动画亮点相差 1–2px，允许有界对齐，避免同一物品被当成新行。
     score = cv2.minMaxLoc(cv2.matchTemplate(left.image, right.image[3:125, 3:125],
                                           cv2.TM_CCOEFF_NORMED))[1]
@@ -240,11 +282,30 @@ def same_card(left, right):
                                           cv2.TM_CCOEFF_NORMED))[1]
     if score >= .985:
         return True
-    left_gray = cv2.GaussianBlur(left_gray, (7, 7), 0)
-    right_gray = cv2.GaussianBlur(right_gray, (7, 7), 0)
-    score = cv2.minMaxLoc(cv2.matchTemplate(left_gray, right_gray[3:125, 3:125],
+    left_smooth = cv2.GaussianBlur(left_gray, (7, 7), 0)
+    right_smooth = cv2.GaussianBlur(right_gray, (7, 7), 0)
+    score = cv2.minMaxLoc(cv2.matchTemplate(left_smooth, right_smooth[3:125, 3:125],
                                           cv2.TM_CCOEFF_NORMED))[1]
-    return score >= .985
+    if score >= .985:
+        return True
+    # 虹彩渐变属于低频背景，保留主体和数量边缘后仍用同一门槛核对。
+    # 使用有符号浮点差分，不能将负边缘截成零而丢失区分不同蓝图的信息。
+    left_gray, right_gray = left_gray.astype(np.float32), right_gray.astype(np.float32)
+    left_detail = cv2.GaussianBlur(left_gray, (3, 3), 0) - cv2.GaussianBlur(left_gray, (31, 31), 0)
+    right_detail = cv2.GaussianBlur(right_gray, (3, 3), 0) - cv2.GaussianBlur(right_gray, (31, 31), 0)
+    score = cv2.minMaxLoc(cv2.matchTemplate(left_detail, right_detail[3:125, 3:125],
+                                          cv2.TM_CCOEFF_NORMED))[1]
+    if score >= .985:
+        return True
+    if left.comparison_amount is None or left.comparison_amount != right.comparison_amount:
+        return False
+    # 强虹彩还会改变主体亮度。只有两格完整数量独立确认一致后，才单独核对主体。
+    # 排除共同边框和数量区，保留头像/ALL 图案；不能用相同数量替代身份匹配。
+    left_detail = cv2.GaussianBlur(left_gray, (7, 7), 0) - cv2.GaussianBlur(left_gray, (31, 31), 0)
+    right_detail = cv2.GaussianBlur(right_gray, (7, 7), 0) - cv2.GaussianBlur(right_gray, (31, 31), 0)
+    score = cv2.minMaxLoc(cv2.matchTemplate(left_detail[9:103, 9:119], right_detail[12:100, 12:116],
+                                          cv2.TM_CCOEFF_NORMED))[1]
+    return score >= .97
 
 
 def same_row(left, right):
@@ -275,8 +336,9 @@ class StorageTraversal:
                 raise StorageNoProgressError('滚动后未出现新行')
             # 最后一次短距离拖到底可能只移动空白，不产生新完整行。
             # 已确认到底且整页唯一重叠时，只记复读，不再次累计数量。
-            self.pages += 1
-            return
+        # 保存刚经唯一重叠核对的图像，避免后续页一直与更早的虹彩/采样相位比较。
+        # 身份和数量仍须完全一致；歧义、无进度等失败路径不能修改已读行。
+        self.rows[-count:] = rows[:count]
         self.rows.extend(rows[count:])
         self.pages += 1
 
@@ -293,4 +355,10 @@ def recognize_rows(image, catalog):
                     card.amount = catalog.read_amount(card.image)
                 except StorageRecognitionError as error:
                     raise StorageRecognitionError(f'{card.identifier}（位置 {card.area}）：{error}') from error
+            else:
+                # 未登记物品的完整数量只帮助核对同一格，不进入统计或推断其身份。
+                try:
+                    card.comparison_amount = catalog.read_amount(card.image)
+                except StorageRecognitionError:
+                    pass
     return rows

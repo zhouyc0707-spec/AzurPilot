@@ -1,5 +1,6 @@
 """WebSocket API 的认证、配置事务及订阅回归测试。"""
 import asyncio
+import json
 import shutil
 import tempfile
 import unittest
@@ -44,18 +45,41 @@ class ConfigApiTests(unittest.TestCase):
         self.configs.get('testpilot')
         self.assertEqual(before, path.stat().st_mtime_ns)
 
+    def test_instance_identity_is_preserved_and_hidden_from_editable_config(self):
+        """内部身份随配置读取与保存保留，但不作为可编辑参数返回。"""
+        path = self.configs.path('testpilot')
+        data = self.configs.read_json(path)
+        data['_stockInstance'] = 'test-identity'
+        path.write_text(json.dumps(data), encoding='utf-8')
+        before = path.read_bytes(), path.stat().st_mtime_ns
+        values, revision = self.configs.read('testpilot')
+        self.assertEqual('test-identity', values['_stockInstance'])
+        self.assertNotIn('_stockInstance', self.configs.get('testpilot')['values'])
+        self.assertEqual(before, (path.read_bytes(), path.stat().st_mtime_ns))
+        self.configs.patch('testpilot', revision, [ConfigChange(path='Main.Scheduler.Enable', value=True)])
+        self.assertEqual('test-identity', self.configs.read_json(path)['_stockInstance'])
+
     def test_importable_lists_configs_in_import_folder(self):
         """可导入列表只来自导入目录；解不开的 JSON、符号链接、以及实例目录里的文件都不算。"""
         imports = self.configs.import_directory
         imports.mkdir()
         shutil.copyfile(self.configs.directory / 'testpilot.json', imports / 'shared.json')
         (imports / 'broken.json').write_text('{ not json', encoding='utf-8')
-        (imports / 'link.json').symlink_to(imports / 'shared.json')
+        symlink_supported = True
+        try:
+            (imports / 'link.json').symlink_to(imports / 'shared.json')
+        except OSError as error:
+            if getattr(error, 'winerror', None) != 1314:
+                raise
+            symlink_supported = False
 
         names = [entry['name'] for entry in self.configs.importable()]
         self.assertIn('shared', names)
         self.assertNotIn('broken', names)     # 解不开的 JSON
-        self.assertNotIn('link', names)       # 符号链接
+        with self.subTest('符号链接不可导入'):
+            if not symlink_supported:
+                self.skipTest('当前 Windows 用户没有创建符号链接的权限')
+            self.assertNotIn('link', names)
         self.assertNotIn('testpilot', names)  # 实例目录里的不会被当作导入源
 
         # 文件名不合规的不能被列出来：read_import 会拒掉它，列出来就是一个选不了的选项
@@ -385,13 +409,60 @@ class SocketApiTests(unittest.TestCase):
             self.assertEqual(1, diagnostic['line'])
             self.assertIsInstance(diagnostic['column'], int)
 
-    def test_subscribe_sends_scoped_snapshot(self):
+    def test_overview_and_scheduler_controls_accept_instance_identity(self):
+        """启停实际完成后，总览响应不能因内部身份字段而失败。"""
+        from module.runtime.process_manager import ProcessManager
+
+        path = Path(self.temp.name) / 'config/testpilot.json'
+        data = json.loads(path.read_text(encoding='utf-8'))
+        data['_stockInstance'] = 'test-identity'
+        data['Main']['Scheduler']['Enable'] = True
+        path.write_text(json.dumps(data), encoding='utf-8')
+        before = path.read_bytes()
+        manager = SimpleNamespace(alive=False, state=2, current_task=None)
+
+        def start(*args, **kwargs):
+            manager.alive, manager.state = True, 1
+
+        def stop(*, soft=False):
+            self.assertTrue(soft)
+            manager.alive, manager.state = False, 2
+            return True
+
+        manager.start = Mock(side_effect=start)
+        manager.stop_by_user = Mock(side_effect=stop)
+        stop_event = object()
+        with patch.object(ProcessManager, 'get_manager', return_value=manager), \
+                patch.dict(ProcessManager._processes, {'testpilot': manager}, clear=True), \
+                patch.object(RuntimeService, '_record_running_now'), \
+                patch('module.runtime.updater.updater', SimpleNamespace(event=stop_event)), \
+                self.client.websocket_connect('/api/v1/ws') as ws:
+            self.login(ws)
+            for method, status in [('overview.get', 'stopped'), ('scheduler.start', 'running'),
+                                   ('scheduler.stop', 'stopped')]:
+                with self.subTest(method=method):
+                    response = self.call(ws, method, {'instance': 'testpilot'})
+                    self.assertTrue(response['ok'], response)
+                    self.assertEqual(status, response['result']['status'])
+                    tasks = [task['name'] for task in response['result']['tasks']]
+                    self.assertIn('Main', tasks)
+                    self.assertNotIn('_stockInstance', tasks)
+        manager.start.assert_called_once_with('alas', ev=stop_event)
+        manager.stop_by_user.assert_called_once_with(soft=True)
+        self.assertEqual(before, path.read_bytes())
+
+    def test_subscribe_sends_scoped_snapshot_with_instance_identity(self):
+        path = Path(self.temp.name) / 'config/testpilot.json'
+        data = json.loads(path.read_text(encoding='utf-8'))
+        data['_stockInstance'] = 'test-identity'
+        path.write_text(json.dumps(data), encoding='utf-8')
         with self.client.websocket_connect('/api/v1/ws') as ws:
             self.login(ws)
             self.assertTrue(self.call(ws, 'events.subscribe', {'instance': 'testpilot', 'topics': ['overview']})['ok'])
             event = ws.receive_json()
             self.assertEqual('overview', event['topic'])
             self.assertEqual('testpilot', event['data']['instance'])
+            self.assertNotIn('_stockInstance', [task['name'] for task in event['data']['tasks']])
             self.assertTrue(self.call(ws, 'events.subscribe', {'topics': []})['ok'])
 
     def test_log_arrival_pushes_websocket_event_without_polling(self):
