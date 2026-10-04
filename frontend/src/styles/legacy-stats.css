@@ -36,7 +36,6 @@
 
 /* 第一个板块（体力图表）紧接仪表盘，不套用板块之间的 24px 间距 */
 .legacy-stats-charts > .legacy-stats-section:first-child {margin-top: 8px}
-.legacy-stats-charts > .legacy-stats-section:first-child .legacy-ap-head {margin-top: 2px}
 
 .legacy-stats-section {
   margin-top: 24px;
@@ -44,9 +43,8 @@
   min-width: 0;
 }
 
-/* 大世界数据收集 / 耄耋相接收获 / 每日经验检测 / 委托收益四个区域各自一张底纹卡片：
-   底色取主题 surface（旧版浅色主题即白色），边框与圆角跟页面其它卡片一致。
-   体力图表不在其中 —— 它的画布本身已经是圆角描边的卡片。 */
+/* 五个统计区域各自一张底纹卡片，标题、控件与内容统一收进卡片内。
+   底色取主题 surface（旧版浅色主题即白色），边框与圆角跟页面其它卡片一致。 */
 .legacy-stats-card {
   margin-top: 16px;
   padding: 16px 18px;
@@ -55,6 +53,11 @@
   background: var(--surface, var(--theme-surface));
   box-shadow: var(--theme-shadow-panel, none);
 }
+
+/* 体力变化沿用外层卡片的留白，画布不再重复套圆角边框。 */
+.legacy-ap-card .legacy-ap-head {margin: 0 0 8px}
+.legacy-ap-card .legacy-ap-legend {margin-bottom: 10px}
+.legacy-ap-card .legacy-ap-canvas {padding: 0; border: 0; border-radius: 0}
 
 .legacy-stat-title-row {
   display: flex;
