@@ -22,7 +22,9 @@ export function FinancialChart({detail,period,month,day,onPeriod,onMonth,onDay,l
   const container=useRef<HTMLDivElement>(null),chart=useRef<EChartsType|null>(null),viewport=useRef<{start:number;end:number}|null>(null)
   const bars=detail?.bars??emptyBars,lines=useMemo(()=>indicatorLines(bars,selected),[bars,selected]),oscillator=useMemo(()=>macd(bars),[bars]),signal=useMemo(()=>trend(bars),[bars])
   const identity=`${detail?.stock.id}/${period}/${month}/${day}`
-  useEffect(()=>{viewport.current=null},[identity])
+  const loadedIdentity=useRef(identity)
+  // 隐藏页恢复会重新运行副作用；只有证券或时间窗口改变时才重置缩放。
+  useEffect(()=>{if(loadedIdentity.current!==identity){loadedIdentity.current=identity;viewport.current=null}},[identity])
   useEffect(()=>{
     if(!full)return
     const old=document.body.style.overflow;document.body.style.overflow='hidden';container.current?.focus()

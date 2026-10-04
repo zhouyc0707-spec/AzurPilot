@@ -27,7 +27,7 @@ export function App(){
   }catch{setOnline(false)}finally{loading.current=false}},[token])
   useEffect(()=>{void refresh();const timer=setInterval(()=>{if(document.visibilityState==='visible')void refresh()},15000);const visible=()=>{if(document.visibilityState==='visible')void refresh()};document.addEventListener('visibilitychange',visible);return ()=>{clearInterval(timer);document.removeEventListener('visibilitychange',visible)}},[refresh])
   useEffect(()=>{if(!toast)return;const id=setTimeout(()=>setToast(''),5500);return ()=>clearTimeout(id)},[toast])
-  useEffect(()=>{if(page==='stock')document.getElementById('main-content')?.scrollTo({top:0})},[page])
+  useEffect(()=>{if(page==='stock')document.getElementById('stock-main-content')?.scrollTo({top:0})},[page])
   const selectedStock=market?.stocks.find(s=>s.id===selected)??market?.stocks.find(s=>s.id!==account?.player.id)??market?.stocks[0]
   const chartState=useStockDetail(selectedStock?.id,period,month,day,detailRefresh,page==='market'||page==='stock')
   const stock=chartState.detail?.stock.id===selectedStock?.id?chartState.detail?.stock:selectedStock

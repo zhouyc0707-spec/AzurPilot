@@ -54,6 +54,12 @@ const ALL_CLASSES = ['motion-nav-forward', 'motion-nav-back', 'motion-nav-fade']
 let lastTransitionClass: string | null = null
 let cleanupTimer: number | null = null
 
+/** 保留的隐藏页面仍有 DOM，动效只作用于当前可见内容。 */
+function activeMainContent() {
+  const exchange = document.getElementById('stock-main-content')
+  return exchange?.getClientRects().length ? exchange : document.getElementById('main-content')
+}
+
 function stopTransition(target: HTMLElement) {
   if (cleanupTimer !== null) window.clearTimeout(cleanupTimer)
   cleanupTimer = null
@@ -72,7 +78,7 @@ function playTransition(target: HTMLElement, className: string) {
 
 /** 重播最近一次页面转场（开发者工具用；重播外层底板转场并重新从左上角逐个错峰上浮所有卡片）。 */
 export function replayLastPageTransition() {
-  const target = document.getElementById('main-content')
+  const target = activeMainContent()
   if (!target) return
   if (motionReducedActive()) return
   if (lastTransitionClass) {
@@ -90,7 +96,7 @@ export function usePageMotion() {
   const previous = useRef<string | null>(null)
   useLayoutEffect(() => {
     const pathname = location.pathname
-    const target = document.getElementById('main-content')
+    const target = activeMainContent()
     const before = previous.current
     previous.current = pathname
     if (!target) return

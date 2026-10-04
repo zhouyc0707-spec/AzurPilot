@@ -46,12 +46,13 @@ export function mergeLines(previous: CompactLine[], entries: (LogEntry | Compact
  */
 function RecentLogs({instance}: {instance: string}) {
   const [lines, setLines] = useState<CompactLine[]>([])
+  const loadedInstance = useRef(instance)
   const connection = useConnection()
   const {notify, ui} = useApp()
   useEffect(() => {
     if (connection !== 'ready') return
     let active = true
-    setLines([])
+    if (loadedInstance.current !== instance) {loadedInstance.current = instance; setLines([])}
     void api.request('logs.get', {instance}).then(value => {
       if (active) setLines(mergeLines([], value.entries, true))
     }).catch(error => notify(error.message, true))

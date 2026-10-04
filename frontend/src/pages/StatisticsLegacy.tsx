@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { RefreshCw } from 'lucide-react'
 import { api } from '../api/client'
@@ -114,6 +114,7 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
   const {ui, notify} = useApp()
   const text = useLegacyText()
   const connection = useConnection()
+  const loadedInstance = useRef(instance)
   const [data, setData] = useState<LegacyStatisticsReport>()
   const [overview, setOverview] = useState<Overview>()
   const [error, setError] = useState('')
@@ -150,6 +151,8 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
   /* 只在切换实例（或首次进入）时清空内容：切月份走静默重取，页面 DOM 保持不变，
      否则整块内容会被替换成 Loading，滚动位置随之回到顶部（看起来像整页刷新）。 */
   useEffect(() => {
+    if (loadedInstance.current === instance) return
+    loadedInstance.current = instance
     setData(undefined)
     setError('')
     setMeowMonth(undefined)
@@ -170,13 +173,14 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
   useEffect(() => {
     if (connection !== 'ready') return
     let timer: ReturnType<typeof setTimeout> | undefined
-    return api.onEvent(event => {
+    const unsubscribe = api.onEvent(event => {
       if (event.topic !== 'statistics' && event.topic !== 'overview') return
       const payload = event.data as {instance?: string} | undefined
       if (payload?.instance && payload.instance !== instance) return
       clearTimeout(timer)
       timer = setTimeout(() => void load(true), 300)
     })
+    return () => { unsubscribe(); clearTimeout(timer) }
   }, [connection, instance, load])
 
   const commission = data?.commission

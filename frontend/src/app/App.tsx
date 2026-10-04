@@ -24,6 +24,8 @@ import { RightRail } from '../components/RightRail'
 import { CompactScrollbars } from '../components/CompactScrollbars'
 import { TaskNav } from '../components/TaskNav'
 import { SidebarTransition } from '../components/SidebarTransition'
+import { InstancePageActivities } from './InstancePageActivities'
+import { Overview } from '../pages/Overview'
 
 import { useIsDesktop } from '../components/TaskNav'
 import { TaskSwitcher } from '../components/TaskSwitcher'
@@ -204,7 +206,7 @@ export function App() {
   /* 主页与五个二级菜单也走旧版外壳：它们没有实例内容，顶栏只写居中的页名。 */
   const legacyHomeShell = (location.pathname === '/' || PRIMARY_NAV_PATHS.includes(location.pathname)) && usesLegacyLayout(theme) && instancesLoaded
   // 旧版把调度器与任务计划放进实例页左列，右栏整体让位，否则同一块内容会出现两处。
-  const showRail = showsRightRail(theme, instance) && !schedulerEditor && !stockExchange
+  const showRail = showsRightRail(theme, instance) && !schedulerEditor
   /* 紧凑主题可把调度与任务计划栏换到内容区左侧。换位走 DOM 顺序而不是 CSS order，
      键盘 Tab 的顺序才会跟看到的顺序一致；列宽与顶栏跨栏方向由 compact.css 按同一偏好调整。 */
   const railFirst = theme === 'extreme' && compactRailSide === 'left'
@@ -329,10 +331,9 @@ export function App() {
   /* 登录页要在所有 Hook 调用之后返回：否则同一次会话里的 Hook 数量会随连接状态变化，
      隧道远程访问首帧就走 auth，React 会直接抛 #300 崩掉整页。 */
   if (connection === 'auth') return <Login/>
-  // 交易终端独占窗口，离开后恢复实例原有的导航与布局偏好。
-  if (stockExchange) return <div className="stock-exchange-shell"><div id="main-content" role="main" tabIndex={-1}>{!schema || !instancesLoaded || !current ? <Loading/> : <Outlet context={update} key={instance}/>}</div></div>
   const hasDockedInspector = inspector.open && inspector.docked && !inspector.minimized
-  return <div className={`app-shell ${layout.sidebarCollapsed ? 'nav-collapsed' : ''} ${hasDockedInspector ? 'has-docked-inspector' : ''} ${showRail ? 'with-rail' : ''} ${currentTask ? 'task-config-shell' : ''} ${legacyShell ? 'legacy-shell' : ''} ${legacyHomeShell ? 'legacy-shell legacy-home-shell' : ''} ${mobileOpen ? 'mobile-open' : ''} ${railOpen ? 'rail-open' : ''}`}>
+  return <InstancePageActivities key={instance ?? 'home'} exchange={stockExchange} exchangeReady={Boolean(schema && instancesLoaded && current)}>
+  <div className={`app-shell ${layout.sidebarCollapsed ? 'nav-collapsed' : ''} ${hasDockedInspector ? 'has-docked-inspector' : ''} ${showRail ? 'with-rail' : ''} ${currentTask ? 'task-config-shell' : ''} ${legacyShell ? 'legacy-shell' : ''} ${legacyHomeShell ? 'legacy-shell legacy-home-shell' : ''} ${mobileOpen ? 'mobile-open' : ''} ${railOpen ? 'rail-open' : ''}`}>
     <a className="skip-link" href="#main-content" onClick={event => {event.preventDefault(); document.getElementById('main-content')?.focus()}}>{ui('nav.skipContent')}</a>
     {(legacyShell || legacyHomeShell) && topbar}
     <NavHandle/>
@@ -354,7 +355,11 @@ export function App() {
       {/* 旧版外壳多一行：实例标签条在里面，点标签就能带着当前页型切实例。其它主题此行不开。 */}
       {usesLegacyLayout(theme) && (legacyShell || legacyHomeShell) ? pageNav : null}
       {connection !== 'ready' && <div className="connection-banner" role="status"><WifiOff size={16}/>{ui('connection.connecting')}</div>}
-      {homeFrame ? null : <main id="main-content" tabIndex={-1}>{!schema || ((instance || location.pathname === '/') && !instancesLoaded) ? <Loading/> : !instance || current ? <Outlet context={update} key={instance ?? 'home'}/> : <Loading/>}</main>}
+      {homeFrame ? null : <main id="main-content" tabIndex={-1}>{!schema || ((instance || location.pathname === '/') && !instancesLoaded) ? <Loading/> : !instance || current
+        ? instance && (stockExchange || location.pathname.endsWith('/overview'))
+          ? <Overview key={instance}/>
+          : <Outlet context={update} key={instance ?? 'home'}/>
+        : <Loading/>}</main>}
     </div>
     {!railFirst && instance && showRail && !railInFrame && rail}
     <CompactScrollbars/>
@@ -370,6 +375,7 @@ export function App() {
     </Modal>}
     <MaterialInspector/>
   </div>
+  </InstancePageActivities>
 }
 
 /** 侧栏收起/展开把手：侧栏边缘一条很细的竖带 + 一枚扁的指示标记（收起时贴屏幕左缘）。

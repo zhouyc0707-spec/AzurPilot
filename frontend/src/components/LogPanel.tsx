@@ -196,6 +196,7 @@ export function LogPanel({active = true, logs}: {active?: boolean; logs?: LogsDa
   const scroll = useRef<HTMLDivElement>(null)
   /* 已渲染到的最大日志 id：大于它的增量行做入场动画（初始加载不播）。 */
   const freshFrom = useRef<number | null>(null)
+  const loadedInstance = useRef(instance)
 
   /** 流式日志微批处理缓冲队列，防止高频 WebSocket 推送造成密集 React 重绘 */
   const logBuffer = useRef<LogBufferState & { rafId: number | null }>({
@@ -265,8 +266,12 @@ export function LogPanel({active = true, logs}: {active?: boolean; logs?: LogsDa
     buf.reset = false
     buf.cursor = null
 
-    setFloor(0)
-    setEntries([])
+    // 同实例从交易页恢复时先沿用日志和本地清空位置，后台请求只补齐新记录。
+    if (loadedInstance.current !== instance) {
+      loadedInstance.current = instance
+      setFloor(0)
+      setEntries([])
+    }
     void api.request('logs.get', {instance}).then(value => {
       if (active) setEntries(previous => mergeLogEntries(previous, value.entries))
     }).catch(error => notify(error.message, true))

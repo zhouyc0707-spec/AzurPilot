@@ -15,7 +15,7 @@ export function StockExchange(){
   const [status,setStatus]=useState<StockExchangeStatus>(),[error,setError]=useState('')
   const current=useRef(instance);current.current=instance
   const sessionChanged=useCallback(()=>{void api.request('stock.status',{instance}).then(next=>{if(current.current===next.instance)setStatus(next)}).catch(e=>{if(current.current===instance)setError(e.message)})},[instance])
-  useEffect(()=>{setStatus(undefined);setError('');let active=true
+  useEffect(()=>{if(connection!=='ready')setStatus(undefined);setError('');let active=true
     const load=async()=>{if(connection!=='ready')return;try{const next=await api.request('stock.status',{instance});if(active){setStatus(next);setError('')}}catch(e){if(active)setError((e as Error).message)}}
     void load();const timer=setInterval(()=>{if(document.visibilityState==='visible')void load()},5000)
     return ()=>{active=false;clearInterval(timer)}

@@ -1,5 +1,5 @@
 .stock-exchange-shell{width:100%;height:100dvh;overflow:hidden;background:#0d141c;color:#d7e0e6}
-.stock-exchange-shell>#main-content{width:100%;height:100%;overflow:auto;padding:0;margin:0;max-width:none;outline:none}
+.stock-exchange-shell>#stock-main-content{width:100%;height:100%;overflow:auto;padding:0;margin:0;max-width:none;outline:none}
 .stock-exchange-page{width:100%;min-height:100%;margin:0}
 .stock-exchange-loading{position:relative;display:flex;justify-content:center;align-items:center;min-height:100dvh}
 .stock-exchange-loading>.overview-link{position:absolute;top:24px;right:29px}

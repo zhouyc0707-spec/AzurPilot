@@ -58,6 +58,8 @@ frontend/
 
 茗交所入口为 `src/pages/StockExchange.tsx`，实例侧栏的「茗喵证券交易所」导航位于「资源统计」下方，由 `src/app/App.tsx` 提供；总览资源卡片设置旁的快捷入口已移除，移动端从导航抽屉进入。交易终端独立顶栏固定在窗口顶部，左侧依次提供返回总览与用户入口，右侧留空。开户、登录弹窗提供返回当前实例总览的链接，状态与行情加载期间隐藏返回入口；交互与联调方式见 [前端 README「茗喵证券交易所」](../../../frontend/README.md#茗喵证券交易所)。
 
+`src/app/InstancePageActivities.tsx` 按当前实例保存普通外壳与交易终端。`App` 在总览及交易路由下保持同一总览节点，交易路由的 `Outlet` 留空；交易代码首次访问时才加载。隐藏分支使用 [React Activity](https://react.dev/reference/react/Activity) 保留 DOM 与状态并清理副作用，返回时重新订阅并静默刷新。日志、旧版统计和行情的初始化副作用必须区分「实例或查询目标改变」与「同实例页面恢复」，后者不清空已有内容。两个内容区分别使用 `main-content` 和 `stock-main-content`，滚动与动效应作用于可见分支。实例 key 改变、浏览器刷新或进入登录页后缓存销毁；不将账号、日志或行情写入浏览器持久缓存。切换性能回归见 `e2e/stock-overview-navigation.spec.ts`。
+
 茗交所 Mock 还需单独启动相邻交易所仓库的 Go Mock 服务，本仓库 `dev:mock` 只提供模拟 API 与 Vite。代理将上游连接失败归为 `STOCK_UNAVAILABLE` 并提示启动方式，无效 JSON 或响应时间归为 `STOCK_INVALID_RESPONSE`，不再误报为浏览器请求格式错误；修复上游后可在交易页面重试连接。
 
 | 入口 | 用途 |
