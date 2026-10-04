@@ -43,8 +43,8 @@ function parseTime(value: string): number {
  * 体力变化图表（旧版统计页还原）。
  *
  * 行为对齐 `webapp/ap_chart.js`：默认近七天、默认只显示体力，主曲线按涨跌分段
- * 着色（涨红跌绿），辅助序列共用右侧一条 Y 轴，支持滚轮缩放与拖拽平移，
- * 「重置图表」恢复默认视图。与旧界面的差异见 `定制化修改清单.md`。
+ * 着色（涨红跌绿），辅助序列共用右侧一条 Y 轴，支持按住 Ctrl 滚轮缩放、拖拽平移
+ * 和双击恢复完整缩放范围。与旧界面的差异见 `定制化修改清单.md`。
  */
 export function LegacyApChart({series, onRefresh, refreshing = false}: {
   series: LegacySeries[]
@@ -109,7 +109,7 @@ export function LegacyApChart({series, onRefresh, refreshing = false}: {
     chartRef.current = chart
     const observer = new ResizeObserver(() => chart.resize())
     observer.observe(container)
-    // 双击恢复默认视图（旧图表用重置按钮，这里两种都支持）
+    // 双击恢复完整缩放范围，保留当前时间范围和图例选择。
     chart.getZr().on('dblclick', () => chart.dispatchAction({type: 'dataZoom', start: 0, end: 100}))
     /* zrender 会给画布挂 wheel 监听并 stopPropagation，指针停在图表上时整页就滚不动
        （实测：画布上滚轮页面 scrollTop 恒为 0，图例行与表格处正常）。这里在捕获阶段
@@ -189,7 +189,7 @@ export function LegacyApChart({series, onRefresh, refreshing = false}: {
       ],
       /* 滚轮默认交给页面滚动，只有按住 Ctrl 滚轮才缩放图表：旧图表是滚轮即缩放，
          但画布占掉大半屏之后，指针停在图表上就整页滚不动。上游统计图表同样用
-         zoomOnMouseWheel: 'ctrl'。拖拽平移与「重置图表」保持可用。 */
+         zoomOnMouseWheel: 'ctrl'。拖拽平移与双击恢复缩放范围保持可用。 */
       dataZoom: [{type: 'inside', filterMode: 'none', zoomOnMouseWheel: 'ctrl', moveOnMouseWheel: false}],
       // 涨跌配色：正数红、负数绿、持平灰；体力被隐藏时不参与着色（避免着色到别的序列）
       visualMap: visible[0] ? {
@@ -199,12 +199,6 @@ export function LegacyApChart({series, onRefresh, refreshing = false}: {
       series: lineSeries,
     }, {replaceMerge: ['series', 'yAxis']})
   }, [ranged, visible, palette, byKey])
-
-  function reset() {
-    setRange('week')
-    setVisible(DEFAULT_VISIBLE)
-    chartRef.current?.dispatchAction({type: 'dataZoom', start: 0, end: 100})
-  }
 
   function toggle(key: string) {
     const index = SERIES_ORDER.indexOf(key as (typeof SERIES_ORDER)[number])
@@ -247,9 +241,6 @@ export function LegacyApChart({series, onRefresh, refreshing = false}: {
           <span className="legacy-ap-legend-swatch" style={{background: colors[index]}}/>
           {byKey.get(key)?.label ?? key}
         </button>)}
-      </div>
-      <div className="legacy-ap-legend-actions is-end">
-        <button type="button" className="legacy-button" onClick={reset}>{t('Gui.Stat.ResetChart')}</button>
       </div>
     </div>
     <div className="legacy-ap-canvas" style={{background: palette.bg, borderColor: palette.border}} ref={containerRef}/>

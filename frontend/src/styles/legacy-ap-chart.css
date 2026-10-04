@@ -22,7 +22,7 @@
 
 .legacy-ap-series-item {white-space: nowrap; cursor: default}
 
-/* 图例行：左侧时间范围、中间图例、右侧重置按钮 */
+/* 图例行：左侧时间范围，右侧图例；窄屏按可用宽度换行。 */
 .legacy-ap-legend {
   display: flex;
   flex-wrap: wrap;
@@ -35,7 +35,6 @@
 }
 
 .legacy-ap-legend-actions {display: flex; align-items: center; gap: 10px; flex: 0 0 auto}
-.legacy-ap-legend-actions.is-end {margin-left: auto}
 .legacy-ap-legend-items {display: flex; flex-wrap: wrap; align-items: center; gap: 12px; flex: 1 1 auto; min-width: 0}
 
 .legacy-ap-legend-item {
