@@ -207,9 +207,11 @@ class TestCommissionIncomeScreenshotInvariant(unittest.TestCase):
         from pathlib import Path
 
         from module.statistics.cl1_database import Cl1Database
+        from tests.opsi_test_support import install_vault
 
         with tempfile.TemporaryDirectory() as tmp:
-            database = Cl1Database(Path(tmp) / "cl1_data.db")
+            install_vault(self, tmp)
+            database = Cl1Database(Path(tmp) / "config" / "cl1_data.db")
             database.add_commission_income(
                 "alas",
                 {"Oil": 282},

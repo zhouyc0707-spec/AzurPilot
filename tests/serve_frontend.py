@@ -12,6 +12,9 @@ from module.api.app import create_app
 from module.api.config_service import ROOT
 from tests.test_api import fixture
 from module.runtime.account_local import LocalProtector
+from module.statistics import opsi_secure, cl1_database, resource_stats
+from module.statistics.azurstats import AzurStats
+from tests.test_opsi_secure import MemoryProvider
 
 
 def main():
@@ -21,6 +24,14 @@ def main():
     background_svg = b'<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><rect width="1280" height="720" fill="#9acbff"/></svg>'
     with tempfile.TemporaryDirectory(prefix='azurpilot-ui-') as directory, \
             tempfile.TemporaryDirectory(prefix='azurpilot-ui-keys-') as keys, \
+            patch.object(opsi_secure, '_VAULT', opsi_secure.Vault(
+                Path(directory), provider=MemoryProvider(), background_migration=False)), \
+            patch.object(AzurStats, 'LOCAL_DB', str(Path(directory) / 'config/azurstats_local.db')), \
+            patch.object(AzurStats, 'LOCAL_MEOW_CSV', str(Path(directory) / 'log/azurstat_meowofficer_farming.csv')), \
+            patch.object(resource_stats, '_LOCAL_DB', str(Path(directory) / 'config/azurstats_local.db')), \
+            patch.object(resource_stats, '_table_ensured', False), \
+            patch('module.statistics.ship_exp_stats.__file__',
+                  str(Path(directory) / 'module/statistics/ship_exp_stats.py')), \
             patch.object(LocalProtector, 'key_directory', return_value=Path(keys) / 'private'), \
             patch('module.api.app.LIBRARY_DIR', Path(directory) / 'background-library'), \
             patch('module.api.background_service.LIBRARY_DIR', Path(directory) / 'background-library'), \
@@ -38,6 +49,12 @@ def main():
             data['Dashboard'][name]['Value'] = value
             data['Dashboard'][name]['Record'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         path.write_text(json.dumps(data, ensure_ascii=False), encoding='utf-8')
+        # 统计存储和凭据同样绑定临时目录，浏览器夹具不能迁移开发目录的历史。
+        test_db = cl1_database.Cl1Database(root / 'config/cl1_data.db')
+        cl1_database.db = test_db
+        from module.statistics import opsi_month, commission_income_stats
+        opsi_month.cl1_db = test_db
+        commission_income_stats.cl1_db = test_db
         app = create_app(root=root, password='', manage_runtime=False, mount_mcp=False)
         runtime = app.state.gateway.router.runtime
         def reject_execution(*args, **kwargs):

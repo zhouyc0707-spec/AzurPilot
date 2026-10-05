@@ -27,6 +27,7 @@ from typing import Any
 from module.os.ship_exp_data import LIST_SHIP_EXP
 from module.logger import logger
 from module.config.time_source import now as current_time
+from module.statistics import opsi_secure
 
 
 class ShipExpStats:
@@ -65,34 +66,56 @@ class ShipExpStats:
         # 当前战斗的开始时间
         self._battle_start_time: float | None = None
 
+    @opsi_secure.checked_read
     def _load(self) -> dict[str, Any]:
-        """加载数据文件。
+        """加载数据文件；已设置密钥的文件为密文，密钥不可用时降级为空并禁止覆盖。
 
         Returns:
             dict[str, Any]: 舰船经验统计数据字典。
         """
+        self._locked = False
+        state = opsi_secure.get_vault()._state or {}
+        self._installation_id = state.get('installation_id')
         if not self._path.exists():
             return {}
         try:
             text = self._path.read_text(encoding='utf-8')
             data = json.loads(text)
+            if isinstance(data, dict) and (data.get(opsi_secure.WRAPPER_KEY) or data.get(opsi_secure.LEGACY_WRAPPER_KEY)):
+                opened = opsi_secure.get_vault().open_or_none('ships', data.get('payload'), opsi_secure.get_vault().file_context('ships', self._path))
+                if opened is None:
+                    self._locked = True
+                    opsi_secure.record_dropped('ships')
+                    logger.warning('[统计-经验] 舰船经验数据暂不可用，暂不加载（恢复后继续）')
+                    return {}
+                return opened if isinstance(opened, dict) else {}
             if isinstance(data, dict):
+                if not opsi_secure.get_vault().legacy_plaintext_readable():
+                    self._locked = True
+                    return {}
                 return data
             return {}
         except Exception as e:
-            logger.warning(f'[统计-经验] 加载舰船经验数据失败: {e}')
+            logger.warning(f'[统计-经验] 加载舰船经验数据失败: {type(e).__name__}')
             return {}
 
     def _save(self) -> None:
-        """保存数据文件到本地。"""
+        """保存数据文件到本地；已设置密钥时整文件受保护存储。"""
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)
-            self._path.write_text(
-                json.dumps(self.data, ensure_ascii=False, indent=2),
-                encoding='utf-8'
-            )
+            vault = opsi_secure.get_vault()
+            with vault.coordinator.lock():
+                if not vault.writer_ready():
+                    opsi_secure.record_dropped('ships')
+                    return
+                if self._locked or self._installation_id != vault._state['installation_id']:
+                    # 环境变更后不能把进程内的旧缓存写入新环境。
+                    self.data = self._load()
+                    opsi_secure.record_dropped('ships')
+                    return
+                vault.write_file('ships', self._path, self.data, wrapper=True)
         except Exception as e:
-            logger.warning(f'[统计-经验] 保存舰船经验数据失败: {e}')
+            logger.warning(f'[统计-经验] 保存舰船经验数据失败: {type(e).__name__}')
 
     # ========== 战斗时间记录 ==========
 

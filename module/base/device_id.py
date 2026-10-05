@@ -212,7 +212,6 @@ def _init_device_id() -> str:
             pass
 
     _overwrite_device_id(device_id, device_id_file)
-    logger.info(f'设备ID initialized: {device_id[:8]}...')
 
     _start_refresh_timer(device_id, device_id_file)
 

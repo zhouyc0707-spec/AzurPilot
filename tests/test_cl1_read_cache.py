@@ -5,20 +5,21 @@
 后续改动破坏，而这些破坏不会在功能上表现出来（只会读到过期数据），因此单独测。
 """
 
-import sqlite3
 import tempfile
 import unittest
-from contextlib import closing
 from pathlib import Path
 
+from module.statistics import opsi_secure
 from module.statistics.cl1_database import Cl1Database
+from tests.opsi_test_support import install_vault
 
 
 class TestCl1ReadCache(unittest.TestCase):
     def setUp(self):
         self.temporary_directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary_directory.cleanup)
-        db_path = Path(self.temporary_directory.name) / "cl1_data.db"
+        self.vault = install_vault(self, self.temporary_directory.name)
+        db_path = Path(self.temporary_directory.name) / "config" / "cl1_data.db"
         self.db = Cl1Database(db_path=db_path)
         # 写一份初始数据（此时缓存未开启）
         self.db.save_stats("probe", "2026-09", {"battle_count": 1})
@@ -63,13 +64,9 @@ class TestCl1ReadCache(unittest.TestCase):
         """worker 是另一个进程，进程内失效看不到它 —— 靠库文件签名识别。"""
         with self.db.read_cache():
             self.assertEqual(1, self.db.get_stats("probe", "2026-09")["battle_count"])
-            # 绕过本实例直接改库，模拟外部进程写入（同时改动大小与 mtime）
-            with closing(sqlite3.connect(self.db.db_path)) as conn:
-                conn.execute(
-                    "UPDATE cl1_data SET data_json = ? WHERE instance = ? AND month = ?",
-                    ('{"battle_count":99,"ap_snapshots":[]}', "probe", "2026-09"),
-                )
-                conn.commit()
+            # 独立存储对象通过正式加密入口写入，模拟外部进程更新。
+            other = Cl1Database(self.db.db_path)
+            other.save_stats("probe", "2026-09", {"battle_count": 99})
             self.assertEqual(99, self.db.get_stats("probe", "2026-09")["battle_count"])
 
     def test_cache_expires_after_ttl(self):
@@ -86,13 +83,32 @@ class TestCl1ReadCache(unittest.TestCase):
                 datetime.now() - timedelta(seconds=self.db.READ_CACHE_TTL + 1),
                 data,
             )
-            with closing(sqlite3.connect(self.db.db_path)) as conn:
-                conn.execute(
-                    "UPDATE cl1_data SET data_json = ? WHERE instance = ? AND month = ?",
-                    ('{"battle_count":77,"ap_snapshots":[]}', "probe", "2026-09"),
-                )
-                conn.commit()
+            other = Cl1Database(self.db.db_path)
+            other.save_stats("probe", "2026-09", {"battle_count": 77})
             self.assertEqual(77, self.db.get_stats("probe", "2026-09")["battle_count"])
+
+    def test_unavailable_provider_cannot_return_cached_decrypted_data(self):
+        with self.db.read_cache():
+            self.assertEqual(1, self.db.get_stats("probe", "2026-09")["battle_count"])
+            original = self.db.db_path.read_bytes()
+            self.vault.provider.offline = True
+            self.assertEqual(0, self.db.get_stats("probe", "2026-09")["battle_count"])
+            self.assertEqual({}, self.db._read_cache)
+            self.assertEqual(original, self.db.db_path.read_bytes())
+            self.assertFalse(self.vault.status()["blocked"])
+            self.vault.provider.offline = False
+            self.assertEqual(1, self.db.get_stats("probe", "2026-09")["battle_count"])
+
+    def test_quarantine_cannot_return_cached_data_or_overwrite_original(self):
+        with self.db.read_cache():
+            self.assertEqual(1, self.db.get_stats("probe", "2026-09")["battle_count"])
+            original = self.db.db_path.read_bytes()
+            self.vault.wipe("测试冻结")
+            self.assertEqual(0, self.db.get_stats("probe", "2026-09")["battle_count"])
+            self.assertEqual({}, self.db._read_cache)
+            with self.assertRaises(opsi_secure.VaultLocked):
+                self.db.save_stats("probe", "2026-09", {"battle_count": 99})
+            self.assertEqual(original, self.db.db_path.read_bytes())
 
 
 if __name__ == "__main__":

@@ -4,6 +4,8 @@ from unittest.mock import patch
 
 import pytest
 
+from module.statistics import opsi_secure
+from tests.test_opsi_secure import MemoryProvider
 from module.statistics.cl1_database import (
     COINS_EXACT_DAYS,
     COINS_HISTORY_VERSION,
@@ -13,8 +15,11 @@ from module.statistics.cl1_database import (
 
 
 @pytest.fixture
-def coins_database(tmp_path):
-    database = Cl1Database(db_path=tmp_path / 'cl1_data.db')
+def coins_database(tmp_path, monkeypatch):
+    (tmp_path / 'config').mkdir()
+    vault = opsi_secure.Vault(tmp_path, provider=MemoryProvider(), background_migration=False)
+    monkeypatch.setattr(opsi_secure, '_VAULT', vault)
+    database = Cl1Database(db_path=tmp_path / 'config' / 'cl1_data.db')
     # 每个临时库拥有自己的迁移状态，避免进程级缓存跨用例跳过迁移。
     database._coins_history_checked = set()
     database._coins_cleanup_checked = set()
