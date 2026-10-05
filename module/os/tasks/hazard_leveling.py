@@ -134,10 +134,27 @@ class OpsiHazard1Leveling(CoinTaskMixin, OSMap):
             self.config,
             self.config.OpsiHazard1Leveling_DebugClip,
         ):
-            # 第一次重扫：检查是否还有事件
             self._solved_map_event = set()
             self._solved_fleet_mechanism = False
-            self.map_rescan()
+
+            # 先用主舰队的最新截图查附近问号，避免事件就在身边时仍移动镜头扫全图。
+            logger.hr("[大世界-侵蚀1练级] 战后主舰队雷达预检", level=2)
+            self.fleet_set(self.config.OpsiFleet_Fleet)
+            self.device.screenshot()
+            question = self.radar.predict_question(
+                self.device.image, in_port=self.zone.is_port
+            )
+            if question is None:
+                logger.info("[大世界-侵蚀1练级] 主舰队附近无问号，继续地图重扫")
+                self.map_rescan()
+            else:
+                logger.info(f"[大世界-侵蚀1练级] 主舰队附近发现问号 {question}，优先清理")
+                # 显式走单舰队实现，避免组合类调用侵蚀一的多舰队遍历。
+                if OSMap.clear_question(self):
+                    logger.info("[大世界-侵蚀1练级] 主舰队问号已处理，跳过本轮地图重扫")
+                else:
+                    logger.info("[大世界-侵蚀1练级] 主舰队问号未处理成功，继续地图重扫")
+                    self.map_rescan()
 
             # 强制移动（开关）：开启后先零移动遍历 1~4 队雷达找问号；仍没找到
             # 且行动力大于阈值时，再逐个挪动舰队重扫（见 _execute_fixed_patrol_scan）。
