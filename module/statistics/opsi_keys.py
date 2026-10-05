@@ -47,6 +47,11 @@ class KeyProvider:
         from module.statistics.opsi_secure import _decrypt, _subkey
         return _decrypt(_subkey(self.key(state), info), token, aad)
 
+    def chain_key(self, slot, state):
+        """完整性链的独立子密钥；从根密钥派生，与记录加密子密钥分离。"""
+        from module.statistics.opsi_secure import _subkey
+        return _subkey(self.key(state), 'opsi-stats/v2/integrity-chain')
+
 
 class DeviceRootProvider(KeyProvider):
     device_class = ''
@@ -344,7 +349,8 @@ class LinuxTPMProvider(LinuxProvider):
     def _run(*args, data=None):
         try:
             command = [args[0], '-T', 'device:/dev/tpmrm0', *args[1:]]
-            return subprocess.run(command, input=data, check=True, capture_output=True, timeout=15).stdout
+            # fTPM 建 RSA-2048 primary 实测约 10s，new_key/key 各建一次，留足余量。
+            return subprocess.run(command, input=data, check=True, capture_output=True, timeout=60).stdout
         except (OSError, subprocess.SubprocessError) as exc:
             raise ProviderUnavailable('本机设备服务暂不可用') from exc
 
@@ -359,7 +365,8 @@ class LinuxTPMProvider(LinuxProvider):
             parent, public, private = [str(Path(folder) / name) for name in ('parent', 'public', 'private')]
             self._run('tpm2_createprimary', '-Q', '-C', 'o', '-G', 'rsa', '-c', parent)
             raw = os.urandom(32)
-            self._run('tpm2_create', '-Q', '-C', parent, '-G', 'keyedhash', '-i', '-',
+            # 封存数据（-i）时 tpm2-tools 禁止 -G：只允许 keyedhash + null scheme。
+            self._run('tpm2_create', '-Q', '-C', parent, '-i', '-',
                       '-a', 'fixedtpm|fixedparent|userwithauth|noda', '-u', public, '-r', private, data=raw)
             wrapped = [base64.b64encode(Path(p).read_bytes()).decode() for p in (public, private)]
             token = 'TPM2:' + base64.b64encode(json.dumps(wrapped).encode()).decode()

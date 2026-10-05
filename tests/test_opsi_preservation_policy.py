@@ -30,7 +30,7 @@ class OpsiPreservationPolicyTests(unittest.TestCase):
 
     def test_descriptor_mismatch_preserves_files_credentials_and_blocks_loaded_reader(self):
         self.assertTrue(self.vault.ensure_ready())
-        second = opsi_secure.Vault(self.root, provider=self.provider, background_migration=False)
+        second = opsi_secure.Vault(self.root, provider=self.provider, background_migration=False, deep_check=False)
         self.assertTrue(second.ensure_ready())
         before = self.path.read_bytes()
         state = copy.deepcopy(self.provider.states)
@@ -45,7 +45,7 @@ class OpsiPreservationPolicyTests(unittest.TestCase):
         self.assertTrue(second.status()['blocked'])
         with self.assertRaises(opsi_secure.VaultLocked):
             self.vault.open_('cl1', blob, context)
-        restarted = opsi_secure.Vault(self.root, provider=self.provider, background_migration=False)
+        restarted = opsi_secure.Vault(self.root, provider=self.provider, background_migration=False, deep_check=False)
         self.assertFalse(restarted.ensure_ready())
         self.assertEqual(before, self.path.read_bytes())
         self.assertEqual(state, self.provider.states)
@@ -66,7 +66,7 @@ class OpsiPreservationPolicyTests(unittest.TestCase):
 
     def test_competing_writer_lock_does_not_fail_or_freeze_readers(self):
         self.assertTrue(self.vault.ensure_ready())
-        second = opsi_secure.Vault(self.root, provider=self.provider, background_migration=False)
+        second = opsi_secure.Vault(self.root, provider=self.provider, background_migration=False, deep_check=False)
         self.assertTrue(second.ensure_ready())
         with closing(sqlite3.connect(self.path)) as conn:
             blob = conn.execute('SELECT secure_json FROM cl1_data').fetchone()[0]
@@ -111,6 +111,79 @@ class OpsiPreservationPolicyTests(unittest.TestCase):
         self.assertEqual(before, self.path.read_bytes())
         self.assertEqual(state, self.provider.states)
         self.assertEqual(descriptor, self.vault.keyring_path.read_bytes())
+
+    def test_shallow_chain_mismatch_preserves_all_remaining_data_and_credentials(self):
+        self.assertTrue(self.vault.ensure_ready())
+        with closing(sqlite3.connect(self.path)) as conn, conn:
+            conn.execute("UPDATE __opsi_integrity SET chain='invalid'")
+        before = self.path.read_bytes()
+        state = copy.deepcopy(self.provider.states)
+        descriptor = self.vault.keyring_path.read_bytes()
+        self.vault.verify_on_page_open()
+        self.assertTrue(self.vault.status()['blocked'])
+        self.assertEqual(before, self.path.read_bytes())
+        self.assertEqual(state, self.provider.states)
+        self.assertEqual(descriptor, self.vault.keyring_path.read_bytes())
+        self.assertFalse(self.vault.wipe_path.exists())
+
+    def test_deep_mismatch_preserves_ciphertext_and_credentials(self):
+        self.assertTrue(self.vault.ensure_ready())
+        self.vault.deep_check_once()
+        context = opsi_secure.row_context('cl1', {'instance': 'inst', 'month': '2026-09'})
+        blob = self.vault.seal('cl1', {'battle_count': 999}, context)
+        with closing(sqlite3.connect(self.path)) as conn, conn:
+            conn.execute('UPDATE cl1_data SET secure_json=?', (blob,))
+        before = self.path.read_bytes()
+        state = copy.deepcopy(self.provider.states)
+        self.vault.deep_check_once()
+        self.assertTrue(self.vault.status()['blocked'])
+        self.assertEqual(before, self.path.read_bytes())
+        self.assertEqual(state, self.provider.states)
+        self.assertFalse(self.vault.wipe_path.exists())
+
+    def test_bad_record_freezes_same_batch_before_background_rescue(self):
+        self.assertTrue(self.vault.ensure_ready())
+        context = opsi_secure.row_context('cl1', {'instance': 'inst', 'month': '2026-09'})
+        with closing(sqlite3.connect(self.path)) as conn:
+            good = conn.execute('SELECT secure_json FROM cl1_data').fetchone()[0]
+        before = self.path.read_bytes()
+        state = copy.deepcopy(self.provider.states)
+        with self.vault.reading():
+            self.assertIsNone(self.vault.open_or_none('cl1', good[:-1] + '!', context))
+            self.assertTrue((self.vault.directory / 'blocked.json').exists())
+            # 后台线程尚在等待当前协调锁，同批其他读取、写入也必须已被阻止。
+            self.assertIsNone(self.vault.open_or_none('cl1', good, context))
+            with self.assertRaises(opsi_secure.VaultLocked):
+                self.vault.seal('cl1', {'battle_count': 1}, context)
+        self.vault._wipe_thread.join(timeout=10)
+        self.assertFalse(self.vault._wipe_thread.is_alive())
+        self.assertEqual(before, self.path.read_bytes())
+        self.assertEqual(state, self.provider.states)
+        restarted = opsi_secure.Vault(self.root, provider=self.provider, deep_check=False)
+        self.assertFalse(restarted.ensure_ready())
+
+    def test_page_check_with_competing_file_lock_does_not_freeze(self):
+        self.assertTrue(self.vault.ensure_ready())
+        before = self.path.read_bytes()
+        with patch.object(self.vault.coordinator, 'lock', side_effect=portalocker.exceptions.LockException):
+            self.vault.verify_on_page_open()
+        self.assertEqual(before, self.path.read_bytes())
+        self.assertFalse(self.vault.status()['blocked'])
+
+    def test_bad_record_during_write_rolls_back_even_if_read_error_is_downgraded(self):
+        self.assertTrue(self.vault.ensure_ready())
+        before = self.path.read_bytes()
+        state = copy.deepcopy(self.provider.states)
+        context = opsi_secure.row_context('cl1', {'instance': 'inst', 'month': '2026-09'})
+        with self.assertRaises(opsi_secure.VaultLocked):
+            with closing(sqlite3.connect(self.path)) as conn, self.vault.transaction(conn, self.path):
+                blob = conn.execute('SELECT secure_json FROM cl1_data').fetchone()[0]
+                self.assertIsNone(self.vault.open_or_none('cl1', blob[:-1] + '!', context))
+                conn.execute("UPDATE cl1_data SET data_json='{}'")
+        self.vault._wipe_thread.join(timeout=10)
+        self.assertEqual(before, self.path.read_bytes())
+        self.assertEqual(state, self.provider.states)
+        self.assertTrue(self.vault.status()['blocked'])
 
     def test_month_residue_and_all_original_points_migrate_without_loss(self):
         points = [{'ts': f'2026-09-01T00:{minute:02d}:00', 'yellow_coins': 500 + minute,

@@ -30,7 +30,8 @@ class VaultCase(unittest.TestCase):
         (self.root / 'log' / 'cl1' / 'inst').mkdir(parents=True)
         self.previous = opsi_secure._VAULT
         self.provider = MemoryProvider()
-        opsi_secure.set_vault(opsi_secure.Vault(root=self.root, provider=self.provider, background_migration=False))
+        opsi_secure.set_vault(opsi_secure.Vault(root=self.root, provider=self.provider, background_migration=False,
+                                                deep_check=False))
         self.dpapi_patch = None
 
     def tearDown(self):
@@ -48,7 +49,8 @@ class VaultCase(unittest.TestCase):
         """启用加密（测试里关闭后台迁移，迁移由需要的用例显式调用）。"""
         self._release_dpapi()
         self.provider.offline = False
-        vault = opsi_secure.Vault(root=self.root, protected_files=[], background_migration=False, provider=self.provider)
+        vault = opsi_secure.Vault(root=self.root, protected_files=[], background_migration=False,
+                                  provider=self.provider, deep_check=False)
         opsi_secure.set_vault(vault)
         self.assertTrue(vault.ensure_ready())
         return vault
@@ -56,7 +58,8 @@ class VaultCase(unittest.TestCase):
     def lock(self):
         """模拟凭据服务暂时离线。"""
         self.provider.offline = True
-        vault = opsi_secure.Vault(root=self.root, provider=self.provider, background_migration=False)
+        vault = opsi_secure.Vault(root=self.root, provider=self.provider, background_migration=False,
+                                  deep_check=False)
         opsi_secure.set_vault(vault)
         return vault
 
@@ -332,7 +335,7 @@ class ShipExpIntegration(VaultCase):
         self.assertEqual(self.provider.load(vault.slot), credentials)
         self.assertTrue(vault.status()['blocked'])
 
-    def test_offline_plaintext_replacement_is_not_used_as_a_fallback(self):
+    def test_offline_plaintext_replacement_triggers_freeze_on_recovery(self):
         vault = self.configure()
         stats = self.make_stats()
         stats.data = {'battle_times': {'average': 52.0}}
@@ -342,8 +345,9 @@ class ShipExpIntegration(VaultCase):
         self.assertEqual(self.make_stats().data, {})
         self.assertFalse(vault.wipe_path.exists())
         self.provider.offline = False
-        self.assertTrue(opsi_secure.get_vault().ensure_ready())
-        # 无全量根校验后不再有"文件被替换→清空"路径；明文替换仍然读不出。
+        # 恢复后的核对点发现受保护文件被明文替换：按篡改冻结，明文绝不被采用。
+        self.assertFalse(opsi_secure.get_vault().ensure_ready())
+        self.assertTrue(vault.status()['blocked'])
         self.assertFalse(vault.wipe_path.exists())
         self.assertEqual(self.make_stats().data, {})
 

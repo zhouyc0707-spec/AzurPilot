@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import importlib.util
 import multiprocessing
+import os
 from pathlib import Path
 import sqlite3
 import sys
@@ -14,6 +15,11 @@ import threading
 from types import ModuleType, SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
+
+# 机器可能同时跑着模拟器/正式自动化，内存紧张时 OpenBLAS 初始化会卡
+# “MemorTimeout” 20 秒（spawn 子进程引导同样受影响）；本测试只验证
+# SQLite 跨进程串行化，单线程即可。
+os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')
 
 import numpy as np
 
@@ -72,7 +78,7 @@ def process_operation(directory, started, finished, operation):
     """子进程持独立模块和 Python 锁，验证真正的 SQLite 进程间串行化。"""
     if not Path(directory).is_relative_to(Path(tempfile.gettempdir())):
         raise RuntimeError('测试目录未隔离')
-    opsi_secure.set_vault(opsi_secure.Vault(directory, provider=WindowsProvider()))
+    opsi_secure.set_vault(opsi_secure.Vault(directory, provider=WindowsProvider(), deep_check=False))
     module = load_statistics(directory)
     started.set()
     connect = sqlite3.connect
@@ -309,7 +315,8 @@ class TestStatisticsInstanceIsolation(unittest.TestCase):
                 process.start()
                 self.addCleanup(self.stop_process, process)
                 processes.append((process, finished))
-                self.assertTrue(started.wait(10))
+                # 机器可能同时跑着正式自动化与模拟器，spawn 冷启动余量给足。
+                self.assertTrue(started.wait(30))
                 self.assertFalse(finished.is_set())
         for process, finished in processes:
             process.join(10)
@@ -344,7 +351,7 @@ class TestStatisticsInstanceIsolation(unittest.TestCase):
                 self.assertTrue(paused.wait(5))
                 process.start()
                 self.addCleanup(self.stop_process, process)
-                self.assertTrue(started.wait(10))
+                self.assertTrue(started.wait(30))
                 self.assertFalse(finished.is_set())
                 with closing(sqlite3.connect(self.stats.LOCAL_DB, timeout=0)) as probe:
                     with self.assertRaisesRegex(sqlite3.OperationalError, 'locked'):

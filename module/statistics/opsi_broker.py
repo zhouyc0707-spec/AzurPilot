@@ -112,6 +112,18 @@ class BrokerProvider(KeyProvider):
     def key(self, state):
         return None
 
+    def chain_key(self, slot, state):
+        """链子密钥由宿主派生后经 mTLS 取回；同一租约期内缓存复用。"""
+        lease = getattr(self.local, 'lease', None)
+        cached = getattr(self.local, 'chain', None)
+        if cached and cached[0] == (slot, lease):
+            return cached[1]
+        key = base64.b64decode(self._rpc('chain-key', slot)['key'], validate=True)
+        if len(key) != 32:
+            raise ProviderUnavailable('宿主链密钥不可用')
+        self.local.chain = ((slot, lease), key)
+        return key
+
     def encode(self, slot, state, info, raw, aad):
         return self._rpc('record-write', slot, info=info, data=base64.b64encode(raw).decode(), aad=aad)['record']
 
@@ -139,7 +151,7 @@ class HostBroker:
         return dict(state, key='@host') if state and 'key' in state else state
 
     def dispatch(self, fingerprint, request):
-        from module.statistics.opsi_secure import IntegrityFailure, Vault, VaultError
+        from module.statistics.opsi_secure import IntegrityFailure, Vault, VaultError, _subkey
         slot = request['slot']
         if self.grants.get(fingerprint) != slot:
             raise ProviderUnavailable('宿主授权不可用')
@@ -195,6 +207,9 @@ class HostBroker:
                 return {'data': vault._open_legacy(request['kind'], request['record'])}
             if not state or state.get('phase') == 'wiping':
                 raise ProviderUnavailable('宿主状态不可用')
+            if action == 'chain-key':
+                # 只回传派生后的链子密钥，根密钥不出宿主。
+                return {'key': base64.b64encode(_subkey(self.provider.key(state), 'opsi-stats/v2/integrity-chain')).decode()}
             info, aad = request['info'], request['aad']
             if info == 'opsi-stats/v2/commit':
                 if not isinstance(aad, dict) or aad.get('slot') != slot or state['phase'] != 'ready':

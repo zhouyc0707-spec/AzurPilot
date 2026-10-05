@@ -11,7 +11,8 @@ def install_vault(case, folder):
         raise RuntimeError('测试目录未隔离')
     (root / 'config').mkdir(exist_ok=True)
     previous = opsi_secure._VAULT
-    vault = opsi_secure.Vault(root, provider=MemoryProvider(), background_migration=False)
+    vault = opsi_secure.Vault(root, provider=MemoryProvider(), background_migration=False,
+                              deep_check=False)
     opsi_secure.set_vault(vault)
     case.addCleanup(opsi_secure.set_vault, previous)
     return vault

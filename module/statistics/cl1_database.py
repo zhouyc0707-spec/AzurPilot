@@ -211,9 +211,13 @@ class Cl1Database:
             logger.error(f"[Statistics] 创建数据库目录失败: {type(e).__name__}")
 
     def _init_db(self):
-        """初始化数据库表，并兼容旧版 encrypted_blob 结构。"""
+        """初始化数据库表，并兼容旧版 encrypted_blob 结构。
+
+        唯一键必须是 (instance, month)——写入 SQL 依赖它的 ON CONFLICT；被外部
+        工具改坏（重建表后主键不符）时按原结构重建并搬运全部数据。
+        """
         try:
-            with closing(sqlite3.connect(self.db_path)) as conn:
+            with closing(sqlite3.connect(self.db_path, timeout=30)) as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS cl1_data (
@@ -233,9 +237,54 @@ class Cl1Database:
                 if "secure_json" not in columns:
                     # 设置密钥后大世界字段迁到这一列（opsi_secure 的密文）。
                     cursor.execute("ALTER TABLE cl1_data ADD COLUMN secure_json TEXT")
+                if self._primary_key(cursor) != ["instance", "month"]:
+                    self._rebuild_table(cursor)
                 conn.commit()
+        except sqlite3.IntegrityError:
+            logger.exception("CL1 结构无法无损修复，已保留原表，停止打开数据库")
+            raise
         except Exception as e:
             logger.exception(f"初始化 CL1 数据库失败: {type(e).__name__}")
+
+    @staticmethod
+    def _primary_key(cursor):
+        """读取 cl1_data 主键列（按定义顺序）；无主键时返回空列表。"""
+        for row in cursor.execute("PRAGMA index_list(cl1_data)").fetchall():
+            # index_list 行：(seq, name, unique, origin, partial)；origin='pk' 为主键索引。
+            if row[3] == "pk":
+                return [info[2] for info in cursor.execute(f'PRAGMA index_info("{row[1]}")').fetchall()]
+        return []
+
+    def _rebuild_table(self, cursor):
+        """唯一键不符时按 (instance, month) 重建 cl1_data 并搬运数据。
+
+        重复身份、未知列或已有重建表必须人工判断，不能通过覆盖或删表丢弃历史。
+        """
+        if cursor.execute("SELECT 1 FROM cl1_data GROUP BY instance, month HAVING COUNT(*) > 1 LIMIT 1").fetchone():
+            raise sqlite3.IntegrityError("同一实例月份存在多条历史，拒绝自动覆盖")
+        columns = {row[1] for row in cursor.execute("PRAGMA table_info(cl1_data)").fetchall()}
+        if columns != {"instance", "month", "data_json", "encrypted_blob", "secure_json"}:
+            raise sqlite3.IntegrityError("月度表包含未知字段，拒绝自动丢弃")
+        if cursor.execute("SELECT 1 FROM sqlite_master WHERE name='cl1_data_rebuild'").fetchone():
+            raise sqlite3.IntegrityError("已存在重建对象，拒绝自动删除")
+        cursor.execute("""
+            CREATE TABLE cl1_data_rebuild (
+                instance TEXT,
+                month TEXT,
+                data_json TEXT,
+                encrypted_blob BLOB,
+                secure_json TEXT,
+                PRIMARY KEY (instance, month)
+            )
+        """)
+        cursor.execute("""
+            INSERT INTO cl1_data_rebuild
+                (instance, month, data_json, encrypted_blob, secure_json)
+            SELECT instance, month, data_json, encrypted_blob, secure_json FROM cl1_data
+        """)
+        cursor.execute("DROP TABLE cl1_data")
+        cursor.execute("ALTER TABLE cl1_data_rebuild RENAME TO cl1_data")
+        logger.warning("[Statistics] cl1_data 唯一键与预期不符，已无损重建并保留全部历史")
 
     def _derive_key(self, device_id: str) -> bytes:
         """基于 device_id 派生 256 位 AES 密钥"""

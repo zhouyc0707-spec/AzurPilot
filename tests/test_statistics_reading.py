@@ -42,15 +42,20 @@ class StatisticsReadingTests(VaultCase):
                 self.assertEqual(self.provider.load(self.vault.slot)['generation'], generation)
                 self.assertEqual((self.database.db_path.read_bytes(), self.ships.read_bytes()), before)
 
-    def test_write_transaction_does_not_scan_or_touch_provider_state(self):
-        """一次统计写入只解封一次，不做全量扫描，也不写回凭据状态。"""
+    def test_write_transaction_touches_only_written_path(self):
+        """一次统计写入只解封一次、不做全量摘要，只为所写路径核对并更新链值。"""
         with patch.object(self.vault.coordinator, 'snapshot', wraps=self.vault.coordinator.snapshot) as snapshot, \
                 patch.object(self.provider, 'load', wraps=self.provider.load) as load, \
-                patch.object(self.provider, 'save', wraps=self.provider.save) as save:
+                patch.object(self.provider, 'save', wraps=self.provider.save) as save, \
+                patch.object(self.vault, '_path_digest', wraps=self.vault._path_digest) as digest:
             self.database.increment_battle_count('inst', 1)
         self.assertEqual(load.call_count, 1)
         self.assertEqual(snapshot.call_count, 0)
-        self.assertEqual(save.call_count, 0)
+        self.assertEqual(save.call_count, 1)
+        self.assertEqual(digest.call_count, 0)      # 写入路径不触碰任何全量摘要
+        key = str(self.database.db_path.resolve().relative_to(self.root))
+        entry = self.vault._state['expect'][key]
+        self.assertEqual(entry['s'], 2)             # 建链（1）后每次写入推进链序号
 
     def test_meow_compatibility_is_in_memory_until_explicit_backfill(self):
         data = self.database.get_stats('inst', '2026-09')
@@ -67,29 +72,50 @@ class StatisticsReadingTests(VaultCase):
         self.assertTrue(self.database.backfill_meow_stats('inst', 2026, 9))
         self.assertEqual(self.database.get_stats('inst', '2026-09')['meow_battle_raw_count'], result['battle_count'])
 
-    def test_tamper_degrades_records_without_wiping(self):
-        """无全局根校验后：改单条密文只让该条读出降级，不触发清空；读改写仍正常。"""
+    def test_tamper_triggers_freeze_on_page_read(self):
+        """页面读取路径拿到被改的密文：本次读出降级，后台完成冻结。"""
         before = self.get_report()
         with closing(sqlite3.connect(self.database.db_path)) as conn, conn:
             conn.execute("UPDATE cl1_data SET secure_json = substr(secure_json, 1, length(secure_json) - 4) || 'AAAA'")
-        with patch.object(self.vault, '_wipe', wraps=self.vault._wipe) as wipe:
-            data = self.get_report()
-            wipe.assert_not_called()
-        self.assertTrue(self.vault._active)
+        data = self.get_report()
+        self.vault._wipe_thread.join(timeout=10)
+        self.assertTrue(self.vault.status()['blocked'])
+        self.assertFalse(self.vault.wipe_path.exists())
         self.assertEqual(data['category'], before['category'])
-        # 删除行同样不再清空，只是读出为空。
+
+    def test_row_deletion_triggers_freeze_on_page_checkpoint(self):
+        """页面核对点发现受保护行被整体删除：当场冻结，页面降级显示。"""
+        self.get_report()
         with closing(sqlite3.connect(self.database.db_path)) as conn, conn:
             conn.execute('DELETE FROM cl1_data')
-        with patch.object(self.vault, '_wipe', wraps=self.vault._wipe) as wipe:
-            self.get_report()
-            wipe.assert_not_called()
-        self.assertTrue(self.vault._active)
+        self.get_report()
+        self.assertTrue(self.vault.status()['blocked'])
+        self.assertFalse(self.vault.wipe_path.exists())
+
+    def test_legacy_page_checkpoint_detects_chain_mismatch_without_deleting_history(self):
+        from contextlib import ExitStack
+        from module.api import legacy_stats_service
+
+        with closing(sqlite3.connect(self.database.db_path)) as conn, conn:
+            conn.execute("UPDATE __opsi_integrity SET chain='invalid'")
+        before = self.database.db_path.read_bytes()
+        credentials = self.provider.load(self.vault.slot)
+        with ExitStack() as stack:
+            for name in ('_ap_panel', '_opsi_panel', '_meow_loot_panel', '_ship_panel',
+                         '_commission_periods', '_commission_recent', '_commission_running'):
+                stack.enter_context(patch.object(legacy_stats_service, name, return_value={}))
+            data = legacy_stats_service.report(self.configs, 'inst', '2026-09')
+        self.assertEqual(data['month'], '2026-09')
+        self.assertTrue(self.vault.status()['blocked'])
+        self.assertEqual(before, self.database.db_path.read_bytes())
+        self.assertEqual(credentials, self.provider.load(self.vault.slot))
+        self.assertFalse(self.vault.wipe_path.exists())
 
     def test_backend_outage_does_not_write_or_wipe(self):
         expected = self.get_report()
         before = (self.database.db_path.read_bytes(), self.ships.read_bytes(), self.vault.keyring_path.read_bytes())
         self.provider.offline = True
-        with patch.object(self.vault, '_wipe', side_effect=AssertionError('临时故障不能清空')):
+        with patch.object(self.vault, '_wipe', side_effect=AssertionError('临时故障不能冻结')):
             self.get_report()
         self.assertEqual((self.database.db_path.read_bytes(), self.ships.read_bytes(), self.vault.keyring_path.read_bytes()), before)
         self.provider.offline = False

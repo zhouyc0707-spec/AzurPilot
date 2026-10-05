@@ -239,9 +239,11 @@ def report(configs, instance: str, category: str, month: str, days: int, period:
            research_series: int = 0, research_scope: str = 'series', loot_task: str = None) -> dict:
     """同一份受保护报表的读取共用一次校验及协调锁。"""
     configs.path(instance)
+    from module.statistics.opsi_secure import checked_read, verify_on_page_open
+    # 打开/刷新统计页的核对点：浅检查毫秒级同步，深检查只交后台线程。
+    verify_on_page_open()
     reader = _report
     if category in ('resources', 'action', 'opsi', 'ships', 'loot', 'commission', 'research'):
-        from module.statistics.opsi_secure import checked_read
         reader = checked_read(reader)
     return reader(configs, instance, category, month, days, period,
                   research_series, research_scope, loot_task)

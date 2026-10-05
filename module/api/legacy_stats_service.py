@@ -510,6 +510,10 @@ def report(configs, instance, month=None):
     configs.path(instance)
     year, month_number, month_key = _parse_month(month)
 
+    # 旧界面也接入上游页面核对点；保持既有面板和缓存行为。
+    from module.statistics.opsi_secure import verify_on_page_open
+    verify_on_page_open()
+
     # 一次渲染会经由多条路径重复读取同一个月份的月度 blob（每次都要反序列化
     # 数 MB 的 JSON），旧界面用只读缓存包住整轮渲染，这里同样处理。
     from module.statistics.cl1_database import db as cl1_db

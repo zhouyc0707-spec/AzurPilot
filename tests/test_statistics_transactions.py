@@ -63,7 +63,7 @@ def process_writer(path, started, finished):
     root = Path(path).parent.parent
     if not root.is_relative_to(Path(tempfile.gettempdir())):
         raise RuntimeError('测试目录未隔离')
-    opsi_secure.set_vault(opsi_secure.Vault(root, provider=WindowsProvider()))
+    opsi_secure.set_vault(opsi_secure.Vault(root, provider=WindowsProvider(), deep_check=False))
     started.set()
     connect = sqlite3.connect
 
@@ -332,3 +332,85 @@ class TestStatisticsTransactions(unittest.TestCase):
     def test_explicit_save_stats_remains_a_full_snapshot_replacement(self):
         self.db.save_stats("test", MONTH, {"replacement": True})
         self.assertEqual(self.db.get_stats("test", MONTH), {"replacement": True})
+
+
+class Cl1SchemaRepairTests(unittest.TestCase):
+    """外部工具改坏 cl1_data 唯一键：构造 Cl1Database 即按原结构重建，数据保留、写入恢复。"""
+
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(directory.cleanup)
+        self.path = Path(directory.name) / "config" / "cl1_data.db"
+        self.path.parent.mkdir(parents=True)
+
+    def make_broken_db(self):
+        """重现现场形态：三列主键（含 secure_json）的外部重建表。"""
+        with closing(sqlite3.connect(self.path)) as conn, conn:
+            conn.execute('CREATE TABLE "cl1_data" ("instance" TEXT, "month" TEXT, "encrypted_blob" BLOB,'
+                         ' "data_json" TEXT, "secure_json" TEXT, PRIMARY KEY("instance","month","secure_json"))')
+            conn.execute("INSERT INTO cl1_data (instance, month, data_json) VALUES (?, ?, ?)",
+                         ("test", "2026-01", json.dumps({"battle_count": 5})))
+
+    def repair(self):
+        with patch.object(database.Cl1Database, "_get_legacy_decryption_keys", return_value=[]):
+            return database.Cl1Database(self.path)
+
+    def test_broken_unique_key_is_repaired_and_writable(self):
+        self.make_broken_db()
+        self.repair()
+        with closing(sqlite3.connect(self.path)) as conn:
+            self.assertEqual(database.Cl1Database._primary_key(conn.cursor()), ["instance", "month"])
+            rows = conn.execute("SELECT instance, month, data_json FROM cl1_data").fetchall()
+        self.assertEqual(rows, [("test", "2026-01", json.dumps({"battle_count": 5}))])
+        # 官方写入形态（ON CONFLICT 匹配 (instance, month)）恢复可执行，且按键更新而非插重复行。
+        with closing(sqlite3.connect(self.path)) as conn, conn:
+            conn.execute("INSERT INTO cl1_data (instance, month, data_json, secure_json, encrypted_blob)"
+                         " VALUES ('test', '2026-01', ?, NULL, NULL)"
+                         " ON CONFLICT(instance, month) DO UPDATE SET data_json=excluded.data_json",
+                         (json.dumps({"battle_count": 6}),))
+        with closing(sqlite3.connect(self.path)) as conn:
+            rows = conn.execute("SELECT data_json FROM cl1_data").fetchall()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(json.loads(rows[0][0])["battle_count"], 6)
+
+    def test_intact_unique_key_is_left_alone(self):
+        with closing(sqlite3.connect(self.path)) as conn, conn:
+            conn.execute("CREATE TABLE cl1_data (instance TEXT, month TEXT, data_json TEXT,"
+                         " encrypted_blob BLOB, secure_json TEXT, PRIMARY KEY (instance, month))")
+            conn.execute("INSERT INTO cl1_data VALUES ('test', '2026-01', '{}', NULL, NULL)")
+            before = conn.execute("SELECT sql FROM sqlite_master WHERE name='cl1_data'").fetchone()[0]
+        self.repair()
+        with closing(sqlite3.connect(self.path)) as conn:
+            after = conn.execute("SELECT sql FROM sqlite_master WHERE name='cl1_data'").fetchone()[0]
+        self.assertEqual(before, after)
+
+    def test_duplicate_months_are_preserved_and_require_manual_repair(self):
+        self.make_broken_db()
+        with closing(sqlite3.connect(self.path)) as conn, conn:
+            conn.execute("INSERT INTO cl1_data VALUES ('test','2026-01',NULL,'{\"battle_count\":9}',NULL)")
+        before = self.path.read_bytes()
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.repair()
+        self.assertEqual(before, self.path.read_bytes())
+        with closing(sqlite3.connect(self.path)) as conn:
+            self.assertEqual(conn.execute('SELECT COUNT(*) FROM cl1_data').fetchone()[0], 2)
+
+    def test_unknown_columns_are_preserved_and_require_manual_repair(self):
+        self.make_broken_db()
+        with closing(sqlite3.connect(self.path)) as conn, conn:
+            conn.execute("ALTER TABLE cl1_data ADD COLUMN custom_history TEXT")
+            conn.execute("UPDATE cl1_data SET custom_history='preserve'")
+        before = self.path.read_bytes()
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.repair()
+        self.assertEqual(before, self.path.read_bytes())
+
+    def test_existing_rebuild_table_is_preserved(self):
+        self.make_broken_db()
+        with closing(sqlite3.connect(self.path)) as conn, conn:
+            conn.execute('CREATE TABLE cl1_data_rebuild (history TEXT)')
+            conn.execute("INSERT INTO cl1_data_rebuild VALUES ('preserve')")
+        before = self.path.read_bytes()
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.repair()
+        self.assertEqual(before, self.path.read_bytes())

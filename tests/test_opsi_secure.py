@@ -3,6 +3,7 @@
 import json
 import sqlite3
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -22,7 +23,7 @@ def db(path):
 from module.statistics.opsi_keys import KeyProvider, ProviderUnavailable
 from module.statistics.opsi_state import canonical
 
-from module.statistics import opsi_secure
+from module.statistics import cl1_database, opsi_secure
 
 NOW = 1_800_000_000.0
 
@@ -130,8 +131,9 @@ class OpsiSecureTestCase(unittest.TestCase):
         self.dpapi_patch.stop()
         self.directory.cleanup()
 
-    def new_vault(self):
-        return opsi_secure.Vault(self.root, provider=self.provider, background_migration=False)
+    def new_vault(self, deep_check=False):
+        return opsi_secure.Vault(self.root, provider=self.provider, background_migration=False,
+                                 deep_check=deep_check)
 
     def read_cl1(self, vault=None):
         vault = vault or self.vault
@@ -215,52 +217,82 @@ class OpsiSecureTestCase(unittest.TestCase):
         self.to_v1()
         self.assertTrue(self.vault.ensure_ready())
         self.assertTrue(opsi_secure.Vault(self.root, protected_files=[self.root / 'nonexistent.py'],
-                                        provider=self.provider).ensure_ready())
+                                        provider=self.provider, deep_check=False).ensure_ready())
         self.assertEqual(self.read_cl1(), self.full)
         self.assertFalse(self.vault.wipe_path.exists())
 
     def assert_no_global_detection(self):
-        """库外改动不再触发全局清空：新实例可用、无 wipe 记录、凭据未撤销。"""
+        """结构变化等豁免路径不触发全局冻结：新实例可用、无 wipe 记录、凭据未撤销。"""
         fresh = self.new_vault()
         self.assertTrue(fresh.ensure_ready())
         self.assertFalse(self.vault.wipe_path.exists())
         self.assertIsNotNone(self.provider.load(self.vault.slot))
         return fresh
 
-    def test_raw_deletion_is_not_globally_detected(self):
+    def assert_blocked_state(self):
+        """检测仍生效，按定制策略持久冻结，保留原件与凭据并生成救援副本。"""
+        self.assertTrue(self.vault.status()['blocked'])
+        self.assertFalse(self.vault.wipe_path.exists())
+        self.assertTrue(list(self.vault.directory.glob('rescue-*')))
+        self.assertIsNotNone(self.provider.load(self.vault.slot))
+        with db(self.vault.cl1_db) as conn:
+            row = conn.execute('SELECT secure_json FROM cl1_data').fetchone()
+        self.assertTrue(row[0].startswith(opsi_secure.BLOB_PREFIX))
+        self.assertFalse(self.new_vault().ensure_ready())
+        with self.assertRaises(opsi_secure.VaultLocked):
+            self.update_count(9999)
+
+    def test_unprotected_columns_stay_editable(self):
+        """公开列（非大世界资源列、CL1 公开字段）库外编辑不触发浅检查冻结。"""
+        self.assertTrue(self.vault.ensure_ready())
+        with db(self.vault.azurstats_db) as conn:
+            conn.execute('UPDATE resource_snapshots SET oil=999')
+        with db(self.vault.cl1_db) as conn:
+            public = json.loads(conn.execute('SELECT data_json FROM cl1_data').fetchone()[0])
+            public['research_drop_entries'] = []
+            conn.execute('UPDATE cl1_data SET data_json=?', (json.dumps(public, ensure_ascii=False),))
+        self.vault.verify_on_page_open()
+        self.assertFalse(self.vault.wipe_path.exists())
+        self.assertFalse((self.vault.directory / 'integrity.json').exists())
+        with db(self.vault.azurstats_db) as conn:
+            self.assertEqual(conn.execute('SELECT oil FROM resource_snapshots').fetchone()[0], 999)
+        self.assertEqual(self.read_cl1()['battle_count'], self.full['battle_count'])
+
+    def test_out_of_band_row_deletion_triggers_freeze(self):
+        """库外删行：下一次写入即按行数锚点冻结。"""
         self.assertTrue(self.vault.ensure_ready())
         with db(self.vault.azurstats_db) as conn:
             conn.execute('DELETE FROM opsi_items')
-            conn.execute('UPDATE resource_snapshots SET oil=999')
-        self.assert_no_global_detection()
-        with db(self.vault.azurstats_db) as conn:
-            self.assertEqual(conn.execute('SELECT count(*) FROM opsi_items').fetchone()[0], 0)
-            self.assertEqual(conn.execute('SELECT oil FROM resource_snapshots').fetchone()[0], 999)
-        with db(self.vault.cl1_db) as conn:
-            self.assertIn('research_drop_entries', json.loads(conn.execute('SELECT data_json FROM cl1_data').fetchone()[0]))
+        with self.assertRaises(opsi_secure.VaultLocked):
+            with db(self.vault.azurstats_db) as conn:
+                with self.vault.transaction(conn, self.vault.azurstats_db):
+                    conn.execute("INSERT INTO resource_snapshots(instance, ts) VALUES('inst','2026-09-02T00:00:00')")
+        self.assert_blocked_state()
 
-    def test_forged_insertion_persists_but_reads_empty(self):
+    def test_out_of_band_row_insertion_triggers_freeze(self):
+        """库外插行：页面核对点即按行数锚点冻结。"""
         self.assertTrue(self.vault.ensure_ready())
         with db(self.vault.azurstats_db) as conn:
             conn.execute("INSERT INTO opsi_items(imgid,instance) VALUES('forged','inst')")
-        fresh = self.assert_no_global_detection()
-        with db(self.vault.azurstats_db) as conn:
-            conn.row_factory = sqlite3.Row
-            row = dict(conn.execute("SELECT * FROM opsi_items WHERE imgid='forged'").fetchone())
-        self.assertIsNone(row['secure_payload'])
-        self.assertIsNone(fresh.open_or_none('loot', row['secure_payload'], opsi_secure.row_context('loot', row)))
+        self.vault.verify_on_page_open()
+        self.assert_blocked_state()
 
-    def test_record_replacement_degrades_that_record(self):
+    def test_record_replacement_triggers_freeze_on_read(self):
+        """行身份被库外改写（AAD 不再匹配）：读取该条即按篡改信号冻结。"""
         self.assertTrue(self.vault.ensure_ready())
         with db(self.vault.azurstats_db) as conn:
             conn.execute("UPDATE opsi_items SET instance='other'")
-        fresh = self.assert_no_global_detection()
+        fresh = self.new_vault()
+        self.assertTrue(fresh.ensure_ready())
+        self.assertFalse(self.vault.wipe_path.exists())
         with db(self.vault.azurstats_db) as conn:
             row = dict(zip([r[1] for r in conn.execute('PRAGMA table_info(opsi_items)')], conn.execute('SELECT * FROM opsi_items').fetchone()))
-        # 行身份参与认证：换实例后该条读不出，其余记录不受影响。
+        # 行身份参与认证：换实例后该条读不出，读取路径判定为篡改并冻结。
         self.assertIsNone(fresh.open_or_none('loot', row['secure_payload'], opsi_secure.row_context('loot', row)))
+        self.assert_blocked_state()
 
-    def test_record_exchange_degrades_both_records(self):
+    def test_record_exchange_triggers_freeze_on_read(self):
+        """跨行挪动密文（AAD 绑定行身份）：读取任一条即按篡改信号冻结。"""
         with db(self.vault.azurstats_db) as conn:
             conn.execute("INSERT INTO opsi_items(imgid,instance,item,amount,created_at) VALUES('second','inst','other',9,1789000000)")
         self.assertTrue(self.vault.ensure_ready())
@@ -268,19 +300,26 @@ class OpsiSecureTestCase(unittest.TestCase):
             records = conn.execute('SELECT id,secure_payload FROM opsi_items ORDER BY id').fetchall()
             conn.execute('UPDATE opsi_items SET secure_payload=? WHERE id=?', (records[1][1], records[0][0]))
             conn.execute('UPDATE opsi_items SET secure_payload=? WHERE id=?', (records[0][1], records[1][0]))
-        fresh = self.assert_no_global_detection()
+        fresh = self.new_vault()
+        self.assertTrue(fresh.ensure_ready())
+        self.assertFalse(self.vault.wipe_path.exists())
         with db(self.vault.azurstats_db) as conn:
             conn.row_factory = sqlite3.Row
-            for row in conn.execute('SELECT * FROM opsi_items ORDER BY id'):
-                self.assertIsNone(fresh.open_or_none('loot', row['secure_payload'], opsi_secure.row_context('loot', dict(row))))
+            row = dict(conn.execute('SELECT * FROM opsi_items ORDER BY id').fetchone())
+        self.assertIsNone(fresh.open_or_none('loot', row['secure_payload'], opsi_secure.row_context('loot', row)))
+        self.assert_blocked_state()
 
-    def test_added_or_removed_files_do_not_wipe(self):
+    def test_copied_file_new_path_verify_silent_read_freezes(self):
+        """受保护文件被复制到新路径：核对点静默采纳新文件；读取复制品即冻结。"""
         self.assertTrue(self.vault.ensure_ready())
         extra = self.root / 'log' / 'azurstat_meowofficer_farming.instance-forged.csv'
         extra.write_bytes(self.csv.read_bytes())
-        fresh = self.assert_no_global_detection()
-        # 文件的相对路径参与认证：复制的密文在新路径下读不出。
+        fresh = self.new_vault()
+        self.assertTrue(fresh.ensure_ready())
+        self.assertFalse(self.vault.wipe_path.exists())
+        # 文件的相对路径参与认证：复制的密文在新路径下读不出，按篡改信号冻结。
         self.assertIsNone(fresh.open_or_none('loot', extra.read_text(), fresh.file_context('loot', extra)))
+        self.assert_blocked_state()
 
     def test_transaction_writes_leave_no_pending_state(self):
         """写入不再走 pending/journal 协议：提交即持久，状态里不残留中间态。"""
@@ -351,15 +390,20 @@ class OpsiSecureTestCase(unittest.TestCase):
         self.assertEqual(self.vault.open_('archives', wrapper['payload'], self.vault.file_context('archives', archive)),
                          {'2026-09': 987})
 
-    def test_bit_flip_degrades_that_record_only(self):
+    def test_bit_flip_triggers_background_freeze_on_page_read(self):
+        """库外逐字节改密文：页面读取路径（事务内）触发后台冻结，本次读取降级为空。"""
         self.assertTrue(self.vault.ensure_ready())
         with db(self.vault.azurstats_db) as conn:
             conn.execute("UPDATE opsi_items SET secure_payload=substr(secure_payload,1,length(secure_payload)-1)||'!' ")
-        fresh = self.assert_no_global_detection()
+        fresh = self.new_vault()
+        self.assertTrue(fresh.ensure_ready())
         with db(self.vault.azurstats_db) as conn:
             columns = [r[1] for r in conn.execute('PRAGMA table_info(opsi_items)')]
             row = dict(zip(columns, conn.execute('SELECT * FROM opsi_items').fetchone()))
-        self.assertIsNone(fresh.open_or_none('loot', row['secure_payload'], opsi_secure.row_context('loot', row)))
+        with fresh.reading():
+            self.assertIsNone(fresh.open_or_none('loot', row['secure_payload'], opsi_secure.row_context('loot', row)))
+        fresh._wipe_thread.join(timeout=10)
+        self.assert_blocked_state()
 
     def test_forged_triggers_do_not_wipe_or_block(self):
         self.assertTrue(self.vault.ensure_ready())
@@ -368,11 +412,117 @@ class OpsiSecureTestCase(unittest.TestCase):
         fresh = self.assert_no_global_detection()
         self.assertTrue(fresh.ensure_ready())
 
-    def test_deleted_database_does_not_wipe(self):
+    def test_deleted_database_triggers_freeze(self):
+        """受保护数据库被整个删除：启动核对点即冻结。"""
         self.assertTrue(self.vault.ensure_ready())
         self.vault.azurstats_db.unlink()
-        fresh = self.assert_no_global_detection()
+        fresh = self.new_vault()
+        self.assertFalse(fresh.ensure_ready())
+        self.assert_blocked_state()
+
+    def test_deleted_protected_file_triggers_freeze(self):
+        """受保护统计文件被删除：页面核对点即冻结。"""
+        self.assertTrue(self.vault.ensure_ready())
+        self.ship.unlink()
+        self.vault.verify_on_page_open()
+        self.assert_blocked_state()
+
+    def test_missing_expectations_are_vouched_silently(self):
+        """升级场景：旧状态里没有基线字段时静默补记全部路径，不误报。"""
+        self.assertTrue(self.vault.ensure_ready())
+        state = self.provider.load(self.vault.slot)
+        state.pop('expect', None)
+        self.provider.save(self.vault.slot, state)
+        fresh = self.new_vault()
         self.assertTrue(fresh.ensure_ready())
+        self.assertTrue(fresh._state.get('expect'))
+        self.assertFalse((self.vault.directory / 'integrity.json').exists())
+
+    def test_regular_operations_leave_no_integrity_record(self):
+        """正常读写不产生误报：基线与实际一致时没有任何 integrity 记录。"""
+        self.assertTrue(self.vault.ensure_ready())
+        self.update_count(121)
+        self.update_count(122)
+        self.assertTrue(self.new_vault().ensure_ready())
+        self.assertFalse((self.vault.directory / 'integrity.json').exists())
+        self.assertFalse(self.vault.wipe_path.exists())
+
+    def test_snapshot_rollback_triggers_freeze_at_next_write(self):
+        """整库回滚到旧字节：下一次写入前按链值冻结（证据 + 救援 + 保留凭据）。"""
+        self.assertTrue(self.vault.ensure_ready())
+        old = self.vault.cl1_db.read_bytes()
+        self.update_count(999)
+        self.vault.cl1_db.write_bytes(old)
+        with self.assertRaises(opsi_secure.VaultLocked):
+            self.update_count(888)
+        self.assert_blocked_state()
+
+    def test_snapshot_rollback_detected_at_startup(self):
+        """被替换为旧备份：新进程启动核对即冻结，不再加载被回滚的数据。"""
+        self.assertTrue(self.vault.ensure_ready())
+        old = self.vault.cl1_db.read_bytes()
+        self.update_count(555)
+        self.vault.cl1_db.write_bytes(old)
+        fresh = self.new_vault()
+        self.assertFalse(fresh.ensure_ready())
+        self.assert_blocked_state()
+
+    def test_file_rollback_triggers_freeze(self):
+        """受保护文件回滚到旧字节：页面核对点冻结。"""
+        self.assertTrue(self.vault.ensure_ready())
+        before = self.ship.read_bytes()
+        self.vault.write_file('ships', self.ship, {'changed': True}, wrapper=True)
+        self.ship.write_bytes(before)
+        self.vault.verify_on_page_open()
+        self.assert_blocked_state()
+
+    def test_external_table_rebuild_is_repaired_and_rebaselined(self):
+        """外部工具把 cl1_data 改成三列主键：重启构造自愈重建，vault 按结构变化
+        重记基线（不冻结），随后写入与行数锚点恢复正常。"""
+        self.assertTrue(self.vault.ensure_ready())
+        self.update_count(41)
+        with db(self.vault.cl1_db) as conn:
+            conn.execute('CREATE TABLE "cl1_data_new" ("instance" TEXT, "month" TEXT, "encrypted_blob" BLOB,'
+                         ' "data_json" TEXT, "secure_json" TEXT, PRIMARY KEY("instance","month","secure_json"))')
+            conn.execute("INSERT INTO cl1_data_new (instance, month, encrypted_blob, data_json, secure_json)"
+                         " SELECT instance, month, encrypted_blob, data_json, secure_json FROM cl1_data")
+            conn.execute("DROP TABLE cl1_data")
+            conn.execute("ALTER TABLE cl1_data_new RENAME TO cl1_data")
+        with patch.object(cl1_database.Cl1Database, "_get_legacy_decryption_keys", return_value=[]):
+            cl1_database.Cl1Database(self.vault.cl1_db)
+        with db(self.vault.cl1_db) as conn:
+            self.assertEqual(cl1_database.Cl1Database._primary_key(conn.cursor()), ["instance", "month"])
+        self.update_count(42)
+        self.assertEqual(self.read_cl1()["battle_count"], 42)
+        self.assertFalse(self.vault.wipe_path.exists())
+        self.assert_no_global_detection()
+        with db(self.vault.cl1_db) as conn:
+            anchors = conn.execute("SELECT count(*) FROM sqlite_master"
+                                   " WHERE name LIKE '__opsi_count_cl1_data%'").fetchone()[0]
+        self.assertEqual(anchors, 2)
+
+    def test_expectation_persists_across_restart(self):
+        """文件类路径同样记基线；重启后基线从安全服务恢复，常规状态下无误报。"""
+        self.assertTrue(self.vault.ensure_ready())
+        self.vault.write_file('ships', self.ship, {'a': 1}, wrapper=True)
+        key = str(self.ship.resolve().relative_to(self.root))
+        self.assertIn(key, self.vault._state['expect'])
+        fresh = self.new_vault()
+        self.assertTrue(fresh.ensure_ready())
+        self.assertEqual(fresh._state['expect'][key], self.vault._state['expect'][key])
+        self.assertFalse((self.vault.directory / 'integrity.json').exists())
+        self.assertFalse(self.vault.wipe_path.exists())
+
+    def test_revouch_re_baselines_explicitly(self):
+        """显式重记入口：库外改动被 revouch 接受后，核对点不再判定篡改。"""
+        self.assertTrue(self.vault.ensure_ready())
+        before = self.ship.read_bytes()
+        self.vault.write_file('ships', self.ship, {'b': 2}, wrapper=True)
+        self.ship.write_bytes(before)
+        self.vault.revouch(self.ship)
+        self.vault.verify_on_page_open()
+        self.assertFalse(self.vault.wipe_path.exists())
+        self.assertTrue(self.new_vault().ensure_ready())
 
     def test_descriptor_tamper(self):
         self.assertTrue(self.vault.ensure_ready())
@@ -387,14 +537,17 @@ class OpsiSecureTestCase(unittest.TestCase):
         self.assertEqual(self.vault.keyring_path.read_text(), '{}')
         self.assertFalse(self.new_vault().ensure_ready())
 
-    def test_rollback_to_old_bytes_returns_old_values(self):
-        """无全量根校验后，整文件回滚不再被发现；回滚后的旧密文照常读出。"""
+    def test_schema_upgrade_rebaselines_without_wipe(self):
+        """应用升级改表结构（ALTER 加列）：甲胄乙记日志并重记基线，不冻结。"""
         self.assertTrue(self.vault.ensure_ready())
-        old = self.vault.cl1_db.read_bytes()
-        self.update_count(999)
-        self.vault.cl1_db.write_bytes(old)
-        fresh = self.assert_no_global_detection()
-        self.assertEqual(self.read_cl1(fresh)['battle_count'], self.full['battle_count'])
+        with db(self.vault.azurstats_db) as conn:
+            conn.execute('ALTER TABLE opsi_items ADD COLUMN extra TEXT')
+        self.vault.verify_on_page_open()
+        self.assertFalse(self.vault.wipe_path.exists())
+        self.assertFalse((self.vault.directory / 'integrity.json').exists())
+        self.assertTrue(self.new_vault().ensure_ready())
+        self.update_count(777)
+        self.assertEqual(self.read_cl1(self.new_vault())['battle_count'], 777)
 
     def update_count(self, count, vault=None):
         vault = vault or self.vault
@@ -404,32 +557,34 @@ class OpsiSecureTestCase(unittest.TestCase):
                 blob = vault.seal('cl1', {'battle_count': count}, context)
                 conn.execute('UPDATE cl1_data SET secure_json=?', (blob,))
 
-    def test_record_replay_returns_old_values_silently(self):
+    def test_row_replay_is_caught_by_deep_check(self):
+        """库内记录回放（旧密文本省合法、行数不变）：浅检查看不见，深检查冻结。"""
         self.assertTrue(self.vault.ensure_ready())
         with db(self.vault.cl1_db) as conn:
             old = conn.execute('SELECT secure_json FROM cl1_data').fetchone()[0]
         self.update_count(123)
+        self.vault.deep_check_once()
         with db(self.vault.cl1_db) as conn:
             conn.execute('UPDATE cl1_data SET secure_json=?', (old,))
-        fresh = self.assert_no_global_detection()
-        self.assertEqual(self.read_cl1(fresh)['battle_count'], self.full['battle_count'])
+        self.vault.deep_check_once()
+        self.assert_blocked_state()
 
-    def test_file_rollback_reads_old_content(self):
+    def test_first_run_initializes_chain_silently(self):
+        """首次启用（升级到本版本）：静默建链补基线，不冻结、无证据文件。"""
         self.assertTrue(self.vault.ensure_ready())
-        before = self.vault.open_('ships', json.loads(self.ship.read_bytes())['payload'],
-                                  self.vault.file_context('ships', self.ship))
-        old = self.ship.read_bytes()
-        self.vault.write_file('ships', self.ship, {'changed': True}, wrapper=True)
-        self.ship.write_bytes(old)
-        fresh = self.assert_no_global_detection()
-        self.assertEqual(fresh.open_('ships', json.loads(self.ship.read_bytes())['payload'],
-                                     fresh.file_context('ships', self.ship)), before)
+        with db(self.vault.cl1_db) as conn:
+            self.assertEqual(conn.execute('SELECT seq FROM __opsi_integrity').fetchone()[0], 1)
+        self.assertFalse(self.vault.wipe_path.exists())
+        self.assertFalse((self.vault.directory / 'integrity.json').exists())
+        self.update_count(131)
+        with db(self.vault.cl1_db) as conn:
+            self.assertEqual(conn.execute('SELECT seq FROM __opsi_integrity').fetchone()[0], 2)
 
     def test_binding_dataset_instance_identity_period_installation(self):
         self.assertTrue(self.vault.ensure_ready())
         context = self.vault.context('cl1', 'inst', 'row', '2026-09')
         blob = self.vault.seal('cl1', {'battle_count': 7}, context)
-        # 直接校验标签，不让每个参数试验清空后影响其余试验。
+        # 直接校验标签，不让每个参数试验冻结后影响其余试验。
         for field, value in [('dataset', 'loot'), ('instance', 'other'), ('identity', 'other'),
                              ('period', '2026-10'), ('installation_id', 'other'), ('algorithm', 'AES-GCM')]:
             aad = dict(context, schema=2, algorithm=opsi_secure.ALGORITHM,
@@ -440,13 +595,13 @@ class OpsiSecureTestCase(unittest.TestCase):
 
     def test_cross_device_account_and_copied_installation_preserve_original(self):
         self.assertTrue(self.vault.ensure_ready())
-        other = opsi_secure.Vault(self.root, provider=MemoryProvider())
+        other = opsi_secure.Vault(self.root, provider=MemoryProvider(), deep_check=False)
         self.assertFalse(other.ensure_ready())
         self.assertFalse(self.vault.wipe_path.exists())
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as folder:
             clone = Path(folder) / 'clone'
             shutil.copytree(self.root, clone)
-            copied = opsi_secure.Vault(clone, provider=self.provider)
+            copied = opsi_secure.Vault(clone, provider=self.provider, deep_check=False)
             self.assertFalse(copied.ensure_ready())
             self.assertFalse(copied.wipe_path.exists())
         self.assertTrue(self.vault.ensure_ready())
@@ -465,7 +620,7 @@ class OpsiSecureTestCase(unittest.TestCase):
         self.assertTrue(self.vault.ensure_ready())
         with db(self.vault.azurstats_db) as conn:
             conn.execute('BEGIN EXCLUSIVE')
-            # 解封与写入都不再触碰数据库文件，占用中的库不影响可用性判断，也不触发清空。
+            # 解封与写入都不再触碰数据库文件，占用中的库不影响可用性判断，也不触发冻结。
             self.assertTrue(self.new_vault().ensure_ready())
             self.assertFalse(self.vault.wipe_path.exists())
 
@@ -497,6 +652,84 @@ class OpsiSecureTestCase(unittest.TestCase):
         with ThreadPoolExecutor(max_workers=4) as pool:
             list(pool.map(update, range(12)))
         self.assertEqual(self.read_cl1(self.new_vault())['battle_count'], 132)
+
+    def test_crash_window_between_commit_and_save_rebaselines(self):
+        """提交成功但期望值未写入安全服务的崩溃窗口：重记基线，不冻结。"""
+        self.assertTrue(self.vault.ensure_ready())
+        with patch.object(self.vault, '_save_expectations', return_value=False):
+            self.update_count(500)
+        self.assertTrue((self.vault.directory / 'pending.json').exists())
+        fresh = self.new_vault()
+        self.assertTrue(fresh.ensure_ready())
+        self.assertFalse(self.vault.wipe_path.exists())
+        self.assertFalse((self.vault.directory / 'integrity.json').exists())
+        self.assertFalse((self.vault.directory / 'pending.json').exists())
+        self.assertEqual(self.read_cl1(fresh)['battle_count'], 500)
+        # 同一 Vault 也能自愈：下一笔写入前按崩溃窗口重记基线后照常进行。
+        self.update_count(501)
+        self.assertEqual(self.read_cl1(self.new_vault())['battle_count'], 501)
+
+    def test_reencrypted_row_bypassing_chain_is_caught_by_deep_check(self):
+        """用本环境密钥重加密单条但绕过链更新：浅检查看不见，深检查冻结。"""
+        self.assertTrue(self.vault.ensure_ready())
+        self.vault.deep_check_once()
+        context = opsi_secure.row_context('cl1', {'instance': 'inst', 'month': '2026-09'})
+        blob = self.vault.seal('cl1', {'battle_count': 4242}, context)
+        with db(self.vault.cl1_db) as conn:
+            conn.execute('UPDATE cl1_data SET secure_json=?', (blob,))
+        self.vault.deep_check_once()
+        self.assert_blocked_state()
+
+    def test_deep_check_runs_concurrently_with_writes_without_wipe(self):
+        """深检查与写入并发：序号乐观并发不误报，写入全部成功。"""
+        self.assertTrue(self.vault.ensure_ready())
+        self.vault.deep_check_once()
+        errors = []
+        stop = threading.Event()
+
+        def writer(offset):
+            try:
+                for step in range(15):
+                    self.update_count(2000 + offset * 100 + step)
+            except Exception as exc:
+                errors.append(exc)
+
+        def deep():
+            try:
+                while not stop.is_set():
+                    self.vault.deep_check_once()
+            except Exception as exc:
+                errors.append(exc)
+
+        writers = [threading.Thread(target=writer, args=(index,)) for index in range(2)]
+        watcher = threading.Thread(target=deep)
+        for worker in [*writers, watcher]:
+            worker.start()
+        for worker in writers:
+            worker.join()
+        stop.set()
+        watcher.join(timeout=10)
+        self.assertEqual(errors, [])
+        self.assertFalse(self.vault.wipe_path.exists())
+        self.assertFalse((self.vault.directory / 'integrity.json').exists())
+
+    def test_write_path_never_digests(self):
+        """性能回归护栏：写入路径只读链行/行数/结构，不做任何全量摘要。"""
+        self.assertTrue(self.vault.ensure_ready())
+        with patch.object(opsi_secure.Vault, '_path_digest',
+                          wraps=opsi_secure.Vault._path_digest) as digest:
+            self.update_count(222)
+        self.assertEqual(digest.call_count, 0)
+        with db(self.vault.cl1_db) as conn:
+            self.assertEqual(conn.execute('SELECT seq FROM __opsi_integrity').fetchone()[0], 2)
+
+    def test_provider_state_stays_within_platform_budget(self):
+        """Windows 凭据有 2560 字节上限：期望值编码必须保持精简。"""
+        self.assertTrue(self.vault.ensure_ready())
+        self.update_count(131)
+        self.vault.write_file('ships', self.ship, {'a': 1}, wrapper=True)
+        state = self.provider.load(self.vault.slot)
+        self.assertLess(len(canonical(state)), 2200)
 
 
 

@@ -30,7 +30,7 @@ def process_increment(root, crash=False):
     root = Path(root)
     if not root.is_relative_to(Path(tempfile.gettempdir())):
         raise RuntimeError('测试目录必须隔离')
-    vault = opsi_secure.Vault(root, provider=opsi_keys.WindowsProvider(), background_migration=False)
+    vault = opsi_secure.Vault(root, provider=opsi_keys.WindowsProvider(), background_migration=False, deep_check=False)
     with closing(sqlite3.connect(vault.cl1_db)) as conn:
         with vault.transaction(conn, vault.cl1_db):
             context = opsi_secure.row_context('cl1', {'instance': 'inst', 'month': '2026-09'})
@@ -52,7 +52,7 @@ def process_migrate(root):
             os._exit(23)
         return real(path, data)
     opsi_secure.durable_write = terminate
-    opsi_secure.Vault(root, provider=opsi_keys.WindowsProvider(), background_migration=False).ensure_migrated()
+    opsi_secure.Vault(root, provider=opsi_keys.WindowsProvider(), background_migration=False, deep_check=False).ensure_migrated()
 
 
 class ProviderTests(unittest.TestCase):
@@ -70,7 +70,7 @@ class ProviderTests(unittest.TestCase):
             ship.write_text(json.dumps({opsi_secure.LEGACY_WRAPPER_KEY: True,
                                        'payload': legacy_blob(key, 'ships', {'samples': [9]})}))
             provider = opsi_keys.WindowsProvider()
-            vault = opsi_secure.Vault(root, provider=provider, background_migration=False)
+            vault = opsi_secure.Vault(root, provider=provider, background_migration=False, deep_check=False)
             try:
                 worker = multiprocessing.get_context('spawn').Process(target=process_migrate, args=(str(root),))
                 worker.start()
@@ -94,7 +94,7 @@ class ProviderTests(unittest.TestCase):
             (root / 'config').mkdir()
             make_cl1_db(root / 'config' / 'cl1_data.db')
             provider = opsi_keys.WindowsProvider()
-            vault = opsi_secure.Vault(root, provider=provider, background_migration=False)
+            vault = opsi_secure.Vault(root, provider=provider, background_migration=False, deep_check=False)
             try:
                 self.assertTrue(vault.ensure_ready())
                 ctx = multiprocessing.get_context('spawn')
@@ -198,6 +198,8 @@ class ProviderTests(unittest.TestCase):
             self.assertNotIn(base64.b64encode(key).decode(), sealed)
             self.assertEqual(provider.key({'key': sealed}), key)
         self.assertIn('fixedtpm|fixedparent|userwithauth|noda', commands[1])
+        # 封存载荷的 tpm2_create 不得带 -G：真实 tpm2-tools 会拒绝 -G 与 -i 同传。
+        self.assertNotIn('-G', commands[1])
 
     def test_tpm_failure_does_not_fall_back_to_file(self):
         provider = opsi_keys.LinuxTPMProvider()
@@ -286,7 +288,7 @@ class BrokerTests(unittest.TestCase):
         make_cl1_db(root / 'config' / 'cl1_data.db')
         slot = opsi_keys.installation_slot(root)
         self.broker.grants = {fingerprint: slot for fingerprint in self.broker.grants}
-        vault = opsi_secure.Vault(root, provider=self.client, background_migration=False)
+        vault = opsi_secure.Vault(root, provider=self.client, background_migration=False, deep_check=False)
         self.assertTrue(vault.ensure_ready())
         import sqlite3
         from contextlib import closing
@@ -294,7 +296,7 @@ class BrokerTests(unittest.TestCase):
         with closing(sqlite3.connect(vault.cl1_db)) as conn:
             with vault.transaction(conn, vault.cl1_db):
                 conn.execute('UPDATE cl1_data SET secure_json=?', (vault.seal('cl1', {'battle_count': 333}, context),))
-        fresh = opsi_secure.Vault(root, provider=self.make_client(), background_migration=False)
+        fresh = opsi_secure.Vault(root, provider=self.make_client(), background_migration=False, deep_check=False)
         self.assertTrue(fresh.ensure_ready())
         with closing(sqlite3.connect(vault.cl1_db)) as conn:
             blob = conn.execute('SELECT secure_json FROM cl1_data').fetchone()[0]
