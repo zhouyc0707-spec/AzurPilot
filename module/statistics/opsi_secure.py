@@ -418,7 +418,7 @@ class Vault:
     def open_or_none(self, kind, blob, context=None):
         try:
             return self.open_(kind, blob, context)
-        except (VaultError, ProviderUnavailable, OSError, sqlite3.Error):
+        except (VaultError, ProviderUnavailable, OSError, sqlite3.Error, portalocker_error()):
             return None
 
     @contextmanager
@@ -867,7 +867,7 @@ def checked_read(function):
         try:
             with vault.reading():
                 return function(*args, **kwargs)
-        except (ProviderUnavailable, VaultLocked, OSError, sqlite3.Error):
-            # 原调用方的形状及只读降级逻辑保持不变。
+        except (ProviderUnavailable, VaultLocked, OSError, sqlite3.Error, portalocker_error()):
+            # 迁移占用文件锁时沿用只读降级，不把暂时忙碌误判为统计损坏。
             return function(*args, **kwargs)
     return read

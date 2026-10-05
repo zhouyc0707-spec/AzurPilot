@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
+import portalocker
 
 from module.statistics import opsi_secure
 from module.statistics.azurstats import AzurStats
@@ -62,6 +63,42 @@ class OpsiPreservationPolicyTests(unittest.TestCase):
         self.assertEqual(before, self.path.read_bytes())
         self.provider.offline = False
         self.assertTrue(self.vault.ensure_ready())
+
+    def test_competing_writer_lock_does_not_fail_or_freeze_readers(self):
+        self.assertTrue(self.vault.ensure_ready())
+        second = opsi_secure.Vault(self.root, provider=self.provider, background_migration=False)
+        self.assertTrue(second.ensure_ready())
+        with closing(sqlite3.connect(self.path)) as conn:
+            blob = conn.execute('SELECT secure_json FROM cl1_data').fetchone()[0]
+        context = opsi_secure.row_context('cl1', {'instance': 'inst', 'month': '2026-09'})
+
+        class Reader:
+            db_path = self.path
+
+            @opsi_secure.checked_read
+            def read(self):
+                return opsi_secure.get_vault().open_or_none('cl1', blob, context)
+
+        opsi_secure.set_vault(second)
+        reader = Reader()
+        expected = reader.read()
+        before = self.path.read_bytes()
+        descriptor = self.vault.keyring_path.read_bytes()
+        state = copy.deepcopy(self.provider.states)
+        original_lock = portalocker.Lock
+
+        def immediate_lock(*args, **kwargs):
+            kwargs['timeout'] = 0
+            return original_lock(*args, **kwargs)
+
+        # 使用真实争用的文件锁，缩短测试超时；不把暂时忙碌误判为数据损坏。
+        with self.vault.coordinator.lock(), patch.object(portalocker, 'Lock', side_effect=immediate_lock):
+            self.assertIsNone(reader.read())
+        self.assertEqual(expected, reader.read())
+        self.assertEqual(before, self.path.read_bytes())
+        self.assertEqual(descriptor, self.vault.keyring_path.read_bytes())
+        self.assertEqual(state, self.provider.states)
+        self.assertFalse(second.status()['blocked'])
 
     def test_old_wiping_phase_freezes_remaining_originals(self):
         self.assertTrue(self.vault.ensure_ready())
