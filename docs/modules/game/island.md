@@ -147,6 +147,14 @@ flowchart TD
 | `island_pearl_sell.py` | 珍珠每周采购售卖 | `IslandPearlSell` | 周一 01:00 交易窗口；本岛价不达标时按排行榜拜访好友岛比价（买 1.1 折算）；每日 03:00 可选价格刷新 |
 | `island_cargo_preparation.py` | 货运委托 | `IslandCargoPreparation` | 3 栏位状态机（locked/pending/running/finished/refreshing/empty）；牛奶黑名单触发换货；默认 2 小时重跑 |
 
+### 经营确认与返回
+
+`IslandBusiness._confirm_business_start()` 的前置页面是已选好角色与餐品的商店经营详情；结束条件是正向识别岗位管理的经营、生产或采集页签，调用方再切回经营页签。分批与传统模式共用此流程。
+
+每轮重新截图，优先处理单按钮、白色单按钮和确认弹窗；开始经营按钮同时检查模板和蓝色，兼容美食评审的横向偏移。确认与返回补点共用 3 秒点击间隔，点击后由下一轮截图复核；灰色禁用按钮不再点击，也不盲点返回。30 秒仍未确认返回时抛出 `GameStuckError`，由 `alas.py` 的既有恢复路径先保存最近截图及日志，再安排重启；现场保存继续遵循 `Error.SaveError` 与 `Error.ScreenshotLength`，不调用会在内部直接重启的未知页面导航。
+
+离线回归入口：[经营确认与现场保存](../../../tests/test_island_business_confirm.py)。
+
 ## 7. 调用关系
 
 ### 上游

@@ -12,7 +12,9 @@ from module.island_select_character.assets import *
 from module.logger import logger
 from module.base.button import Button
 from module.base.template import Template
+from module.base.timer import Timer
 from module.base.utils import crop, get_color, color_similar
+from module.exception import GameStuckError
 from module.island.island_season import SEASONAL_ITEMS
 from datetime import timedelta
 
@@ -885,7 +887,7 @@ class IslandBusiness(Island):
         return Button(area=new_area, color=button.color,
                       button=new_button, file=button.file)
 
-    def _appear_at_positions(self, button, offset=30):
+    def _appear_at_positions(self, button, offset=30, skip_first_screenshot=False):
         """
         在正常位置和偏移位置（美食评审模式）检测按钮。
 
@@ -899,11 +901,13 @@ class IslandBusiness(Island):
         Args:
             button: 待检测的按钮。
             offset: 模板匹配搜索范围，默认 30。
+            skip_first_screenshot: 已有当前帧时复用，避免状态循环内再次截图。
 
         Returns:
             Button: 检测到的按钮实例，或 None。
         """
-        self.device.screenshot()
+        if not skip_first_screenshot:
+            self.device.screenshot()
         # 清理残留偏移，确保以干净状态进入检测
         button.clear_offset()
         if self.appear(button, offset=offset):
@@ -1984,26 +1988,57 @@ class IslandBusiness(Island):
                 self.device.sleep(0.5)
 
     def _confirm_business_start(self):
-        start_button = self._appear_at_positions(BUSINESS_START_IN_SHOP)
-        if start_button:
-            logger.info("[岛屿-经营] 确认经营")
-            self.device.click(start_button)
-            self.device.sleep(1)
-            # 确认经营后检测并跳过可能的周常/PT奖励弹窗
-            self.device.screenshot()
-            for _ in range(3):
-                if self.handle_popup_single('BUSINESS'):
-                    self.device.sleep(0.5)
-                    self.device.screenshot()
-                else:
-                    break
-            self.device.click(ISLAND_BACK)
-            self.device.sleep(1)
-            self.device.screenshot()
-            if not self.appear(POST_MANAGE_BUSINESS, offset=30) and not self.appear(POST_MANAGE_PRODUCTION, offset=30):
-                self.goto_postmanage()
-                self.post_manage_mode(POST_MANAGE_BUSINESS)
-                self.device.sleep(1)
+        """确认开始经营，处理奖励弹窗并确认返回岗位管理。
+
+        Returns:
+            bool: 已识别到岗位管理时返回 True。
+
+        Raises:
+            GameStuckError: 未能确认返回，交给调度器保存现场后恢复。
+
+        Pages:
+            in: 商店经营详情，角色和餐品已选好。
+            out: page_island_postmanage，页签由调用方切回经营。
+        """
+        start_requested = False
+        click_timer = Timer(3)
+        for _ in self.loop(timeout=Timer(30), skip_first=False):
+            # 奖励弹窗可能晚于经营按钮响应，必须在每轮新截图上优先处理。
+            if self.handle_popup_single('BUSINESS'):
+                continue
+            if self.handle_popup_single_white():
+                continue
+            if self.handle_popup_confirm('BUSINESS'):
+                continue
+
+            if self.appear(POST_MANAGE_BUSINESS, offset=30) \
+                    or self.appear(POST_MANAGE_PRODUCTION, offset=30) \
+                    or self.appear(ISLAND_GATHER_COLLECT_CHECK, offset=30):
+                logger.info('[岛屿-经营] 已确认返回岗位管理')
+                return True
+
+            start_button = self._appear_at_positions(
+                BUSINESS_START_IN_SHOP, skip_first_screenshot=True)
+            # 文字模板也可能匹配灰色禁用按钮，只有蓝色可点击状态才补点。
+            if start_button and color_similar(
+                    get_color(self.device.image, start_button.area), start_button.color, threshold=50):
+                if click_timer.reached():
+                    logger.info('[岛屿-经营] 确认经营')
+                    self.device.click(start_button)
+                    start_requested = True
+                    click_timer.reset()
+                continue
+
+            if start_requested and click_timer.reached() \
+                    and self.appear_then_click(ISLAND_BACK, offset=30, interval=3):
+                logger.info('[岛屿-经营] 返回岗位管理，等待页面确认')
+                click_timer.reset()
+                continue
+            if self.ui_additional(get_ship=False):
+                continue
+
+        # 不在未知画面上调用内部直接重启的导航，保留最后截图供调度器落盘。
+        raise GameStuckError('[岛屿-经营] 确认经营并返回岗位管理超时')
 
     def _trigger_shop_refill(self, shop_names=None):
         if shop_names is None:
