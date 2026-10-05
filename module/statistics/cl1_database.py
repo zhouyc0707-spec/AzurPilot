@@ -1,7 +1,7 @@
 """CL1 数据库模块。
 
-使用 SQLite 本地存储战斗统计和掉落数据；大世界字段由 opsi_secure 受保护存储到
-secure_json 列，旧版 encrypted_blob 仅用于自动读取还原迁移。
+使用 SQLite 本地存储战斗统计和掉落数据；大世界字段使用普通 JSON。
+兼容读取 secure_json 与 encrypted_blob 中的旧密文，并执行无损迁移。
 """
 
 # -*- coding: utf-8 -*-
@@ -235,7 +235,7 @@ class Cl1Database:
                 if "encrypted_blob" not in columns:
                     cursor.execute("ALTER TABLE cl1_data ADD COLUMN encrypted_blob BLOB")
                 if "secure_json" not in columns:
-                    # 设置密钥后大世界字段迁到这一列（opsi_secure 的密文）。
+                    # 保留旧密文列用于无损迁移，普通存储直接使用 data_json。
                     cursor.execute("ALTER TABLE cl1_data ADD COLUMN secure_json TEXT")
                 if self._primary_key(cursor) != ["instance", "month"]:
                     self._rebuild_table(cursor)
@@ -806,8 +806,10 @@ class Cl1Database:
         vault = opsi_secure.get_vault()
         if data.pop(opsi_secure.MISSING_MARKER, False):
             raise opsi_secure.VaultLocked('统计快照暂不可用')
-        public, secure = opsi_secure.partition_cl1(data)
-        blob = vault.seal('cl1', secure, opsi_secure.row_context('cl1', {'instance': instance, 'month': month}))
+        public, blob = data, None
+        if vault.encrypted:
+            public, secure = opsi_secure.partition_cl1(data)
+            blob = vault.seal('cl1', secure, opsi_secure.row_context('cl1', {'instance': instance, 'month': month}))
         conn.execute(
             """
             INSERT INTO cl1_data (instance, month, data_json, secure_json, encrypted_blob)
@@ -843,9 +845,8 @@ class Cl1Database:
     def _get_stats_in_connection(self, conn, instance, month):
         """事务中的读取不能把数据库错误或损坏行当成空数据覆盖。
 
-        大世界字段存在 secure_json 密文列里；当前进程拿不到密钥时以空的
-        大世界部分降级返回，并打上 MISSING 标记，让随后的写回路径保留原
-        密文而不是用空值覆盖。
+        正常统计保存在完整的 data_json 中；兼容旧密文读取时仍保留
+        MISSING 标记，阻止用默认值覆盖尚未完整迁移的历史。
         """
         row = conn.execute(
             "SELECT data_json, encrypted_blob, secure_json FROM cl1_data WHERE instance = ? AND month = ?",
@@ -1266,7 +1267,7 @@ class Cl1Database:
                 logger.info(f"[Statistics] 已迁移 {instance} {month}")
 
             vault = opsi_secure.get_vault()
-            # 原文件保留同一身份；不生成普通格式的备用副本。
+            # 原文件保留同一身份；普通存储保持可直接读取的 JSON。
             vault.write_file('archives', json_path, old_data, wrapper=True)
 
         except Exception as e:

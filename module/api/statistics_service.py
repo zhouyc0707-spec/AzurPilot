@@ -55,8 +55,8 @@ def get_statistics_fingerprint(instance: str) -> str:
     except OSError:
         parts.append("ship:none")
 
-    # 5. 大世界统计加密状态（设置或清空后页面需要刷新）
-    keyring = './config/opsi_secure/keyring.json'
+    # 5. 存储迁移完成后页面需要刷新；旧加密描述不再控制普通统计。
+    keyring = './config/opsi_secure/plaintext.json'
     try:
         stat = os.stat(keyring)
         parts.append(f"secure:{stat.st_mtime_ns}")
@@ -237,10 +237,10 @@ def _month_end(moment: datetime) -> datetime:
 
 def report(configs, instance: str, category: str, month: str, days: int, period: str,
            research_series: int = 0, research_scope: str = 'series', loot_task: str = None) -> dict:
-    """同一份受保护报表的读取共用一次校验及协调锁。"""
+    """同一份统计报表的读取共用存储就绪检查及协调锁。"""
     configs.path(instance)
     from module.statistics.opsi_secure import checked_read, verify_on_page_open
-    # 打开/刷新统计页的核对点：浅检查毫秒级同步，深检查只交后台线程。
+    # 普通存储只确认迁移已完成；旧加密实现保留兼容性校验入口。
     verify_on_page_open()
     reader = _report
     if category in ('resources', 'action', 'opsi', 'ships', 'loot', 'commission', 'research'):

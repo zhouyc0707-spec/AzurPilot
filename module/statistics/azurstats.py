@@ -295,7 +295,7 @@ class AzurStats:
                 # 旧记录没有可靠的实例身份，NULL 明确表示历史共享，禁止推断归属。
                 conn.execute('ALTER TABLE opsi_items ADD COLUMN instance TEXT')
             if 'secure_payload' not in columns:
-                # 设置密钥后物品与数量等列迁到这一列（opsi_secure 的密文）。
+                # 保留旧密文列以兼容无损迁移，普通存储直接使用业务列。
                 conn.execute('ALTER TABLE opsi_items ADD COLUMN secure_payload TEXT')
             conn.execute('CREATE INDEX IF NOT EXISTS idx_opsi_items_instance_device_genre '
                          'ON opsi_items(instance, device_id, genre)')
@@ -322,12 +322,17 @@ class AzurStats:
                 with closing(sqlite3.connect(AzurStats.LOCAL_DB, timeout=30)) as conn:
                     with vault.transaction(conn, AzurStats.LOCAL_DB):
                         for row in rows:
-                            cursor = conn.execute('INSERT INTO opsi_items (imgid, device_id, instance, genre, created_at) '
-                                                  'VALUES (:imgid,:device_id,:instance,:genre,:created_at)', row)
-                            row = dict(row, id=cursor.lastrowid)
-                            payload = {key: row.get(key) for key in opsi_secure.LOOT_SECURE_FIELDS}
-                            blob = vault.seal('loot', payload, opsi_secure.row_context('loot', row))
-                            conn.execute('UPDATE opsi_items SET secure_payload=? WHERE id=?', (blob, row['id']))
+                            if vault.encrypted:
+                                cursor = conn.execute('INSERT INTO opsi_items (imgid, device_id, instance, genre, created_at) '
+                                                      'VALUES (:imgid,:device_id,:instance,:genre,:created_at)', row)
+                                row = dict(row, id=cursor.lastrowid)
+                                payload = {key: row.get(key) for key in opsi_secure.LOOT_SECURE_FIELDS}
+                                blob = vault.seal('loot', payload, opsi_secure.row_context('loot', row))
+                                conn.execute('UPDATE opsi_items SET secure_payload=? WHERE id=?', (blob, row['id']))
+                            else:
+                                fields = ('imgid', 'device_id', 'instance', 'genre', 'created_at', *opsi_secure.LOOT_SECURE_FIELDS)
+                                conn.execute('INSERT INTO opsi_items (' + ','.join(fields) + ') VALUES (' +
+                                             ','.join('?' for _ in fields) + ')', [row.get(key) for key in fields])
         return len(rows)
 
     @staticmethod
@@ -416,7 +421,7 @@ class AzurStats:
 
     @staticmethod
     def _write_meowofficer_farming(data, instance=None):
-        """原子替换汇总文件，读取者只会看到完整的新旧版本；已设置密钥时写密文。"""
+        """原子替换普通 CSV 汇总文件，读取者只会看到完整的新旧版本。"""
         path = AzurStats._meowofficer_farming_path(instance)
         folder = os.path.dirname(path) or '.'
         os.makedirs(folder, exist_ok=True)
@@ -438,14 +443,14 @@ class AzurStats:
 
         用 SQLite 写事务串行化明细读取和缓存替换，防止跨进程刷新将
         新快照覆盖成旧快照。旧记录的 NULL 身份不会匹配任何实例。
-        已设置密钥但当前环境拿不到密钥时不重算、不覆盖现有缓存（明细暂不可读）。
+        旧统计尚未完整迁移时不重算、不覆盖现有缓存。
         """
         opsi_secure.get_vault().check_database(AzurStats.LOCAL_DB)
         AzurStats._ensure_local_db()
         vault = opsi_secure.get_vault()
         if vault.is_configured() and not vault.writer_ready():
             opsi_secure.record_dropped('loot')
-            logger.warning('[统计] 掉落明细密钥不可用，暂不重算短猫收益（保留现有缓存）')
+            logger.warning('[统计] 掉落明细暂不可用，暂不重算短猫收益（保留现有缓存）')
             return np.zeros((6, len(AzurStats.meowofficer_farming_labels)))
         with vault.reading(), closing(sqlite3.connect(AzurStats.LOCAL_DB, timeout=30)) as conn, conn:
             conn.execute('BEGIN IMMEDIATE')

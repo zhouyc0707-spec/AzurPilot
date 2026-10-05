@@ -179,9 +179,9 @@ def backup_config(backup_dir):
         except Exception as e:
             logger.warning(f'用户配置备份失败：{file.name}，{e}')
 
-    # 描述文件没有本机凭据；它不提供恢复旧统计状态的入口。
+    # 普通统计备份可直接读取，不需要继续复制旧加密凭据和迁移标记。
     secure_dir = CONFIG_DIR / 'opsi_secure'
-    if secure_dir.exists():
+    if opsi_secure.get_vault().encrypted and secure_dir.exists():
         target_dir = backup_dir / 'opsi_secure'
         target_dir.mkdir(parents=True, exist_ok=True)
         for file in secure_dir.glob('*.json'):

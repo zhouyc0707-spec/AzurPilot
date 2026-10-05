@@ -53,7 +53,7 @@ AzurPilot 在执行任务时天然经过大量战斗结算与资源画面。这�
 - 资源快照记录（`resource_stats`）与资源变动入口（`LogRes`）
 - 掉落截图按保留天数清理，过期后删除或备份到 `bak/`（`drop_cleanup`）
 - 大世界运行期统计事件的统一落库入口（`opsi_runtime`）
-- 大世界统计加密、旧格式迁移与异常冻结（`opsi_secure`）
+- 普通统计存储、旧密文无损迁移与失败回滚（`opsi_plain`；`opsi_secure` 保留旧格式读取）
 - 离线批量掉落分析工具（`DropStatistics`，独立运行）
 
 ### 不负责
@@ -83,7 +83,8 @@ module/statistics/
 ├── opsi_month.py             # OpsiMonthStats：月度大世界汇总与时间线
 ├── opsi_runtime.py           # 大世界运行期事件 → 落库的集中入口
 ├── opsi_drop_stats.py        # 大世界掉落聚合（部件、图纸、材料、计划及突破部件）
-├── opsi_secure.py            # 大世界统计加密（凭据、迁移、异常保留与冻结）
+├── opsi_plain.py             # 普通统计存储、旧密文无损迁移与发布回滚
+├── opsi_secure.py            # 旧加密格式兼容实现，正常运行不创建密文
 ├── drop_statistics.py        # 离线批量掉落分析（可独立运行）
 ├── drop_cleanup.py           # 掉落截图保留天数清理与备份
 ├── get_items.py / item.py / battle_status.py / campaign_bonus.py
@@ -165,17 +166,17 @@ module/log_res/
 
 统计页仍按金菜（部件 T4）与彩图纸（研发图纸 T5，包括通用装备研发图纸）展示。独立或共用掉落开关的任务始终可筛选；任务次数取完整时间窗口，筛选仅影响收获明细。窗口内没有这两类物品的奖励不显示在掉落记录表。`/opsi-items/` 先查 `opsi_reward_items`，缺图时回退到 `opsi_items` 同名模板；`/research-items/` 先查 `research_items`，再查 `stats_basic`。图标回退只影响展示，不改变识别模板选择。
 
-### 大世界统计 V2 存储（opsi_secure.py）
+### 普通统计存储与旧密文迁移（opsi_plain.py）
 
-大世界载荷使用 OPSIV2.XCHACHA20-POLY1305（256 位密钥、192 位随机 nonce），根凭据与 generation/认证根存于 OS 安全服务或宿主 Broker；安装、数据集、实例、记录和周期均绑定到载荷。SQLite 的公共字段与路由元数据保留。WebUI 保留历史展示，并同步上游恢复各分类 CSV 导出及图表保存；不提供绕过校验的恢复或重封工具。日志数值与 CL1 遥测按当前约定保留。
+本 fork 默认取消上游本地统计加密。`get_vault()` 返回 `PlainStatisticsStore`：CL1 全部字段保存在 `data_json`，掉落、资源和日报事件直接保存到 SQLite 业务列，日报正文为普通文本，舰船经验为 JSON，短猫汇总为 CSV，每日数据库备份为可直接打开的 SQLite。黄币／紫币全部历史点、月初残留、未知扩展字段、委托科研数据、分类导出及图表保存继续保留。登录、游戏账号保险库、交易身份与传输认证使用各自原有保护，不通过此存储服务。
 
-旧明文、CL1 AES 与 V1 的 DPAPI/MAC 数据先在内存转换为 V2，逐条回读确认后，通过受保护 journal 与安全服务阶段发布。迁移失败恢复原格式；正常源码升级不参与状态认证。SQLite 锁、文件占用、临时 I/O、provider/Broker 离线不触发冻结或清空，也禁止降级写普通格式。
+正常读写保留 `StoreCoordinator` 的线程／进程协调锁、`BEGIN IMMEDIATE` 的读改写事务、异常回滚和原子文件替换；不解封 OS 凭据、调用 Broker、维护加密校验链或启动深检查线程。CL1 缓存仍按数据库签名与 TTL 失效，`include_opsi=False` 的资源查询优化保留。旧密文列仅为格式兼容存在，普通写入保持 NULL；不得将 `seal()` 改成返回伪密文。
 
-按用户确认的保留策略，描述文件与本机状态不匹配、提交状态校验失败等原清空入口统一改为冻结：先写 `blocked.json` 阻止异常读写，再保存 `config/opsi_secure/rescue-*` 副本；统计原件、描述文件与 OS 凭据不删除、不重置。该标记跨进程与服务重启生效，阻止解密和受保护存储写入，不能通过重启绕过；应查明原因并恢复匹配的原始状态后再解除。旧 `wiping` 状态同样冻结剩余原件，不继续删除。单条载荷认证失败在当前批次立即冻结，救援副本可后台保存；保留原密文、读出降级，读改写拒绝覆盖缺失载荷，不以默认零值修复历史。
+每个进程首次使用时检查现有数据库、统计文件和每日归档。发现 V2、V1 或早期 CL1 AES 时，在原安装环境使用原凭据只读解密：核对已有描述／链／文件摘要及逐条认证，在 `config/opsi_secure/plaintext-backup-<时间>-<标识>/original/` 保存原件，在 `plain/` 生成普通格式并逐行回读验证。所有副本通过后才发布；密文归档解封后若仍含 V1／V2 业务列，继续还原这些列；不含这些载荷的既有 SQLite 归档保持原始字节，其中早期 AES 行也原样保留。混合归档中的早期 AES 原件不删改；正在使用的库则必须完整迁移成功才允许写入。只移除已登记的加密链与计数器元数据，保留业务表、记录、主键、其他触发器和列，转换不触发业务触发器。
 
-每批读取重新核对凭据与描述，同一协调锁持有期只解封一次。启动及新版、旧版统计页打开时核对全部受保护路径，写入前核对当前路径的链值、行数锚点和结构指纹；数据与链值同事务提交，期望值存入安全服务。同步写入不做全库摘要，后台深检查识别保持行数不变的密文回放或改写。首次升级静默建链，应用改表、SQLite 忙碌和正常提交崩溃窗口按上游兼容规则处理；不会把临时锁争用判为篡改。归档不纳入页面浅检查及后台深检查，但读取仍校验认证密文。CL1 只读缓存仅在安全状态可读时命中，凭据离线或冻结立即失效，解密失败的默认值不缓存。黄币/紫币全部原始点和月初残留继续保留，月初残留也纳入加密。
+`plaintext-transition.json` 记录待发布批次；发布失败或进程中断后恢复全部原件，再尝试迁移。完成记录写入 `plaintext.json`。失败时保留原件与旧凭据、阻止覆盖，不以零值或删除历史继续迁移；凭据离线可重试，损坏密文、未知旧 AES 密钥、旧加密迁移／提交未完成等需要先恢复可读的源状态。已冻结的旧存储也不能绕过认证。迁移备份不参与每日备份的过期清理，旧 OS 凭据不删除；新每日备份无需复制旧加密描述或迁移状态。
 
-资源趋势等只使用非大世界列的查询保留 `include_opsi=False` 优化，跳过载荷解封。平台凭据实现见 [opsi_keys.py](../../../module/statistics/opsi_keys.py)：Windows 使用凭据管理器并优先采用可用 TPM；macOS 使用 Keychain，Linux 使用 Secret Service/可用 TPM，容器优先使用已配置宿主 Broker；未配置时使用同目录 `config/opsi_secure/state.json` 本地凭据，复制整个目录即可解密，不能等同于 OS 凭据保护。显式 Broker 配置不完整时仍阻止使用。OS/Broker 凭据与安装路径、系统账户绑定，迁移目录或更换账户不能仅复制数据库。备份描述文件不等于备份 OS 凭据。停掉全部旧版本统计写者后再升级，避免旧代码与新版混写；V2 历史不能直接由升级前代码读取，代码回退与统计数据恢复须分开处理。
+升级前停掉全部 GUI 与统计写者；迁移完成后普通统计可随目录复制，不再依赖原设备／账户凭据。保留的 `opsi_secure.Vault`、`opsi_keys` 和 Broker 仅供旧格式兼容与隔离测试使用。若回退到加密版本，先保留迁移后的新增统计，再按同一批次恢复 `original/`、旧描述和仍保留的原凭据；不能将普通新数据直接交给旧 V2 代码。备份和回退流程见 [本次交付记录](../../merges/2026-10-05-plain-statistics.md)。
 
 ### CL1 月度库（cl1_database.py）
 
@@ -376,15 +377,16 @@ stateDiagram-v2
 | 存储 | 内容 | 写入时机 | 清理 |
 | --- | --- | --- | --- |
 | `config/azurstats_local.db` | `opsi_items` 掉落明细 + `resource_snapshots` 资源快照 | 每次 commit / LogRes 资源变化 | 不自动清理明细 |
-| `config/opsi_secure/keyring.json` | V2 版本、installation_id、provider 描述，无 Root Key | 首次写入大世界数据时自动创建 | 校验异常保留原件及凭据、冻结大世界读写；纳入每日备份 |
+| `config/opsi_secure/plaintext.json` | 普通统计模式与迁移完成记录 | 首次初始化／无损迁移完成 | 保留迁移备份；正常读写不依赖旧凭据 |
+| `config/opsi_secure/keyring.json`、`plaintext-backup-*/` | 旧加密描述及转换前原件 | 仅兼容迁移与数据回退 | 不自动删除；新每日备份无需包含 |
 | `config/cl1_data.db` | CL1 月度统计（instance×month） | 各 `async_*` 方法即时写 | 凭证与行动力历史完整保留；委托/科研明细各保留 5000 条 |
 | `config/storage_statistics.db` | 按实例保存完整仓库物品快照 | `StorageStatistics` 两次完整扫描一致后原子提交 | 保留已完成扫描 |
 | `config/daily_summary.db` | 日报任务事件、周期状态、采集缺口 | 任务前后、战斗结束、日报流程 | `cleanup()` 保留 35 天 |
-| `log/azurstat_meowofficer_farming.csv` | farming 受保护汇总（只在内部读取还原） | 每次本地解析成功后重算 | 覆写 |
+| `log/azurstat_meowofficer_farming.csv` | farming 普通 CSV 汇总 | 每次本地解析成功后重算 | 原子覆写 |
 | `log/cl1/<instance>/ship_exp_data.json` | 战斗耗时样本、每日经验、升级进度 | 每场战斗结束 | 样本 100 条 / 日统计 30 天 |
 | `screenshots/<genre>/`、`log/commission_rewards/<instance>/<月份>/` | 掉落与委托截图 | commit / 委托结算 | `DropRecord_RetentionDays` 天数清理（节流 1 小时），过期后按 `DropRecord_BackUpMethod` 删除 / 拷贝备份 / 压缩备份到 `bak/` |
 
-CL1 唯一键不符时自动无损重建为 `(instance, month)`；存在重复月份、未知字段或已有重建对象时保留原表并拒绝自动修复，需要人工决定数据取舍。CL1 库的兼容性迁移是自动的：启动时把旧位置 `log/cl1/cl1_data.db` 移入 `config/`，旧行与 JSON 由版本化统计运行服务在内存转换为 OPSIV2；旧 JSON 和 `.bak` 原路径保存受保护载荷，不生成普通格式归档。
+CL1 唯一键不符时自动无损重建为 `(instance, month)`；存在重复月份、未知字段或已有重建对象时保留原表并拒绝自动修复，需要人工决定数据取舍。旧位置 `log/cl1/cl1_data.db` 与月度 JSON 沿用兼容迁移入口，已存在的月份不覆盖。V2／V1／可读 AES 载荷无损还原为普通存储；旧 JSON 和 `.bak` 可直接读取，解密失败保留原件。
 
 ## 14. 生命周期
 

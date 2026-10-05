@@ -168,6 +168,9 @@ def row_context(kind, row):
 
 
 class Vault:
+    # 加密实现仅供旧数据迁移和兼容性测试；正常运行使用 PlainStatisticsStore。
+    encrypted = True
+
     def __init__(self, root=None, protected_files=None, clock=time.time, background_migration=True,
                  provider=None, deep_check=True):
         self.root = Path(root).resolve() if root else Path(__file__).resolve().parents[2]
@@ -1519,7 +1522,8 @@ _VAULT = None
 def get_vault():
     global _VAULT
     if _VAULT is None:
-        _VAULT = Vault()
+        from module.statistics.opsi_plain import PlainStatisticsStore
+        _VAULT = PlainStatisticsStore()
     return _VAULT
 
 

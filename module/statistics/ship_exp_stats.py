@@ -68,7 +68,7 @@ class ShipExpStats:
 
     @opsi_secure.checked_read
     def _load(self) -> dict[str, Any]:
-        """加载数据文件；已设置密钥的文件为密文，密钥不可用时降级为空并禁止覆盖。
+        """加载普通 JSON；旧密文尚未迁移时禁止用空数据覆盖。
 
         Returns:
             dict[str, Any]: 舰船经验统计数据字典。
@@ -100,7 +100,7 @@ class ShipExpStats:
             return {}
 
     def _save(self) -> None:
-        """保存数据文件到本地；已设置密钥时整文件受保护存储。"""
+        """使用原子替换保存普通 JSON，保留未迁移历史与缓存失效保护。"""
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)
             vault = opsi_secure.get_vault()

@@ -140,7 +140,9 @@ class StoreCoordinator:
 def durable_write(path, data):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_name(path.name + '.' + os.urandom(12).hex() + '.stage')
+    # 统计文件名可含设备标识；重复整段文件名会让迁移备份的临时路径超过
+    # Windows 路径长度限制。短随机名仍在同目录原子替换，不改变目标身份。
+    temp = path.with_name('.opsi-' + os.urandom(12).hex() + '.stage')
     try:
         with open(temp, 'xb') as stream:
             stream.write(data if isinstance(data, bytes) else data.encode('utf-8'))

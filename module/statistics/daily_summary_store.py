@@ -430,14 +430,18 @@ class DailySummaryStore:
                 self._mark_collection_started(
                     connection, instance, 'cl1_tracking_started_at', timestamp
                 )
-                cursor = connection.execute(
-                    'INSERT INTO daily_summary_cl1_events(instance,ts,duration_seconds,estimated_exp) VALUES(?,?,0,0)',
-                    (instance, self._serialize_time(timestamp)))
-                row = {'id': cursor.lastrowid, 'instance': instance, 'ts': self._serialize_time(timestamp)}
                 vault = opsi_secure.get_vault()
-                blob = vault.seal('daily', {'duration_seconds': max(0.0, float(duration_seconds)),
-                                          'estimated_exp': max(0, int(estimated_exp))}, opsi_secure.row_context('daily', row))
-                connection.execute('UPDATE daily_summary_cl1_events SET secure_payload=? WHERE id=?', (blob, row['id']))
+                duration = max(0.0, float(duration_seconds))
+                experience = max(0, int(estimated_exp))
+                cursor = connection.execute(
+                    'INSERT INTO daily_summary_cl1_events(instance,ts,duration_seconds,estimated_exp) VALUES(?,?,?,?)',
+                    (instance, self._serialize_time(timestamp),
+                     0 if vault.encrypted else duration, 0 if vault.encrypted else experience))
+                row = {'id': cursor.lastrowid, 'instance': instance, 'ts': self._serialize_time(timestamp)}
+                if vault.encrypted:
+                    blob = vault.seal('daily', {'duration_seconds': duration, 'estimated_exp': experience},
+                                      opsi_secure.row_context('daily', row))
+                    connection.execute('UPDATE daily_summary_cl1_events SET secure_payload=? WHERE id=?', (blob, row['id']))
                 cutoff = self._serialize_time(
                     timestamp - timedelta(days=DAILY_SUMMARY_RETENTION_DAYS)
                 )
@@ -490,8 +494,10 @@ class DailySummaryStore:
                 decoded = []
                 for record in records:
                     item = dict(record)
-                    payload = opsi_secure.get_vault().open_('daily', item['secure_payload'],
-                                                           opsi_secure.row_context('daily', item))
+                    payload = {}
+                    if item.get('secure_payload'):
+                        payload = opsi_secure.get_vault().open_('daily', item['secure_payload'],
+                                                               opsi_secure.row_context('daily', item))
                     decoded.append(dict(item, **payload))
                 row = {'battles': len(decoded), 'estimated_exp': sum(r['estimated_exp'] for r in decoded),
                        'duration_seconds': sum(r['duration_seconds'] for r in decoded),
@@ -647,7 +653,8 @@ class DailySummaryStore:
         with self._lock, self._connect() as connection:
             if report_text is not None:
                 vault = opsi_secure.get_vault()
-                values['report_text'] = vault.seal('reports', {'text': report_text}, vault.report_context(instance, period_key))
+                values['report_text'] = (vault.seal('reports', {'text': report_text}, vault.report_context(instance, period_key))
+                                         if vault.encrypted else report_text)
             assignments = ', '.join(f'{key} = ?' for key in values)
             parameters = [*values.values(), instance, period_key]
             connection.execute(
@@ -679,7 +686,8 @@ class DailySummaryStore:
                 (instance, period_key),
             ).fetchone()
         result = dict(row) if row is not None else None
-        if result and result.get('report_text'):
+        if result and isinstance(result.get('report_text'), str) and result['report_text'].startswith(
+                (opsi_secure.BLOB_PREFIX, opsi_secure.LEGACY_PREFIX)):
             vault = opsi_secure.get_vault()
             value = vault.open_or_none('reports', result['report_text'], vault.report_context(instance, period_key))
             result['report_text'] = value.get('text') if value else None
