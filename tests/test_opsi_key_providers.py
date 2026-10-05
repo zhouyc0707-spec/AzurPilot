@@ -167,8 +167,34 @@ class ProviderTests(unittest.TestCase):
                 patch.object(opsi_keys.sys, 'platform', 'linux'), patch.object(opsi_keys.LinuxTPMProvider, 'available', return_value=False):
             self.assertIsInstance(opsi_keys.get_provider(), opsi_keys.LinuxProvider)
         with patch.object(opsi_keys, 'in_container', return_value=True), patch.dict(os.environ, {}, clear=True):
+            self.assertIsInstance(opsi_keys.get_provider(), opsi_keys.ContainerFileProvider)
+        # 容器里显式配置了 Broker 但凭据不全时继续失败，不允许静默降级到本地文件。
+        with patch.object(opsi_keys, 'in_container', return_value=True), \
+                patch.dict(os.environ, {'ALAS_STATISTICS_BROKER': 'https://127.0.0.1:25549'}, clear=True):
             with self.assertRaises(opsi_keys.ProviderUnavailable):
                 opsi_keys.get_provider()
+
+    def test_container_file_provider_roundtrip(self):
+        directory = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(directory.cleanup)
+        provider = opsi_keys.ContainerFileProvider(Path(directory.name) / 'state.json')
+        self.assertIsNone(provider.load('slot'))
+        sealed = provider.new_key()
+        state = {'phase': 'ready', 'key': sealed, 'installation_id': uuid.uuid4().hex}
+        provider.save('slot', state)
+        self.assertEqual(provider.load('slot'), state)
+        self.assertEqual(provider.key(state), base64.b64decode(sealed))
+        provider.delete('slot')
+        self.assertIsNone(provider.load('slot'))
+
+    def test_container_file_provider_survives_slot_change(self):
+        """状态文件与数据同目录同搬：安装路径变化（slot 变化）后仍按原状态加载。"""
+        directory = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(directory.cleanup)
+        provider = opsi_keys.ContainerFileProvider(Path(directory.name) / 'state.json')
+        state = {'phase': 'ready', 'key': provider.new_key()}
+        provider.save('old-slot', state)
+        self.assertEqual(provider.load('new-slot'), state)
 
     def test_container_does_not_accept_client_credentials_from_data_volume(self):
         with patch.object(opsi_keys, 'in_container', return_value=True), \

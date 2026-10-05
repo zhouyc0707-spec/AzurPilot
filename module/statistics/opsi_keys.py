@@ -403,14 +403,74 @@ class LinuxTPMProvider(LinuxProvider):
         super().delete(slot)
 
 
+class ContainerFileProvider(KeyProvider):
+    """容器内未配置宿主统计服务时的本地文件凭据（自动兜底，免配置）。
+
+    Root 与运行状态存于本安装的 config/opsi_secure/state.json：数据目录被
+    整体拷走即可解密，属于"防君子不防小人"级别；能配置宿主 Broker 的部署
+    应优先用宿主保管（设置 ALAS_STATISTICS_BROKER）。状态不做 slot 隔离：
+    文件与数据同目录、同搬同走，安装路径变化后应继续可用。
+    """
+
+    name = 'container-file'
+
+    def __init__(self, state_path=None):
+        self.state_path = Path(state_path) if state_path else (
+            Path(__file__).resolve().parents[2] / 'config' / 'opsi_secure' / 'state.json')
+
+    def load(self, slot):
+        try:
+            payload = json.loads(self.state_path.read_bytes())
+        except FileNotFoundError:
+            return None
+        except (OSError, ValueError) as exc:
+            raise ProviderUnavailable('统计本地凭据不可用') from exc
+        if not isinstance(payload, dict) or not isinstance(payload.get('state'), dict):
+            raise ProviderUnavailable('统计本地凭据不可用')
+        return payload['state']
+
+    def save(self, slot, state):
+        try:
+            self.state_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = self.state_path.with_name(self.state_path.name + '.tmp')
+            temporary.write_bytes(json.dumps({'slot': slot, 'state': state},
+                                             separators=(',', ':')).encode())
+            os.replace(temporary, self.state_path)
+            os.chmod(self.state_path, 0o600)
+        except OSError as exc:
+            raise ProviderUnavailable('统计本地凭据不可用') from exc
+
+    def delete(self, slot):
+        try:
+            self.state_path.unlink(missing_ok=True)
+        except OSError as exc:
+            raise ProviderUnavailable('统计本地凭据不可用') from exc
+
+
 def in_container():
     return Path('/.dockerenv').exists() or Path('/run/.containerenv').exists() or bool(os.getenv('container'))
 
 
+_local_fallback_logged = False
+
+
 def get_provider():
-    if in_container() or os.getenv('ALAS_STATISTICS_BROKER'):
+    if os.getenv('ALAS_STATISTICS_BROKER'):
         from module.statistics.opsi_broker import BrokerProvider
         return BrokerProvider.from_environment()
+    if in_container():
+        # 容器里没配宿主统计服务时自动兜底为容器本地文件密钥，保证统计能存、
+        # 免手动配置；显式配置了 Broker 但凭据不全时仍失败（不允许静默降级）。
+        global _local_fallback_logged
+        if not _local_fallback_logged:
+            _local_fallback_logged = True
+            try:
+                from module.logger import logger
+                logger.warning('[统计-加密] 容器未配置宿主统计服务，已启用容器本地文件密钥'
+                               '（config/opsi_secure/state.json；拷走数据目录即可解密）')
+            except Exception:
+                pass
+        return ContainerFileProvider()
     if sys.platform == 'win32':
         return WindowsProvider()
     if sys.platform == 'darwin':

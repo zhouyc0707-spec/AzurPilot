@@ -20,7 +20,7 @@ def db(path):
     with closing(sqlite3.connect(path)) as conn, conn:
         yield conn
 
-from module.statistics.opsi_keys import KeyProvider, ProviderUnavailable
+from module.statistics.opsi_keys import ContainerFileProvider, KeyProvider, ProviderUnavailable
 from module.statistics.opsi_state import canonical
 
 from module.statistics import cl1_database, opsi_secure
@@ -220,6 +220,30 @@ class OpsiSecureTestCase(unittest.TestCase):
                                         provider=self.provider, deep_check=False).ensure_ready())
         self.assertEqual(self.read_cl1(), self.full)
         self.assertFalse(self.vault.wipe_path.exists())
+
+    def test_container_file_provider_adopts_plaintext_and_persists(self):
+        """容器本地文件凭据（免配置兜底）：首次运行接管明文数据，重启新实例后仍可读。"""
+        state = self.root / 'config' / 'opsi_secure' / 'state.json'
+        vault = opsi_secure.Vault(self.root, provider=ContainerFileProvider(state),
+                                  background_migration=False, deep_check=False)
+        opsi_secure.set_vault(vault)
+        self.assertTrue(vault.ensure_ready())
+        self.assertEqual(self.read_cl1(vault), self.full)
+        self.assertTrue(state.exists())
+        again = opsi_secure.Vault(self.root, provider=ContainerFileProvider(state),
+                                  background_migration=False, deep_check=False)
+        self.assertTrue(again.ensure_ready())
+        self.assertEqual(self.read_cl1(again), self.full)
+
+    def test_fallback_keeps_unreachable_environment_locked_without_wipe(self):
+        """已有环境（如曾配 Broker）下兜底凭据取不到状态：只锁定保留，绝不清空。"""
+        self.assertTrue(self.vault.ensure_ready())
+        fallback = opsi_secure.Vault(self.root,
+                                     provider=ContainerFileProvider(self.root / 'config' / 'opsi_secure' / 'state.json'),
+                                     background_migration=False, deep_check=False)
+        self.assertFalse(fallback.ensure_ready())
+        self.assertFalse(fallback.wipe_path.exists())
+        self.assertIsNotNone(self.provider.load(self.vault.slot))
 
     def assert_no_global_detection(self):
         """结构变化等豁免路径不触发全局冻结：新实例可用、无 wipe 记录、凭据未撤销。"""
