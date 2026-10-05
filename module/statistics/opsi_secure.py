@@ -1307,7 +1307,7 @@ class Vault:
             raise VaultLocked('迁移记录未通过校验，保留当前数据') from exc
 
     def _rescue_wipe_copy(self):
-        """冻结前把受保护文件与凭据状态复制到救援目录，原件和凭据仍保留。"""
+        """冻结后把受保护文件与凭据状态复制到救援目录，原件和凭据仍保留。"""
         try:
             folder = self.directory / time.strftime('rescue-%Y%m%d-%H%M%S')
             written = 0
@@ -1321,9 +1321,9 @@ class Vault:
             if self._state:
                 folder.mkdir(parents=True, exist_ok=True)
                 (folder / 'provider_state.json').write_bytes(canonical(self._state))
-            logger.warning(f'[统计-加密] 冻结前已救援备份 {written} 个文件到 {folder}')
+            logger.warning(f'[统计-加密] 冻结后已救援备份 {written} 个文件到 {folder}')
         except OSError as exc:
-            logger.warning(f'[统计-加密] 冻结前救援备份失败: {exc}')
+            logger.warning(f'[统计-加密] 冻结后救援备份失败: {exc}')
 
     def _freeze(self, reason):
         """在协调锁内先停止解密和写入，再持久化跨进程冻结标记。"""
