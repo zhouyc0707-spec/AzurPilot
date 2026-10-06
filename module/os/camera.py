@@ -20,6 +20,7 @@ from module.exception import MapDetectionError
 from module.logger import logger
 from module.map.camera import Camera
 from module.map.map_base import location2node, location_ensure
+from module.map.utils import random_direction
 from module.map_detection.os_grid import OSGrid
 from module.map_detection.view import View
 from module.os.map_operation import OSMapOperation
@@ -104,9 +105,73 @@ class OSCamera(OSMapOperation, Camera):
             x = 0
         return x == 0 and y == 0
 
-    # def ensure_edge_insight(self, reverse=False, preset=None, swipe_limit=(4, 3)):
-    #     return super().ensure_edge_insight(reverse=reverse, preset=preset, swipe_limit=swipe_limit)
-    #
+    def ensure_edge_insight(self, reverse=False, preset=None, swipe_limit=(4, 3), skip_first_update=True):
+        """确认大世界地图的横纵边缘，建立摄像机绝对坐标。
+
+        格内单应位置是周期相位，正常滑动整格后也可能不变，不能据此判断
+        镜头没有移动。只有实际识别到两个方向的地图边缘才完成定位。
+
+        Args:
+            reverse (bool): 定位后是否按记录反向滑回原视野。
+            preset (tuple[int, int] | None): 首次定位前的滑动预设。
+            swipe_limit (tuple[int, int]): 每次横纵滑动的最大格数。
+            skip_first_update (bool): 已有有效视图时是否跳过首次截图更新。
+
+        Returns:
+            list[tuple[int, int]]: 定位过程的滑动记录。
+
+        Raises:
+            MapDetectionError: 有限滑动后仍无法确认横纵边缘，交由调度器
+                保存错误现场并恢复，不能使用未定位的坐标继续扫描。
+
+        Pages:
+            in: page_os
+            out: page_os
+        """
+        logger.info('[大世界-摄像机] 确认地图横纵边缘')
+        if not skip_first_update:
+            self.update()
+
+        record = []
+        if preset is not None:
+            self.map_swipe(preset)
+            record.append(preset)
+
+        limits = np.abs(np.array(swipe_limit, dtype=int))
+        if np.any(limits == 0):
+            raise MapDetectionError('大世界边缘定位的滑动步长必须大于零')
+        direction = random_direction(self.config.MAP_ENSURE_EDGE_INSIGHT_CORNER)
+        x_swipe, y_swipe = np.multiply(limits, direction)
+        # 地图 shape 是右下格坐标；加一后换算最坏情况下跨越两轴的次数。
+        max_swipes = int(np.ceil((np.array(self.map.shape) + 1) / limits).sum()) + 2
+
+        for _ in range(max_swipes + 1):
+            horizontal_edge = self.view.left_edge or self.view.right_edge
+            vertical_edge = self.view.lower_edge or self.view.upper_edge
+            if horizontal_edge and vertical_edge:
+                # update_os() 只刷新视图；已有双边时也显式锚定，避免沿用旧坐标。
+                x = (self.view.center_loca[0] if self.view.left_edge else
+                     self.map.shape[0] - self.view.shape[0] + self.view.center_loca[0])
+                y = (self.map.shape[1] - self.view.shape[1] + self.view.center_loca[1]
+                     if self.view.upper_edge else self.view.center_loca[1])
+                self.camera = (x, y)
+                logger.attr('大世界边缘定位', location2node(self.camera))
+                break
+            if len(record) >= max_swipes:
+                raise MapDetectionError(
+                    f'大世界地图边缘定位失败：横边={horizontal_edge}，'
+                    f'纵边={vertical_edge}，滑动={len(record)} 次；停止本轮扫描'
+                )
+            vector = (0 if horizontal_edge else x_swipe, 0 if vertical_edge else y_swipe)
+            self.map_swipe(vector)
+            record.append(vector)
+
+        if reverse:
+            for x, y in reversed(record):
+                if x != 0 or y != 0:
+                    self.map_swipe((-x, -y))
+        return record
+
     # def focus_to(self, location, swipe_limit=(4, 3)):
     #     return super().focus_to(location, swipe_limit=swipe_limit)
 

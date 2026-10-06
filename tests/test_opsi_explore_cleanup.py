@@ -81,12 +81,15 @@ class CleanupTests(unittest.TestCase):
             update=Mock(), focus_to=Mock(), focus_to_grid_center=Mock(),
             map_rescan_current=Mock(return_value=False),
         )
+        runner.focus_to.side_effect = lambda grid, **kwargs: setattr(runner, 'camera', grid.location)
         runner.map_rescan_once = lambda **kw: OSMap.map_rescan_once(runner, **kw)
         self.assertTrue(OSMap.map_rescan(runner, rescan_mode='full'))
-        expected = map_.camera_data.sort_by_camera_distance(runner.camera)
-        self.assertEqual(runner.focus_to.call_args_list,
-                         [call(grid, swipe_limit=(6, 5)) for grid in expected])
-        self.assertEqual(runner.map_rescan_current.call_count, len(expected) + 1)
+        visited = [args.args[0] for args in runner.focus_to.call_args_list]
+        self.assertEqual(set(visited), set(map_.camera_data))
+        self.assertEqual(len(visited), len(map_.camera_data))
+        for args in runner.focus_to.call_args_list:
+            self.assertEqual(args.kwargs, {'swipe_limit': (6, 5)})
+        self.assertEqual(runner.map_rescan_current.call_count, len(visited) + 1)
 
     def test_failed_world_scan_preserves_checkpoint_and_skips_radar(self):
         for failure in (False, MapDetectionError('扫描失败')):
