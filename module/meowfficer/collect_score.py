@@ -5,14 +5,16 @@
 
 - 复用收集流程本来就会打开的天赋详情面板（``_meow_talent_cap_handle``），
   顺手 OCR 出天赋名，因此不需要任何新的游戏资源与页面导航。
-- 由 ``MeowfficerTrain_ScoreTalents`` 开关控制，**默认关闭**，不影响既有行为。
+- 由 ``MeowfficerTrain_ScoreTalents`` 或 ``MeowfficerTrain_LockByAdvice`` 开关控制，默认关闭。
 - ``MeowfficerTrain_ScoreThreshold`` 大于 0 时，评分会参与「是否锁定保留」的判断。
+- 按评价锁定时，仅完整识别后评价为「建议喂掉」的新猫不锁定，其余保护锁定。
 
 开关关闭时，本模块的所有方法都是空操作，收集流程与原来完全一致。
 """
 
 from module.logger import logger
-from module.meowfficer.score import evaluate
+from module.meowfficer.cat_data import CATS
+from module.meowfficer.score import evaluate, normalize
 from module.meowfficer.score_report import render_summary
 
 
@@ -30,13 +32,21 @@ class MeowfficerCollectScore:
         Returns:
             bool: 评分功能是否开启。
         """
-        return bool(getattr(self.config, 'MeowfficerTrain_ScoreTalents', False))
+        return bool(getattr(self.config, 'MeowfficerTrain_ScoreTalents', False)
+                    or self.meow_lock_by_advice_enabled())
+
+    def meow_lock_by_advice_enabled(self):
+        """检查是否按评分报告的培养建议锁定新领取的指挥喵。"""
+        return bool(getattr(self.config, 'MeowfficerTrain_LockByAdvice', False))
 
     def meow_score_reset(self):
         """重置当前收集流程中的天赋识别缓存与评分状态。"""
         self._meow_score_talents = []
         self._meow_score_result = None
         self._meow_score_cat = None
+        self._meow_score_details = 0
+        self._meow_score_expected_talents = None
+        self._meow_score_uncertain = False
 
     def _meow_score_ocr(self):
         """惰性创建并缓存 OCR 实例（首次加载模型较慢）。
@@ -73,44 +83,102 @@ class MeowfficerCollectScore:
         """
         if not self.meow_score_enabled():
             return
+        self._meow_score_details += 1
         ocr = self._meow_score_ocr()
         if ocr is None:
+            self._meow_score_uncertain = True
             return
         try:
             from module.meowfficer.score_ocr import recognize
             talents, cat = recognize(image, ocr=ocr)
         except Exception as e:
             logger.warning(f'[指挥喵-评分] 天赋识别失败，跳过这一条：{e}')
+            self._meow_score_uncertain = True
             return
-        if cat and not getattr(self, '_meow_score_cat', None):
-            self._meow_score_cat = cat
-        known = {t.line for t in self._meow_score_talents}
+        if cat:
+            if self._meow_score_cat and cat != self._meow_score_cat:
+                self._meow_score_uncertain = True
+            else:
+                self._meow_score_cat = cat
+        known = {t.line: t for t in self._meow_score_talents}
+        # 每个初始天赋槽只应对应一条详情。重复、模糊或漏识别不能作为放弃锁定的依据。
+        if len(talents) != 1 or any(
+                t.line in known or t.kind == 'unknown' or t.inferred
+                or not t.raw or normalize(t.name) not in normalize(t.raw)
+                for t in talents):
+            self._meow_score_uncertain = True
         for talent in talents:
-            if talent.line not in known:
+            current = known.get(talent.line)
+            if current is None:
                 self._meow_score_talents.append(talent)
-                known.add(talent.line)
+                known[talent.line] = talent
+            elif talent.level > current.level:
+                self._meow_score_talents[self._meow_score_talents.index(current)] = talent
+                known[talent.line] = talent
 
-    def meow_score_finish(self, cat=None):
+    def meow_score_finish(self, cat=None, expected_talents=None):
         """本只猫的天赋都识别完后，执行评分并输出日志。
 
         Args:
             cat (str, optional): 指挥喵名称，用于挑选专属评分口径；未知时传 None。
+            expected_talents (int, optional): 获取界面检测到的非空天赋槽数。
 
         Returns:
             ScoreResult | None: 评分结果对象；未开启评分或未识别到天赋时返回 None。
         """
         if not self.meow_score_enabled():
             return None
+        self._meow_score_expected_talents = expected_talents
         talents = getattr(self, '_meow_score_talents', None)
         if not talents:
             logger.info('[指挥喵-评分] 本次未识别到天赋，跳过评分')
             self._meow_score_result = None
             return None
 
-        result = evaluate(talents, cat=cat or getattr(self, '_meow_score_cat', None))
+        try:
+            result = evaluate(talents, cat=cat or getattr(self, '_meow_score_cat', None))
+        except Exception as e:
+            if not self.meow_lock_by_advice_enabled():
+                raise
+            logger.warning(f'[指挥喵-评分] 评价失败，将保护锁定：{e}')
+            self._meow_score_result = None
+            return None
         self._meow_score_result = result
         logger.info(f'[指挥喵-评分] {render_summary(result)}')
         return result
+
+    def meow_should_lock_by_advice(self):
+        """按培养建议判断锁定，识别不确定时保护锁定。
+
+        Returns:
+            bool: 仅完整、明确的「建议喂掉」评价返回 False；其余返回 True。
+                此方法仅供按评价锁定模式使用，模式关闭时返回 False。
+        """
+        if not self.meow_lock_by_advice_enabled():
+            return False
+        result = getattr(self, '_meow_score_result', None)
+        expected = getattr(self, '_meow_score_expected_talents', None)
+        complete = (result is not None and expected is not None and expected > 0
+                    and getattr(self, '_meow_score_details', 0) == expected
+                    and len(result.talents) == expected
+                    and not getattr(self, '_meow_score_uncertain', True)
+                    and all(t.kind != 'unknown' and not t.inferred and t.raw
+                            and normalize(t.name) in normalize(t.raw) for t in result.talents)
+                    and result.cat in CATS and bool(result.primary)
+                    and result.primary[0] in result.rubrics)
+        if not complete:
+            logger.warning('[指挥喵-评分] 猫名或天赋未能完整确认，保护锁定')
+            return True
+        try:
+            from module.meowfficer.advice import VERDICT_FEED, reset_advice
+            advice = reset_advice(result)
+        except Exception as e:
+            logger.warning(f'[指挥喵-评分] 培养建议生成失败，保护锁定：{e}')
+            return True
+        lock = advice is None or advice.verdict != VERDICT_FEED
+        logger.attr('[指挥喵-评分] 按评价锁定',
+                    f'{advice.headline if advice else "建议未知"} -> {"锁定" if lock else "不锁定"}')
+        return lock
 
     def meow_score_passes(self):
         """检查当前评分是否达到配置的锁定保留门槛。

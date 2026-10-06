@@ -968,6 +968,7 @@ MeowfficerTrain:
     option: [seamlessly, once_a_day]
   RetainTalentedGold: true
   RetainTalentedPurple: true
+  LockByAdvice: false
   ScoreTalents: false
   ScoreThreshold:
     value: 0

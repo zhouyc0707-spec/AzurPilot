@@ -462,6 +462,7 @@ class GeneratedConfig:
     MeowfficerTrain_Mode = 'seamlessly'  # seamlessly, once_a_day
     MeowfficerTrain_RetainTalentedGold = True
     MeowfficerTrain_RetainTalentedPurple = True
+    MeowfficerTrain_LockByAdvice = False
     MeowfficerTrain_ScoreTalents = False
     MeowfficerTrain_ScoreThreshold = 0
     MeowfficerTrain_EnhanceIndex = 1

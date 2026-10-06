@@ -2550,22 +2550,26 @@
     },
     "RetainTalentedGold": {
       "name": "Lock golden Meowfficers with special talents",
-      "help": "Lock Meowfficers with special talents when collecting. Locked Meowfficers will not be used for enhancement. Users need to manually check and unlock unnecessary ones."
+      "help": "Lock Meowfficers with special talents when collecting. Locked Meowfficers will not be used for enhancement. Users need to manually check and unlock unnecessary ones.\nIgnored when \"Lock new Meowfficers by score advice\" is enabled."
     },
     "RetainTalentedPurple": {
       "name": "Lock purple Meowfficers with special talents",
-      "help": "Lock Meowfficers with special talents when collecting. Locked Meowfficers will not be used for enhancement. Users need to manually check and unlock unnecessary ones."
+      "help": "Lock Meowfficers with special talents when collecting. Locked Meowfficers will not be used for enhancement. Users need to manually check and unlock unnecessary ones.\nIgnored when \"Lock new Meowfficers by score advice\" is enabled."
+    },
+    "LockByAdvice": {
+      "name": "Lock new Meowfficers by score advice",
+      "help": "Automatically recognize talents and score new Meowfficers when collecting from training. Leave unlocked only those recommended as enhancement fodder after complete recognition; lock all other gold, purple, and blue Meowfficers. Recognition failures or uncertain completeness also result in a protective lock. Overrides special-talent retention switches and the score threshold. Applies only to newly collected Meowfficers; existing lock states are not changed in bulk."
     },
     "ScoreTalents": {
       "name": "Score talents while collecting",
-      "help": "Also identify talent names and score them with public guide rules when collecting meowfficers; opens every talent detail, a bit slower"
+      "help": "Also identify talent names and score them with public guide rules when collecting meowfficers; opens every talent detail, a bit slower\nScoring is automatic when \"Lock new Meowfficers by score advice\" is enabled; this separate switch is not required."
     },
     "ScoreThreshold": {
       "name": "Score threshold to keep",
-      "help": "0 disables the check; when greater than 0, cats scoring below it are not locked (only when scoring is enabled)"
+      "help": "0 disables the check; when greater than 0, cats scoring below it are not locked (only when scoring is enabled)\nIgnored when \"Lock new Meowfficers by score advice\" is enabled."
     },
     "EnhanceIndex": {
-      "name": "Use Meowfficers without special talents to enhance the Xth Meowfficer",
+      "name": "Enhancement target position",
       "help": "The Xth Meowfficer in the Meowfficer storage, limited to 1 ~ 12, in order from upper left to lower right"
     },
     "MaxFeedLevel": {

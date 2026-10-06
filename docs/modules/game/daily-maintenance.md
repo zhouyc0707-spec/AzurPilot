@@ -166,7 +166,23 @@ flowchart TD
     E1 --> G
 ```
 
-收取（`meow_get`）逐只进行：颜色检测三个天赋格判断「特殊天赋」，金猫默认只有在「开启保留 + 有特殊天赋 + 评分达标」时才 `_meow_apply_lock`，否则 `_meow_skip_lock` 跳过；紫猫同理受 `RetainTalentedPurple` 控制。评分（`MeowfficerCollectScore` 混入，`MeowfficerTrain_ScoreTalents` 开启时）复用本来就要展开的天赋详情面板 OCR 天赋名，经 `score.py` 四口径评分，`ScoreThreshold > 0` 时评分参与锁定判断。强化（`meow_enhance`）按 `MeowfficerTrain_EnhanceIndex`（1~12）选目标猫，OCR 等级满 30 则索引自增换下一只（第 12 只满级会禁用训练功能）；材料按 `MaxFeedLevel` 过滤，单次最多 10 只，循环至金币不足 1000。训练模式两分支（`seamlessly` / `once_a_day`）当前排队逻辑相同，差别只在收取范围：前者全收，后者平日收一只、周日全收并触发强化。
+收取（`meow_get`）逐只进行：颜色检测三个天赋格判断「特殊天赋」。默认沿用原规则：金猫只有在「开启保留 + 有特殊天赋 + 评分达标」时才 `_meow_apply_lock`，否则 `_meow_skip_lock` 跳过；紫猫同理受 `RetainTalentedPurple` 控制。评分（`MeowfficerCollectScore` 混入，`MeowfficerTrain_ScoreTalents` 开启时）复用天赋详情面板 OCR 天赋名，经 `score.py` 四口径评分，`ScoreThreshold > 0` 时评分参与原规则的锁定判断。
+
+`MeowfficerTrain.LockByAdvice` 默认关闭；开启后自动启用领取时评分，按 `advice.reset_advice()` 的结论处理金、紫、蓝猫，优先于 `RetainTalentedGold`、`RetainTalentedPurple` 和 `ScoreThreshold`：
+
+| 建议结论 | 领取时处理 |
+| --- | --- |
+| `feed`（不建议投入，直接喂掉） | 不锁定，后续由既有强化材料筛选决定是否使用 |
+| `pending`（先补点） | 锁定保留 |
+| `reroll`（建议洗点） | 锁定保留 |
+| `keep`（保留） | 锁定保留 |
+| 评分缺失、识别失败或结果不完整 | 保护性锁定并记录原因 |
+
+建议锁定只处理本次训练完成后领取的新猫，不扫描猫窝重新锁定已有猫，也不自动补天赋或洗点。已处于锁定状态的新金猫仍需完成本只猫的评分，不能由旧的锁定弹窗跳过逻辑提前进入下一只；确定为 `feed` 时先解锁，再取消金猫锁定确认。保护性锁定或建议保留后，由领取父循环识别并确认当前弹窗，下一只无论是否预锁都重新评分，不以「下一只未锁定」作为收尾条件。
+
+识别完整性同时核对非空天赋槽位数、已打开详情数和去重天赋线数；每个详情仅接受一条原文准确包含名称的天赋，猫名也需已知且前后无冲突，评分成功后才允许按 `feed` 放行。中文天赋白名单不适用于其他语言客户端，保护保留也不代表评分识别已成功。
+
+强化（`meow_enhance`）按 `MeowfficerTrain_EnhanceIndex`（1~12）选目标猫，OCR 等级满 30 则索引自增换下一只（第 12 只满级会禁用训练功能）；材料按 `MaxFeedLevel` 过滤，单次最多 10 只，循环至金币不足 1000。训练模式两分支（`seamlessly` / `once_a_day`）当前排队逻辑相同，差别只在收取范围：前者全收，后者平日收一只、周日全收并触发强化。
 
 排程：训练开启时延迟 150~210 分钟（训练时长蓝 2~2.5h / 紫 5.5~6.5h / 金 9.5~10.5h，取最短档上浮），否则延迟到服务器刷新。
 
@@ -257,6 +273,7 @@ flowchart TD
 | `MeowfficerTrain_Enable` / `Mode` | checkbox/select | false / seamlessly | 训练开关与模式 |
 | `MeowfficerTrain_RetainTalentedGold` / `RetainTalentedPurple` | checkbox | true | 锁定带特殊天赋的金/紫猫 |
 | `MeowfficerTrain_ScoreTalents` / `ScoreThreshold` | checkbox/int | false / 0 | 收集时 OCR 天赋并评分；门槛参与锁定判断 |
+| `MeowfficerTrain_LockByAdvice` | checkbox | false | 金、紫、蓝新猫按同源养成建议锁定；自动启用领取评分，优先于原保留开关与分数门槛；失败或不完整时保护锁定 |
 | `MeowfficerTrain_EnhanceIndex` / `MaxFeedLevel` | int | 1 / 5 | 强化目标槽位（1~12）/ 材料等级上限（1~30），越界会被代码修正 |
 | `MeowfficerScore_Source` 等 | 见 argument.yaml | screenshot | 评分工具：来源、截图目录、报告路径、跟拍与扫描参数 |
 

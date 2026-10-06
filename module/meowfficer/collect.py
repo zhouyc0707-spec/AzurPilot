@@ -4,7 +4,7 @@
 - 检测并收集已训练完成的指挥喵（单个或全部）
 - 处理指挥喵获取界面的各种弹窗和过渡动画
 - 检测指挥喵是否拥有特殊天赋（金色/紫色品质专属）
-- 金色指挥喵的锁定/解锁处理（防止被误用作强化材料）
+- 指挥喵的锁定/解锁处理，支持按培养评价保护金、紫、蓝猫
 
 特殊天赋检测机制：
 - 检查天赋网格中的图标，通过颜色分析区分普通天赋和特殊天赋
@@ -52,6 +52,7 @@ class MeowfficerCollect(MeowfficerCollectScore, MeowfficerBase):
     Attributes:
         config.MeowfficerTrain_RetainTalentedGold (bool): 是否保留有特殊天赋的金色指挥喵。
         config.MeowfficerTrain_RetainTalentedPurple (bool): 是否保留有特殊天赋的紫色指挥喵。
+        config.MeowfficerTrain_LockByAdvice (bool): 是否按评分报告的培养建议锁定新猫。
         config.DropRecord_MeowfficerTalent (str): 指挥喵天赋截图记录模式。
     """
     def _meow_detect_shift(self, skip_first_screenshot=True):
@@ -144,6 +145,7 @@ class MeowfficerCollect(MeowfficerCollectScore, MeowfficerBase):
         open_detail = handle_drop or score_enabled
         if score_enabled:
             self.meow_score_reset()
+        talent_count = 0
         if handle_drop:
             drop.add(self.device.image)
 
@@ -151,6 +153,7 @@ class MeowfficerCollect(MeowfficerCollectScore, MeowfficerBase):
             # 空槽位：白色像素较多
             if self.image_color_count(btn, color=(255, 255, 247), threshold=30, count=200):
                 continue
+            talent_count += 1
 
             # 非空槽位：白色像素较少（如罗马数字）
             if self.image_color_count(btn, color=(255, 255, 255), threshold=30, count=25):
@@ -164,7 +167,7 @@ class MeowfficerCollect(MeowfficerCollectScore, MeowfficerBase):
             special_talent = True
 
         if score_enabled:
-            self.meow_score_finish()
+            self.meow_score_finish(expected_talents=talent_count)
 
         log_insert = '发现' if special_talent else '未发现'
         logger.info(f'[指挥喵-收集] {log_insert}指挥喵拥有特殊天赋')
@@ -262,6 +265,7 @@ class MeowfficerCollect(MeowfficerCollectScore, MeowfficerBase):
         # 循环处理可能出现的界面转换
         confirm_timer = Timer(1.5, count=3).start()
         count = 0
+        lock_by_advice = self.meow_lock_by_advice_enabled()
         while 1:
             if skip_first_screenshot:
                 skip_first_screenshot = False
@@ -275,11 +279,24 @@ class MeowfficerCollect(MeowfficerCollectScore, MeowfficerBase):
             else:
                 confirm_timer.reset()
 
+            # 按建议处理时直接确认当前锁定弹窗，不以「下一只未锁定」作为收尾条件。
+            # 下一只也可能已锁定，沿用旧收尾循环会跳过它的评分。
+            if lock_by_advice and (
+                    self.appear(MEOWFFICER_CONFIRM, offset=(40, 20))
+                    or self.appear(MEOWFFICER_CANCEL, offset=(40, 20))):
+                if self.appear(MEOWFFICER_CONFIRM, offset=(40, 20)):
+                    self.appear_then_click(MEOWFFICER_CONFIRM, offset=(40, 20), interval=3)
+                elif self.appear(MEOWFFICER_CANCEL, offset=(40, 20), interval=3):
+                    self.device.click(MEOWFFICER_CONFIRM)
+                confirm_timer.reset()
+                self.interval_reset(MEOWFFICER_GET_CHECK)
+                continue
             if self.handle_meow_popup_dismiss():
                 confirm_timer.reset()
                 continue
             if self.appear(MEOWFFICER_GET_CHECK, offset=(40, 40), interval=3):
-                if self.appear(MEOWFFICER_APPLY_UNLOCK, offset=(40, 40)):
+                if self.appear(MEOWFFICER_APPLY_UNLOCK, offset=(40, 40)) \
+                        and not lock_by_advice:
                     self._meow_skip_popup_after_locking(skip_first_screenshot=True)
                     confirm_timer.reset()
                     # 意外退出获取队列
@@ -293,21 +310,31 @@ class MeowfficerCollect(MeowfficerCollectScore, MeowfficerBase):
                         method=self.config.DropRecord_MeowfficerTalent
                 ) as drop:
                     special_talent = self._meow_is_special_talented(drop=drop)
-                    # 开了评分门槛时，评分不达标同样不锁定，交给强化消化掉
-                    score_passed = self.meow_score_passes()
-                    if self.appear(MEOWFFICER_GOLD_CHECK, offset=(40, 40)):
-                        if not self.config.MeowfficerTrain_RetainTalentedGold \
-                                or not special_talent or not score_passed:
+                    if lock_by_advice:
+                        # 新模式统一处理全部品质，不再受特殊天赋开关与分数门槛限制。
+                        should_lock = self.meow_should_lock_by_advice()
+                        self._meow_apply_lock(lock=should_lock)
+                        if not should_lock and self.appear(MEOWFFICER_GOLD_CHECK, offset=(40, 40)):
                             self._meow_skip_lock()
                             skip_first_screenshot = True
                             confirm_timer.reset()
                             continue
-                        self._meow_apply_lock()
-
-                    if self.appear(MEOWFFICER_PURPLE_CHECK, offset=(40, 40)):
-                        if self.config.MeowfficerTrain_RetainTalentedPurple \
-                                and special_talent and score_passed:
+                    else:
+                        # 默认仍沿用原来的金紫特殊天赋与评分门槛规则。
+                        score_passed = self.meow_score_passes()
+                        if self.appear(MEOWFFICER_GOLD_CHECK, offset=(40, 40)):
+                            if not self.config.MeowfficerTrain_RetainTalentedGold \
+                                    or not special_talent or not score_passed:
+                                self._meow_skip_lock()
+                                skip_first_screenshot = True
+                                confirm_timer.reset()
+                                continue
                             self._meow_apply_lock()
+
+                        if self.appear(MEOWFFICER_PURPLE_CHECK, offset=(40, 40)):
+                            if self.config.MeowfficerTrain_RetainTalentedPurple \
+                                    and special_talent and score_passed:
+                                self._meow_apply_lock()
 
                     # 连续收集多只时易触发异常，通过弹出 click_record 缓解
                     self.device.click(MEOWFFICER_TRAIN_CLICK_SAFE_AREA)

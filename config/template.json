@@ -2181,6 +2181,7 @@
       "Mode": "seamlessly",
       "RetainTalentedGold": true,
       "RetainTalentedPurple": true,
+      "LockByAdvice": false,
       "ScoreTalents": false,
       "ScoreThreshold": 0,
       "EnhanceIndex": 1,
