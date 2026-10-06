@@ -35,7 +35,7 @@ from module.meowfficer.scan_utils import _crop, _mean_diff, parse_level, pick_ca
 from module.meowfficer.score_ocr import recognize
 from module.ui.assets import MEOWFFICER_GOTO_DORMMENU
 from module.meowfficer.scan_utils import (CATTERY_PANEL_AREA, CATTERY_SCREEN_HEIGHT, CATTERY_SWIPE_STEP,
-                                          CURRENT_CAT_AREA, INERT_CLICK,
+                                          CURRENT_CAT_AREA, CURRENT_CAT_LEVEL_AREA, CURRENT_CAT_NAME_AREA, INERT_CLICK,
                                           MAX_TALENT_SWIPES, MEOWFFICER_CATTERY_GRID, MEOWFFICER_PLAY_CONFIRM,
                                           PLAY_CONFIRM_COUNT, PLAY_CONFIRM_THRESHOLD, STABLE_TOLERANCE,
                                           TALENT_OCR_AREA, TALENT_PANEL_AREA, TALENT_TAB_OFFSET)
@@ -266,8 +266,8 @@ class MeowfficerScanner(MeowfficerBase):
         """读左下角「当前显示的猫」名字与等级。
 
         猫名可能是玩家自定义的，所以这里不强行匹配天赋库里的猫名，
-        只做去噪后原样返回，用于去重与日志。等级用来区分**同名猫**
-        （这一窝就有 3 只「潜艇参谋」、4 只「潜艇火猫」）。
+        只读取姓名框并去噪后原样返回，用于身份核验与日志，不将所属舰队名
+        作为候选。等级单独从经验条读取，用来辅助区分同名猫。
 
         Args:
             ocr (AlOcr): 已初始化的 OCR 实例。
@@ -277,20 +277,20 @@ class MeowfficerScanner(MeowfficerBase):
         """
         from module.meowfficer.score_ocr import _iter_det_results
 
-        image = _crop(self.device.image, CURRENT_CAT_AREA)
-        image = self._crop_scale(image)
-        try:
-            results = ocr.det(image)
-        except Exception as e:
-            logger.warning(f'[指挥喵-扫描] 猫名识别失败：{e}')
-            return '', None
-
-        texts = [text for text, _score in _iter_det_results(results)]
-        name = pick_cat_name(texts)
-        level = parse_level(texts)
+        fields = []
+        for label, area in (('猫名', CURRENT_CAT_NAME_AREA), ('等级', CURRENT_CAT_LEVEL_AREA)):
+            image = self._crop_scale(_crop(self.device.image, area))
+            try:
+                texts = [text for text, _score in _iter_det_results(ocr.det(image))]
+            except Exception as e:
+                logger.warning(f'[指挥喵-扫描] {label}识别失败：{e}')
+                texts = []
+            fields.append(texts)
+        name = pick_cat_name(fields[0])
+        level = parse_level(fields[1])
         # 注意：指挥喵**可以自定义名字**，自定义名完全可能和天赋重名
         # （用户就有一只猫叫「不动如山」），所以这里绝不能用天赋库过滤猫名
-        logger.debug(f'[指挥喵-扫描] 当前猫 OCR -> {texts}，取 {name!r} Lv{level}')
+        logger.debug(f'[指挥喵-扫描] 当前猫 OCR -> 姓名 {fields[0]}，等级 {fields[1]}，取 {name!r} Lv{level}')
         return name, level
 
     @staticmethod
@@ -701,7 +701,9 @@ class MeowfficerScanner(MeowfficerBase):
                     following = swipe_next_cat(self, ocr, cat, level)
                     if following is not None:
                         if not self._identity_matches(following, expected):
-                            raise RequestHumanTakeover('立绘切换后的猫与下一格身份不一致，停止，避免漏猫或错配')
+                            raise RequestHumanTakeover(
+                                f'立绘切换后的猫与下一格身份不一致：实际 {following[0]} Lv{following[1]}，'
+                                f'预期 {expected[0]} Lv{expected[1]}；停止，避免漏猫或错配')
                         identity = following
                         logger.info(f'[指挥喵-扫描] 天赋页左滑切换到 {identity[0]} Lv{identity[1]}')
                         continue

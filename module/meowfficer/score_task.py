@@ -17,11 +17,14 @@
 
 import json
 import os
+import tempfile
 import time
 from datetime import datetime
+from pathlib import Path
 
 from rich.table import Table
 
+from module.base.utils import save_image
 from module.config.config import AzurLaneConfig
 from module.exception import RequestHumanTakeover
 from module.logger import logger
@@ -423,8 +426,29 @@ class MeowfficerScore:
                          '② 日志里是否有 OCR 相关警告（首次运行需要联网下载模型）。')
 
 
+def _save_failure_scene(device, reason):
+    """只保存已有 RGB 截图与失败原因，不重新截图或读取用户配置。"""
+    import numpy as np
+
+    image = getattr(device, 'image', None) if device is not None else None
+    if (not isinstance(image, np.ndarray) or image.ndim != 3 or image.shape[2] != 3
+            or image.size == 0 or image.dtype != np.uint8):
+        return
+    try:
+        root = Path('log/error/meowfficer_score')
+        root.mkdir(parents=True, exist_ok=True)
+        # 时间便于查找，随机后缀避免同一瞬间的多次失败互相覆盖。
+        scene = Path(tempfile.mkdtemp(prefix=f'{datetime.now():%Y-%m-%d_%H-%M-%S-%f}_', dir=root))
+        # 设备统一截图管线输出 RGB，复用 PIL 保存，不做额外红蓝通道交换。
+        save_image(image, scene / 'screen.png')
+        (scene / 'reason.txt').write_text(reason + '\n', encoding='utf-8')
+        logger.info(f'[指挥喵-评分] 已保存停止时的现有截图和原因：{scene}')
+    except Exception as exc:
+        logger.warning(f'[指挥喵-评分] 失败现场保存失败：{exc}')
+
+
 def run_meowfficer_score(config, device=None):
-    """工具任务包装函数，异常处理与 ``run_ocr_benchmark`` 保持一致。
+    """工具任务包装函数，人工接管时记录原因并保存已有截图。
 
     Args:
         config (AzurLaneConfig | str): 配置实例或配置标识。
@@ -436,6 +460,8 @@ def run_meowfficer_score(config, device=None):
     try:
         MeowfficerScore(config, device=device, task='MeowfficerScore').run()
         return True
-    except RequestHumanTakeover:
-        logger.critical('[指挥喵-评分] 错误 请求人类接管')
+    except RequestHumanTakeover as exc:
+        reason = str(exc).strip() or type(exc).__name__
+        logger.critical(f'[指挥喵-评分] 错误 请求人类接管：{reason}')
+        _save_failure_scene(device, reason)
         return False
