@@ -124,6 +124,10 @@ class _StubScanner(MeowfficerScanner):
     def _load_ocr(self):
         return object()
 
+    def _supports_talent_swipe(self):
+        """此组保留非国服卡片遍历的编排回归，快速路径另行覆盖。"""
+        return False
+
     def _ensure_cattery(self):
         return None
 

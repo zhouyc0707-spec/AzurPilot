@@ -1,9 +1,9 @@
-"""扫描全部指挥喵的天赋（工具评分任务的第四种取图方式）。
+"""扫描全部指挥喵的天赋（工具评分任务的自动遍历方式）。
 
 与 ``screenshot`` / ``device`` 两种方式不同，本模式**自己操作游戏**：
-进入指挥喵页面的猫窝列表，逐只选中猫 -> 打开「天赋」页 -> 截图识别 -> 返回，
-再小步滑动列表覆盖后面的猫。默认结束后统一评分；启用建议锁定时，
-在当前猫的天赋页内通过回调评分和确认锁状态，然后再继续下一只。
+国服在当前「天赋」页左侧立绘向左滑动，连续读取下一只；列表位置核验、
+同名同级猫、翻屏或锁状态实际变化时返回猫窝。其他服务器沿用卡片遍历。
+默认结束后统一评分；启用建议锁定时，在当前猫的天赋页内评分并确认锁状态。
 
 实机量测结论（1280×720）：
 
@@ -496,12 +496,237 @@ class MeowfficerScanner(MeowfficerBase):
     # 主流程
     # ------------------------------------------------------------------
 
+    def _supports_talent_swipe(self):
+        """仅启用已校准国服猫窝标记及天赋标题的快速遍历。"""
+        import module.config.server as server
+        return server.server == 'cn'
+
+    @staticmethod
+    def _identity_matches(actual, expected):
+        """只核对预期中已经确认的字段，未知等级不能作为猫已切换的证据。"""
+        return actual[0] == expected[0] and (expected[1] is None or actual[1] == expected[1])
+
+    def _stable_cattery_frame(self):
+        """持续截图确认猫窝网格稳定，滚动判断不包含标题与底部入口。"""
+        previous = None
+        stable = 0
+        for _ in range(12):
+            self.device.screenshot()
+            if not self.appear(MEOWFFICER_TALENT_TAB, offset=TALENT_TAB_OFFSET):
+                previous = None
+                stable = 0
+                continue
+            current = _crop(self.device.image, (718, 133, 1245, 550)).copy()
+            stable = stable + 1 if previous is not None and _mean_diff(previous, current) < 3 else 0
+            if stable >= 2:
+                return current
+            previous = current
+        raise RequestHumanTakeover('猫窝列表页面或滚动状态无法确认，已停止扫描')
+
+    def _reset_swipe_cattery(self):
+        """用滑块顶部或实际停止滚动确认起点，避免从长列表中段开始。"""
+        from module.meowfficer.scan_list import cattery_at_top
+
+        before = self._stable_cattery_frame()
+        for _ in range(40):
+            if cattery_at_top(self.device.image) is True:
+                return
+            self.device.swipe((1100, 170), (1100, 490), duration=0.6, name='MEOWFFICER_LIST_SCROLL')
+            after = self._stable_cattery_frame()
+            if _mean_diff(before, after) < 3:
+                # 小名单可以没有滑块；向顶部滚动后网格未移动，且页面持续正向确认。
+                if cattery_at_top(self.device.image) is not False:
+                    return
+                raise RequestHumanTakeover('猫窝滚动没有进展且未到顶部，已停止扫描')
+            self.device.click_record_remove('MEOWFFICER_LIST_SCROLL')
+            before = after
+        raise RequestHumanTakeover('猫窝列表仍未确认顶部，已停止，避免遗漏前面的指挥喵')
+
+    def _advance_verified_page(self):
+        """实测并对齐三行滚动；末页只允许已确认的整行重叠。"""
+        from module.meowfficer.scan_list import selected_card
+
+        before = self._stable_cattery_frame()
+        total = 0
+        ratio = 1.4
+        reached_end = False
+        for _ in range(8):
+            remaining = CATTERY_SCREEN_HEIGHT - total
+            if abs(remaining) <= 3:
+                break
+            distance = min(120, max(8, round(abs(remaining) / ratio)))
+            forward = remaining > 0
+            start = (1100, 450) if forward else (1100, 170)
+            end = (1100, start[1] - distance if forward else start[1] + distance)
+            self.device.swipe(start, end, duration=0.5, name='MEOWFFICER_LIST_SCROLL')
+            after = self._stable_cattery_frame()
+            moved = scroll_offset(before, after) if forward else scroll_offset(after, before)
+            if moved == 0:
+                if forward and _mean_diff(before, after) < 3:
+                    reached_end = True
+                    break
+                raise RequestHumanTakeover('猫窝滚动位移无法确认，已停止，避免跳过指挥喵')
+            first, second = (before, after) if forward else (after, before)
+            overlap_first, overlap_second = first[moved:], second[:-moved]
+            difference = np.abs(overlap_first.astype(np.int16) - overlap_second.astype(np.int16))
+            if (_mean_diff(overlap_first, overlap_second) > 5
+                    or (difference.max(axis=2) > 20).mean() > 0.1):
+                raise RequestHumanTakeover('猫窝滚动前后内容不匹配，已停止，避免误算位移')
+            total += moved if forward else -moved
+            ratio = min(3.0, max(0.5, moved / distance))
+            self.device.click_record_remove('MEOWFFICER_LIST_SCROLL')
+            before = after
+        rows = round(total / 146)
+        if (rows < 0 or rows > 3 or abs(total - rows * 146) > 3
+                or (rows < 3 and not reached_end)):
+            raise RequestHumanTakeover('猫窝翻屏没有对齐完整行，已停止，避免重复或遗漏指挥喵')
+        # 不足三行时，旧末只仍可见；用其选中圈独立核对实际位移。
+        if rows in (1, 2) and selected_card(self.device.image) != 11 - rows * 4:
+            raise RequestHumanTakeover('猫窝末屏的重叠位置无法确认，已停止扫描')
+        logger.attr('[指挥喵-扫描] 翻屏', f'{total}px，{rows} 行')
+        return rows
+
+    def _select_verified_card(self, index, ocr, expected):
+        """正向确认目标卡片被选中、姓名等级稳定后才打开天赋页。"""
+        from module.meowfficer.scan_list import card_center, selected_card
+
+        x, y = card_center(index)
+        button = Button(area=(x - 10, y - 10, x + 10, y + 10), color=(0, 0, 0),
+                        button=(x - 10, y - 10, x + 10, y + 10), name=f'MEOWFFICER_SCAN_CARD_{index}')
+        previous = None
+        stable = 0
+        for attempt in range(2):
+            if not self.appear(MEOWFFICER_TALENT_TAB, offset=TALENT_TAB_OFFSET):
+                raise RequestHumanTakeover('无法确认猫窝列表，停止选择指挥喵')
+            self.device.click(button)
+            for _ in range(8):
+                self.device.screenshot()
+                if (not self.appear(MEOWFFICER_TALENT_TAB, offset=TALENT_TAB_OFFSET)
+                        or selected_card(self.device.image) != index):
+                    previous = None
+                    stable = 0
+                    continue
+                identity = self._read_current_cat(ocr)
+                stable = stable + 1 if identity == previous else 1
+                previous = identity
+                if (stable >= 2 and identity[0]
+                        and (expected is None or self._identity_matches(identity, expected))):
+                    self.device.stuck_record_clear()
+                    return identity
+            logger.warning(f'[指挥喵-扫描] 第 {index + 1} 格选中状态或身份未确认，第 {attempt + 1} 次尝试')
+        raise RequestHumanTakeover('未能确认目标猫卡片的位置与身份，已停止，避免重复读取或错配')
+
+    def _confirm_talent_identity(self, ocr, expected):
+        """持续截图确认天赋标题与两次相同的当前猫身份。"""
+        from module.meowfficer.score_lock import detail_page_confirmed
+
+        stable = 0
+        for _ in range(12):
+            self.device.screenshot()
+            matched = (detail_page_confirmed(self.device.image)
+                       and self._read_current_cat(ocr) == expected)
+            stable = stable + 1 if matched else 0
+            if stable >= 2:
+                return
+        raise RequestHumanTakeover('天赋页或目标猫身份未能正向确认，已停止指挥喵扫描')
+
+    def _return_verified_list(self, before, index):
+        """核对返回后的视口、排序和选中位置，不能继续使用失效的卡位。"""
+        from module.meowfficer.scan_list import cattery_order_unchanged, selected_card
+
+        if not self._back_to_cattery():
+            raise RequestHumanTakeover('未能返回猫窝列表，已停止指挥喵扫描')
+        # _back_to_cattery 已等待列表稳定，此处仍用新截图确认正向选中标记。
+        for _ in range(2):
+            self.device.screenshot()
+            if (not self.appear(MEOWFFICER_TALENT_TAB, offset=TALENT_TAB_OFFSET)
+                    or selected_card(self.device.image) != index
+                    or not cattery_order_unchanged(before, self.device.image)):
+                raise RequestHumanTakeover(
+                    '猫窝选中位置、排序或滚动视口发生变化，已停止扫描；请检查筛选与排序后重试')
+
+    def _scan_by_swipe(self, ocr, limit, passes, on_cat):
+        """保留每屏位置锚点，在相邻身份可区分时连续左滑读取。"""
+        from module.meowfficer.scan_capture import capture_current_cat
+        from module.meowfficer.scan_list import card_is_empty, read_card_identity
+        from module.meowfficer.scan_next import swipe_next_cat
+
+        start_index = 0
+        for page in range(1, passes + 1):
+            self.device.screenshot()
+            if not self.appear(MEOWFFICER_TALENT_TAB, offset=TALENT_TAB_OFFSET):
+                raise RequestHumanTakeover('猫窝列表无法确认，已停止指挥喵扫描')
+            page_image = self.device.image.copy()
+            # 名称和等级只作下一格预期，最终身份必须在实际选中的猫上再次确认。
+            identities = [read_card_identity(page_image, index, ocr) for index in range(12)]
+            occupied = [index for index in range(start_index, 12) if not card_is_empty(page_image, index)]
+            if not occupied:
+                break
+            identity = None
+            in_detail = False
+            for offset, index in enumerate(occupied):
+                if not in_detail:
+                    identity = self._select_verified_card(index, ocr, identities[index])
+                    before = self.device.image.copy()
+                    if not self._open_talent():
+                        raise RequestHumanTakeover('打开天赋页失败，已停止指挥喵扫描')
+                    self._confirm_talent_identity(ocr, identity)
+                    in_detail = True
+                cat, level = identity
+                logger.hr(f'第 {page} 屏 第 {index + 1} 张：{cat}', level=3)
+                action = None
+                if on_cat is None:
+                    talents = self._read_talents(ocr)
+                else:
+                    capture = capture_current_cat(self, ocr, cat, level)
+                    talents = capture.talents
+                    action = on_cat(self, capture)
+                if talents or on_cat is not None:
+                    self.scanned.append((cat, talents, level))
+                    logger.attr('[指挥喵-扫描] 已扫描', f'{len(self.scanned)} 只')
+                else:
+                    logger.warning(f'[指挥喵-扫描] {cat} 没识别到天赋，跳过评分')
+
+                reached_limit = limit > 0 and len(self.scanned) >= limit
+                next_index = occupied[offset + 1] if offset + 1 < len(occupied) else None
+                expected = identities[next_index] if next_index is not None else None
+                changed_lock = action and action.get('status') == 'changed'
+                # 同名同级不能靠画面内容区分，提前返回列表按下一格正向选中。
+                distinguishable = (expected is not None and
+                                   (expected[0] != cat or
+                                    (expected[1] is not None and level is not None and expected[1] != level)))
+                can_swipe = (not reached_limit and not changed_lock and next_index == index + 1
+                             and distinguishable)
+                if can_swipe:
+                    following = swipe_next_cat(self, ocr, cat, level)
+                    if following is not None:
+                        if not self._identity_matches(following, expected):
+                            raise RequestHumanTakeover('立绘切换后的猫与下一格身份不一致，停止，避免漏猫或错配')
+                        identity = following
+                        logger.info(f'[指挥喵-扫描] 天赋页左滑切换到 {identity[0]} Lv{identity[1]}')
+                        continue
+                    logger.info('[指挥喵-扫描] 左滑未确认下一只，返回猫窝按位置核验')
+                self._return_verified_list(before, index)
+                in_detail = False
+                if reached_limit:
+                    logger.info(f'[指挥喵-扫描] 已达到上限 {limit} 只，结束')
+                    return self.scanned
+            logger.info(f'[指挥喵-扫描] 第 {page} 屏结束，累计 {len(self.scanned)} 只')
+            if page == passes or len(occupied) < 12:
+                break
+            rows = self._advance_verified_page()
+            if rows == 0:
+                break
+            # 末尾不足一屏，前面的可见行已经读取，只访问旧末只之后的新行。
+            start_index = 12 - rows * 4
+        return self.scanned
+
     def scan_all(self, limit: int = 0, passes: int = 12, on_cat=None) -> list:
         """遍历猫窝列表，返回每只猫的天赋。
 
         指挥喵**可以自定义名字**，自定义名甚至可能和天赋名一样（用户就有一只猫叫
         「不动如山」），而且**可以重名**，所以这里刻意**不做任何按内容的去重**：
-        改成每屏整屏前进、不重叠地扫，保证每只猫只被访问一次。
+        按列表位置分别记录；国服可核验相邻身份时直接在天赋页左滑。
 
         Args:
             limit (int): 最多扫描多少只猫；``0`` 表示不限。
@@ -517,11 +742,17 @@ class MeowfficerScanner(MeowfficerBase):
         ocr = self._load_ocr()
 
         self._ensure_cattery()
-        self._reset_cattery_scroll()
+        if self._supports_talent_swipe():
+            self._reset_swipe_cattery()
+        else:
+            self._reset_cattery_scroll()
         self.device.stuck_record_clear()
         logger.hr('扫描全部指挥喵', level=2)
         logger.info(f'[指挥喵-扫描] 最多 {passes} 屏，上限 '
                     f'{limit if limit > 0 else "不限"} 只')
+
+        if self._supports_talent_swipe():
+            return self._scan_by_swipe(ocr, limit, passes, on_cat)
 
         for page in range(1, passes + 1):
             read_in_page = 0
