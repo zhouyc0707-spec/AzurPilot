@@ -13,6 +13,14 @@ import '../styles/legacy-stats.css'
 const AUTO_REFRESH_MS = 60_000
 /** 历史月份选择器里最多列出多少个历史月份（旧界面同样是 24）。 */
 const HISTORY_MONTH_LIMIT = 24
+/** 历月累计指标移到历史月份弹窗；按键拆分，避免把月度收获混入累计表。 */
+const MEOW_CUMULATIVE_KEYS = new Set([
+  'Gui.Stat.MeowEffectiveRounds',
+  'Gui.Stat.MeowAvgOperationCoin',
+  'Gui.Stat.MeowAvgPlate',
+  'Gui.Stat.MeowAvgAbyssal',
+  'Gui.Stat.MeowAvgObscure',
+])
 /* 委托收益五张卡片的图标沿用**旧界面**那一套（assets/gui/icon/icon_N.png，
    由后端挂在 /gui-icons 下，与旧界面用的是同一份文件）：
    钻石 icon_1 / 心智魔方 icon_2 / **心智 icon_3（浅蓝）** / 石油 icon_4 / 物资 icon_5。
@@ -111,7 +119,7 @@ function LegacySectionTitle({title, onRefresh, busy, children}: {
  */
 export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) {
   const {instance = ''} = useParams()
-  const {ui, notify} = useApp()
+  const {ui} = useApp()
   const text = useLegacyText()
   const connection = useConnection()
   const loadedInstance = useRef(instance)
@@ -200,11 +208,13 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
   }
 
   function pickMonth(month?: string) {
+    setMonthPickerOpen(false)
+    // 重选当前月份只关闭弹窗；月份未改变时不会触发重取，不能留下禁用状态。
+    if (month === meowMonth) return
     // 切月份只压暗表格、保留页面 DOM（整页 Loading 会把滚动位置顶回顶部）；
     // 60 秒自动刷新不压暗，否则每分钟闪一下。
     setPending(true)
     setMeowMonth(month)
-    setMonthPickerOpen(false)
   }
 
   if (error) return <div className="statistics-legacy"><ErrorBox message={error} retry={() => void load(false)}/></div>
@@ -213,6 +223,10 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
   const meowTitle = data.meowLoot.isCurrentMonth
     ? '本月耄耋相接收获'
     : `历史耄耋相接收获（${data.meowLoot.month}）`
+  const monthlyIndexes = data.meowLoot.columns.flatMap((column, index) =>
+    MEOW_CUMULATIVE_KEYS.has(column.key) ? [] : [index])
+  const cumulativeIndexes = data.meowLoot.columns.flatMap((column, index) =>
+    column.key === 'Gui.Stat.HazardLevel' || MEOW_CUMULATIVE_KEYS.has(column.key) ? [index] : [])
 
   return <div className="statistics-legacy legacy-stats">
     <h1 className="legacy-sr-title">{ui('nav.statistics')}</h1>
@@ -239,15 +253,15 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
       <section className={`legacy-stats-section legacy-stats-card${pending ? ' is-pending' : ''}`}>
         <LegacySectionTitle title={meowTitle} onRefresh={() => void load(false)} busy={busy}>
           <div className="legacy-stat-title-actions">
-            {data.meowLoot.isCurrentMonth
-              ? <button type="button" className="legacy-button" disabled={pending} onClick={() => historyMonths.length ? setMonthPickerOpen(true) : notify('暂无历史月份数据')}>查看历史月份</button>
-              : <button type="button" className="legacy-button is-primary" disabled={pending} onClick={() => pickMonth(undefined)}>回到本月</button>}
+            <button type="button" className="legacy-button" disabled={pending} onClick={() => setMonthPickerOpen(true)}>查看历史月份</button>
+            {!data.meowLoot.isCurrentMonth && <button type="button" className="legacy-button is-primary" disabled={pending} onClick={() => pickMonth(undefined)}>回到本月</button>}
           </div>
         </LegacySectionTitle>
         <div className="legacy-stat-summary">
           <span className="legacy-summary-item">{text('Gui.Stat.MeowLastRecord', {value: data.meowLoot.lastRecord})}</span>
         </div>
-        <LegacyTable columns={data.meowLoot.columns} rows={data.meowLoot.rows} text={text}/>
+        <LegacyTable columns={monthlyIndexes.map(index => data.meowLoot.columns[index])}
+          rows={data.meowLoot.rows.map(row => monthlyIndexes.map(index => row[index]))} text={text}/>
       </section>
 
       {/* 每日经验检测 / 舰船升级进度 */}
@@ -355,7 +369,8 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
       </section>
     </div>
 
-    {monthPickerOpen && <Modal title="选择查看月份" onClose={() => setMonthPickerOpen(false)} className="legacy-month-modal">
+    {monthPickerOpen && <Modal title="历史月份与累计收获" onClose={() => setMonthPickerOpen(false)} className="legacy-month-modal">
+      <h3 className="legacy-month-heading">选择查看月份</h3>
       <div className="legacy-month-grid">
         <button type="button" disabled={pending} className={`legacy-button${data.meowLoot.isCurrentMonth ? ' is-primary' : ''}`} onClick={() => pickMonth(undefined)}>本月（{currentMonthKey()}）</button>
         {historyMonths.map(month => <button
@@ -365,6 +380,13 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
           className={`legacy-button${month === data.meowLoot.month ? ' is-primary' : ''}`}
           onClick={() => pickMonth(month)}>{month}</button>)}
       </div>
+      {!historyMonths.length && <p className="legacy-muted">暂无历史月份数据</p>}
+      <section className="legacy-month-cumulative" aria-label="历月累计收获">
+        <h3 className="legacy-month-heading">历月累计收获</h3>
+        <p className="legacy-month-note">汇总所有已记录月份，按侵蚀等级分别统计，不随查看月份变化。</p>
+        <LegacyTable columns={cumulativeIndexes.map(index => data.meowLoot.columns[index])}
+          rows={data.meowLoot.rows.map(row => cumulativeIndexes.map(index => row[index]))} text={text}/>
+      </section>
     </Modal>}
   </div>
 }
