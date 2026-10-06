@@ -118,5 +118,15 @@
   "en": "Ultra High-Purity Metals",
   "rarity": 4,
   "zh": "特种钢材"
+ },
+ "RepairPackFull": {
+  "en": "Full Emergency Repair Pack",
+  "rarity": 3,
+  "zh": "应急维修箱（套装）"
+ },
+ "RepairPackFull2": {
+  "en": "Full Complete Repair Pack",
+  "rarity": 3,
+  "zh": "豪华应急维修箱（套装）"
  }
 }

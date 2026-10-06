@@ -64,5 +64,41 @@
       1224,
       205
     ]
+  },
+  {
+    "template": "opsi_reward_items/RepairPackFull.png",
+    "source": "screenshots/unknown_items/应急维修箱（套装）.png",
+    "source_sha256": "2ddc524661f0a1096ad1ba6d0bb4affcd4170cd0f1758fababcb596a751ba91c",
+    "frame": 0,
+    "area": [
+      936,
+      86,
+      1064,
+      214
+    ],
+    "original_size": [
+      128,
+      128
+    ],
+    "template_size": [
+      96,
+      96
+    ],
+    "fixture": "tests/fixtures/opsi_requested_items/repair_pack_full_storage.png",
+    "note": "用户提供的1280×720储物舱原图，第一排第六格；库存图标归一为96×96。奖励页未标红原图尚待实际结算验证。"
+  },
+  {
+    "template": "opsi_reward_items/RepairPackFull2.png",
+    "source": "assets/shop/os/RepairPackFull2_0.png",
+    "source_sha256": "d9aecb7e67600b9fb4f6b4359365031adcc319b86c88b39a5d265f95fbb37708",
+    "original_size": [
+      96,
+      96
+    ],
+    "template_size": [
+      96,
+      96
+    ],
+    "note": "复用现有豪华维修套装商店图标作为互斥候选，防止普通套装模板误匹配豪华套装；真实奖励页尚待样本验证。"
   }
 ]
