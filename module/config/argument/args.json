@@ -19090,6 +19090,10 @@
           "scan"
         ]
       },
+      "LockByAdvice": {
+        "type": "checkbox",
+        "value": false
+      },
       "Folder": {
         "type": "input",
         "value": "./screenshots/meowfficer_talent"

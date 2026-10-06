@@ -6494,6 +6494,10 @@
       "device": "Auto follow current screen",
       "scan": "Scan all meowfficers"
     },
+    "LockByAdvice": {
+      "name": "Lock or unlock by advice during scans",
+      "help": "Only applies to Scan all meowfficers and changes existing cats' lock states. Fully recognized gold and purple cats are unlocked when the final training advice recommends feeding them; all other advice locks them. Confirmed blue cats skip scoring and are set to unlocked, including removal of an existing lock. Incomplete recognition or an unknown cat type triggers a protective lock only after confirming the current cat, page, and lock state. If any of these cannot be confirmed, no lock operation is performed; incomplete results never trigger automatic unlocking. The report records each action; this does not feed cats, spend talent points, or reroll talents. Local screenshots and auto follow remain read-only. Only the CN Chinese client is currently calibrated; lock operations are skipped on other servers. Automatic unlocking currently requires all talents to be fully confirmed on one screen; cats whose talents require scrolling are protectively locked."
+    },
     "Folder": {
       "name": "Screenshot Folder",
       "help": "Folder holding talent panel screenshots; defaults to the talent drop-record folder ./screenshots/meowfficer_talent"

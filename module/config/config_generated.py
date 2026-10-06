@@ -1115,6 +1115,7 @@ class GeneratedConfig:
 
     # 配置组 `MeowfficerScore`
     MeowfficerScore_Source = 'screenshot'  # screenshot, device, scan
+    MeowfficerScore_LockByAdvice = False
     MeowfficerScore_Folder = './screenshots/meowfficer_talent'
     MeowfficerScore_MaxImages = 50
     MeowfficerScore_ReportPath = './log/meowfficer_score.md'

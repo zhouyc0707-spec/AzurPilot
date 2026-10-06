@@ -5,7 +5,7 @@
 import { useEffect, useState } from 'react'
 import { Cat, ChevronDown, FileText, PawPrint, RefreshCw, Sparkles, Trash2, TriangleAlert } from 'lucide-react'
 import { ApiError, api } from '../api/client'
-import type { MeowfficerAdvice, MeowfficerCat, MeowfficerRubric, MeowfficerScoreReport, MeowfficerTalent } from '../api/types'
+import type { MeowfficerAdvice, MeowfficerCat, MeowfficerLockAction, MeowfficerRubric, MeowfficerScoreReport, MeowfficerTalent } from '../api/types'
 import { useApp, useConnection } from '../app/context'
 import { Empty, ErrorBox, Loading, Modal } from './ui'
 
@@ -154,7 +154,32 @@ function CatCard({cat}: {cat: MeowfficerCat}) {
 
 /** 报告列表本体，与取数逻辑分开，便于单独渲染检查。 */
 export function MeowfficerScoreList({report}: {report: MeowfficerScoreReport}) {
-  return <div className="meow-cats">{report.cats.map((cat, index) => <CatCard key={`${index}-${cat.cat}`} cat={cat}/>)}</div>
+  return <>
+    {!!report.lockActions?.length && <LockActions actions={report.lockActions}/>}
+    {!!report.cats.length && <div className="meow-cats">{report.cats.map((cat, index) => <CatCard key={`${index}-${cat.cat}`} cat={cat}/>)}</div>}
+  </>
+}
+
+/** 复用数据表格样式，蓝猫和失败项也展示实际处理结果，不虚构评分。 */
+function LockActions({actions}: {actions: MeowfficerLockAction[]}) {
+  const {ui} = useApp()
+  const state = (value: boolean | null) => ui(value === true ? 'meow.locked' : value === false ? 'meow.unlocked' : 'meow.lockUnknown')
+  const statuses = {changed: 'meow.lockChanged', unchanged: 'meow.lockUnchanged', skipped: 'meow.lockSkipped', unconfirmed: 'meow.lockUnconfirmed'} as const
+  return <section className="data-table meow-lock-actions" aria-label={ui('meow.lockActions')}>
+    <strong>{ui('meow.lockActions')}</strong>
+    <div className="data-table-viewport">
+      <table>
+        <thead><tr>
+          <th>{ui('meow.lockName')}</th><th>{ui('meow.lockBefore')}</th><th>{ui('meow.lockAfter')}</th>
+          <th>{ui('meow.lockResult')}</th><th>{ui('meow.lockReason')}</th>
+        </tr></thead>
+        <tbody>{actions.map((action, index) => <tr key={index}>
+          <td>{action.name}</td><td>{state(action.before)}</td><td>{state(action.after)}</td>
+          <td>{ui(statuses[action.status])}</td><td>{action.reason}</td>
+        </tr>)}</tbody>
+      </table>
+    </div>
+  </section>
 }
 
 /**
@@ -203,6 +228,7 @@ export function MeowfficerScorePanel({instance}: {instance: string}) {
         setMissing(false)
         setReport(previous => (
           previous && previous.generatedAt === value.generatedAt && previous.cats.length === value.cats.length
+            && JSON.stringify(previous.lockActions) === JSON.stringify(value.lockActions)
             ? previous
             : value))
       }).catch(() => {
@@ -227,17 +253,20 @@ export function MeowfficerScorePanel({instance}: {instance: string}) {
   }
 
   const empty = <Empty icon={<Cat size={32}/>} title={ui('meow.emptyTitle')}>{ui('meow.emptyHint')}</Empty>
+  const hasRecords = !!report && (!!report.cats.length || !!report.lockActions?.length)
   return <>
     <section className="panel meow-panel" aria-label={ui('meow.title')}>
     <div className="panel-heading">
       <div><PawPrint size={18}/><h2>{ui('meow.title')}</h2></div>
       <div className="meow-panel-actions">
-        {report && <span className="meow-summary">{ui('meow.summary', {count: report.cats.length, time: report.generatedAt || '—'})}</span>}
+        {report && <span className="meow-summary">{report.lockActions?.length
+          ? ui('meow.actionSummary', {count: report.cats.length, actions: report.lockActions.length, time: report.generatedAt || '—'})
+          : ui('meow.summary', {count: report.cats.length, time: report.generatedAt || '—'})}</span>}
         {/* HTML 报告与面板读的是同一份产物，有数据即存在。 */}
-        {!!report?.cats.length && <a className="button secondary" href="/reports/meowfficer_score" target="_blank" rel="noopener noreferrer">
+        {hasRecords && <a className="button secondary" href="/reports/meowfficer_score" target="_blank" rel="noopener noreferrer">
           <FileText size={15}/>{ui('meow.openReport')}
         </a>}
-        {!!report?.cats.length && <button className="button secondary" disabled={connection !== 'ready'} onClick={() => setConfirmClear(true)}>
+        {hasRecords && <button className="button secondary" disabled={connection !== 'ready'} onClick={() => setConfirmClear(true)}>
           <Trash2 size={15}/>{ui('meow.clear')}
         </button>}
         <button className="button secondary" disabled={connection !== 'ready' || refreshing} onClick={refresh}>
@@ -248,7 +277,7 @@ export function MeowfficerScorePanel({instance}: {instance: string}) {
     {error ? <div className="meow-body"><ErrorBox message={error} retry={refresh}/></div>
       : missing ? <div className="meow-body">{empty}</div>
       : !report ? <Loading/>
-      : !report.cats.length ? <div className="meow-body">{empty}</div>
+      : !hasRecords ? <div className="meow-body">{empty}</div>
       : <MeowfficerScoreList report={report}/>}
     <p className="panel-note">{ui('meow.disclaimer')}</p>
     </section>

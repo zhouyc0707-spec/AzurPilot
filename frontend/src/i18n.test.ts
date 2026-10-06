@@ -57,4 +57,18 @@ describe('WebUI i18n', () => {
     expect(translateUi('ja-JP', 'developer.formControls')).toBe('フォームコントロール')
     expect(translateUi('zh-TW', 'developer.emptyTitle')).toBe('暫無內容')
   })
+
+  it('translates lock audit states and zero-score action summaries in every language', () => {
+    const keys = ['meow.actionSummary', 'meow.lockActions', 'meow.lockName', 'meow.lockBefore', 'meow.lockAfter',
+      'meow.lockResult', 'meow.lockReason', 'meow.locked', 'meow.unlocked', 'meow.lockUnknown',
+      'meow.lockChanged', 'meow.lockUnchanged', 'meow.lockSkipped', 'meow.lockUnconfirmed'] as const
+    for (const language of ['zh-CN', 'zh-TW', 'en-US', 'ja-JP', 'zh-MIAO'] as const) {
+      for (const key of keys) {
+        const text = translateUi(language, key, {count: 0, actions: 2, time: 'T'})
+        expect(text).not.toContain('meow.')
+        expect(text).not.toContain('{')
+      }
+    }
+    expect(translateUi('zh-CN', 'meow.actionSummary', {count: 0, actions: 2, time: 'T'})).toBe('评分 0 只 · 最近 2 条处理 · 生成时间 T')
+  })
 })

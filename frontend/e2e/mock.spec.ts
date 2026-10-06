@@ -1097,6 +1097,69 @@ test('SHA 不匹配警告与更新确认弹窗', async ({page}) => {
   await fetch('http://127.0.0.1:22492/__mock/updater?mode=default')
 })
 
+for (const theme of ['light', 'legacy-light']) {
+  test(`${theme} 指挥喵评分报告零评分动作记录与完整报告入口`, async ({page, context}, testInfo) => {
+    const errors: string[] = []
+    page.on('pageerror', error => errors.push(error.message))
+    await page.addInitScript(value => {
+      localStorage.setItem('azurpilot.theme', value)
+      localStorage.setItem('azurpilot.language', 'zh-CN')
+      localStorage.setItem('azurpilot.background', JSON.stringify({source: 'off'}))
+    }, theme)
+    await page.route('https://www.clarity.ms/**', route => route.abort())
+    const actions = [
+      {name: '蓝猫', before: true, after: false, target: false, status: 'changed', reason: '蓝猫不评分，解除已有锁'},
+      {name: '蓝猫', before: false, after: false, target: false, status: 'unchanged', reason: '蓝猫已经未锁定'},
+      {name: '识别失败猫', before: false, after: true, target: true, status: 'changed', reason: '天赋不完整，保护锁定'},
+      {name: '未确认猫', before: true, after: null as boolean | null, target: false, status: 'unconfirmed', reason: '切换后未能核验'},
+    ]
+    await page.routeWebSocket('**/api/v1/ws', socket => {
+      const server = socket.connectToServer()
+      socket.onMessage(message => {
+        const request = JSON.parse(String(message))
+        if (request.method === 'meowfficer.scoreReport') {
+          socket.send(JSON.stringify({v: 1, type: 'response', id: request.id, ok: true, result: {
+            instance: request.params.instance, generatedAt: '2026-10-07 00:00:00', count: 0, cats: [], lockActions: actions,
+          }}))
+        } else server.send(message)
+      })
+      server.onMessage(message => socket.send(message))
+    })
+    // 完整报告使用隔离 HTML 夹具，确认链接真的能打开，无任何游戏动作。
+    await context.route('**/reports/meowfficer_score', route => route.fulfill({
+      contentType: 'text/html', body: '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><h1>完整锁定记录</h1><p>蓝猫不评分</p></html>',
+    }))
+    await page.goto('/#/i/demo-main/task/MeowfficerScore')
+    const panel = page.locator('.meow-panel')
+    await expect(panel.locator('.meow-summary')).toContainText('评分 0 只 · 最近 4 条处理')
+    const records = panel.getByRole('region', {name: '锁定／解锁处理记录', exact: true})
+    await expect(records.getByRole('row')).toHaveCount(5)
+    await expect(records.getByRole('cell', {name: '蓝猫', exact: true})).toHaveCount(2)
+    await expect(records).toContainText('已锁定')
+    await expect(records).toContainText('未锁定')
+    await expect(records).toContainText('天赋不完整，保护锁定')
+    await expect(records).toContainText('切换后未确认')
+    await expect(panel.locator('.meow-card')).toHaveCount(0)
+    await expect(panel).not.toContainText('还没跑过评分任务')
+    await expect(panel.getByRole('button', {name: '清空报告', exact: true})).toBeVisible()
+    const link = panel.getByRole('link', {name: '查看完整报告', exact: true})
+    await expect(link).toHaveAttribute('href', '/reports/meowfficer_score')
+    const opened = page.waitForEvent('popup')
+    await link.click()
+    const popup = await opened
+    await expect(popup.getByRole('heading', {name: '完整锁定记录'})).toBeVisible()
+    await popup.close()
+
+    // 时间与数量相同的部分报告也应随轮询更新，不能把变化吞掉。
+    actions[3] = {...actions[3], after: false, status: 'changed', reason: '人工核对后的新记录'}
+    await expect(records).toContainText('人工核对后的新记录', {timeout: 10000})
+    await expect(records).not.toContainText('切换后未能核验')
+    await panel.scrollIntoViewIfNeeded()
+    await panel.screenshot({path: testInfo.outputPath(`meowfficer-lock-report-${theme}.png`), animations: 'disabled'})
+    expect(errors).toEqual([])
+  })
+}
+
 test('指挥喵评分报告面板展示、刷新与空状态', async ({page}) => {
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))

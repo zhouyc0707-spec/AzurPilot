@@ -118,8 +118,16 @@ export interface MeowfficerCat {
   pointsSpent?: number; primary?: string; talents?: MeowfficerTalent[]; rubrics?: MeowfficerRubric[]
   advice?: MeowfficerAdvice | null
 }
-/** 「指挥喵评分」任务写入 log/meowfficer_score.json 的结构化结果，报告不存在时后端返回 NOT_FOUND。 */
-export interface MeowfficerScoreReport { instance: string; generatedAt: string; count: number; cats: MeowfficerCat[] }
+/** 自动扫描时逐只确认的锁状态记录；同名猫按扫描顺序保留，不合并。 */
+export interface MeowfficerLockAction {
+  name: string; before: boolean | null; after: boolean | null; target: boolean | null
+  status: 'changed' | 'unchanged' | 'skipped' | 'unconfirmed'; reason: string
+}
+/** 「指挥喵评分」任务的结构化报告；蓝猫或失败项可能只有动作记录，没有评分。 */
+export interface MeowfficerScoreReport {
+  instance: string; generatedAt: string; count: number; cats: MeowfficerCat[]
+  lockActions?: MeowfficerLockAction[]
+}
 /** 旧版统计页的列描述：`key` 是 `Gui.Stat.*` 翻译键，非 `Gui.` 开头时按原文显示。 */
 export interface LegacyColumn {key: string; format: string}
 export interface LegacySeries {key: string; label: string; points: {time: string; value: number; apNow?: number}[]}

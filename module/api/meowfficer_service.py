@@ -11,6 +11,24 @@ from pathlib import Path
 from module.api.protocol import ApiError
 
 REPORT_NAME = 'meowfficer_score.json'
+LOCK_STATUSES = {'changed', 'unchanged', 'skipped', 'unconfirmed'}
+
+
+def _lock_actions(data, limit):
+    """只返回最新的有效审计条目，剔除额外字段及不能确认含义的状态。"""
+    if not isinstance(data, list):
+        raise ApiError('INTERNAL', '评分报告的锁定处理记录结构不正确')
+    actions = []
+    for action in data:
+        if not isinstance(action, dict) or not isinstance(action.get('name'), str) \
+                or not isinstance(action.get('reason'), str) \
+                or not isinstance(action.get('status'), str) \
+                or action.get('status') not in LOCK_STATUSES \
+                or any(key not in action or type(action[key]) not in (bool, type(None))
+                       for key in ('before', 'after', 'target')):
+            continue
+        actions.append({key: action[key] for key in ('name', 'before', 'after', 'target', 'status', 'reason')})
+    return actions[-limit:]
 
 
 def report_path(root: Path) -> Path:
@@ -34,7 +52,7 @@ def report(configs, instance, limit=100):
         limit (int, optional): 最多返回的猫咪记录数量（取最新的若干只）。默认为 100。
 
     Returns:
-        dict: 包含 instance, generatedAt, count, cats 的报告数据字典。
+        dict: 包含 instance, generatedAt, count, cats，以及新报告可选 lockActions 的字典。
 
     Raises:
         ApiError: 报告不存在或内容损坏时抛出业务错误。
@@ -49,9 +67,14 @@ def report(configs, instance, limit=100):
         raise ApiError('INTERNAL', f'评分报告无法解析：{exc}') from exc
     if not isinstance(data, dict) or not isinstance(data.get('cats'), list):
         raise ApiError('INTERNAL', '评分报告结构不正确')
-    cats = [cat for cat in data['cats'] if isinstance(cat, dict)][-int(limit):]
-    return {'instance': instance, 'generatedAt': str(data.get('generatedAt', '')),
-            'count': len(cats), 'cats': cats}
+    count_limit = max(1, min(500, int(limit)))
+    cats = [cat for cat in data['cats'] if isinstance(cat, dict)][-count_limit:]
+    result = {'instance': instance, 'generatedAt': str(data.get('generatedAt', '')),
+              'count': len(cats), 'cats': cats}
+    # 老报告不增加字段；同名猫保持各自的一条记录，不按名字合并。
+    if 'lockActions' in data:
+        result['lockActions'] = _lock_actions(data['lockActions'], count_limit)
+    return result
 
 
 def clear(configs, instance):

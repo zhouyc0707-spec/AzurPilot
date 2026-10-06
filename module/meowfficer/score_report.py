@@ -165,6 +165,41 @@ def _e(text) -> str:
     return html.escape(str(text if text is not None else ''))
 
 
+def _lock_state_text(value) -> str:
+    """把正向确认的锁状态渲染为报告文字。"""
+    return '已锁定' if value is True else '未锁定' if value is False else '未确认'
+
+
+LOCK_STATUS_TEXT = {'changed': '已修改并确认', 'unchanged': '已符合目标',
+                    'skipped': '未操作', 'unconfirmed': '切换后未确认'}
+
+
+def render_lock_actions_text(actions) -> str:
+    """渲染包含蓝猫与识别失败项的锁状态审计，不按名字合并同名猫。"""
+    rows = ['| 序号 | 当前猫 | 原状态 | 确认后状态 | 处理结果 | 原因 |',
+            '| --- | --- | --- | --- | --- | --- |']
+    for index, action in enumerate(actions, 1):
+        values = (index, action['name'], _lock_state_text(action['before']),
+                  _lock_state_text(action['after']), LOCK_STATUS_TEXT[action['status']], action['reason'])
+        rows.append('| ' + ' | '.join(str(value).replace('|', '\\|').replace('\n', ' ')
+                                     for value in values) + ' |')
+    return '\n'.join(rows)
+
+
+def _lock_actions_html(actions) -> str:
+    """完整 HTML 报告中的逐猫锁定记录；无操作时不增加表格。"""
+    if not actions:
+        return ''
+    rows = []
+    for index, action in enumerate(actions, 1):
+        values = (index, action['name'], _lock_state_text(action['before']),
+                  _lock_state_text(action['after']), LOCK_STATUS_TEXT[action['status']], action['reason'])
+        rows.append('<tr>' + ''.join(f'<td>{_e(value)}</td>' for value in values) + '</tr>')
+    return ('<h2>锁定／解锁处理记录</h2><table class="mini"><thead><tr>'
+            '<th>序号</th><th>当前猫</th><th>原状态</th><th>确认后状态</th><th>处理结果</th><th>原因</th>'
+            '</tr></thead><tbody>' + ''.join(rows) + '</tbody></table>')
+
+
 def _tier_theme(tier: str) -> str:
     """将档位文案映射为对应的 CSS 颜色主题类名。
 
@@ -536,13 +571,14 @@ def render_text(result) -> str:
     return '\n'.join(lines)
 
 
-def render_html(results, title: str = '指挥喵天赋评分报告', generated_at: str = '') -> str:
+def render_html(results, title: str = '指挥喵天赋评分报告', generated_at: str = '', lock_actions=None) -> str:
     """把若干 (来源名, ScoreResult) 渲染成自包含 HTML。
 
     Args:
         results (list[tuple[str, ScoreResult]]): ``[(来源名, ScoreResult), ...]`` 元组列表。
         title (str, optional): 报告标题。
         generated_at (str, optional): 生成时间文本。
+        lock_actions (list[dict], optional): 自动扫描的逐猫锁状态核验记录。
 
     Returns:
         str: 完整 HTML 文档字符串。
@@ -589,6 +625,7 @@ def render_html(results, title: str = '指挥喵天赋评分报告', generated_a
     <span>非游戏官方数值</span>
   </div>
   {summary}
+  {_lock_actions_html(lock_actions)}
   {cards}
   <div class="foot">
     评分口径来自公开攻略：《照做就行——28法则下的碧蓝航线攻略执行篇》(坐看云起)、

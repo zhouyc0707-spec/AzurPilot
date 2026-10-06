@@ -97,4 +97,34 @@ describe('指挥喵评分面板', () => {
     }
     expect(render(withoutAdvice)).not.toContain('meow-advice')
   })
+
+  it('没有评分时仍展示蓝猫与失败项的锁状态记录，同名猫分别保留', () => {
+    const html = render({instance: 'test', generatedAt: 'T', count: 0, cats: [], lockActions: [
+      {name: '蓝猫', before: true, after: false, target: false, status: 'changed', reason: '蓝猫不评分'},
+      {name: '蓝猫', before: false, after: false, target: false, status: 'unchanged', reason: '已经未锁定'},
+      {name: '未知猫', before: null, after: null, target: null, status: 'skipped', reason: '身份未确认'},
+      {name: '故障猫', before: true, after: null, target: false, status: 'unconfirmed', reason: '切换后断开'},
+    ]})
+    expect(html).toContain('锁定／解锁处理记录')
+    expect(html).toContain('原状态')
+    expect(html).toContain('确认后状态')
+    expect(html.match(/<td>蓝猫<\/td>/g)).toHaveLength(2)
+    for (const text of ['已锁定', '未锁定', '未确认', '已修改并确认', '已符合目标', '未操作', '切换后未确认', '蓝猫不评分', '身份未确认']) {
+      expect(html).toContain(text)
+    }
+    expect(html).not.toContain('meow-card')
+  })
+
+  it('操作记录的猫名和失败原因按纯文本显示', () => {
+    const html = render({instance: 'test', generatedAt: 'T', count: 0, cats: [], lockActions: [
+      {name: '<b>自定义名</b>', before: null, after: null, target: null, status: 'skipped', reason: '<script>失败</script>'},
+    ]})
+    expect(html).toContain('&lt;b&gt;自定义名&lt;/b&gt;')
+    expect(html).toContain('&lt;script&gt;失败&lt;/script&gt;')
+    expect(html).not.toContain('<script>')
+  })
+
+  it('旧报告没有动作记录时不增加操作表格', () => {
+    expect(render(report)).not.toContain('meow-lock-actions')
+  })
 })

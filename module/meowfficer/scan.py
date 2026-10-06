@@ -2,7 +2,8 @@
 
 与 ``screenshot`` / ``device`` 两种方式不同，本模式**自己操作游戏**：
 进入指挥喵页面的猫窝列表，逐只选中猫 -> 打开「天赋」页 -> 截图识别 -> 返回，
-再小步滑动列表覆盖后面的猫，最后把每只猫的天赋交给评分引擎。
+再小步滑动列表覆盖后面的猫。默认结束后统一评分；启用建议锁定时，
+在当前猫的天赋页内通过回调评分和确认锁状态，然后再继续下一只。
 
 实机量测结论（1280×720）：
 
@@ -43,8 +44,8 @@ from module.meowfficer.scan_utils import (CATTERY_PANEL_AREA, CATTERY_SCREEN_HEI
 class MeowfficerScanner(MeowfficerBase):
     """自动遍历猫窝并识别每只猫天赋的扫描器。
 
-    只负责「取图 + 识别」，评分与报告由 :class:`~module.meowfficer.score_task.MeowfficerScore`
-    负责，保持这个类没有配置耦合。
+    负责「取图 + 识别」与逐只访问，评分、建议与报告由
+    :class:`~module.meowfficer.score_task.MeowfficerScore` 负责；可通过回调在返回列表前处理当前猫。
 
     Attributes:
         scanned (list[tuple[str, list[Talent], int | None]]): 扫描结果列表，按扫描顺序存储 (猫名, 天赋列表, 等级)。
@@ -491,7 +492,7 @@ class MeowfficerScanner(MeowfficerBase):
     # 主流程
     # ------------------------------------------------------------------
 
-    def scan_all(self, limit: int = 0, passes: int = 12) -> list:
+    def scan_all(self, limit: int = 0, passes: int = 12, on_cat=None) -> list:
         """遍历猫窝列表，返回每只猫的天赋。
 
         指挥喵**可以自定义名字**，自定义名甚至可能和天赋名一样（用户就有一只猫叫
@@ -501,6 +502,8 @@ class MeowfficerScanner(MeowfficerBase):
         Args:
             limit (int): 最多扫描多少只猫；``0`` 表示不限。
             passes (int): 最多翻几屏（每屏 12 张卡片）。
+            on_cat (Callable, optional): 当前猫仍在天赋页时的逐猫回调，接收
+                ``(scanner, ScanCapture)``；启用后严格检查身份和天赋完整性。
 
         Returns:
             list[tuple[str, list[Talent], int | None]]: ``(猫名, 天赋列表, 等级)`` 列表；
@@ -524,6 +527,10 @@ class MeowfficerScanner(MeowfficerBase):
                     logger.info(f'[指挥喵-扫描] 已达到上限 {limit} 只，结束')
                     return self.scanned
 
+                if on_cat is not None:
+                    self.device.screenshot()
+                    if not self.appear(MEOWFFICER_TALENT_TAB, offset=TALENT_TAB_OFFSET):
+                        raise RequestHumanTakeover('猫窝列表无法确认，停止自动锁定，请检查当前页面')
                 cat = self._select_card(button, ocr, previous=previous)
                 if cat:
                     previous = cat
@@ -537,23 +544,51 @@ class MeowfficerScanner(MeowfficerBase):
                     continue
 
                 logger.hr(f'第 {page} 屏 第 {index} 张：{cat}', level=3)
+                cattery_before = (_crop(self.device.image, CATTERY_PANEL_AREA).copy()
+                                  if on_cat is not None else None)
                 if not self._open_talent():
                     continue
+                if on_cat is not None:
+                    from module.meowfficer.score_lock import detail_page_confirmed
+                    timer = Timer(10, count=12).start()
+                    while True:
+                        self.device.screenshot()
+                        if detail_page_confirmed(self.device.image):
+                            break
+                        if timer.reached():
+                            raise RequestHumanTakeover('天赋页未能正向确认，停止自动锁定，请检查游戏页面')
                 # 防串数据：面板切换有一瞬间可能还显示上一只猫的内容，
                 # 用左下角猫名核对，不一致就跳过这只（宁可漏也不要错配）
                 shown, level = self._read_current_cat(ocr)
                 if shown and shown != cat:
                     logger.warning(f'[指挥喵-扫描] 天赋页显示的是 {shown}，与选中的 {cat} 不一致，跳过')
-                    self._back_to_cattery()
+                    returned = self._back_to_cattery()
+                    if on_cat is not None and not returned:
+                        raise RequestHumanTakeover('当前猫不一致且未能返回猫窝，停止自动锁定')
                     previous = shown
                     continue
-                talents = self._read_talents(ocr)
+                action = None
+                if on_cat is None:
+                    talents = self._read_talents(ocr)
+                else:
+                    from module.meowfficer.scan_capture import capture_current_cat
+                    capture = capture_current_cat(self, ocr, cat, level)
+                    talents = capture.talents
+                    # 回调必须发生在返回列表之前，不能按猫名回查（允许同名猫）。
+                    action = on_cat(self, capture)
                 if not self._back_to_cattery():
+                    if on_cat is not None:
+                        raise RequestHumanTakeover('未能返回猫窝列表，停止自动锁定，请检查游戏页面')
                     # 回不去就重进页面，避免后面所有操作都落在错误页面上
                     logger.warning('[指挥喵-扫描] 返回猫窝列表失败，重新进入指挥喵页面')
                     self._ensure_cattery()
                     previous = ''
-                if not talents:
+                elif action and action.get('status') == 'changed':
+                    # 锁定筛选或排序可能使卡片重排，继续按旧位置访问会漏猫。
+                    if not self._cattery_order_unchanged(cattery_before, index - 1):
+                        raise RequestHumanTakeover(
+                            '锁状态修改后猫窝列表发生变化，已停止扫描；请关闭锁定筛选或排序后重试')
+                if not talents and on_cat is None:
                     logger.warning(f'[指挥喵-扫描] {cat} 没识别到天赋，跳过')
                     continue
 
@@ -573,6 +608,20 @@ class MeowfficerScanner(MeowfficerBase):
 
         logger.info(f'[指挥喵-扫描] 扫描完成，共 {len(self.scanned)} 只猫')
         return self.scanned
+
+    def _cattery_order_unchanged(self, before, selected_index) -> bool:
+        """逐格核对其余卡片，排除当前猫锁图标的变化，防止筛选／排序重排。"""
+        panel = _crop(self.device.image, CATTERY_PANEL_AREA)
+        x0, y0, _, _ = CATTERY_PANEL_AREA
+        for index, button in enumerate(MEOWFFICER_CATTERY_GRID.buttons):
+            if index == selected_index:
+                continue
+            left, top, right, bottom = button.area
+            area = (max(0, left - x0 - 30), max(0, top - y0 - 35),
+                    min(panel.shape[1], right - x0 + 15), min(panel.shape[0], bottom - y0 + 30))
+            if _mean_diff(_crop(before, area), _crop(panel, area)) > 1:
+                return False
+        return True
 
     def _load_ocr(self):
         """加载中文 OCR 模型（与评分任务一致的失败提示）。
