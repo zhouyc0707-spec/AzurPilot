@@ -2,8 +2,8 @@
  * @fileoverview 指挥喵评分结果详情与洗点推荐面板组件。
  */
 
-import { useEffect, useState } from 'react'
-import { Cat, ChevronDown, FileText, PawPrint, RefreshCw, Sparkles, Trash2, TriangleAlert } from 'lucide-react'
+import { useEffect, useId, useState } from 'react'
+import { Cat, ChevronDown, ChevronUp, FileText, PawPrint, RefreshCw, Sparkles, Trash2, TriangleAlert } from 'lucide-react'
 import { ApiError, api } from '../api/client'
 import type { MeowfficerAdvice, MeowfficerCat, MeowfficerLockAction, MeowfficerRubric, MeowfficerScoreReport, MeowfficerTalent } from '../api/types'
 import { useApp, useConnection } from '../app/context'
@@ -197,6 +197,9 @@ export function MeowfficerScorePanel({instance}: {instance: string}) {
   const [refreshing, setRefreshing] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
   const [clearing, setClearing] = useState(false)
+  // 默认收起长报告，让下方日志与运行入口保持紧凑；取数更新不改变用户的展开选择。
+  const [collapsed, setCollapsed] = useState(true)
+  const reportBodyId = useId()
 
   useEffect(() => {
     if (connection !== 'ready') return
@@ -262,6 +265,11 @@ export function MeowfficerScorePanel({instance}: {instance: string}) {
         {report && <span className="meow-summary">{report.lockActions?.length
           ? ui('meow.actionSummary', {count: report.cats.length, actions: report.lockActions.length, time: report.generatedAt || '—'})
           : ui('meow.summary', {count: report.cats.length, time: report.generatedAt || '—'})}</span>}
+        {hasRecords && !error && !missing && <button className="button secondary" aria-expanded={!collapsed} aria-controls={reportBodyId}
+          onClick={() => setCollapsed(value => !value)}>
+          {collapsed ? <ChevronDown size={15}/> : <ChevronUp size={15}/>}
+          {ui(collapsed ? 'meow.expandReport' : 'meow.collapseReport')}
+        </button>}
         {/* HTML 报告与面板读的是同一份产物，有数据即存在。 */}
         {hasRecords && <a className="button secondary" href="/reports/meowfficer_score" target="_blank" rel="noopener noreferrer">
           <FileText size={15}/>{ui('meow.openReport')}
@@ -278,7 +286,7 @@ export function MeowfficerScorePanel({instance}: {instance: string}) {
       : missing ? <div className="meow-body">{empty}</div>
       : !report ? <Loading/>
       : !hasRecords ? <div className="meow-body">{empty}</div>
-      : <MeowfficerScoreList report={report}/>}
+      : <div id={reportBodyId} hidden={collapsed}><MeowfficerScoreList report={report}/></div>}
     <p className="panel-note">{ui('meow.disclaimer')}</p>
     </section>
     {confirmClear && <Modal title={ui('meow.clearTitle')} onClose={() => setConfirmClear(false)}>

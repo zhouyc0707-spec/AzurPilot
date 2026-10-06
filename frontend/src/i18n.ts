@@ -312,6 +312,8 @@ const zhCN = {
   'fleet.submarine': '潜艇舰队',
   'fleet.noRecord': '暂无记录',
   'meow.title': '指挥喵评分报告',
+  'meow.expandReport': '展开报告',
+  'meow.collapseReport': '收起报告',
   'meow.actionSummary': '评分 {count} 只 · 最近 {actions} 条处理 · 生成时间 {time}',
   'meow.lockActions': '锁定／解锁处理记录',
   'meow.lockName': '当前猫',
@@ -626,6 +628,8 @@ export type UiKey = keyof typeof zhCN
 export type UiTranslator = (key: UiKey, params?: TranslationParams) => string
 
 const enUS: Record<UiKey, string> = {
+  'meow.expandReport': 'Expand report',
+  'meow.collapseReport': 'Collapse report',
   'meow.actionSummary': '{count} scored · latest {actions} actions · generated {time}',
   'meow.lockActions': 'Lock and unlock records',
   'meow.lockName': 'Current cat',
@@ -799,6 +803,8 @@ const enUS: Record<UiKey, string> = {
 }
 
 const jaJP: Record<UiKey, string> = {
+  'meow.expandReport': 'レポートを展開',
+  'meow.collapseReport': 'レポートを折りたたむ',
   'meow.actionSummary': '採点 {count} 匹 · 直近 {actions} 件の処理 · 生成 {time}',
   'meow.lockActions': 'ロック／解除の処理記録',
   'meow.lockName': '現在の猫',
@@ -1033,6 +1039,8 @@ const jaJP: Record<UiKey, string> = {
 }
 
 const zhTW: Record<UiKey, string> = {
+  'meow.expandReport': '展開報告',
+  'meow.collapseReport': '收起報告',
   'emulator.statusTitle': '模擬器運行狀態',
   'emulator.uptime': '上次偵測的運行時間',
   'emulator.checkedAt': '偵測時間：{time}',
@@ -1316,6 +1324,8 @@ const zhTW: Record<UiKey, string> = {
 
 const zhMiao: Record<UiKey, string> = {
   ...zhCN,
+  'meow.expandReport': '展开报告喵',
+  'meow.collapseReport': '收起报告喵',
   'emulator.statusTitle': '模拟器运行状态喵',
   'emulator.uptime': '上次检测的运行时长喵',
   'emulator.checkedAt': '检测时间：{time}',

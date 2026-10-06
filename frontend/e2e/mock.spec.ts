@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import type { EmulatorStatus } from '../src/api/types'
+import type { EmulatorStatus, MeowfficerCat, MeowfficerLockAction } from '../src/api/types'
 
 for (const theme of ['light', 'legacy-light']) {
   test(`${theme} 模拟器运行状态实时更新、失败提示与窄屏布局`, async ({page}) => {
@@ -1098,7 +1098,7 @@ test('SHA 不匹配警告与更新确认弹窗', async ({page}) => {
 })
 
 for (const theme of ['light', 'legacy-light']) {
-  test(`${theme} 指挥喵评分报告零评分动作记录与完整报告入口`, async ({page, context}, testInfo) => {
+  test(`${theme} 指挥喵评分报告零评分入口与长报告收起展开`, async ({page, context}, testInfo) => {
     const errors: string[] = []
     page.on('pageerror', error => errors.push(error.message))
     await page.addInitScript(value => {
@@ -1107,7 +1107,9 @@ for (const theme of ['light', 'legacy-light']) {
       localStorage.setItem('azurpilot.background', JSON.stringify({source: 'off'}))
     }, theme)
     await page.route('https://www.clarity.ms/**', route => route.abort())
-    const actions = [
+    let cats: MeowfficerCat[] = []
+    let reportRequests = 0
+    const actions: MeowfficerLockAction[] = [
       {name: '蓝猫', before: true, after: false, target: false, status: 'changed', reason: '蓝猫不评分，解除已有锁'},
       {name: '蓝猫', before: false, after: false, target: false, status: 'unchanged', reason: '蓝猫已经未锁定'},
       {name: '识别失败猫', before: false, after: true, target: true, status: 'changed', reason: '天赋不完整，保护锁定'},
@@ -1118,8 +1120,9 @@ for (const theme of ['light', 'legacy-light']) {
       socket.onMessage(message => {
         const request = JSON.parse(String(message))
         if (request.method === 'meowfficer.scoreReport') {
+          reportRequests += 1
           socket.send(JSON.stringify({v: 1, type: 'response', id: request.id, ok: true, result: {
-            instance: request.params.instance, generatedAt: '2026-10-07 00:00:00', count: 0, cats: [], lockActions: actions,
+            instance: request.params.instance, generatedAt: '2026-10-07 00:00:00', count: cats.length, cats, lockActions: actions,
           }}))
         } else server.send(message)
       })
@@ -1132,6 +1135,24 @@ for (const theme of ['light', 'legacy-light']) {
     await page.goto('/#/i/demo-main/task/MeowfficerScore')
     const panel = page.locator('.meow-panel')
     await expect(panel.locator('.meow-summary')).toContainText('评分 0 只 · 最近 4 条处理')
+    const expand = panel.getByRole('button', {name: '展开报告', exact: true})
+    await expect(expand).toHaveAttribute('aria-expanded', 'false')
+    const bodyId = await expand.getAttribute('aria-controls')
+    const body = panel.locator(`[id="${bodyId}"]`)
+    await expect(body).toBeHidden()
+    await expect(panel.getByRole('heading', {name: '指挥喵评分报告', exact: true})).toBeVisible()
+    await expect(panel.getByRole('button', {name: '刷新', exact: true})).toBeVisible()
+    await expect(panel).toContainText('评分口径来自公开攻略')
+    await expect(panel.getByRole('button', {name: '清空报告', exact: true})).toBeVisible()
+    const link = panel.getByRole('link', {name: '查看完整报告', exact: true})
+    await expect(link).toHaveAttribute('href', '/reports/meowfficer_score')
+    // 零评分的报告收起时仍能查看全部蓝猫和失败记录。
+    const opened = page.waitForEvent('popup')
+    await link.click()
+    const popup = await opened
+    await expect(popup.getByRole('heading', {name: '完整锁定记录'})).toBeVisible()
+    await popup.close()
+    await expand.click()
     const records = panel.getByRole('region', {name: '锁定／解锁处理记录', exact: true})
     await expect(records.getByRole('row')).toHaveCount(5)
     await expect(records.getByRole('cell', {name: '蓝猫', exact: true})).toHaveCount(2)
@@ -1141,21 +1162,72 @@ for (const theme of ['light', 'legacy-light']) {
     await expect(records).toContainText('切换后未确认')
     await expect(panel.locator('.meow-card')).toHaveCount(0)
     await expect(panel).not.toContainText('还没跑过评分任务')
-    await expect(panel.getByRole('button', {name: '清空报告', exact: true})).toBeVisible()
-    const link = panel.getByRole('link', {name: '查看完整报告', exact: true})
-    await expect(link).toHaveAttribute('href', '/reports/meowfficer_score')
-    const opened = page.waitForEvent('popup')
-    await link.click()
-    const popup = await opened
-    await expect(popup.getByRole('heading', {name: '完整锁定记录'})).toBeVisible()
-    await popup.close()
 
     // 时间与数量相同的部分报告也应随轮询更新，不能把变化吞掉。
     actions[3] = {...actions[3], after: false, status: 'changed', reason: '人工核对后的新记录'}
     await expect(records).toContainText('人工核对后的新记录', {timeout: 10000})
     await expect(records).not.toContainText('切换后未能核验')
+    await expect(panel.getByRole('button', {name: '收起报告', exact: true})).toHaveAttribute('aria-expanded', 'true')
+
+    // 扩充隔离报告，验证长列表不会在默认收起时把日志和运行入口推到底部。
+    cats = Array.from({length: 6}, (_, index) => ({
+      cat: `测试猫 ${index + 1}`, tags: ['SSR'], primary: 'submarine',
+      talents: [{name: '狼群之首', level: 1, kind: 'special'}],
+      rubrics: [
+        {key: 'submarine', label: '潜艇猫', tier: '准毕业', score: 100, x: 1, y: 6, primary: true},
+        {key: 'low_cost', label: '低耗猫', tier: '过渡可用', score: 35, primary: false},
+      ],
+    }))
+    actions.push(...Array.from({length: 12}, (_, index) => ({
+      name: `测试猫 ${index + 1}`, before: false, after: true, target: true,
+      status: 'changed' as const, reason: '按培养建议锁定',
+    })))
+    const refresh = panel.getByRole('button', {name: '刷新', exact: true})
+    await refresh.click()
+    await expect(panel.locator('.meow-card')).toHaveCount(6)
+    await expect(panel.getByRole('button', {name: '收起报告', exact: true})).toHaveAttribute('aria-expanded', 'true')
+    await expect(body).toBeVisible()
+    const otherRubrics = panel.locator('details.meow-others').first()
+    await otherRubrics.locator('summary').click()
+    await expect(otherRubrics).toHaveAttribute('open', '')
+    const positions = async () => {
+      const panelBox = await panel.boundingBox()
+      const logBox = await page.locator('.tool-log-panel').boundingBox()
+      const runBox = await page.getByRole('button', {name: '运行工具', exact: true}).boundingBox()
+      expect(panelBox).not.toBeNull(); expect(logBox).not.toBeNull(); expect(runBox).not.toBeNull()
+      return {log: logBox!.y - panelBox!.y, run: runBox!.y - panelBox!.y}
+    }
+    const expandedPositions = await positions()
+    await panel.screenshot({path: testInfo.outputPath(`meowfficer-report-expanded-${theme}.png`), animations: 'disabled'})
+    await panel.getByRole('button', {name: '收起报告', exact: true}).click()
+    await expect(body).toBeHidden()
+    const collapsedPositions = await positions()
+    expect(expandedPositions.log - collapsedPositions.log).toBeGreaterThan(1000)
+    expect(expandedPositions.run - collapsedPositions.run).toBeGreaterThan(1000)
+    await expect(page.getByLabel('日志内容')).toBeVisible()
+    await expect(page.getByRole('button', {name: '运行工具', exact: true})).toBeVisible()
+
+    // 手动刷新和自动轮询均保留收起选择；隐藏 DOM 保留子口径的展开状态。
+    await refresh.click()
+    await expect(refresh).toBeEnabled()
+    await expect(expand).toHaveAttribute('aria-expanded', 'false')
+    await expect(body).toBeHidden()
+    const beforePoll = reportRequests
+    actions[3] = {...actions[3], reason: '收起期间更新的记录'}
+    await expect.poll(() => reportRequests, {timeout: 10000}).toBeGreaterThan(beforePoll)
+    await expect(panel.locator('.meow-lock-actions')).toContainText('收起期间更新的记录')
+    await expect(expand).toHaveAttribute('aria-expanded', 'false')
+    await expect(body).toBeHidden()
+    await expand.click()
+    // 刷新重新取得报告后打开子口径，再单独收起/展开验证 DOM 状态不会被卸载。
+    await otherRubrics.locator('summary').click()
+    await expect(otherRubrics).toHaveAttribute('open', '')
+    await panel.getByRole('button', {name: '收起报告', exact: true}).click()
+    await expand.click()
+    await expect(otherRubrics).toHaveAttribute('open', '')
+    await panel.getByRole('button', {name: '收起报告', exact: true}).click()
     await panel.scrollIntoViewIfNeeded()
-    await panel.screenshot({path: testInfo.outputPath(`meowfficer-lock-report-${theme}.png`), animations: 'disabled'})
+    await page.screenshot({path: testInfo.outputPath(`meowfficer-report-collapsed-${theme}.png`), fullPage: true, animations: 'disabled'})
     expect(errors).toEqual([])
   })
 }
@@ -1167,6 +1239,8 @@ test('指挥喵评分报告面板展示、刷新与空状态', async ({page}) =>
   const panel = page.locator('.meow-panel')
   await expect(panel).toBeVisible()
   await expect(panel.locator('.meow-summary')).toContainText('共 2 只')
+  await expect(panel.locator('.meow-card').first()).toBeHidden()
+  await panel.getByRole('button', {name: '展开报告', exact: true}).click()
   await expect(panel).toContainText('克雷喵')
   await expect(panel.locator('.meow-card').first().locator('.meow-tier').first()).toHaveText('准毕业')
   await expect(panel).toContainText('x + y = 1 + 6.0')
@@ -1199,11 +1273,14 @@ test('指挥喵评分报告面板展示、刷新与空状态', async ({page}) =>
   await expect(reportLink).toHaveAttribute('target', '_blank')
   await panel.getByRole('button', {name: '刷新', exact: true}).click()
   await expect(panel).toContainText('克雷喵')
+  await expect(panel.getByRole('button', {name: '收起报告', exact: true})).toHaveAttribute('aria-expanded', 'true')
+  await expect(panel.locator('.meow-card').first()).toBeVisible()
   await page.screenshot({path: 'test-results/meowfficer-score.png', fullPage: true, animations: 'disabled'})
   // 未跑过任务时后端返回 NOT_FOUND，页面显示空状态而不是错误，也不给报告入口（会 404）。
   await page.goto('/#/i/demo-alt/task/MeowfficerScore')
   await expect(page.locator('.meow-panel')).toContainText('还没跑过评分任务')
   await expect(page.locator('.meow-panel').getByRole('link', {name: '查看完整报告', exact: true})).toHaveCount(0)
+  await expect(page.locator('.meow-panel').getByRole('button', {name: '展开报告', exact: true})).toHaveCount(0)
   expect(errors).toEqual([])
 })
 
