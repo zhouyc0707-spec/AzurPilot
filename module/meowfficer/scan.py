@@ -370,6 +370,10 @@ class MeowfficerScanner(MeowfficerBase):
         if not self._wait_talent_tab(appear=True):
             return False
         self._wait_stable(CATTERY_PANEL_AREA, timeout=4)
+        if not self.appear(MEOWFFICER_TALENT_TAB, offset=TALENT_TAB_OFFSET):
+            return False
+        # 猫窝列表已正向确认，当前猫的读取阶段结束，滑动历史不带入下一猫或列表翻页。
+        self.device.click_record_remove('SWIPE')
         return True
 
     def _read_talents(self, ocr) -> list:

@@ -80,6 +80,10 @@ class _Device:
             self.image = self.pending.copy()
             self.pending = None
 
+    def click_record_remove(self, button):
+        """普通图像夹具不模拟历史，真实队列回归在专用模块中覆盖。"""
+        return 0
+
     def swipe(self, start, end, duration):
         self.swipes.append((start, end, duration))
         frames = self.bottom_frames if start[1] > end[1] else self.top_frames

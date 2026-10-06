@@ -232,6 +232,9 @@ def capture_current_cat(scanner, ocr, display_name, level):
     capture.level = actual_level
     capture.identity_image = _crop(image, IDENTITY_AREA).copy()
     capture.identity_confirmed = True
+    # 天赋页与本次猫身份已确认，开始新的读取阶段；上一阶段的滑动不跨猫累计。
+    # 只移除滑动历史，同一阶段内仍保留重复控制保护与有限读取上限。
+    scanner.device.click_record_remove('SWIPE')
     capture.rarity = _read_rarity(image, ocr, reasons)
     expected_rarity = CATS.get(capture.breed or '', {}).get('rarity')
     if expected_rarity and capture.rarity is not None and expected_rarity != capture.rarity:

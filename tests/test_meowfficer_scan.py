@@ -196,6 +196,10 @@ class _StubDevice:
     def stuck_record_clear(self):
         self.stuck_cleared += 1
 
+    def click_record_remove(self, button):
+        """遍历桩不模拟设备历史，真实队列由专用回归覆盖。"""
+        return 0
+
     @contextmanager
     def stuck_timeout_override(self, image_stuck=None, long_wait=None):
         yield
