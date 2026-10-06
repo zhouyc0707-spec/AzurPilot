@@ -6,12 +6,26 @@
 from module.island.island import *
 from collections import Counter
 from datetime import timedelta
+import re
 
 from module.config.time_source import now as current_time
+from module.exception import GameBugError, GameStuckError
 from module.handler.login import LoginHandler
 from module.island.warehouse import *
 from module.logger import logger
 from module.island.island_season import get_global_season_config
+
+
+# 选品页的数量与岗位详情 OCR_POST_NUMBER 不在同一位置。当前仅验证 CN
+# 截图；时间读整段确认按钮，兼容文本居中造成的横向偏移。
+DISPATCH_PRODUCT_NUMBER = Button(
+    area=(726, 353, 857, 382),
+    color=(), button=(726, 353, 857, 382), name='DISPATCH_PRODUCT_NUMBER',
+)
+DISPATCH_PRODUCT_DURATION = Button(
+    area=POST_ADD_ORDER.area, color=(), button=POST_ADD_ORDER.area,
+    name='DISPATCH_PRODUCT_DURATION',
+)
 
 
 class IslandShopBase(Island, WarehouseOCR):
@@ -244,9 +258,11 @@ class IslandShopBase(Island, WarehouseOCR):
         """
         self.warehouse_filter(self.filter_asset)
         image = self.device.screenshot()
+        counts = self.ocr_item_quantities(
+            image, {dish['name']: dish['template'] for dish in self.shop_items})
 
         for dish in self.shop_items:
-            self.warehouse_counts[dish['name']] = self.ocr_item_quantity(image, dish['template'])
+            self.warehouse_counts[dish['name']] = counts[dish['name']]
             if self.warehouse_counts[dish['name']]:
                 logger.info(f"{self._item_cn(dish['name'])}: {self.warehouse_counts[dish['name']]}")
         return self.warehouse_counts
@@ -310,6 +326,139 @@ class IslandShopBase(Island, WarehouseOCR):
         product_select_failures[failed_product] = failed_count
         return failed_count
 
+    def read_food_dispatch_preview(self, requested_number):
+        """读取本帧选品页的实际次数和预计总时长，不可靠时返回 None。
+
+        Pages:
+            in: page_island_postmanage 的派遣选品浮层
+        """
+        # 其他服务器尚无选品页截图验证，保留岗位详情复检，避免错误布局稳定误读。
+        if self.config.SERVER != 'cn':
+            return None
+        if not self.appear(ISLAND_SELECT_PRODUCT_CHECK, offset=1) or not self.appear(POST_ADD_ORDER):
+            return None
+        try:
+            number = Digit(
+                DISPATCH_PRODUCT_NUMBER, lang='cnocr', letter=(80, 80, 80),
+                threshold=160, alphabet='0123456789',
+            ).ocr(self.device.image)
+            duration_text = Ocr(
+                DISPATCH_PRODUCT_DURATION, lang='cnocr', letter=(255, 255, 255),
+                threshold=128, alphabet='0123456789:',
+            ).ocr(self.device.image)
+            # Duration.parse_time 会接受缺失冒号或混入其他数字的文本；快路径必须
+            # 读到完整时分秒，不把按钮其他文案误识别的数字当成可靠时长。
+            matched = re.fullmatch(r'(\d{1,2}):([0-5]\d):([0-5]\d)', str(duration_text).strip())
+            # 加号逐次点击后，低于计划的两帧也可能只是界面尚未更新；少产情况
+            # 用派遣后的岗位实读确认，不能把暂时的旧数量记为最终数量。
+            expected_number = min(requested_number, self.POST_PRODUCE_LIMIT)
+            if not matched or number != expected_number or number <= 0:
+                return None
+            hours, minutes, seconds = (int(value) for value in matched.groups())
+            duration = timedelta(hours=hours, minutes=minutes, seconds=seconds)
+            if duration.total_seconds() <= 0:
+                return None
+        except (ValueError, TypeError, RuntimeError, OSError) as exc:
+            # 只对局部 OCR/解析失败降级，游戏恢复异常仍交给上层处理。
+            logger.warning(f'[岛屿] 派遣预览识别失败，将复检岗位: {exc}')
+            return None
+        return number, duration
+
+    def confirm_food_dispatch(self, requested_number, context):
+        """确认派遣并等正向识别岗位管理，返回可靠预览与实际确认时刻。
+
+        连续两帧的计划数量和时长一致才复用预计结果；最多读取三帧，异常或
+        不稳定时仍可正常确认，随后由岗位详情复检真实数量和时间。
+
+        Pages:
+            in: page_island_postmanage 的派遣选品浮层
+            out: page_island_postmanage
+        """
+        previous = None
+        preview = None
+        samples = 0
+        clicked = False
+        confirmed_at = None
+        retry_timer = Timer(3).start()
+        reward_timer = Timer(2)
+        # 保留原加号操作后最短 0.5 秒稳定窗口，期间持续截图，防止队列尚未
+        # 处理完就确认了较小次数；预览失败也给三帧更新机会再走岗位复检。
+        selection_timer = Timer(0.5).start()
+        for _ in self.loop(timeout=Timer(15), skip_first=False):
+            if self.appear(ERROR1, offset=30):
+                self.island_error = True
+                raise GameBugError(f'{context}检测到岛屿ERROR1')
+            if self.appear(ISLAND_GET, offset=30):
+                if reward_timer.reached():
+                    self.device.click(ISLAND_POST_SAFE_AREA)
+                    reward_timer.reset()
+                continue
+            if self.handle_popup_confirm(context):
+                continue
+            if self.ui_page_appear(page_island_postmanage) and not self.is_post_detail_visible():
+                if not clicked:
+                    raise GameStuckError(f'{context}未确认派遣即返回岗位管理页')
+                return preview, confirmed_at
+            if not self.appear(ISLAND_SELECT_PRODUCT_CHECK, offset=1):
+                continue
+            if not self.appear(POST_ADD_ORDER) or (clicked and not retry_timer.reached()):
+                continue
+            if not selection_timer.reached():
+                continue
+            candidate = self.read_food_dispatch_preview(requested_number)
+            samples += 1
+            if samples < 3 and (candidate is None or candidate != previous):
+                previous = candidate
+                continue
+            preview = candidate if candidate is not None and candidate == previous else None
+            if preview is None:
+                logger.info(f'[岛屿] {context}预计数量或时间未可靠识别，确认后复检岗位')
+            confirmed_at = current_time()
+            self.device.click(POST_ADD_ORDER)
+            clicked = True
+            retry_timer.reset()
+            previous = None
+            samples = 0
+        raise GameStuckError(f'{context}确认后未返回岗位管理页')
+
+    def finish_food_dispatch(self, post_id, product, time_var_name, requested_number, preview, confirmed_at):
+        """记录已确认派遣的数量和时间；预览失败时沿用重新打开岗位的复检。
+
+        Pages:
+            in: page_island_postmanage
+            out: page_island_postmanage
+        """
+        if preview is not None:
+            actual_number, duration = preview
+            finish_time = confirmed_at + duration
+        else:
+            post_button = self.posts[post_id]['button']
+            self.post_manage_swipe(self.post_manage_swipe_count)
+            if not self.post_open(post_button):
+                raise GameStuckError(f'{self._item_cn(product)}派遣后未能复检岗位')
+            number_ocr = Digit(
+                OCR_POST_NUMBER, letter=(57, 58, 60), threshold=100,
+                alphabet='0123456789',
+            )
+            time_ocr = Duration(ISLAND_WORKING_TIME)
+            for image in self.loop(timeout=Timer(5), skip_first=False):
+                if not self.appear(ISLAND_WORKING):
+                    continue
+                actual_number = number_ocr.ocr(image)
+                duration = time_ocr.ocr(image)
+                if (0 < actual_number <= min(requested_number, self.POST_PRODUCE_LIMIT)
+                        and duration.total_seconds() > 0):
+                    finish_time = current_time() + duration
+                    break
+            else:
+                raise GameStuckError(f'{self._item_cn(product)}派遣后数量或时间无法可靠复检')
+            self.post_close()
+        setattr(self, time_var_name, finish_time)
+        self.posts[post_id]['status'] = 'working'
+        self.deduct_materials(product, actual_number)
+        logger.info(f'[岛屿] 已安排生产：{self._item_cn(product)} x{actual_number}')
+        return actual_number
+
     def post_produce(self, post_id, product, number, time_var_name,product2=None):
         """进入岗位安排指定商品的生产流程。
 
@@ -332,7 +481,7 @@ class IslandShopBase(Island, WarehouseOCR):
         self.post_close()
         self.post_open(post_button)
         self.device.sleep(0.5)
-        time_work = Duration(ISLAND_WORKING_TIME)
+        produced_product = product
         selection = self.name_to_config[product]['selection']
         selection_check = self.name_to_config[product]['selection_check']
         product_select_failures = {}
@@ -383,9 +532,7 @@ class IslandShopBase(Island, WarehouseOCR):
                                     return 0  # 返回0表示原料不足
                                 else:
                                     self.post_add_one(number - 1)
-                                    self.device.sleep(0.5)
-                                    self.device.click(POST_ADD_ORDER)
-                                    self.device.sleep(0.5)
+                                    produced_product = product2
                                     break
                             else:
                                 self.device.click(ISLAND_BACK)
@@ -400,9 +547,6 @@ class IslandShopBase(Island, WarehouseOCR):
                             return 0  # 返回0表示原料不足
                     else:
                         self.post_add_one(number - 1)
-                        self.device.sleep(0.5)
-                        self.device.click(POST_ADD_ORDER)
-                        self.device.sleep(0.5)
                         break
                 else:
                     failed_count = self.increase_product_selection_failure(
@@ -414,26 +558,10 @@ class IslandShopBase(Island, WarehouseOCR):
                 continue
         else:
             raise GameStuckError(f"{self._item_cn(product)}生产派遣流程超时")
-        self.wait_until_appear(ISLAND_POSTMANAGE_CHECK)
-        self.device.sleep(0.5)
-        self.post_manage_swipe(self.post_manage_swipe_count)
-        logger.info(post_button)
-        self.post_open(post_button)
-        self.device.sleep(0.5)
-        image = self.device.screenshot()
-        ocr_post_number = Digit(OCR_POST_NUMBER, letter=(57, 58, 60), threshold=100,
-                                alphabet='0123456789')
-        actual_number = ocr_post_number.ocr(image)
-        time_value = time_work.ocr(self.device.image)
-        finish_time = current_time() + time_value
-        setattr(self, time_var_name, finish_time)
-        self.posts[post_id]['status'] = 'working'
-        # 扣除前置材料（子类可覆盖）
-        self.deduct_materials(product, actual_number)
-        logger.info(f"[岛屿] 已安排生产：{self._item_cn(product)} x{actual_number}")
-        self.post_close()
-        # 返回实际生产数量
-        return actual_number
+        preview, confirmed_at = self.confirm_food_dispatch(
+            number, f'{self._item_cn(produced_product)}生产派遣')
+        return self.finish_food_dispatch(
+            post_id, produced_product, time_var_name, number, preview, confirmed_at)
 
     def deduct_materials(self, product, number):
         """扣除前置材料（包括套餐原材料）。

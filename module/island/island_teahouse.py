@@ -8,12 +8,10 @@ from module.island.island_shop_base import IslandShopBase
 from module.island.assets import *
 from module.ui.page import *
 
-from module.config.time_source import now as current_time
 from module.logger import logger
 from module.base.button import Button
 from module.exception import GameStuckError
 from module.island.island_season import SEASONAL_ITEMS
-from module.ocr.ocr import Duration, Digit
 
 
 # 固定位置按钮 — 迎春花茶使用固定坐标，不检测图标颜色，不向下滑动
@@ -344,7 +342,6 @@ class IslandTeahouse(IslandShopBase):
             self.post_close()
             self.post_open(post_button)
             self.device.sleep(0.5)
-            time_work = Duration(ISLAND_WORKING_TIME)
             # 进入商品选择界面（处理选人 + 选商品）
             for _ in self.loop(timeout=120, skip_first=False):
                 if self.appear(ISLAND_SELECT_CHARACTER_CHECK, offset=1):
@@ -375,26 +372,10 @@ class IslandTeahouse(IslandShopBase):
                 return 0
             else:
                 self.post_add_one(number - 1)
-                self.device.sleep(0.5)
-                self.device.click(POST_ADD_ORDER)
-                self.device.sleep(0.5)
-            self.wait_until_appear(ISLAND_POSTMANAGE_CHECK)
-            self.device.sleep(0.5)
-            logger.info(post_button)
-            self.post_open(post_button)
-            self.device.sleep(0.5)
-            image = self.device.screenshot()
-            ocr_post_number = Digit(OCR_POST_NUMBER, letter=(57, 58, 60), threshold=100,
-                                    alphabet='0123456789')
-            actual_number = ocr_post_number.ocr(image)
-            time_value = time_work.ocr(self.device.image)
-            finish_time = current_time() + time_value
-            setattr(self, time_var_name, finish_time)
-            self.posts[post_id]['status'] = 'working'
-            self.deduct_materials(product, actual_number)
-            logger.info(f"[岛屿-白熊饮品] 已安排生产：{self._item_cn(product)} x{actual_number}")
-            self.post_close()
-            return actual_number
+                preview, confirmed_at = self.confirm_food_dispatch(
+                    number, f'{self._item_cn(product)}生产派遣')
+            return self.finish_food_dispatch(
+                post_id, product, time_var_name, number, preview, confirmed_at)
 
         return super().post_produce(post_id, product, number, time_var_name, product2)
 

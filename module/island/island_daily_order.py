@@ -8,6 +8,8 @@ import module.island_daily_order.assets as daily_order_assets
 from module.island_daily_order.assets import *
 from module.island.assets import ISLAND_BACK, ISLAND_GET, ISLAND_CLICK_SAFE_AREA
 from module.base.button import Button
+from module.base.timer import Timer
+from module.exception import GameStuckError
 from module.ui.page import page_island, page_island_phone
 from module.logger import logger
 from module.ocr.ocr import DigitCounter, Duration
@@ -59,8 +61,8 @@ class IslandDailyOrder(Island):
     DEFAULT_URGENT_REFRESH_TIME = datetime(2020, 1, 1, 0, 0)
     URGENT_TOTAL_COUNT = 15
     FAST_POPUP_CHECK_INTERVAL = 0.5
-    REWARD_POPUP_CHECK_INTERVAL = 2
-    REWARD_POPUP_CHECK_LIMIT = 5
+    SUBMIT_CONFIRM_TIMEOUT = 20
+    SUBMIT_STABLE_SECONDS = 1
     DAILY_RUN_HOUR = 3
     URGENT_TEMPLATE_PREFIX = 'TEMPLATE_DAILY_ORDER_URGENT'
     _urgent_template_cache = None
@@ -87,6 +89,7 @@ class IslandDailyOrder(Island):
         # 主流程
         self._first_right_panel_check = True
         self._should_exit_reenter = False
+        self._submit_unconfirmed_count = 0
         self.reject_count = self.config.IslandDailyOrder_RejectCount
 
         self._enter_daily_order()
@@ -254,30 +257,65 @@ class IslandDailyOrder(Island):
 
     def _submit_order(self, button, must_appear=False):
         """
-        点击交付后根据资源不足弹窗判断是否交付成功。
+        点击交付后持续识别奖励、资源不足与订单页面状态。
 
         Args:
             button: 交付按钮。
             must_appear: True 时先检测按钮出现再点击，用于紧急委托专用按钮。
 
         Returns:
-            bool | None: True 表示交付成功，False 表示资源不足，None 表示按钮未检测到。
+            bool | None: True 为确认交付，False 为确认资源不足；None 为按钮未出现或需重进复核。
+
+        Pages:
+            in: 每日订单详情。
+            out: 已确认返回的每日订单页面；无法确认时交由调用方重进或上层恢复。
         """
+        self._submit_needs_reenter = False
         if button is None:
             logger.warning('[岛屿-每日订单] 未配置交付按钮')
             return None
         if must_appear and not self.appear(button):
             logger.warning(f'[岛屿-每日订单] 未检测到交付按钮: {button}')
             return None
+        was_preparing = self._is_preparing()
         self.device.click(button)
-        self.device.sleep(self.FAST_POPUP_CHECK_INTERVAL)
-        self.device.screenshot()
-        if self.appear(POPUP_RESOURCE_INSUFFICIENT, offset=30):
-            logger.info('[岛屿-每日订单] 订单资源不足')
-            self.device.sleep(3)
-            return False
-        self._handle_order_reward_popups()
-        return True
+        resource_insufficient = False
+        reward_seen = False
+        stable = Timer(self.SUBMIT_STABLE_SECONDS, count=2)
+        popup_click = Timer(2)
+        for _ in self.loop(skip_first=False, timeout=Timer(self.SUBMIT_CONFIRM_TIMEOUT)):
+            if self.appear(POPUP_RESOURCE_INSUFFICIENT, offset=30):
+                resource_insufficient = True
+                stable.clear()
+                continue
+            if self.appear(DAILY_ORDER_LEVEL_UP) or self.appear(ISLAND_GET, offset=30):
+                reward_seen = True
+                stable.clear()
+                if popup_click.reached():
+                    self.device.click(ISLAND_CLICK_SAFE_AREA)
+                    popup_click.reset()
+                continue
+            # 页面标题可在弹窗背后存在，先处理弹窗，再确认稳定返回。
+            if self.appear(DAILY_ORDER_CHECK) and (
+                    resource_insufficient or reward_seen
+                    or (not was_preparing and self._is_preparing())):
+                stable.start()
+                if stable.reached():
+                    self._submit_unconfirmed_count = 0
+                    if resource_insufficient:
+                        logger.info('[岛屿-每日订单] 订单资源不足，已返回订单页')
+                        return False
+                    logger.info('[岛屿-每日订单] 已确认交付并返回订单页')
+                    return True
+            else:
+                stable.clear()
+
+        self._submit_needs_reenter = True
+        if getattr(self, '_submit_unconfirmed_count', 0):
+            raise GameStuckError('岛屿订单重进后仍无法确认交付结果')
+        self._submit_unconfirmed_count = 1
+        logger.warning('[岛屿-每日订单] 未确认交付结果，重进复核；不按资源不足驳回')
+        return None
 
     # ==================== 主循环 ====================
 
@@ -379,6 +417,8 @@ class IslandDailyOrder(Island):
         # 点击交付（紧急委托有专用交付按钮）
         submit_result = self._submit_order(urgent_deliver_button, must_appear=True)
         if submit_result is None:
+            if self._submit_needs_reenter:
+                return 'reenter'
             logger.warning('[岛屿-每日订单] 紧急委托交付按钮未检测到，跳到 ②')
             return 'next'
         if not submit_result:
@@ -398,12 +438,7 @@ class IslandDailyOrder(Island):
         # 交付成功
         logger.info('[岛屿-每日订单] 紧急交付成功')
 
-        # 检测右侧是否为空
-        self.device.screenshot()
-        if self._is_right_panel_empty():
-            logger.info('[岛屿-每日订单] 紧急交付后右侧为空，退出重进')
-            return 'reenter'
-
+        self._first_right_panel_check = False
         return 'next'
 
     # ==================== ② 右侧页面检测 ====================
@@ -417,17 +452,20 @@ class IslandDailyOrder(Island):
         """
         self.device.screenshot()
 
+        if not self.appear(DAILY_ORDER_CHECK):
+            logger.warning('[岛屿-每日订单] 未确认订单页，重进复核')
+            return 'reenter'
+
         # 1) 右侧为空
         if self._is_right_panel_empty():
-            if self._first_right_panel_check:
-                self._first_right_panel_check = False
-                logger.info('[岛屿-每日订单] 首次进入右侧为空，延时到下一个 03:00')
-                return 'next_day'
-            else:
-                logger.info('[岛屿-每日订单] 右侧为空，退出重进')
-                return 'reenter'
+            self._first_right_panel_check = False
+            logger.info('[岛屿-每日订单] 右侧为空，留在原页检测其他订单')
+            return 'to_step3'
 
         self._first_right_panel_check = False
+
+        if self._is_preparing():
+            return 'to_step3'
 
         # 2) 没有驳回按钮 → 当前是紧急委托页面
         if not self._has_reject_button():
@@ -439,17 +477,13 @@ class IslandDailyOrder(Island):
             logger.info('[岛屿-每日订单] 订单命中驳回物品过滤，执行驳回')
         else:
             logger.info('[岛屿-每日订单] 尝试交付订单')
-            if self._submit_order(DAILY_ORDER_DELIVER):
+            submit_result = self._submit_order(DAILY_ORDER_DELIVER)
+            if submit_result is None:
+                return 'reenter'
+            if submit_result:
                 logger.info('[岛屿-每日订单] 订单交付成功')
-
-                # 交付后检测右侧是否为空
-                self.device.screenshot()
-                if self._is_right_panel_empty():
-                    logger.info('[岛屿-每日订单] 交付后右侧为空，退出重进')
-                    return 'reenter'
-                else:
-                    logger.info('[岛屿-每日订单] 交付后右侧非空，退出重进刷新状态')
-                    return 'reenter'
+                logger.info('[岛屿-每日订单] 留在原页重新检测其他订单')
+                return 'to_step3'
 
             logger.info('[岛屿-每日订单] 订单资源不足，执行驳回')
 
@@ -680,23 +714,6 @@ class IslandDailyOrder(Island):
             self.device.click(ISLAND_CLICK_SAFE_AREA)
             return True
         return False
-
-    def _handle_order_reward_popups(self):
-        """提交订单后连续处理获得奖励和订单等级升级弹窗。"""
-        handled = False
-        for _ in range(self.REWARD_POPUP_CHECK_LIMIT):
-            self.device.sleep(self.REWARD_POPUP_CHECK_INTERVAL)
-            self.device.screenshot()
-            if self.appear(DAILY_ORDER_LEVEL_UP):
-                logger.info('[岛屿-每日订单] 检测到订单等级升级，点击安全区域关闭')
-                self.device.click(ISLAND_CLICK_SAFE_AREA)
-                handled = True
-                continue
-            if self.appear(ISLAND_GET, offset=30):
-                self.device.click(ISLAND_CLICK_SAFE_AREA)
-                handled = True
-                continue
-        return handled
 
     def _check_items_for_reject(self):
         """

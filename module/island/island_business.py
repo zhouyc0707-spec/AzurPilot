@@ -1338,6 +1338,30 @@ class IslandBusiness(Island):
             'has_blue': has_blue,
         }
 
+    def _batch_view_after_return(self, batch_shops, processed_shop_names, claimed_shop_names):
+        """返回经营列表后先检查当前视野，缺少待办商店时再回顶部。
+
+        返回后的店铺排序和坐标可能变化，因此必须基于新截图重新定位；
+        只有剩余商店全部可见才继续，避免跳过视野外靠前的商店，
+        改变同批共享角色的分配顺序；已开业或重复黄色不作为目标。
+        """
+        visible_shops = self._scan_visible_batch_shops(batch_shops)
+        remaining_names = {shop['name'] for shop in batch_shops} - processed_shop_names
+        visible_names = {shop_info['shop']['name'] for shop_info in visible_shops}
+        if not remaining_names.issubset(visible_names):
+            self._scroll_business_to_top()
+            return None
+        for shop_info in visible_shops:
+            shop_name = shop_info['shop']['name']
+            if shop_name in processed_shop_names:
+                continue
+            status = shop_info['status']
+            if status == 'blue' or (status == 'yellow' and shop_name not in claimed_shop_names):
+                logger.info('[岛屿-经营] 当前视野已有待处理商店，继续检查列表')
+                return visible_shops
+        self._scroll_business_to_top()
+        return None
+
     def _run_batch(self, batch_shops):
         """
         执行指定批次的商店经营（逐商店扫描模式）。
@@ -1346,14 +1370,14 @@ class IslandBusiness(Island):
         1. 先向上滑动回到列表顶部
         2. 截图 → 扫描当前视野中属于本批次的商店
         3. 对每个可见商店检测按钮状态：
-           - blue → 点击进入 → 处理 → 回到顶部 → 重新扫描
-           - yellow → 领取奖励 → 回到顶部 → 重新扫描
+           - blue → 点击进入 → 处理 → 当前视野重新定位，缺少待办时回顶部
+           - yellow → 领取奖励 → 当前视野重新定位，缺少待办时回顶部
            - darkblue → 记录为经营中，继续看下一个
            - gray → 跳过，继续看下一个
         4. 如果所有可见商店都处理完后还需要滚动：
            - 向下滑动 → 等待惯性结束 → 重新扫描可见商店
         5. 如果向下滑动也找不到更多 → 退出判断
-        6. 退出前向上滑动回顶部
+        6. 需要读取经营剩余时间时再回到顶部查找
 
         Args:
             batch_shops: 当前批次的商店列表
@@ -1370,9 +1394,14 @@ class IslandBusiness(Island):
         self._scroll_business_to_top()
 
         scroll_attempt = 0
+        returned_view = None
         while scroll_attempt < max_scrolls:
-            self.device.screenshot()
-            visible_shops = self._scan_visible_batch_shops(batch_shops)
+            if returned_view is None:
+                visible_shops = self._scan_visible_batch_shops(batch_shops)
+            else:
+                # 只复用刚返回后截取的这一帧；中间没有其他游戏操作。
+                visible_shops = returned_view
+                returned_view = None
 
             if not visible_shops:
                 logger.info("[岛屿-经营] 当前视野中无本批次商店，尝试向下滑动")
@@ -1430,8 +1459,9 @@ class IslandBusiness(Island):
                         self.post_manage_mode(POST_MANAGE_BUSINESS)
                         self.device.sleep(0.5)
 
-                    # 返回后重新扫描（列表可能有变化）
-                    self._scroll_business_to_top()
+                    # 返回后先在新截图定位当前待办，找不到才恢复原回顶搜索。
+                    returned_view = self._batch_view_after_return(
+                        batch_shops, processed_shop_names, claimed_shop_names)
                     scroll_attempt = 0
                     break  # 重新扫描
 
@@ -1453,8 +1483,8 @@ class IslandBusiness(Island):
 
                     claimed_shop_names.add(shop_name)
 
-                    # 返回后重新扫描
-                    self._scroll_business_to_top()
+                    returned_view = self._batch_view_after_return(
+                        batch_shops, processed_shop_names, claimed_shop_names)
                     scroll_attempt = 0
                     break  # 重新扫描
 
@@ -1483,9 +1513,6 @@ class IslandBusiness(Island):
                     break
 
         # ========== 退出判断 ==========
-        # 先回到顶部
-        self._scroll_business_to_top()
-
         if total_darkblue_count > 0 and not self._has_seen_blue:
             # 所有商店都在经营中（从未处理过蓝色按钮）
             logger.info(f"[岛屿-经营] 批次所有商店均在经营中，检测剩余时间")
@@ -1883,7 +1910,17 @@ class IslandBusiness(Island):
 
     def _find_and_select_character(self):
         """在角色选择界面中查找并选择角色（全区域模板匹配）"""
-        # 进入角色选择界面后，先向上滑动500px回到顶部
+        # 本地经营仍按两个独立槽位分别确认；已有目标可见时无需先滑回顶部。
+        self.device.screenshot()
+        result = self._find_best_character(require_all_visible=True)
+        if result:
+            char_name, button = result
+            logger.info(f"[岛屿-经营] 当前视野选择角色: {char_name}")
+            self.device.click(button)
+            self.device.sleep(0.5)
+            return char_name
+
+        # 当前视野没有目标时沿用从顶部开始的有界搜索及排序回退。
         self._swipe_up_reset()
 
         max_swipes = 5
@@ -1917,11 +1954,15 @@ class IslandBusiness(Island):
 
         return False
 
-    def _find_best_character(self):
+    def _find_best_character(self, require_all_visible=False):
         """
         在全区域 (55, 139, 878, 563) 内进行模板匹配查找角色。
         只匹配 character_priority 中指定的角色，不做全量扫描。
         返回 (角色名, Button) 或 None。
+
+        Args:
+            require_all_visible: 当前视野快路径要求所有剩余配置候选均可见，
+                防止列表停在下半部时提前选择另一名候选，改变原来的选人结果。
         """
         s = self.device.image
         area_img = crop(s, self.BUSINESS_CHARACTER_AREA)
@@ -1931,8 +1972,12 @@ class IslandBusiness(Island):
         for name in self.character_priority:
             template = self.character_templates.get(name)
             if template is None:
+                if require_all_visible:
+                    return None
                 continue
             sim, btn = template.match_result(area_img)
+            if require_all_visible and sim < 0.8:
+                return None
             if sim >= 0.8 and sim > best[2]:
                 # 创建新 Button，坐标从裁剪区域偏移回全屏坐标
                 old_area = btn.area

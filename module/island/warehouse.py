@@ -6,6 +6,25 @@
 from module.ocr.ocr import *
 from module.base.button import *
 from module.ui.ui import *
+from module.exception import GameStuckError
+from module.ui.assets import ISLAND_WAREHOUSE_CHECK
+
+
+class WarehouseQuantityDigit(Digit):
+    """记录各数量框的有效性，区分数字 0 与空文本的兜底 0。"""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.region_validity = []
+
+    def after_process(self, result):
+        quantity = super().after_process(result)
+        self.region_validity.append(self.last_valid)
+        return quantity
+
+    def ocr(self, image, direct_ocr=False):
+        self.region_validity = []
+        return super().ocr(image, direct_ocr=direct_ocr)
 
 
 class WarehouseOCR:
@@ -59,6 +78,77 @@ class WarehouseOCR:
                 alphabet = '0123456789')
                 return ocr_instance.ocr(screenshot)
         return 0
+
+    def ocr_item_quantities(self, screenshot, item_templates):
+        """从已确认的同一张仓库截图批量读取物品数量。
+
+        数量框和物品匹配规则沿用单项识别。只复用本次调用中的格子裁图与
+        数量定位，不保留截图、库存或跨任务缓存；批量 OCR 异常时逐项降级。
+
+        Args:
+            screenshot (np.ndarray): 当前 1280×720 仓库截图。
+            item_templates (dict[str, Template]): 物品名称到仓库图标模板的映射。
+
+        Returns:
+            dict[str, int]: 当前截图中的库存，未找到的物品仍为 0。
+
+        Raises:
+            GameStuckError: 当前画面不是完整仓库页，禁止从其他页面读库存。
+        """
+        if not item_templates:
+            return {}
+        if (
+            getattr(screenshot, 'shape', None) != (720, 1280, 3)
+            or not ISLAND_WAREHOUSE_CHECK.match_template_color(
+                screenshot, offset=(30, 30), similarity=0.85, threshold=30
+            )
+        ):
+            raise GameStuckError('仓库页面未确认，停止库存识别')
+
+        cells = [
+            (button, crop(screenshot, button.area))
+            for _, _, button in self.warehouse_grid.generate()
+        ]
+        results = dict.fromkeys(item_templates, 0)
+        matched = {}
+        for name, template in item_templates.items():
+            for button, cell_image in cells:
+                if template.match(cell_image, similarity=0.85):
+                    matched[name] = self._get_number_area(button)
+                    break
+        if not matched:
+            return results
+
+        # 同格可能对应多个兼容名称；合并数量框，避免重复 OCR。
+        areas = list(dict.fromkeys(matched.values()))
+        buttons = [Button(area=area, color=(), button=area, name='ITEM_NUMBER') for area in areas]
+        ocr = WarehouseQuantityDigit(buttons, letter=(255, 255, 255), threshold=200,
+                                     alphabet='0123456789', name='WAREHOUSE_ITEM_NUMBERS')
+        try:
+            quantities = ocr.ocr(screenshot)
+            quantities = quantities if isinstance(quantities, list) else [quantities]
+            if len(quantities) != len(areas) or any(
+                not isinstance(quantity, (int, np.integer))
+                or isinstance(quantity, (bool, np.bool_)) or quantity < 0
+                for quantity in quantities
+            ):
+                raise ValueError('仓库批量 OCR 返回数量与区域不一致')
+        except (OSError, RuntimeError, ValueError, TypeError, IndexError) as exc:
+            logger.warning(f'[岛屿] 仓库批量识别不可用，改用单项识别: {type(exc).__name__}')
+            for name in matched:
+                results[name] = self.ocr_item_quantity(screenshot, item_templates[name])
+            return results
+
+        quantity_by_area = dict(zip(areas, map(int, quantities)))
+        validity = ocr.region_validity
+        if len(validity) != len(areas):
+            validity = [False] * len(areas)
+        invalid_areas = {area for area, valid in zip(areas, validity) if not valid}
+        results.update({name: quantity_by_area[area] for name, area in matched.items()})
+        for name, area in matched.items():
+            if area in invalid_areas:
+                results[name] = self.ocr_item_quantity(screenshot, item_templates[name])
+        return results
 
     def _get_number_area(self, button):
         """计算指定仓库槽位中物品数量的绝对屏幕区域。
