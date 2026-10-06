@@ -166,9 +166,15 @@ flowchart TD
     E1 --> G
 ```
 
-收取（`meow_get`）逐只进行：颜色检测三个天赋格判断「特殊天赋」。默认沿用原规则：金猫只有在「开启保留 + 有特殊天赋 + 评分达标」时才 `_meow_apply_lock`，否则 `_meow_skip_lock` 跳过；紫猫同理受 `RetainTalentedPurple` 控制。评分（`MeowfficerCollectScore` 混入，`MeowfficerTrain_ScoreTalents` 开启时）复用天赋详情面板 OCR 天赋名，经 `score.py` 四口径评分，`ScoreThreshold > 0` 时评分参与原规则的锁定判断。
+收取（`meow_get`）逐只进行，先确认领取页已加载及新猫品质。蓝猫直接保持未锁定，不展开天赋详情、不执行 OCR 或评分，也不因评分无结果而保护锁定；此规则仅限训练完成后领取的新猫，不扫描猫窝已有蓝猫批量解锁，独立主动评分工具仍可评估蓝猫。
 
-`MeowfficerTrain.LockByAdvice` 默认关闭；开启后自动启用领取时评分，按 `advice.reset_advice()` 的结论处理金、紫、蓝猫，优先于 `RetainTalentedGold`、`RetainTalentedPurple` 和 `ScoreThreshold`：
+品质检测在 `_meow_detect_shift()` 确认加载稳定后进行：`_meow_get_rarity()` 优先匹配金、紫品质模板，两者均未匹配时，必须在相同品质文字区域正向检测到蓝色像素，才返回 `blue`；不会由金紫未命中反推蓝猫。该区域随领取页左上偏移修正，颜色检测不加载 OCR。无法确认品质返回 `None`，开启 `LockByAdvice` 时强制保护锁定，即使评分给出 `feed` 也不放行。已预锁的本次新蓝猫会先解锁再领取，并清除上一只的评分缓存；金紫猫复用本次偏移结果，不重复等待加载。
+
+蓝色文字检测的区域与色系沿用品质标记设计，离线验证覆盖正向蓝色、金紫优先、偏移及未知保护。当前缺少蓝猫领取页实拍样本，区域、颜色容差和像素阈值尚未经过实拍校准；此限制不改变未知品质在建议模式下保护锁定的规则。
+
+金、紫猫颜色检测三个天赋格判断「特殊天赋」。默认沿用原规则：金猫只有在「开启保留 + 有特殊天赋 + 评分达标」时才 `_meow_apply_lock`，否则 `_meow_skip_lock` 跳过；紫猫同理受 `RetainTalentedPurple` 控制。评分（`MeowfficerCollectScore` 混入，`MeowfficerTrain_ScoreTalents` 开启时）复用天赋详情面板 OCR 天赋名，经 `score.py` 四口径评分，`ScoreThreshold > 0` 时评分参与原规则的锁定判断。
+
+`MeowfficerTrain.LockByAdvice` 默认关闭；开启后自动启用金、紫新猫的领取评分，按 `advice.reset_advice()` 的结论处理，优先于 `RetainTalentedGold`、`RetainTalentedPurple` 和 `ScoreThreshold`。蓝猫仍走上述直接不锁定、不评分的流程。金、紫猫的建议映射如下：
 
 | 建议结论 | 领取时处理 |
 | --- | --- |
@@ -178,7 +184,7 @@ flowchart TD
 | `keep`（保留） | 锁定保留 |
 | 评分缺失、识别失败或结果不完整 | 保护性锁定并记录原因 |
 
-建议锁定只处理本次训练完成后领取的新猫，不扫描猫窝重新锁定已有猫，也不自动补天赋或洗点。已处于锁定状态的新金猫仍需完成本只猫的评分，不能由旧的锁定弹窗跳过逻辑提前进入下一只；确定为 `feed` 时先解锁，再取消金猫锁定确认。保护性锁定或建议保留后，由领取父循环识别并确认当前弹窗，下一只无论是否预锁都重新评分，不以「下一只未锁定」作为收尾条件。
+建议锁定只处理本次训练完成后领取的新猫，不扫描猫窝重新锁定已有猫，也不自动补天赋或洗点。已处于锁定状态的新金猫仍需完成本只猫的评分，不能由旧的锁定弹窗跳过逻辑提前进入下一只；确定为 `feed` 时先解锁，再取消金猫锁定确认。保护性锁定或建议保留后，由领取父循环识别并确认当前弹窗，下一只金、紫猫无论是否预锁都重新评分，不以「下一只未锁定」作为收尾条件。
 
 识别完整性同时核对非空天赋槽位数、已打开详情数和去重天赋线数；每个详情仅接受一条原文准确包含名称的天赋，猫名也需已知且前后无冲突，评分成功后才允许按 `feed` 放行。中文天赋白名单不适用于其他语言客户端，保护保留也不代表评分识别已成功。
 
@@ -273,7 +279,7 @@ flowchart TD
 | `MeowfficerTrain_Enable` / `Mode` | checkbox/select | false / seamlessly | 训练开关与模式 |
 | `MeowfficerTrain_RetainTalentedGold` / `RetainTalentedPurple` | checkbox | true | 锁定带特殊天赋的金/紫猫 |
 | `MeowfficerTrain_ScoreTalents` / `ScoreThreshold` | checkbox/int | false / 0 | 收集时 OCR 天赋并评分；门槛参与锁定判断 |
-| `MeowfficerTrain_LockByAdvice` | checkbox | false | 金、紫、蓝新猫按同源养成建议锁定；自动启用领取评分，优先于原保留开关与分数门槛；失败或不完整时保护锁定 |
+| `MeowfficerTrain_LockByAdvice` | checkbox | false | 金、紫新猫按同源养成建议锁定；自动启用领取评分，优先于原保留开关与分数门槛；失败或不完整时保护锁定；蓝猫直接不锁定、不评分 |
 | `MeowfficerTrain_EnhanceIndex` / `MaxFeedLevel` | int | 1 / 5 | 强化目标槽位（1~12）/ 材料等级上限（1~30），越界会被代码修正 |
 | `MeowfficerScore_Source` 等 | 见 argument.yaml | screenshot | 评分工具：来源、截图目录、报告路径、跟拍与扫描参数 |
 

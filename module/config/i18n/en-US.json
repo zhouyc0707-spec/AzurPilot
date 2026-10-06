@@ -2558,11 +2558,11 @@
     },
     "LockByAdvice": {
       "name": "Lock new Meowfficers by score advice",
-      "help": "Automatically recognize talents and score new Meowfficers when collecting from training. Leave unlocked only those recommended as enhancement fodder after complete recognition; lock all other gold, purple, and blue Meowfficers. Recognition failures or uncertain completeness also result in a protective lock. Overrides special-talent retention switches and the score threshold. Applies only to newly collected Meowfficers; existing lock states are not changed in bulk."
+      "help": "Automatically recognize talents and score only gold and purple Meowfficers when collecting from training. Leave these unlocked only when complete recognition recommends them as enhancement fodder; lock all other gold and purple Meowfficers, including recognition failures or uncertain completeness. Blue Meowfficers are collected without locking or scoring, regardless of scoring switches. Overrides special-talent retention switches and the score threshold. Applies only to newly collected Meowfficers; existing lock states are not changed in bulk. Manual scoring with the separate scoring tool is unaffected."
     },
     "ScoreTalents": {
       "name": "Score talents while collecting",
-      "help": "Also identify talent names and score them with public guide rules when collecting meowfficers; opens every talent detail, a bit slower\nScoring is automatic when \"Lock new Meowfficers by score advice\" is enabled; this separate switch is not required."
+      "help": "Identify talent names and score gold and purple Meowfficers with public guide rules when collecting; opens every talent detail, a bit slower. Blue Meowfficers are collected without scoring or locking, regardless of this switch.\nGold and purple Meowfficers are scored automatically when \"Lock new Meowfficers by score advice\" is enabled; this separate switch is not required. The separate scoring tool is unaffected."
     },
     "ScoreThreshold": {
       "name": "Score threshold to keep",

@@ -2,8 +2,12 @@
 
 import unittest
 from contextlib import nullcontext
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
+
+import numpy as np
+from PIL import Image
 
 from module.meowfficer import collect as collect_module
 from module.meowfficer.collect import MeowfficerCollect
@@ -37,6 +41,8 @@ class CollectPageFixture:
             click=Mock(side_effect=self.click), sleep=Mock(), click_record=['领取占位'] * 20,
         )
         self.runner.appear = Mock(side_effect=self.appear)
+        self.runner._meow_detect_shift = Mock(return_value=False)
+        self.runner._meow_get_rarity = Mock(side_effect=lambda **kwargs: self.rarity)
         self.runner.handle_meow_popup_dismiss = Mock(return_value=False)
         self.runner._meow_is_special_talented = Mock(return_value=special)
         self.runner._meow_apply_lock = Mock(side_effect=self.apply_lock)
@@ -129,10 +135,12 @@ class CollectQueueFixture(CollectPageFixture):
     def read_details(self, **kwargs):
         if self.confirm_pending:
             raise AssertionError('不能把已处理金猫的确认弹窗再次当作新猫评分')
+        if self.rarity == 'blue':
+            raise AssertionError('蓝猫必须跳过天赋详情与评分')
         self.scored.append(self.index)
         self.runner.meow_score_reset()
         spec = self.cats[self.index]
-        cat = {'gold': '奥古喵', 'purple': '帕特喵', 'blue': '乔治喵'}[self.rarity]
+        cat = {'gold': '奥古喵', 'purple': '帕特喵'}[self.rarity]
         talents = evaluate(list(spec.get('names', ())), cat=cat).talents
         with patch('module.meowfficer.score_ocr.recognize', side_effect=[([talent], cat) for talent in talents]):
             for talent in talents:
@@ -243,9 +251,12 @@ class TestExistingCollectBehavior(unittest.TestCase):
                 runner._meow_skip_lock.assert_not_called()
 
     def test_blue_is_not_locked_by_legacy_special_rule(self):
-        runner = CollectPageFixture(rarity='blue', special=True).run()
+        fixture = CollectPageFixture(rarity='blue', special=True)
+        runner = fixture.run()
+        self.assertFalse(fixture.locked)
         runner._meow_apply_lock.assert_not_called()
         runner._meow_skip_lock.assert_not_called()
+        runner._meow_is_special_talented.assert_not_called()
 
     def test_original_score_threshold_remains_effective(self):
         fixture = CollectPageFixture(
@@ -266,6 +277,70 @@ class TestExistingCollectBehavior(unittest.TestCase):
         self.assertTrue(runner.meow_score_passes())
         runner._meow_score_ocr.assert_not_called()
         self.assertFalse(hasattr(runner, '_meow_score_result'))
+
+
+class TestCollectRarityRecognition(unittest.TestCase):
+    """用品质模板和代表性区域像素验证蓝色必须正向命中。"""
+
+    @staticmethod
+    def make_runner(image):
+        runner = MeowfficerCollect.__new__(MeowfficerCollect)
+        runner.device = SimpleNamespace(image=image, stuck_record_add=Mock())
+        runner.interval_timer = {}
+        return runner
+
+    @staticmethod
+    def blue_area(shifted=False):
+        gold = collect_module.MEOWFFICER_GOLD_CHECK.area
+        purple = collect_module.MEOWFFICER_PURPLE_CHECK.area
+        dx, dy = (-40, -20) if shifted else (0, 0)
+        return (
+            min(gold[0], purple[0]) - 16 + dx,
+            min(gold[1], purple[1]) - 4 + dy,
+            max(gold[2], purple[2]) + 16 + dx,
+            max(gold[3], purple[3]) + 4 + dy,
+        )
+
+    def test_real_gold_and_purple_resources_keep_their_rarity(self):
+        root = Path(__file__).resolve().parents[1]
+        for name, button in (
+            ('gold', collect_module.MEOWFFICER_GOLD_CHECK),
+            ('purple', collect_module.MEOWFFICER_PURPLE_CHECK),
+        ):
+            with self.subTest(rarity=name):
+                with Image.open(root / button.file) as source:
+                    image = np.array(source.convert('RGB'))
+                self.assertEqual(self.make_runner(image)._meow_get_rarity(), name)
+
+    def test_blue_marker_uses_real_color_count_without_ocr(self):
+        image = np.zeros((720, 1280, 3), dtype=np.uint8)
+        x, y, _, _ = self.blue_area()
+        image[y + 2:y + 8, x + 2:x + 8] = (128, 190, 255)
+        runner = self.make_runner(image)
+        runner._meow_score_ocr = Mock(side_effect=AssertionError('品质识别不能初始化 OCR'))
+        self.assertEqual(runner._meow_get_rarity(), 'blue')
+        runner._meow_score_ocr.assert_not_called()
+
+    def test_shifted_blue_marker_is_found_only_in_shifted_region(self):
+        image = np.zeros((720, 1280, 3), dtype=np.uint8)
+        x, y, _, _ = self.blue_area(shifted=True)
+        image[y + 2:y + 8, x + 2:x + 8] = (128, 190, 255)
+        runner = self.make_runner(image)
+        self.assertIsNone(runner._meow_get_rarity(shifted=False))
+        self.assertEqual(runner._meow_get_rarity(shifted=True), 'blue')
+
+    def test_blank_gray_and_occluded_markers_are_unknown(self):
+        for color in ((0, 0, 0), (140, 140, 140), (255, 255, 255), (20, 40, 60)):
+            with self.subTest(color=color):
+                image = np.full((720, 1280, 3), color, dtype=np.uint8)
+                self.assertIsNone(self.make_runner(image)._meow_get_rarity())
+
+    def test_a_few_blue_pixels_or_blue_outside_marker_do_not_prove_blue_cat(self):
+        image = np.zeros((720, 1280, 3), dtype=np.uint8)
+        x, y, _, _ = self.blue_area()
+        image[y + 2:y + 4, x + 2:x + 7] = (128, 190, 255)
+        image[100:150, 100:150] = (128, 190, 255)
+        self.assertIsNone(self.make_runner(image)._meow_get_rarity())
 
 
 class TestAdviceLockDecision(unittest.TestCase):
@@ -436,7 +511,7 @@ class TestAdviceCollectBehavior(unittest.TestCase):
         )
         runner = fixture.runner
         runner._meow_score_ocr = Mock(return_value=object())
-        cat = {'gold': '奥古喵', 'purple': '帕特喵', 'blue': '乔治喵'}[rarity]
+        cat = {'gold': '奥古喵', 'purple': '帕特喵'}[rarity]
 
         def read_details(**kwargs):
             runner.meow_score_reset()
@@ -451,14 +526,14 @@ class TestAdviceCollectBehavior(unittest.TestCase):
         runner.meow_score_passes = Mock(side_effect=AssertionError('新规则不能被旧评分门槛覆盖'))
         return fixture
 
-    def test_all_rarities_follow_real_advice_and_ignore_old_switches(self):
+    def test_gold_and_purple_follow_real_advice_and_ignore_old_switches(self):
         cases = (
             (VERDICT_FEED, ('炮击新手·主力', '装填新手·战列')),
             (VERDICT_PENDING, ('侵略如火', '炮击新手·主力')),
             (VERDICT_REROLL, ('炮术长·主力', '无影手·战列')),
             (VERDICT_KEEP, ('侵略如火', '炮术长·主力')),
         )
-        for rarity in ('gold', 'purple', 'blue'):
+        for rarity in ('gold', 'purple'):
             for verdict, names in cases:
                 with self.subTest(rarity=rarity, verdict=verdict):
                     fixture = self.make_fixture(rarity, names)
@@ -491,11 +566,62 @@ class TestAdviceCollectBehavior(unittest.TestCase):
         self.assertTrue(fixture.locked)
         runner._meow_skip_lock.assert_not_called()
 
-    def test_missing_result_protects_blue_cat_instead_of_discarding(self):
-        fixture = CollectPageFixture(rarity='blue', MeowfficerTrain_LockByAdvice=True)
-        runner = fixture.run()
-        self.assertTrue(fixture.locked)
-        runner._meow_apply_lock.assert_called_once_with(lock=True)
+    def test_blue_skips_details_ocr_and_lock_decision_for_all_score_switches(self):
+        for advice in (False, True):
+            for score in (False, True):
+                with self.subTest(advice=advice, score=score):
+                    fixture = CollectPageFixture(
+                        rarity='blue', special=True,
+                        MeowfficerTrain_LockByAdvice=advice,
+                        MeowfficerTrain_ScoreTalents=score,
+                        MeowfficerTrain_RetainTalentedGold=True,
+                        MeowfficerTrain_RetainTalentedPurple=True,
+                        MeowfficerTrain_ScoreThreshold=100,
+                    )
+                    runner = fixture.runner
+                    runner._meow_score_result = evaluate(['侵略如火', '炮术长·主力'], cat='奥古喵')
+                    runner._meow_score_ocr = Mock(side_effect=AssertionError('蓝猫不能初始化 OCR'))
+                    runner.meow_score_passes = Mock(side_effect=AssertionError('蓝猫不应读取旧分数'))
+                    runner.meow_should_lock_by_advice = Mock(side_effect=AssertionError('蓝猫不应读取旧建议'))
+                    fixture.run()
+                    self.assertFalse(fixture.locked)
+                    runner._meow_apply_lock.assert_not_called()
+                    runner._meow_skip_lock.assert_not_called()
+                    runner._meow_is_special_talented.assert_not_called()
+                    runner._meow_score_ocr.assert_not_called()
+                    runner.meow_score_passes.assert_not_called()
+                    runner.meow_should_lock_by_advice.assert_not_called()
+
+    def test_prelocked_blue_is_unlocked_without_scoring_for_all_switches(self):
+        for advice in (False, True):
+            for score in (False, True):
+                with self.subTest(advice=advice, score=score):
+                    fixture = CollectPageFixture(
+                        rarity='blue', locked=True,
+                        MeowfficerTrain_LockByAdvice=advice,
+                        MeowfficerTrain_ScoreTalents=score,
+                    )
+                    runner = fixture.run()
+                    self.assertFalse(fixture.locked)
+                    runner._meow_apply_lock.assert_called_once_with(lock=False)
+                    runner._meow_is_special_talented.assert_not_called()
+                    runner._meow_skip_popup_after_locking.assert_not_called()
+                    runner._meow_skip_lock.assert_not_called()
+
+    def test_unknown_rarity_protects_gold_and_purple_even_with_feed_advice(self):
+        for rarity in ('gold', 'purple'):
+            with self.subTest(rarity=rarity):
+                fixture = self.make_fixture(rarity, ('炮击新手·主力', '装填新手·战列'))
+                fixture.runner._meow_get_rarity.side_effect = None
+                fixture.runner._meow_get_rarity.return_value = None
+                fixture.runner.meow_should_lock_by_advice = Mock(
+                    side_effect=AssertionError('品质未知不应按低分放行'),
+                )
+                runner = fixture.run()
+                self.assertTrue(fixture.locked)
+                runner._meow_apply_lock.assert_called_once_with(lock=True)
+                runner._meow_skip_lock.assert_not_called()
+                runner.meow_should_lock_by_advice.assert_not_called()
 
     def test_real_slot_scanning_counts_only_nonempty_slots(self):
         runner = MeowfficerCollect.__new__(MeowfficerCollect)
@@ -536,8 +662,8 @@ class TestAdviceCollectBehavior(unittest.TestCase):
                         dict(rarity='purple', names=('侵略如火', '炮术长·主力')),
                     ])
                     fixture.run()
-                    self.assertEqual(fixture.scored, [0, 1, 2])
-                    self.assertEqual(fixture.finished, [(0, True), (1, next_keep), (2, True)])
+                    self.assertEqual(fixture.scored, [1, 2] if first_rarity == 'blue' else [0, 1, 2])
+                    self.assertEqual(fixture.finished, [(0, first_rarity != 'blue'), (1, next_keep), (2, True)])
 
     def test_gold_lock_confirmation_is_not_a_second_new_cat(self):
         fixture = CollectQueueFixture([
@@ -580,14 +706,24 @@ class TestAdviceCollectBehavior(unittest.TestCase):
         fixture.runner._meow_skip_popup_after_locking.assert_not_called()
         fixture.runner.device.sleep.assert_called_once_with(0.1)
 
-    def test_previous_feed_result_does_not_unlock_next_unreadable_blue(self):
+    def test_previous_feed_result_does_not_cause_next_blue_to_be_scored(self):
         fixture = CollectQueueFixture([
             dict(rarity='purple', names=('炮击新手·主力', '装填新手·战列')),
             dict(rarity='blue', names=(), expected=1),
         ])
         fixture.run()
-        self.assertEqual(fixture.scored, [0, 1])
-        self.assertEqual(fixture.finished, [(0, False), (1, True)])
+        self.assertEqual(fixture.scored, [0])
+        self.assertEqual(fixture.finished, [(0, False), (1, False)])
+
+    def test_previous_failed_purple_result_does_not_protect_lock_next_blue(self):
+        fixture = CollectQueueFixture([
+            dict(rarity='purple', names=(), expected=1),
+            dict(rarity='blue', locked=True, names=(), expected=1),
+            dict(rarity='gold', names=('侵略如火', '炮术长·主力')),
+        ])
+        fixture.run()
+        self.assertEqual(fixture.scored, [0, 2])
+        self.assertEqual(fixture.finished, [(0, True), (1, False), (2, True)])
 
 
 if __name__ == '__main__':

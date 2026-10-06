@@ -4,7 +4,7 @@
 - 检测并收集已训练完成的指挥喵（单个或全部）
 - 处理指挥喵获取界面的各种弹窗和过渡动画
 - 检测指挥喵是否拥有特殊天赋（金色/紫色品质专属）
-- 指挥喵的锁定/解锁处理，支持按培养评价保护金、紫、蓝猫
+- 指挥喵的锁定/解锁处理，金紫猫按培养评价保留，蓝猫直接跳过评分
 
 特殊天赋检测机制：
 - 检查天赋网格中的图标，通过颜色分析区分普通天赋和特殊天赋
@@ -125,11 +125,38 @@ class MeowfficerCollect(MeowfficerCollectScore, MeowfficerBase):
         self.device.click_record.pop()
         self.device.click_record.pop()
 
-    def _meow_is_special_talented(self, drop=None):
+    def _meow_get_rarity(self, shifted=False):
+        """识别已稳定领取页的品质，无法确认时返回 None。
+
+        蓝猫必须命中品质标记中的蓝色文字，不能由金紫模板均未匹配反推。
+        复用品质区域和颜色检测，不读取天赋或加载评分 OCR。
+
+        Args:
+            shifted (bool): 当前领取页是否向左上偏移。
+
+        Returns:
+            str | None: gold、purple、blue，或无法确认的 None。
+        """
+        if self.appear(MEOWFFICER_GOLD_CHECK, offset=(40, 40)):
+            return 'gold'
+        if self.appear(MEOWFFICER_PURPLE_CHECK, offset=(40, 40)):
+            return 'purple'
+        gold = MEOWFFICER_GOLD_CHECK.area
+        purple = MEOWFFICER_PURPLE_CHECK.area
+        dx, dy = (-40, -20) if shifted else (0, 0)
+        # 蓝色 R 标记宽度与金紫不同，取两者共同区域并留出文字边缘。
+        area = (min(gold[0], purple[0]) - 16 + dx, min(gold[1], purple[1]) - 4 + dy,
+                max(gold[2], purple[2]) + 16 + dx, max(gold[3], purple[3]) + 4 + dy)
+        if self.image_color_count(area, color=(128, 190, 255), threshold=55, count=30):
+            return 'blue'
+        return None
+
+    def _meow_is_special_talented(self, drop=None, shifted=None):
         """检查获取的指挥喵是否拥有至少一个特殊天赋。
 
         Args:
             drop (DropImage, optional): 掉落统计截图记录对象。默认为 None。
+            shifted (bool, optional): 已确认的领取页偏移；未提供时检测并等待加载。
 
         Returns:
             bool: 拥有特殊天赋返回 True，否则返回 False。
@@ -138,7 +165,9 @@ class MeowfficerCollect(MeowfficerCollectScore, MeowfficerBase):
         logger.info('[指挥喵-收集] 等待加载完成并检查基础天赋')
 
         special_talent = False
-        grid = MEOWFFICER_TALENT_GRID_2 if self._meow_detect_shift() else MEOWFFICER_TALENT_GRID_1
+        if shifted is None:
+            shifted = self._meow_detect_shift()
+        grid = MEOWFFICER_TALENT_GRID_2 if shifted else MEOWFFICER_TALENT_GRID_1
         handle_drop = self.config.DropRecord_MeowfficerTalent != 'do_not'
         # 开了评分就同样需要展开天赋详情面板，即使没开截图记录
         score_enabled = self.meow_score_enabled()
@@ -295,13 +324,27 @@ class MeowfficerCollect(MeowfficerCollectScore, MeowfficerBase):
                 confirm_timer.reset()
                 continue
             if self.appear(MEOWFFICER_GET_CHECK, offset=(40, 40), interval=3):
+                # 稳定后先确认品质，蓝猫不展开详情，不调用任何评分判断。
+                shifted = self._meow_detect_shift()
+                rarity = self._meow_get_rarity(shifted=shifted)
+                if rarity == 'blue':
+                    count += 1
+                    logger.attr('[指挥喵-收集] 获取次数', count)
+                    logger.info('[指挥喵-收集] 蓝猫直接不锁定，跳过天赋识别与评分')
+                    self.meow_score_reset()
+                    if self.appear(MEOWFFICER_APPLY_UNLOCK, offset=(40, 40)):
+                        self._meow_apply_lock(lock=False)
+                    self.device.click(MEOWFFICER_TRAIN_CLICK_SAFE_AREA)
+                    self.device.click_record.pop()
+                    confirm_timer.reset()
+                    self.interval_reset(MEOWFFICER_GET_CHECK)
+                    continue
                 if self.appear(MEOWFFICER_APPLY_UNLOCK, offset=(40, 40)) \
                         and not lock_by_advice:
                     self._meow_skip_popup_after_locking(skip_first_screenshot=True)
                     confirm_timer.reset()
-                    # 意外退出获取队列
-                    if self.appear(MEOWFFICER_TRAIN_START, offset=(20, 20)):
-                        continue
+                    # 收尾可能已经进入下一只，重新截图和判断品质，避免沿用上一只状态。
+                    continue
 
                 count += 1
                 logger.attr('[指挥喵-收集] 获取次数', count)
@@ -309,10 +352,12 @@ class MeowfficerCollect(MeowfficerCollectScore, MeowfficerBase):
                         genre="meowfficer_talent",
                         method=self.config.DropRecord_MeowfficerTalent
                 ) as drop:
-                    special_talent = self._meow_is_special_talented(drop=drop)
+                    special_talent = self._meow_is_special_talented(drop=drop, shifted=shifted)
                     if lock_by_advice:
-                        # 新模式统一处理全部品质，不再受特殊天赋开关与分数门槛限制。
-                        should_lock = self.meow_should_lock_by_advice()
+                        # 金紫按建议保留；品质未知时保护锁定，不按低分放行。
+                        should_lock = True if rarity is None else self.meow_should_lock_by_advice()
+                        if rarity is None:
+                            logger.warning('[指挥喵-收集] 品质标记无法确认，保护锁定')
                         self._meow_apply_lock(lock=should_lock)
                         if not should_lock and self.appear(MEOWFFICER_GOLD_CHECK, offset=(40, 40)):
                             self._meow_skip_lock()
