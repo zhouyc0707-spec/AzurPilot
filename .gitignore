@@ -375,3 +375,6 @@ frontend/*.tsbuildinfo
 # 提交信息临时文件（各种写法都不要提交）
 /*-msg.txt
 /.commit-msg*.txt
+
+# 本地交易迁移原件包含身份凭据，禁止进入公开仓库
+config/stock-exchange-migration-backups/
