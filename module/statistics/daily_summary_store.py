@@ -496,8 +496,10 @@ class DailySummaryStore:
                     item = dict(record)
                     payload = {}
                     if item.get('secure_payload'):
-                        payload = opsi_secure.get_vault().open_('daily', item['secure_payload'],
-                                                               opsi_secure.row_context('daily', item))
+                        payload = opsi_secure.decode_record('daily', item['secure_payload'],
+                                                              opsi_secure.row_context('daily', item))
+                        if payload is None:
+                            raise opsi_secure.StoreUnavailable('日报事件记录暂不可读')
                     decoded.append(dict(item, **payload))
                 row = {'battles': len(decoded), 'estimated_exp': sum(r['estimated_exp'] for r in decoded),
                        'duration_seconds': sum(r['duration_seconds'] for r in decoded),
@@ -653,6 +655,11 @@ class DailySummaryStore:
         with self._lock, self._connect() as connection:
             if report_text is not None:
                 vault = opsi_secure.get_vault()
+                stored = connection.execute('SELECT report_text FROM daily_summary_periods WHERE instance=? AND period_key=?',
+                                            (instance, period_key)).fetchone()
+                if not vault.encrypted and stored and opsi_secure.is_ciphertext(stored[0]):
+                    vault._checked = False
+                    raise opsi_secure.StoreUnavailable('现有日报正文未完整迁移，保留原件并拒绝覆盖')
                 values['report_text'] = (vault.seal('reports', {'text': report_text}, vault.report_context(instance, period_key))
                                          if vault.encrypted else report_text)
             assignments = ', '.join(f'{key} = ?' for key in values)
@@ -689,7 +696,7 @@ class DailySummaryStore:
         if result and isinstance(result.get('report_text'), str) and result['report_text'].startswith(
                 (opsi_secure.BLOB_PREFIX, opsi_secure.LEGACY_PREFIX)):
             vault = opsi_secure.get_vault()
-            value = vault.open_or_none('reports', result['report_text'], vault.report_context(instance, period_key))
+            value = opsi_secure.decode_record('reports', result['report_text'], vault.report_context(instance, period_key))
             result['report_text'] = value.get('text') if value else None
         return result
 

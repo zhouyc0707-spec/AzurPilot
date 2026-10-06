@@ -3,7 +3,6 @@ import base64
 import hashlib
 import json
 import uuid
-from pathlib import Path
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PrivateFormat, PublicFormat, NoEncryption
@@ -16,36 +15,41 @@ from module.runtime.game_data import GameDataProtector
 def load_identity(root, instance):
     protection = GameDataProtector(root)
     identity = protection.resolve(instance)
-    name = 'identities/' + identity + '.json'
-    # 多个进程可能同时发现身份文件为空；检查与创建须共享同一锁，避免覆盖签名密钥。
-    with config_transaction(protection.file_path(name)):
-        data = protection.read_file(name)
-        legacy = protection.record(identity)['legacy']
-        path = Path(root) / 'cache' / 'stock-exchange' / 'identities' / (hashlib.sha256(instance.encode()).hexdigest() + '.json')
-        if data is None and legacy:
-            try:
-                data = json.loads(path.read_bytes())
-            except (OSError, ValueError):
-                raise ApiError('STOCK_IDENTITY_DAMAGED', '旧实例交易身份损坏，请恢复完整备份') from None
-        if data is None:
-            key = Ed25519PrivateKey.generate()
-            data = {'instanceId': identity, 'privateKey': base64.b64encode(key.private_bytes(Encoding.Raw, PrivateFormat.Raw, NoEncryption())).decode()}
-            protection.write_file(name, data)
-        try:
-            if str(uuid.UUID(data['instanceId'])) != identity:
-                raise ValueError()
-            key = Ed25519PrivateKey.from_private_bytes(base64.b64decode(data['privateKey'], validate=True))
-        except (ValueError, KeyError, TypeError):
-            raise ApiError('STOCK_IDENTITY_DAMAGED', '实例交易身份损坏，请恢复身份备份，不能自动创建新身份') from None
-        if legacy:
-            if not protection.file_path(name).exists():
-                protection.write_file(name, data)
-            from module.runtime.account_vault import AccountVault
-            AccountVault.wipe_file(path)
-            with protection.transaction() as (state, _):
-                state['instances'][identity]['legacy'] = False
+    with config_transaction(protection.file_path('identities/' + identity + '.json')):
+        key = _load_key(protection, instance, identity)
     protection.relocate_scheduler(instance, identity)
     return identity, key
+
+
+def _load_key(protection, instance, identity):
+    """首次生成签名私钥也纳入文件事务，多个进程必须得到同一把私钥。"""
+    name = 'identities/' + identity + '.json'
+    data = protection.read_file(name)
+    legacy = protection.record(identity)['legacy']
+    path = protection.directory / 'identities' / (hashlib.sha256(instance.encode()).hexdigest() + '.json')
+    if data is None and legacy:
+        try:
+            data = json.loads(path.read_bytes())
+        except (OSError, ValueError):
+            raise ApiError('STOCK_IDENTITY_DAMAGED', '旧实例交易身份损坏，请恢复完整备份') from None
+    if data is None:
+        key = Ed25519PrivateKey.generate()
+        data = {'instanceId': identity, 'privateKey': base64.b64encode(key.private_bytes(Encoding.Raw, PrivateFormat.Raw, NoEncryption())).decode()}
+        protection.write_file(name, data)
+    try:
+        if str(uuid.UUID(data['instanceId'])) != identity:
+            raise ValueError()
+        key = Ed25519PrivateKey.from_private_bytes(base64.b64decode(data['privateKey'], validate=True))
+    except (ValueError, KeyError, TypeError, AttributeError):
+        raise ApiError('STOCK_IDENTITY_DAMAGED', '实例交易身份损坏，请恢复身份备份，不能自动创建新身份') from None
+    if legacy:
+        if not protection.file_path(name).exists():
+            protection.write_file(name, data)
+        from module.runtime.account_vault import AccountVault
+        AccountVault.wipe_file(path)
+        with protection.transaction() as (state, _):
+            state['instances'][identity]['legacy'] = False
+    return key
 
 
 def binding_key(instance_id, key):

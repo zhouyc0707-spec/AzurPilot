@@ -47,7 +47,7 @@ AzurPilot 在执行任务时天然经过大量战斗结算与资源画面。这�
 
 - 战斗/搜索结算截图的保存（`DropRecord_SaveFolder`）与本地解析入库（SQLite `config/azurstats_local.db`）
 - 物品识别原语：`Item`/`ItemGrid`/`AmountOcr`（模板匹配 + 带上限验证的数量 OCR）——商店、委托、仓库等模块都复用这一层
-- CL1 月度统计库（`config/cl1_data.db`）的读写与旧加密数据迁移
+- CL1 月度统计库（`config/cl1_data.db`）的读写与旧数据迁移
 - 侵蚀 1 遥测提交（`Cl1DataSubmitter` → `ApiClient`）
 - 日报运行时事件采集、周期去重、LLM 文案生成与推送
 - 资源快照记录（`resource_stats`）与资源变动入口（`LogRes`）
@@ -168,15 +168,15 @@ module/log_res/
 
 ### 普通统计存储与旧密文迁移（opsi_plain.py）
 
-本 fork 默认取消上游本地统计加密。`get_vault()` 返回 `PlainStatisticsStore`：CL1 全部字段保存在 `data_json`，掉落、资源和日报事件直接保存到 SQLite 业务列，日报正文为普通文本，舰船经验为 JSON，短猫汇总为 CSV，每日数据库备份为可直接打开的 SQLite。黄币／紫币全部历史点、月初残留、未知扩展字段、委托科研数据、分类导出及图表保存继续保留。登录、游戏账号保险库、交易身份与传输认证使用各自原有保护，不通过此存储服务。
+上游与本 fork 均已取消本地统计加密；本 fork 保留普通业务列与更严格的无损迁移。`get_vault()` 返回 `PlainStatisticsStore`：CL1 全部字段保存在 `data_json`，掉落、资源和日报事件直接保存到 SQLite 业务列，日报正文为普通文本，舰船经验为 JSON，短猫汇总为 CSV，每日数据库备份为可直接打开的 SQLite。黄币／紫币全部历史点、月初残留、未知扩展字段、委托科研数据、分类导出及图表保存继续保留。登录、游戏账号保险库、交易身份与传输认证使用各自原有保护，不通过此存储服务。
 
-正常读写保留 `StoreCoordinator` 的线程／进程协调锁、`BEGIN IMMEDIATE` 的读改写事务、异常回滚和原子文件替换；不解封 OS 凭据、调用 Broker、维护加密校验链或启动深检查线程。CL1 缓存仍按数据库签名与 TTL 失效，`include_opsi=False` 的资源查询优化保留。旧密文列仅为格式兼容存在，普通写入保持 NULL；不得将 `seal()` 改成返回伪密文。
+正常读写保留 `StoreCoordinator` 的线程／进程协调锁、`BEGIN IMMEDIATE` 的读改写事务、异常回滚和原子文件替换；不解封 OS 凭据、调用 Broker、维护加密校验链或启动深检查线程。CL1 缓存仍按数据库签名与 TTL 失效，`include_opsi=False` 的资源查询优化保留。载荷列保留格式兼容，默认普通写入保持 NULL。上游 `secure_json`／`secure_payload`／`opsi_payload` 中的明文 JSON 也可读取：通过 `decode_record()` 合并到业务列或完整 `data_json`，保留所有原始点、未知普通字段和扩展字段；不需要 OS 凭据。`decode_text()` 兼容普通日报正文，`decode_file_payload()` 兼容旧包装与明文对象；不得将 `seal()` 改成返回伪密文。
 
-每个进程首次使用时检查现有数据库、统计文件和每日归档。发现 V2、V1 或早期 CL1 AES 时，在原安装环境使用原凭据只读解密：核对已有描述／链／文件摘要及逐条认证，在 `config/opsi_secure/plaintext-backup-<时间>-<标识>/original/` 保存原件，在 `plain/` 生成普通格式并逐行回读验证。所有副本通过后才发布；密文归档解封后若仍含 V1／V2 业务列，继续还原这些列；不含这些载荷的既有 SQLite 归档保持原始字节，其中早期 AES 行也原样保留。混合归档中的早期 AES 原件不删改；正在使用的库则必须完整迁移成功才允许写入。只移除已登记的加密链与计数器元数据，保留业务表、记录、主键、其他触发器和列，转换不触发业务触发器。
+每个进程首次使用时检查现有数据库、统计文件和每日归档。发现 V2、V1 或早期 CL1 AES 时，按旧描述恢复原凭据只读解密（Windows／Linux 支持按安装标识找回跨目录旧状态，macOS 保留登录钥匙串与旧数据保护钥匙串读取，容器从旧 `state.json` 读取；找回的状态仅用于内存读取，不写入新安装槽）：核对已有描述／链／文件摘要及逐条认证，在 `config/opsi_secure/plaintext-backup-<时间>-<标识>/original/` 保存原件，在 `plain/` 生成普通格式并逐行回读验证。所有副本通过后才发布；密文归档解封后若仍含 V1／V2 业务列，继续还原这些列；不含这些载荷的既有 SQLite 归档保持原始字节，其中早期 AES 行也原样保留。混合归档中的早期 AES 原件不删改；正在使用的库则必须完整迁移成功才允许写入。只移除已登记的加密链与计数器元数据，保留业务表、记录、主键、其他触发器和列，转换不触发业务触发器。
 
-`plaintext-transition.json` 记录待发布批次；发布失败或进程中断后恢复全部原件，再尝试迁移。完成记录写入 `plaintext.json`。失败时保留原件与旧凭据、阻止覆盖，不以零值或删除历史继续迁移；凭据离线可重试，损坏密文、未知旧 AES 密钥、旧加密迁移／提交未完成等需要先恢复可读的源状态。已冻结的旧存储也不能绕过认证。迁移备份不参与每日备份的过期清理，旧 OS 凭据不删除；新每日备份无需复制旧加密描述或迁移状态。
+`plaintext-transition.json` 记录待发布批次；发布失败或进程中断后恢复全部原件，再尝试迁移。完成记录写入 `plaintext.json`。失败时保留原件与旧凭据、阻止覆盖，不以零值或删除历史继续迁移；凭据离线可重试，损坏密文、未知旧 AES 密钥、旧加密迁移／提交未完成等需要先恢复可读的源状态。已冻结的旧存储也不能绕过认证。进程首次检查完成后若外部重新放入旧载荷，CL1 的增量修改与显式整月保存、统计文件替换、日报正文更新都检查原载荷；密文、损坏 JSON 或早期 AES 尚未完整迁移时拒绝覆盖，并让后续就绪检查重新扫描。迁移备份不参与每日备份的过期清理，旧 OS 凭据不删除；新每日备份无需复制旧加密描述或迁移状态。
 
-升级前停掉全部 GUI 与统计写者；迁移完成后普通统计可随目录复制，不再依赖原设备／账户凭据。保留的 `opsi_secure.Vault`、`opsi_keys` 和 Broker 仅供旧格式兼容与隔离测试使用。若回退到加密版本，先保留迁移后的新增统计，再按同一批次恢复 `original/`、旧描述和仍保留的原凭据；不能将普通新数据直接交给旧 V2 代码。备份和回退流程见 [本次交付记录](../../merges/2026-10-05-plain-statistics.md)。
+启动钩子 `initialize(timeout=30)` 有界等待同一后台迁移线程；并发调用复用该线程，超时返回后原读写入口仍须取得协调锁并确认迁移成功。旧加密目录迁移前应停止全部写者；迁移完成后普通统计可随目录复制，不再依赖原设备／账户凭据。保留的 `opsi_secure.Vault`、`opsi_keys` 和 Broker 仅供旧格式兼容与隔离测试使用。`provider_for_descriptor("host-broker")` 仅对旧描述显式选择 Broker，`dev_tools.opsi_host_broker` 提供原有已配置宿主服务的迁移兼容入口；正常 `get_provider()` 与普通存储不因 Broker 环境变量自动启用宿主服务。若回退到加密版本，先保留迁移后的新增统计，再按同一批次恢复 `original/`、旧描述和仍保留的原凭据；不能将普通新数据直接交给旧 V2 代码。备份和回退流程见 [本次交付记录](../../merges/2026-10-05-plain-statistics.md)。
 
 ### CL1 月度库（cl1_database.py）
 
@@ -194,7 +194,7 @@ module/log_res/
 | `commission_income_entries` / `running_gem_commissions` | 委托收益明细（上限 5000）与运行中钻石委托（跨月合并） |
 | `research_drop_entries` | 科研掉落明细：项目代号、期数、物品（上限 5000，imgid 去重） |
 
-关键机制：`_stats_transaction()` 用 `BEGIN IMMEDIATE` 取写锁，跨线程/进程串行化整个「读-改-写」，避免并发覆盖；`save_stats` 只做整体替换，增量修改必须走事务内方法。旧版 device_id 派生密钥的历史行与 V1 载荷由 Vault 合法读取，在内存中直接转换为最终 XChaCha20-Poly1305 格式，回读验证后发布；失败保留旧格式原件。
+关键机制：`_stats_transaction()` 用 `BEGIN IMMEDIATE` 取写锁，跨线程/进程串行化整个「读-改-写」，避免并发覆盖；`save_stats` 只做整体替换，增量修改必须走事务内方法。旧版 device_id 派生密钥的历史行可在读取时解码；可选维护写入失败仍返回已成功读取的内容。旧 V1／V2 与上游明文载荷在安全副本中归并为完整普通业务字段，全部验证通过后才发布。
 
 本地定制要求保留近七天、本月曲线的原始精度。凭证历史补齐与新快照写入默认关闭有损抽稀；上游算法仅在离线调用显式传入 `enabled=True` 时使用。月初紫币沿用上月读数时，历史修正及新采集都将原始记录存入同月残留档案，保留上游显示修正且不丢数据。读写缓存、列式传输及绘图优化照常启用。
 
@@ -453,7 +453,7 @@ record_siren_research_device(self)          # opsi_runtime 内部决定来源与
 
 ## 19. 调试方法
 
-- 日志前缀：`[统计-物品]`（识别修正）、`[统计-资源]`、`[统计-经验]`、`[统计-大世界]`（运行期事件）、`[日报]`（日报全链路）、`[掉落记录]`（清理）、`[基础-API]`（遥测提交）。`logger.attr('CL1单轮耗时', ...)` 等属性行适合 grep 单轮耗时。
+- 日志前缀：`[统计-物品]`（识别修正）、`[统计-资源]`、`[统计-经验]`、`[统计-大世界]`（运行期事件）、`[统计-解密]`（旧加密数据自动解密）、`[日报]`（日报全链路）、`[掉落记录]`（清理）、`[基础-API]`（遥测提交）。`logger.attr('CL1单轮耗时', ...)` 等属性行适合 grep 单轮耗时。
 - 本地调试服务：`ALAS_DEBUG_SERVER=1` 启动调度器后，`module/debug/commission_debug.py` 可以不开游戏注入伪造委托收益并触发推送，验证统计口径与推送链路。
 - 测试：`tests/test_statistics_amount_digits.py` / `test_item_amount_area.py`（真实数量切片、严格上限、裁剪边界与单格失败保留其余物品）、`tests/test_statistics_transactions.py`（CL1 事务与并发）、`tests/test_daily_summary*.py`（日报窗口与聚合）、`tests/test_drop_cleanup.py`（清理与 `AzurStats.new` 节流）、`tests/test_archive.py`（删除/拷贝/压缩三种过期处理方式）、`tests/test_commission_settlement.py`、`tests/test_research_stats.py` / `test_research_drop.py` / `test_research_drop_repair.py`（科研口径、角标识别与记录订正）。
 - 数据核查入口：直接用 sqlite3 打开 `config/cl1_data.db`（明文 JSON）、`config/azurstats_local.db`、`config/daily_summary.db`； farming 汇总看 `log/azurstat_meowofficer_farming.csv`。科研记录里出现「当前 `assets/stats/research_items/` 与名称表都没有的模板名」基本就是模板改名残留，用 `dev_tools/research_drop_repair.py` 拿原截图重放订正。

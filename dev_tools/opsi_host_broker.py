@@ -1,4 +1,4 @@
-"""宿主统计运行服务；只接受已登记客户端的双向认证连接。"""
+"""旧统计格式兼容宿主服务；仅用于迁移已有 Broker 密文。"""
 from __future__ import annotations
 
 import argparse

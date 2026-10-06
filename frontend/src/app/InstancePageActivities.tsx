@@ -1,6 +1,6 @@
 /** 保留当前实例的总览外壳与交易终端，隐藏时暂停副作用，恢复时沿用页面状态。 */
 import { Activity, lazy, Suspense, useState, type ReactNode } from 'react'
-import { Loading } from '../components/ui'
+import { StockExchangeBoundary, StockExchangeFallback } from '../stock/OverviewLink'
 
 const StockExchange = lazy(() => import('../pages/StockExchange').then(module => ({default: module.StockExchange})))
 
@@ -16,7 +16,7 @@ export function InstancePageActivities({exchange, exchangeReady, children}: {
     <Activity name="实例工作区" mode={exchange ? 'hidden' : 'visible'}>{children}</Activity>
     {visitedExchange && <Activity name="茗喵证券交易所" mode={exchange ? 'visible' : 'hidden'}>
       <div className="stock-exchange-shell"><div id="stock-main-content" role="main" tabIndex={-1}>
-        {exchangeReady ? <Suspense fallback={<Loading/>}><StockExchange/></Suspense> : <Loading/>}
+        <StockExchangeBoundary>{exchangeReady ? <Suspense fallback={<StockExchangeFallback/>}><StockExchange/></Suspense> : <StockExchangeFallback/>}</StockExchangeBoundary>
       </div></div>
     </Activity>}
   </>

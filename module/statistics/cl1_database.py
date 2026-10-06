@@ -445,14 +445,24 @@ class Cl1Database:
                 row = cursor.fetchone()
                 if row:
                     data = self._deserialize_data(row[0])
-                    if data is None and row[1] and isinstance(data := self._decrypt(row[1]), dict):
+                    decoded = False
+                    if data is None and row[1]:
+                        data = self._decrypt(row[1])
+                        decoded = isinstance(data, dict)
+                    if decoded:
                         try:
                             with self._stats_transaction() as write_conn:
-                                data = self._get_stats_in_connection(write_conn, instance, month)
-                                self._save_stats_in_connection(write_conn, instance, month, data)
+                                merged = self._get_stats_in_connection(write_conn, instance, month)
+                                self._save_stats_in_connection(write_conn, instance, month, merged)
+                                data = merged
                         except Exception:
                             # 迁移只是读取时的可选维护，保存失败仍返回已经读取还原的数据。
                             logger.warning(f"[Statistics] 旧数据迁移未落盘: {instance} {month}")
+                            if row[2]:
+                                data = self._merge_secure_part(data, row[2], month, instance)
+                        # 展示路径不需要保留降级标记。
+                        data.pop(opsi_secure.MISSING_MARKER, None)
+                        return data
                     if isinstance(data, dict):
                         data = self._merge_secure_part(data, row[2], month, instance)
                         if self._read_cache_enabled and readable and not data.get(opsi_secure.MISSING_MARKER):
@@ -804,6 +814,14 @@ class Cl1Database:
     def _save_stats_in_connection(self, conn, instance, month, data):
         """在已协调的事务内保存单个月份；不可用时由事务完整回滚。"""
         vault = opsi_secure.get_vault()
+        if not vault.encrypted:
+            stored = conn.execute('SELECT secure_json,encrypted_blob FROM cl1_data WHERE instance=? AND month=?',
+                                  (instance, month)).fetchone()
+            if stored and (stored[1] or (stored[0] and (
+                    opsi_secure.is_ciphertext(stored[0]) or opsi_secure.decode_record('cl1', stored[0]) is None))):
+                # 首次迁移后外部放入旧载荷时，显式整体保存也不能覆盖原件。
+                vault._checked = False
+                raise opsi_secure.StoreUnavailable('现有统计载荷未完整迁移，保留原件并拒绝覆盖')
         if data.pop(opsi_secure.MISSING_MARKER, False):
             raise opsi_secure.VaultLocked('统计快照暂不可用')
         public, blob = data, None
@@ -834,7 +852,7 @@ class Cl1Database:
                 defaults = self._empty_data(month)
                 return dict(public, **{key: defaults[key] for key in opsi_secure.CL1_SECURE_FIELDS if key in defaults})
             return data
-        secure = opsi_secure.get_vault().open_or_none('cl1', secure_json, opsi_secure.row_context('cl1', {'instance': instance, 'month': month}))
+        secure = opsi_secure.decode_record('cl1', secure_json, opsi_secure.row_context('cl1', {'instance': instance, 'month': month}))
         if secure is not None:
             return {**data, **secure}
         defaults = self._empty_data(month)

@@ -196,7 +196,7 @@ export function App() {
   useEffect(() => { setMobileOpen(false); setRailOpen(false) }, [location.pathname])
   useEffect(() => {
     if (connection !== 'ready') return
-    const topics: Array<'instances' | 'overview' | 'logs' | 'preview' | 'emulator'> = instance && !stockExchange ? ['instances', 'overview', 'logs'] : ['instances']
+    const topics: Array<'instances' | 'overview' | 'logs' | 'preview' | 'emulator' | 'stock'> = instance ? stockExchange ? ['instances', 'stock'] : ['instances', 'overview', 'logs'] : ['instances']
     if (instance && !stockExchange && previewEnabled) topics.push('preview')
     if (instance && showEmulatorStatus) topics.push('emulator')
     void api.request('events.subscribe', {instance: instance ?? null, topics}).catch(error => notify(error.message, true))

@@ -343,7 +343,7 @@ class AzurStats:
             blob = row.pop('secure_payload', None)
             if not blob:
                 continue
-            payload = vault.open_or_none('loot', blob, opsi_secure.row_context('loot', row))
+            payload = opsi_secure.decode_record('loot', blob, opsi_secure.row_context('loot', row))
             if payload:
                 row.update(payload)
         return rows

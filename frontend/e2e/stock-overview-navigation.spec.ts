@@ -40,6 +40,7 @@ async function isolatedExchange(page: Page) {
     let data: unknown
     if (path === '/meta') data = meta
     else if (path === '/market') data = {...market, stocks: [currentStock]}
+    else if (path === '/orders') data = []
     else if (path === '/account') {
       data = {
         player: {id: 1, username: `验收账号-${instance}`, identityCode: 'TEST', joinedAt: quote.observedAt,
@@ -81,6 +82,9 @@ async function isolatedExchange(page: Page) {
       if (request.method.startsWith('stock.')) {
         const result = stockResult(request)
         deliver('stock', () => socket.send(JSON.stringify({v: 1, type: 'response', id: request.id, ok: true, result})))
+      } else if (request.method === 'events.subscribe' && request.params.topics?.includes('stock')) {
+        // 股票事件由本夹具发送，不让隔离 Python 后端连接公网交易所。
+        server.send(JSON.stringify({...request, params: {...request.params, topics: request.params.topics.filter(topic => topic !== 'stock')}}))
       } else server.send(raw)
     })
     server.onMessage(raw => {
@@ -104,6 +108,10 @@ async function isolatedExchange(page: Page) {
   return {
     gate, requests, errors, sockets,
     count: (method: string) => requests.filter(request => request.method === method).length,
+    notifyStock() {
+      for (const socket of sockets) socket.send(JSON.stringify({v: 1, type: 'event', topic: 'stock', seq: requests.length + 1000,
+        data: {instance: requests.filter(request => request.method === 'stock.status').at(-1)?.params.instance}}))
+    },
     release(kind: 'overview' | 'stock') {
       gate[kind] = false
       const ready = held.filter(item => item.kind === kind)
@@ -130,7 +138,8 @@ for (const theme of ['light', 'legacy-light', 'extreme']) {
     await page.clock.install()
     await page.goto('/#/i/testpilot/overview')
     const resources = page.locator('#main-content .resource-grid')
-    await expect(resources.getByText('14,200', {exact: true})).toBeVisible()
+    // 首次访问包含后端模块冷加载；缓存恢复仍使用下方的一秒硬性验收。
+    await expect(resources.getByText('14,200', {exact: true})).toBeVisible({timeout: 15000})
     await resources.evaluate(element => element.setAttribute('data-test-cache', 'overview'))
     await page.getByRole('button', {name: '展开日志筛选', exact: true}).click()
     const search = page.getByRole('textbox', {name: '搜索日志', exact: true})
@@ -179,7 +188,7 @@ for (const theme of ['light', 'legacy-light', 'extreme']) {
     await page.clock.fastForward(7000)
     expect(fixture.count('overview.get')).toBe(hiddenOverview)
     expect(fixture.count('statistics.legacy')).toBe(hiddenStatistics)
-    expect(fixture.requests.filter(request => request.method === 'events.subscribe').at(-1)?.params.topics).toEqual(['instances'])
+    expect(fixture.requests.filter(request => request.method === 'events.subscribe').at(-1)?.params.topics).toEqual(['instances', 'stock'])
     await expect(page.locator('#main-content')).toHaveCount(1)
     await expect(page.locator('#stock-main-content')).toHaveCount(1)
     await expect(page.locator('#main-content')).toBeHidden()
@@ -218,7 +227,7 @@ test('旧版内嵌统计往返保留图表与选择，截图订阅随可见页�
   await expect.poll(() => fixture.requests.filter(request => request.method === 'events.subscribe').at(-1)?.params.topics).toContain('preview')
   await page.locator('.primary-nav').getByRole('link', {name: '茗喵证券交易所', exact: true}).click()
   await expect(page.locator('.exchange')).toBeVisible()
-  await expect.poll(() => fixture.requests.filter(request => request.method === 'events.subscribe').at(-1)?.params.topics).toEqual(['instances'])
+  await expect.poll(() => fixture.requests.filter(request => request.method === 'events.subscribe').at(-1)?.params.topics).toEqual(['instances', 'stock'])
   await page.getByRole('link', {name: '返回总览', exact: true}).click()
   await expect(page.getByRole('tab', {name: '截图', exact: true})).toHaveAttribute('aria-selected', 'true')
   await expect.poll(() => fixture.requests.filter(request => request.method === 'events.subscribe').at(-1)?.params.topics).toContain('preview')
@@ -322,15 +331,17 @@ test('上游涨跌幅使用开盘价，退市股票禁止委托，缺少开盘�
   await page.getByRole('button', {name: '日K', exact: true}).click()
   await expect(page.locator('.stock-detail-price')).toContainText('-4.76%')
   fixture.gate.delisted = true
-  await page.clock.fastForward(16000)
+  fixture.notifyStock()
   await expect(page.locator('.stock-detail-quote')).toContainText('本月已退市')
   await page.getByRole('button', {name: '返回市场', exact: true}).click()
+  await page.locator('.watchlist summary').click()
+  await page.getByLabel('上市状态').selectOption('all')
   await expect(page.locator('.stock-row')).toContainText('退市')
   await expect(page.getByRole('button', {name: '提交买入委托', exact: true})).toBeDisabled()
   await expect(page.locator('.ticket-warning')).toContainText('股票本月已退市')
   fixture.gate.open = 0
   fixture.gate.delisted = false
-  await page.clock.fastForward(16000)
+  fixture.notifyStock()
   await expect(page.locator('.stock-row').getByText('—', {exact: true})).toBeVisible()
   await expect(page.getByRole('button', {name: '提交买入委托', exact: true})).toBeEnabled()
   expect(fixture.errors).toEqual([])

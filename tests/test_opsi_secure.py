@@ -800,3 +800,13 @@ def make_loot_db(path):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def seal_v2(key, kind, obj, context, installation_id):
+    """测试侧的 V2 封装：与已删除的写入器同格式（冻结的旧世界格式）。"""
+    from Crypto.Cipher import ChaCha20_Poly1305
+    aad = dict(context, schema=2, algorithm=opsi_secure.ALGORITHM, installation_id=installation_id)
+    cipher = ChaCha20_Poly1305.new(key=opsi_secure._subkey(key, 'opsi-stats/v2/' + kind), nonce=os.urandom(24))
+    cipher.update(opsi_secure.canonical(aad))
+    raw, tag = cipher.encrypt_and_digest(opsi_secure.canonical(obj))
+    return opsi_secure.BLOB_PREFIX + base64.b64encode(cipher.nonce + raw + tag).decode()

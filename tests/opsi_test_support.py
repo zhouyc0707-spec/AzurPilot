@@ -16,3 +16,15 @@ def install_vault(case, folder):
     opsi_secure.set_vault(vault)
     case.addCleanup(opsi_secure.set_vault, previous)
     return vault
+
+
+def install_store(case, folder):
+    root = Path(folder).resolve()
+    if not root.is_relative_to(Path(tempfile.gettempdir()).resolve()):
+        raise RuntimeError('测试目录未隔离')
+    (root / 'config').mkdir(exist_ok=True)
+    previous = opsi_secure._VAULT
+    store = opsi_secure.StatsStore(root)
+    opsi_secure.set_store(store)
+    case.addCleanup(opsi_secure.set_vault, previous)
+    return store

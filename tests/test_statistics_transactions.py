@@ -16,8 +16,7 @@ from Crypto.Cipher import AES
 
 from module.statistics import cl1_database as database
 from module.statistics import opsi_secure
-from module.statistics.opsi_keys import WindowsProvider
-from tests.opsi_test_support import install_vault
+from tests.opsi_test_support import install_vault, install_store
 import sys
 
 
@@ -63,7 +62,7 @@ def process_writer(path, started, finished):
     root = Path(path).parent.parent
     if not root.is_relative_to(Path(tempfile.gettempdir())):
         raise RuntimeError('测试目录未隔离')
-    opsi_secure.set_vault(opsi_secure.Vault(root, provider=WindowsProvider(), deep_check=False))
+    opsi_secure.set_store(opsi_secure.StatsStore(root))
     started.set()
     connect = sqlite3.connect
 
@@ -83,10 +82,8 @@ class TestStatisticsTransactions(unittest.TestCase):
     def setUp(self):
         directory = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.addCleanup(directory.cleanup)
-        self.vault = install_vault(self, directory.name)
-        if self._testMethodName == "test_independent_process_waits_and_preserves_both_metrics" and sys.platform == "win32":
-            self.vault.provider = WindowsProvider()
-            self.addCleanup(self.vault.provider.delete, self.vault.slot)
+        installer = install_store if self._testMethodName == "test_independent_process_waits_and_preserves_both_metrics" else install_vault
+        self.vault = installer(self, directory.name)
         self.path = Path(directory.name) / "config" / "cl1_data.db"
         with patch.object(database.Cl1Database, "_get_legacy_decryption_keys", return_value=[]):
             self.db = database.Cl1Database(self.path)

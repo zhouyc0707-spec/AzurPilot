@@ -30,9 +30,16 @@ class MeowfficerTargetZoneMixin:
     def _meow_target_zone_tokens(self):
         """解析耄耋相接指定海域输入，保留原始顺序用于后续校验。
 
+        智能调度月末清理代跑时经 ``_meow_target_zone_override`` 传入调度层
+        已解析好的单个海域，直接覆盖用户配置的指定海域。
+
         Returns:
             list[str | int]: 分割后的海域标识字符串或整数列表。
         """
+        override = getattr(self, '_meow_target_zone_override', None)
+        if override is not None:
+            return [override.zone_id]
+
         target_zone = self.config.OpsiMeowfficerFarming_TargetZone
         if target_zone is None:
             return []

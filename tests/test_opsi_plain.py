@@ -6,6 +6,8 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from contextlib import closing
 from datetime import datetime, timedelta
@@ -432,3 +434,161 @@ for _ in range(20):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class UpstreamPlainCompatibility(unittest.TestCase):
+    """上游普通 JSON 载荷与本地普通业务列/安全迁移的融合回归。"""
+
+    setUp = PlainStatisticsCase.setUp
+    sql = PlainStatisticsCase.sql
+    configure_encrypted = PlainStatisticsCase.configure_encrypted
+
+    def test_plain_payload_and_business_columns_merge_without_credentials(self):
+        full = make_cl1_db(self.cl1)
+        full['custom_extension'] = {'keep': [1, 2, 3]}
+        with closing(sqlite3.connect(self.cl1)) as conn, conn:
+            conn.execute('ALTER TABLE cl1_data ADD COLUMN secure_json TEXT')
+            conn.execute('UPDATE cl1_data SET data_json=?,secure_json=?',
+                         (canonical(full).decode(), canonical({'battle_count': 137, 'coins_month_start_residue': {'yellow': 7}}).decode()))
+        with patch.object(self.provider, 'load', side_effect=AssertionError('普通 JSON 不应访问凭据')):
+            self.assertTrue(self.store.ensure_ready())
+            restored = Cl1Database(self.cl1).get_stats('inst', '2026-09')
+        self.assertEqual(restored['battle_count'], 137)
+        self.assertEqual(restored['custom_extension'], {'keep': [1, 2, 3]})
+        self.assertEqual(restored['coins_month_start_residue'], {'yellow': 7})
+        self.assertEqual(self.sql(self.cl1, 'SELECT secure_json FROM cl1_data'), [(None,)])
+
+    def test_plain_resource_payload_restores_all_original_points(self):
+        resource_stats._ensure_table()
+        now = datetime.now().isoformat()
+        with closing(sqlite3.connect(self.local)) as conn, conn:
+            for i in range(11):
+                conn.execute('INSERT INTO resource_snapshots(instance,ts,oil,action_point,yellow_coin,purple_coin,opsi_payload) '
+                             'VALUES (?,?,?,?,?,?,?)', ('inst', now, i, None, None, None,
+                             canonical({'action_point': 31+i, 'yellow_coin': 97+i, 'purple_coin': 11+i}).decode()))
+        self.assertTrue(self.store.ensure_ready())
+        rows = self.sql(self.local, 'SELECT oil,action_point,yellow_coin,purple_coin,opsi_payload FROM resource_snapshots ORDER BY id')
+        self.assertEqual(len(rows), 11)
+        self.assertEqual(rows[-1], (10, 41, 107, 21, None))
+
+    def test_cross_directory_credential_recovery_is_read_only(self):
+        self.configure_encrypted()
+        old_states = json.loads(json.dumps(self.provider.states))
+        moved = self.root / 'relocated'
+        moved.mkdir()
+        shutil.copytree(self.root / 'config', moved / 'config')
+        shutil.copytree(self.root / 'log', moved / 'log')
+        shutil.copytree(self.root / 'AzurPilot_Data_Backup', moved / 'AzurPilot_Data_Backup')
+        saved = next(iter(old_states.values()))
+        with patch.object(self.provider, 'load_any', return_value=saved) as lookup:
+            relocated = PlainStatisticsStore(moved, provider=self.provider)
+            self.assertTrue(relocated.ensure_ready())
+        self.assertTrue(lookup.called)
+        self.assertEqual(self.provider.states, old_states)
+        self.assertTrue((moved / 'config' / 'opsi_secure' / 'keyring.json').exists())
+        data = json.loads(self.sql(moved / 'config' / 'cl1_data.db', 'SELECT data_json FROM cl1_data')[0][0])
+        self.assertEqual(data, self.full)
+
+    def test_unreadable_plain_payload_never_overwrites_original(self):
+        make_cl1_db(self.cl1)
+        with closing(sqlite3.connect(self.cl1)) as conn, conn:
+            conn.execute('ALTER TABLE cl1_data ADD COLUMN secure_json TEXT')
+            conn.execute('UPDATE cl1_data SET secure_json=?', ('{damaged',))
+        before = self.cl1.read_bytes()
+        self.assertFalse(self.store.ensure_ready())
+        with self.assertRaises(opsi_secure.StoreUnavailable):
+            Cl1Database(self.cl1).increment_battle_count('inst', 1)
+        self.assertEqual(self.cl1.read_bytes(), before)
+
+    def test_unified_decoders_accept_plaintext_and_legacy_wrapper(self):
+        self.assertEqual(opsi_secure.decode_record('cl1', '{"battle_count":9}'), {'battle_count': 9})
+        self.assertEqual(opsi_secure.decode_file_payload('ships', self.ship,
+                         {opsi_secure.WRAPPER_KEY: True, 'payload': {'custom': 7}}), {'custom': 7})
+        self.assertIsNone(opsi_secure.decode_record('cl1', '{damaged'))
+        self.assertEqual(opsi_secure.decode_text('普通日报'), '普通日报')
+
+    def test_initialize_is_bounded_and_concurrent_calls_share_worker(self):
+        start = threading.Event()
+        release = threading.Event()
+        calls = []
+
+        def wait_for_migration():
+            calls.append(True)
+            start.set()
+            release.wait(3)
+            return True
+
+        with patch.object(self.store, 'ensure_ready', side_effect=wait_for_migration), \
+                patch.object(opsi_secure, '_INIT_THREAD', None), \
+                patch.object(opsi_secure, '_INIT_DONE', None), \
+                patch.object(opsi_secure, '_INIT_ROOT', None):
+            before = time.monotonic()
+            self.assertFalse(opsi_secure.initialize(timeout=0.02))
+            self.assertLess(time.monotonic() - before, 1.0)
+            self.assertTrue(start.wait(1))
+            threads = [threading.Thread(target=lambda: opsi_secure.initialize(timeout=0.02)) for _ in range(7)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(1)
+            self.assertEqual(len(calls), 1)
+            release.set()
+            self.assertTrue(opsi_secure.initialize(timeout=1))
+
+    def test_unified_plain_write_keeps_csv_and_long_path_semantics(self):
+        csv = 'a,b\n1,2\n'
+        opsi_secure.write_file('loot', self.csv, csv)
+        self.assertEqual(self.csv.read_text(encoding='utf-8'), csv)
+        self.assertTrue((self.root / 'config' / 'opsi_secure' / 'plaintext.json').exists())
+        self.assertEqual(self.provider.states, {})
+
+
+    def test_late_unreadable_payload_blocks_explicit_save_and_increment(self):
+        database = Cl1Database(self.cl1)
+        database.increment_battle_count('inst', 3)
+        self.assertTrue(self.store._checked)
+        month = datetime.now().strftime('%Y-%m')
+        for value in ('OPSIV2.XCHACHA20-POLY1305.corrupt', '{damaged'):
+            with self.subTest(value=value):
+                self.store._checked = True
+                with closing(sqlite3.connect(self.cl1)) as conn, conn:
+                    conn.execute('UPDATE cl1_data SET secure_json=?', (value,))
+                original = self.sql(self.cl1, 'SELECT data_json,secure_json,encrypted_blob FROM cl1_data')
+                displayed = database.get_stats('inst', month)
+                with self.assertRaises(opsi_secure.StoreUnavailable):
+                    database.save_stats('inst', month, displayed)
+                self.assertEqual(self.sql(self.cl1, 'SELECT data_json,secure_json,encrypted_blob FROM cl1_data'), original)
+                with self.assertRaises(opsi_secure.StoreUnavailable):
+                    database.increment_battle_count('inst', 1)
+                self.assertEqual(self.sql(self.cl1, 'SELECT data_json,secure_json,encrypted_blob FROM cl1_data'), original)
+
+    def test_late_legacy_aes_blocks_explicit_save(self):
+        database = Cl1Database(self.cl1)
+        database.increment_battle_count('inst', 3)
+        month = datetime.now().strftime('%Y-%m')
+        with closing(sqlite3.connect(self.cl1)) as conn, conn:
+            conn.execute('UPDATE cl1_data SET encrypted_blob=?,data_json=NULL', (b'opaque AES source',))
+        original = self.sql(self.cl1, 'SELECT data_json,secure_json,encrypted_blob FROM cl1_data')
+        with self.assertRaises(opsi_secure.StoreUnavailable):
+            database.save_stats('inst', month, {'battle_count': 0})
+        self.assertEqual(self.sql(self.cl1, 'SELECT data_json,secure_json,encrypted_blob FROM cl1_data'), original)
+
+    def test_late_cipher_file_is_not_overwritten(self):
+        self.assertTrue(self.store.ensure_ready())
+        original = canonical({opsi_secure.WRAPPER_KEY: True, 'payload': 'OPSIV2.XCHACHA20-POLY1305.corrupt'})
+        self.ship.write_bytes(original)
+        with self.assertRaises(opsi_secure.StoreUnavailable):
+            opsi_secure.write_file('ships', self.ship, {'replacement': 0})
+        self.assertEqual(self.ship.read_bytes(), original)
+
+    def test_late_cipher_report_is_not_overwritten(self):
+        summary = DailySummaryStore(self.root / 'config' / 'daily_summary.db')
+        now = datetime.now().replace(microsecond=0)
+        period = now.strftime('%Y-%m-%d')
+        summary.claim_period('inst', period, 'cn', now, now + timedelta(days=1))
+        original = 'OPSIV2.XCHACHA20-POLY1305.corrupt'
+        with closing(sqlite3.connect(summary.db_path)) as conn, conn:
+            conn.execute('UPDATE daily_summary_periods SET report_text=?', (original,))
+        with self.assertRaises(opsi_secure.StoreUnavailable):
+            summary.update_period('inst', period, 'sent', report_text='替换正文')
+        self.assertEqual(self.sql(summary.db_path, 'SELECT report_text FROM daily_summary_periods'), [(original,)])

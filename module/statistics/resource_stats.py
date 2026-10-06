@@ -94,7 +94,7 @@ def _overlay_opsi_snapshot(row: Dict[str, Any]) -> Dict[str, Any]:
         if not opsi_secure.get_vault().legacy_plaintext_readable():
             row.update({field: None for field in opsi_secure.RES_SECURE_FIELDS})
         return row
-    payload = opsi_secure.get_vault().open_or_none('res', blob, opsi_secure.row_context('res', row))
+    payload = opsi_secure.decode_record('res', blob, opsi_secure.row_context('res', row))
     if payload:
         row.update(payload)
     return row

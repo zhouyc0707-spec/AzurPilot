@@ -1,4 +1,8 @@
-"""大世界统计的版本化存储运行服务。"""
+"""普通统计存储入口、上游 JSON 载荷兼容及旧加密格式的只读迁移。
+
+默认实现保留普通业务列、原始历史、原子写入与事务；旧 Vault 仅用于
+历史认证和隔离兼容夹具。迁移保留原件和凭据，失败不覆盖统计。
+"""
 from __future__ import annotations
 import base64
 import csv
@@ -35,7 +39,7 @@ CL1_SECURE_FIELDS = frozenset({
     'coins_snapshots',
     'coins_history_version',
     'coins_cleanup_version',
-    # 本地保留的月初残留也包含凭证原始值，必须与显示序列一起加密。
+    # 旧格式迁移时月初残留属于同一统计载荷；普通模式完整保留业务字段。
     'coins_month_start_residue',
     'meow_battle_raw_count',
     'meow_battle_count',
@@ -115,7 +119,7 @@ class IntegrityFailure(VaultError):
     pass
 
 
-class RecordTampered(IntegrityFailure):
+class RecordTampered(IntegrityFailure, ValueError):
     """记录级认证失败：本环境内的密文被库外改动或替换（读取路径的篡改信号）。"""
 
 
@@ -1592,3 +1596,415 @@ def checked_read(function):
             # 迁移占用文件锁时沿用只读降级，不把暂时忙碌误判为统计损坏。
             return function(*args, **kwargs)
     return read
+
+
+# 上游统一载荷接口。默认写入仍使用普通业务列；旧格式只在兼容读取时访问凭据。
+from module.statistics.opsi_keys import ContainerFileProvider, installation_slot, provider_for_descriptor
+
+MIGRATION_LOCK_TIMEOUT = 20.0
+DECODER_RETRY_INTERVAL = 60.0
+DATABASE_NAMES = ('cl1_data.db', 'azurstats_local.db', 'daily_summary.db')
+DATABASE_LAYOUT = (
+    ('cl1_data.db', 'cl1_data', 'secure_json', 'cl1'),
+    ('azurstats_local.db', 'opsi_items', 'secure_payload', 'loot'),
+    ('azurstats_local.db', 'resource_snapshots', 'opsi_payload', 'res'),
+    ('daily_summary.db', 'daily_summary_cl1_events', 'secure_payload', 'daily'),
+    ('daily_summary.db', 'daily_summary_periods', 'report_text', 'reports'),
+)
+StoreError = VaultError
+StoreUnavailable = VaultLocked
+_STORE = None
+
+def serialize_obj(obj):
+    """把统计载荷编码为存储文本（明文 JSON）。"""
+    return canonical(obj).decode('utf-8')
+
+
+def is_ciphertext(value):
+    """值是否为旧加密载荷（V1/V2 前缀）。"""
+    return isinstance(value, str) and value.startswith((BLOB_PREFIX, LEGACY_PREFIX))
+
+
+def report_context(instance, period):
+    month = re.search(r'\d{4}-\d{2}', period)
+    return {'dataset': 'reports', 'instance': instance, 'identity': str(period), 'period': month[0] if month else period}
+
+
+def file_context(root, kind, path, instance=None):
+    path = Path(path).resolve()
+    relative = str(path.relative_to(Path(root).resolve())).replace('\\', '/')
+    # 缓存与舰船文件覆盖多个月，逻辑周期属于整个历史集合。
+    return {'dataset': kind, 'instance': instance if instance is not None else relative,
+            'identity': relative, 'period': 'all-history'}
+
+
+def database_paths(root):
+    return [Path(root) / 'config' / name for name in DATABASE_NAMES]
+
+
+def protected_files(root):
+    """登记过的统计文件（舰船经验、月度 JSON 与 farming CSV 及其备份）。"""
+    root = Path(root)
+    files = set()
+    cl1 = root / 'log' / 'cl1'
+    for pattern in ('*/ship_exp_data.json', '*/ship_exp_data.json.bak',
+                    '*/cl1_monthly.json', '*/cl1_monthly.json.bak'):
+        files.update(cl1.glob(pattern))
+    for pattern in ('azurstat_meowofficer_farming*.csv', 'azurstat_meowofficer_farming*.csv.bak'):
+        files.update((root / 'log').glob(pattern))
+    return sorted(files)
+
+
+def _file_kind(path):
+    if 'cl1_monthly' in path.name:
+        return 'archives'
+    return 'ships' if '.json' in path.name else 'loot'
+
+
+def archive_files(root):
+    """备份目录里的受保护归档（加密时代为包装文件）。"""
+    base = Path(root) / 'AzurPilot_Data_Backup'
+    if not base.exists():
+        return []
+    result = []
+    for path in base.rglob('*'):
+        if not path.is_file():
+            continue
+        if path.name in DATABASE_NAMES or (path.parent.name == 'opsi_secure' and path.suffix == '.json'):
+            result.append(path)
+    return sorted(result)
+
+
+class _VaultKeys:
+    """旧加密环境的密钥材料（按需加载，进程内缓存）。
+
+    - V2：按描述文件恢复当时的凭据提供者并读取状态；本机按当前安装槽读不到时，
+      枚举同 installation_id 的状态找回（安装目录被移动或复制后的解密路径）。
+    - V1：描述文件自带 DPAPI 保护的本地密钥。
+    任一步失败都只记录一次并按间隔重试（进入系统后钥匙串或凭据服务可能才可用）。
+    """
+
+    def __init__(self, root):
+        self.root = Path(root).resolve()
+        self.directory = self.root / 'config' / 'opsi_secure'
+        self._tried = False
+        self._next_retry = 0.0
+        self._provider = None
+        self._state = None
+        self._slot = None
+        self._dek = None
+        self._legacy = None
+        # 最近一次尝试里出现过"暂时性"失败（凭据服务报错、描述文件读不出）：
+        # 这种环境下不能把解不开的旧载荷当作不可救，必须保留原样等重试。
+        self._blips = True
+
+    def _keyring(self):
+        try:
+            value = json.loads((self.directory / 'keyring.json').read_bytes())
+        except FileNotFoundError:
+            return None
+        except (OSError, ValueError, TypeError):
+            logger.warning('[统计-解密] 统计描述文件不可读，旧密文保持原样')
+            return None
+        return value if isinstance(value, dict) else None
+
+    def _legacy_key(self, ring):
+        """V1 描述文件里的 DPAPI 本地密钥（含完整性校验）。"""
+        try:
+            key = _dpapi(_b64d(ring['wrapped_local']), decrypt=True)
+        except Exception:
+            return None
+        payload = {k: v for k, v in ring.items() if k != 'mac'}
+        mac_key = _subkey(key, 'opsi-stats/v1/keyring-mac')
+        mac = hmac.new(mac_key, canonical(payload), hashlib.sha256).hexdigest()
+        if len(key) != 32 or not hmac.compare_digest(mac, str(ring.get('mac', ''))):
+            return None
+        return key
+
+    def _ensure(self):
+        now = time.monotonic()
+        if self._dek is not None or self._legacy is not None:
+            return
+        if self._tried and now < self._next_retry:
+            return
+        self._tried = True
+        self._next_retry = now + DECODER_RETRY_INTERVAL
+        self._blips = False
+        ring = self._keyring()
+        if ring is None and (self.directory / 'keyring.json').exists():
+            self._blips = True
+        slot = installation_slot(self.root)
+        self._slot = slot
+        if isinstance(ring, dict) and ring.get('version') == 1:
+            self._legacy = self._legacy_key(ring)
+            if self._legacy is None:
+                self._blips = True
+        provider = provider_for_descriptor(ring.get('provider') if ring else None, self.directory)
+        if provider is None:
+            if ring is not None:
+                logger.warning(f'[统计-解密] 描述文件的凭据提供者不受支持（{ring.get("provider")}），旧密文保持原样')
+            if self._legacy is None:
+                return
+        else:
+            self._provider = provider
+            try:
+                state = provider.load(slot)
+            except ProviderUnavailable:
+                state = None
+                self._blips = True
+            if state is None and isinstance(ring, dict) and ring.get('installation_id'):
+                try:
+                    state = provider.load_any(slot, ring['installation_id'])
+                except ProviderUnavailable:
+                    state = None
+                    self._blips = True
+                if state is not None:
+                    logger.warning('[统计-解密] 当前安装槽没有本机凭据，已按安装标识找回（安装目录可能被移动过）')
+            if state is None and not isinstance(provider, ContainerFileProvider):
+                # 描述文件缺失或提供者不可用时，再试数据目录内的本地文件状态。
+                container = ContainerFileProvider(self.directory / 'state.json')
+                try:
+                    state = container.load(slot)
+                except ProviderUnavailable:
+                    state = None
+                    self._blips = True
+                if state is not None:
+                    self._provider = container
+            if state is not None:
+                self._state = state
+                try:
+                    self._dek = provider.key(state)
+                except (ProviderUnavailable, ValueError, KeyError, TypeError):
+                    self._dek = None
+                    self._blips = True
+                if self._dek is None and self._provider is not provider:
+                    try:
+                        self._dek = self._provider.key(state)
+                    except (ProviderUnavailable, ValueError, KeyError, TypeError):
+                        self._dek = None
+            if self._dek is not None:
+                self._blips = False
+        if self._dek is None and self._legacy is None and (ring is not None or self._state is not None):
+            logger.warning('[统计-解密] 本机密钥暂不可用，旧密文保持原样，稍后自动重试')
+
+    def retry(self):
+        """显式重试：丢弃失败缓存后重新加载（启动解密入口使用，读取路径仍按间隔限频）。"""
+        if self._dek is None and self._legacy is None:
+            self._tried = False
+        self._ensure()
+
+    def available(self):
+        self._ensure()
+        return self._dek is not None or self._legacy is not None
+
+    def definitive(self):
+        """密钥已可用，或已确认本机不存在能解密的旧密钥（干净的未命中）。
+
+        凭据服务报错的"暂时不可用"返回 False：调用方应保留原样等重试，
+        不能把还救得回的旧载荷替换掉。
+        """
+        self._ensure()
+        return self._dek is not None or self._legacy is not None or not self._blips
+
+    def decrypt_record(self, kind, value, context):
+        """旧密文 → 载荷字典；当前不可读时返回 None。"""
+        self._ensure()
+        if value.startswith(BLOB_PREFIX):
+            if self._dek is None or not context or not self._state:
+                return None
+            aad = dict(context, schema=2, algorithm=ALGORITHM,
+                       installation_id=self._state.get('installation_id'))
+            try:
+                return json.loads(_decrypt(_subkey(self._dek, 'opsi-stats/v2/' + kind),
+                                           value[len(BLOB_PREFIX):], aad))
+            except (ValueError, TypeError, UnicodeError, VaultError):
+                return None
+        if value.startswith(LEGACY_PREFIX):
+            if self._legacy is None:
+                return None
+            try:
+                raw = _b64d(value[len(LEGACY_PREFIX):])
+                cipher = AES.new(_subkey(self._legacy, 'opsi-stats/v1/' + kind), AES.MODE_GCM, nonce=raw[:12])
+                cipher.update(('opsi-stats/v1/' + kind).encode())
+                return json.loads(cipher.decrypt_and_verify(raw[12:-16], raw[-16:]))
+            except (ValueError, TypeError, UnicodeError, VaultError):
+                return None
+        return None
+
+
+def _database_rows(conn, path):
+    """按登记位置清点库内密文行，yield (table, column, kind, rowid, value)。"""
+    tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    for name, table, column, kind in DATABASE_LAYOUT:
+        if name != Path(path).name or table not in tables:
+            continue
+        columns = [row[1] for row in conn.execute('PRAGMA table_info(' + table + ')')]
+        if column not in columns:
+            continue
+        for rowid, value in conn.execute(f'SELECT rowid, {column} FROM {table}').fetchall():
+            if is_ciphertext(value):
+                yield table, column, kind, rowid, value
+
+
+def pending_blobs(root):
+    """清点仍处于加密态的位置；返回位置描述列表，空列表表示没有密文。"""
+    root = Path(root).resolve()
+    pending = []
+    for path in database_paths(root):
+        if not path.exists():
+            continue
+        try:
+            with closing(sqlite3.connect(path.as_uri() + '?mode=ro', uri=True, timeout=5)) as conn:
+                counts = {}
+                for table, _, _, _, _ in _database_rows(conn, path):
+                    counts[table] = counts.get(table, 0) + 1
+                for table, count in sorted(counts.items()):
+                    pending.append(f'{path.name}:{table}×{count}')
+        except sqlite3.Error as exc:
+            # 读不了就不能断言"没有密文"：按待处理对待，下次再试。
+            pending.append(f'{path.name}（{type(exc).__name__}）')
+    for path in [*protected_files(root), *archive_files(root)]:
+        try:
+            with path.open('rb') as stream:
+                head = stream.read(64)
+        except OSError:
+            # 读不了就不能断言"没有密文"：按待处理对待。
+            pending.append(str(path.relative_to(root)))
+            continue
+        if head.startswith((f'{{"{LEGACY_WRAPPER_KEY}"'.encode(), f'{{"{WRAPPER_KEY}"'.encode())):
+            pending.append(str(path.relative_to(root)))
+            continue
+        try:
+            with path.open(encoding='utf-8') as stream:
+                text = stream.read(64)
+        except (OSError, UnicodeError):
+            continue
+        if text.startswith((BLOB_PREFIX, LEGACY_PREFIX)):
+            pending.append(str(path.relative_to(root)))
+    return pending
+
+
+
+def _dpapi(data, decrypt=False):
+    from module.runtime.account_local import dpapi
+    return dpapi(data, decrypt=decrypt)
+
+
+class StatsStore:
+    """上游新存储句柄入口，使用本地无损迁移和普通业务列实现。"""
+
+    def __new__(cls, root=None):
+        from module.statistics.opsi_plain import PlainStatisticsStore
+        return PlainStatisticsStore(root)
+
+
+def get_store():
+    return get_vault()
+
+
+def set_store(store):
+    global _STORE, _INIT_DONE
+    _STORE = store
+    set_vault(store)
+    _INIT_DONE = None
+
+
+def decode_record(kind, value, context=None):
+    """统一读取普通 JSON 载荷和旧密文；不可读返回 None，写端仍禁止覆盖。"""
+    if not isinstance(value, str) or not value:
+        return None
+    if is_ciphertext(value):
+        vault = get_vault()
+        if vault.encrypted:
+            return vault.open_or_none(kind, value, context)
+        return vault.vault_keys().decrypt_record(kind, value, context)
+    try:
+        data = json.loads(value)
+    except (ValueError, TypeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def decode_text(value, context=None):
+    if not isinstance(value, str) or not value:
+        return None
+    if is_ciphertext(value):
+        payload = decode_record('reports', value, context)
+        text = payload.get('text') if isinstance(payload, dict) else None
+        return text if isinstance(text, str) else None
+    return value
+
+
+def decode_file_payload(kind, path, data, root=None):
+    if not isinstance(data, dict):
+        return None
+    if not (data.get(WRAPPER_KEY) or data.get(LEGACY_WRAPPER_KEY)):
+        return data
+    payload = data.get('payload')
+    if isinstance(payload, dict):
+        return payload
+    if isinstance(payload, str):
+        try:
+            context = file_context(root or get_store().root, kind, path)
+        except ValueError:
+            return None
+        return decode_record(kind, payload, context)
+    return None
+
+
+def write_file(kind, path, data):
+    get_store().write_file(kind, path, data)
+
+
+@contextmanager
+def immediate_transaction(conn):
+    """兼容上游明文事务接口，完整提交或回滚，不生成安全状态。"""
+    conn.execute('BEGIN IMMEDIATE')
+    try:
+        yield conn
+        if conn.execute('PRAGMA foreign_keys').fetchone()[0] and conn.execute('PRAGMA foreign_key_check').fetchone():
+            raise sqlite3.IntegrityError('统计事务的延迟约束未满足')
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
+
+
+def decrypt_all():
+    """安全副本迁移入口：失败保留原件，不撤销旧凭据，不覆盖不可读记录。"""
+    store = get_store()
+    before = pending_blobs(store.root)
+    ready = store.ensure_ready()
+    return {'pending': not ready, 'decrypted': len(before) if ready else 0, 'quarantined': 0}
+
+
+_INIT_DONE = None
+_INIT_THREAD = None
+_INIT_ROOT = None
+_INIT_LOCK = threading.Lock()
+
+
+def initialize(timeout=30.0):
+    """有界等待安全迁移；并发调用共享后台线程，超时后读写仍受迁移锁保护。"""
+    global _INIT_DONE, _INIT_THREAD, _INIT_ROOT
+    store = get_store()
+    root = store.root
+    with _INIT_LOCK:
+        if _INIT_ROOT == root and _INIT_DONE is True:
+            return True
+        if _INIT_THREAD is None or not _INIT_THREAD.is_alive():
+            _INIT_ROOT, _INIT_DONE = root, None
+
+            def worker():
+                global _INIT_DONE
+                try:
+                    _INIT_DONE = bool(store.ensure_ready())
+                except Exception:
+                    _INIT_DONE = False
+                    logger.exception('[统计-迁移] 启动迁移未完成，保留原件等待重试')
+
+            _INIT_THREAD = threading.Thread(target=worker, name='statistics-decrypt', daemon=True)
+            _INIT_THREAD.start()
+        thread = _INIT_THREAD
+    thread.join(max(0.0, timeout))
+    return _INIT_ROOT == root and _INIT_DONE is True

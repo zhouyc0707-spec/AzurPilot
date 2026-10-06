@@ -22,6 +22,7 @@ from module.statistics.opsi_secure import (
     BLOB_PREFIX, LEGACY_PREFIX, LEGACY_WRAPPER_KEY, WRAPPER_KEY,
     CHAIN_TABLE, COUNT_TABLE, LOOT_SECURE_FIELDS, RES_SECURE_FIELDS,
     SIG_LEN, Vault, VaultError, VaultLocked, row_context,
+    ProviderUnavailable,
 )
 from module.statistics.opsi_state import canonical, durable_write
 
@@ -71,6 +72,47 @@ def _row_bytes(row):
 
 class _MigrationReader(Vault):
     """只读解密器：验证失败不修改源数据、凭据或另启后台恢复线程。"""
+
+    def _provider(self):
+        if self.provider is None:
+            from module.statistics.opsi_keys import provider_for_descriptor
+            ring = self._keyring()
+            self.provider = provider_for_descriptor(ring.get('provider') if ring else None, self.directory)
+            if self.provider is None:
+                raise VaultLocked('旧凭据提供者不可用，保留原件')
+        return self.provider
+
+    def _load(self):
+        # 上游新增跨目录凭据查找；只把找回的状态映射到内存，不保存到新安装槽。
+        provider = self._provider()
+        ring = self._keyring()
+        try:
+            state = provider.load(self.slot)
+        except ProviderUnavailable:
+            # V1 可只依赖旧 DPAPI 描述；沿用旧读取分支，不能因 V2 服务离线拒绝它。
+            return super()._load()
+        if state is None and ring and ring.get('installation_id'):
+            recovered = provider.load_any(self.slot, ring['installation_id'])
+            if recovered is not None:
+                original_load = provider.load
+
+                def relocated_load(slot):
+                    return recovered if slot == self.slot else original_load(slot)
+
+                provider.load = relocated_load
+                try:
+                    return super()._load()
+                finally:
+                    provider.load = original_load
+        return super()._load()
+
+    def open_(self, kind, blob, context=None):
+        if not _encrypted_text(blob):
+            payload = json.loads(blob)
+            if not isinstance(payload, dict):
+                raise VaultLocked('普通统计载荷结构无效，保留原件')
+            return payload
+        return super().open_(kind, blob, context)
 
     def _resolve_pending(self):
         if self._state.get('pending') or self._pending_keys():
@@ -193,12 +235,27 @@ class PlainStatisticsStore(Vault):
     def seal(self, kind, obj, context=None):
         raise VaultError('普通统计存储不能生成密文')
 
+    def vault_keys(self):
+        from module.statistics.opsi_secure import _VaultKeys
+        if not hasattr(self, '_keys'):
+            self._keys = _VaultKeys(self.root)
+        return self._keys
+
     def open_(self, kind, blob, context=None):
+        if not _encrypted_text(blob):
+            value = json.loads(blob)
+            if not isinstance(value, dict):
+                raise VaultLocked('统计载荷不是对象，拒绝覆盖')
+            return value
         # 正常读写前已迁移全部载荷；遇到后放入的密文不能伪装成空统计。
         raise VaultLocked('发现未迁移的统计密文，请停止写入并重启服务完成迁移')
 
     @staticmethod
     def _file_bytes(kind, data):
+        if isinstance(data, bytes):
+            return data
+        if isinstance(data, str):
+            return data.encode('utf-8')
         if kind == 'loot':
             if not isinstance(data, dict) or not isinstance(data.get('header'), list) or not isinstance(data.get('rows'), list):
                 raise ValueError('统计 CSV 结构无效')
@@ -214,6 +271,14 @@ class PlainStatisticsStore(Vault):
     def write_file(self, kind, path, data, context=None, wrapper=False):
         self.check_file(path)
         with self.reading():
+            target = Path(path)
+            if target.exists():
+                with target.open('rb') as stream:
+                    prefix = stream.read(4096)
+                if (prefix.startswith((BLOB_PREFIX.encode(), LEGACY_PREFIX.encode())) or
+                        WRAPPER_KEY.encode() in prefix or LEGACY_WRAPPER_KEY.encode() in prefix):
+                    self._checked = False
+                    raise VaultLocked('现有统计文件未完整迁移，保留原件并拒绝覆盖')
             durable_write(path, self._file_bytes(kind, data))
 
     def remove_files(self, paths):
@@ -246,9 +311,24 @@ class PlainStatisticsStore(Vault):
         # 共用同一可重入协调锁；仅迁移期间取得旧凭据服务的锁。
         reader.coordinator = self.coordinator
         # 早期 CL1 AES 不使用统计安全服务；普通库和这类旧库不额外依赖 OS 凭据。
-        credential_lock = reader._provider().lock(reader.slot) if reader.keyring_present() else nullcontext()
+        requires_keys = False
+        for path in paths:
+            if path in self.coordinator.paths():
+                with closing(sqlite3.connect(path.as_uri() + '?mode=ro', uri=True)) as conn:
+                    tables = _tables(conn)
+                    requires_keys = requires_keys or CHAIN_TABLE in tables or COUNT_TABLE in tables
+                    for table, column, _, _ in DATASETS:
+                        if table in tables and column in _columns(conn, table):
+                            requires_keys = requires_keys or any(_encrypted_text(row[0]) for row in conn.execute(
+                                f'SELECT {column} FROM {table} WHERE {column} IS NOT NULL'))
+                    if 'daily_summary_periods' in tables:
+                        requires_keys = requires_keys or any(_encrypted_text(row[0]) for row in conn.execute(
+                            'SELECT report_text FROM daily_summary_periods WHERE report_text IS NOT NULL'))
+            else:
+                requires_keys = True
+        credential_lock = reader._provider().lock(reader.slot) if requires_keys and reader.keyring_present() else nullcontext()
         with credential_lock:
-            if reader.keyring_present():
+            if requires_keys and reader.keyring_present():
                 reader._load()
                 reader.verify_sources()
             reader._in_transaction = True
