@@ -41,6 +41,7 @@ class ScanCapture:
     identity_confirmed: bool
     reasons: list[str] = field(default_factory=list)
     identity_image: np.ndarray | None = None
+    talents_complete: bool = False
 
 
 @dataclass
@@ -322,7 +323,7 @@ def _scroll(scanner, toward_bottom, reference):
     scanner.device.swipe(start, end, duration=0.45)
 
 
-def capture_current_cat(scanner, ocr, display_name, level):
+def capture_current_cat(scanner, ocr, display_name, level, *, reset_history=True):
     """读取当前选中猫，给出自动修改锁状态前需要的保守判断。
 
     Pages:
@@ -350,19 +351,20 @@ def capture_current_cat(scanner, ocr, display_name, level):
     capture.level = actual_level
     capture.identity_image = _crop(image, IDENTITY_AREA).copy()
     capture.identity_confirmed = True
-    # 天赋页与本次猫身份已确认，开始新的读取阶段；上一阶段的滑动不跨猫累计。
-    # 只移除滑动历史，同一阶段内仍保留重复控制保护与有限读取上限。
-    scanner.device.click_record_remove('SWIPE')
+    # 独立读取在此结束旧阶段；连续同名遍历交由调用方完整比较后清理。
+    # 同一阶段内仍保留重复控制保护与有限读取上限。
+    if reset_history:
+        scanner.device.click_record_remove('SWIPE')
     capture.rarity = _read_rarity(image, ocr, reasons)
     expected_rarity = CATS.get(capture.breed or '', {}).get('rarity')
     if expected_rarity and capture.rarity is not None and expected_rarity != capture.rarity:
         _add_reason(reasons, '品质标记与已知猫种不一致')
         capture.rarity = None
     if capture.rarity == 'R':
+        # 蓝猫按既定策略跳过天赋评分，仍可参与连续遍历的身份和属性核对。
+        capture.talents_complete = True
         capture.complete = True
         return capture
-    if capture.breed is None:
-        _add_reason(reasons, '自定义猫名未能确定原始猫种')
     frame, stable = _stable_frame(scanner)
     if not stable:
         _add_reason(reasons, '天赋面板未稳定')
@@ -430,7 +432,10 @@ def capture_current_cat(scanner, ocr, display_name, level):
         capture.identity_confirmed = False
         _add_reason(reasons, '读取期间当前猫身份发生变化或未能再次确认')
     capture.talents = coverage.talents()
-    capture.complete = (capture.identity_confirmed and capture.breed is not None
-                        and capture.rarity in ('SSR', 'SR') and top_confirmed and bottom_confirmed
-                        and covered and bool(capture.talents) and not reasons)
+    capture.talents_complete = (capture.identity_confirmed and capture.rarity in ('SSR', 'SR')
+                               and top_confirmed and bottom_confirmed and covered
+                               and bool(capture.talents) and not reasons)
+    if capture.breed is None:
+        _add_reason(reasons, '自定义猫名未能确定原始猫种')
+    capture.complete = capture.talents_complete and capture.breed is not None
     return capture

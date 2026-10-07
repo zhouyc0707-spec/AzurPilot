@@ -1,8 +1,8 @@
 """扫描全部指挥喵的天赋（工具评分任务的自动遍历方式）。
 
 与 ``screenshot`` / ``device`` 两种方式不同，本模式**自己操作游戏**：
-国服在当前「天赋」页左侧立绘向左滑动，连续读取下一只；列表位置核验、
-同名同级猫、翻屏或锁状态实际变化时返回猫窝。其他服务器沿用卡片遍历。
+国服只在启动时核验猫窝起点与拥有数，进入首猫后在立绘上连续左滑；
+同名同级按完整天赋与属性核对，结束时保持天赋页。其他服务器沿用卡片遍历。
 默认结束后统一评分；启用建议锁定时，在当前猫的天赋页内评分并确认锁状态。
 
 实机量测结论（1280×720）：
@@ -779,7 +779,7 @@ class MeowfficerScanner(MeowfficerBase):
 
         Args:
             limit (int): 最多扫描多少只猫；``0`` 表示不限。
-            passes (int): 最多翻几屏（每屏 12 张卡片）。
+            passes (int): EN／JP／TW 最多翻几屏；CN 按实际拥有数连续读取。
             on_cat (Callable, optional): 当前猫仍在天赋页时的逐猫回调，接收
                 ``(scanner, ScanCapture)``；启用后严格检查身份和天赋完整性。
 
@@ -797,11 +797,14 @@ class MeowfficerScanner(MeowfficerBase):
             self._reset_cattery_scroll()
         self.device.stuck_record_clear()
         logger.hr('扫描全部指挥喵', level=2)
+        if self._supports_talent_swipe():
+            logger.info('[指挥喵-扫描] 从首猫连续左滑读取，按猫窝拥有数结束；'
+                        f'扫描上限 {limit if limit > 0 else "不限"} 只')
+            from module.meowfficer.scan_continuous import scan_continuous_detail
+            return scan_continuous_detail(self, ocr, limit=limit, on_cat=on_cat)
+
         logger.info(f'[指挥喵-扫描] 最多 {passes} 屏，上限 '
                     f'{limit if limit > 0 else "不限"} 只')
-
-        if self._supports_talent_swipe():
-            return self._scan_by_swipe(ocr, limit, passes, on_cat)
 
         for page in range(1, passes + 1):
             read_in_page = 0

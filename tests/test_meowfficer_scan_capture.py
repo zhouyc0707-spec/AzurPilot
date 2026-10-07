@@ -278,6 +278,15 @@ class CaptureSafetyTests(unittest.TestCase):
         self.assertFalse(capture.complete)
         self.assertIsNone(capture.breed)
         self.assertIn('自定义猫名未能确定原始猫种', capture.reasons)
+        self.assertTrue(capture.talents_complete)
+
+    def test_continuous_capture_defers_history_cleanup_to_accepted_comparison(self):
+        scanner = _Scanner()
+        scanner.device.click_record_remove = Mock()
+        capture = capture_current_cat(scanner, _OCR(), '林德喵', 5, reset_history=False)
+        self.assertTrue(capture.talents_complete)
+        self.assertTrue(capture.complete)
+        scanner.device.click_record_remove.assert_not_called()
 
     def test_known_blue_skips_all_talent_reads_and_scrolls(self):
         scanner = _Scanner(name='乔治喵')

@@ -355,13 +355,32 @@ class MeowfficerScore:
                     raise
                 return
             logger.warning('[指挥喵-评分] 当前服尚未校准锁状态资源，本次只评分、不操作锁定')
-        scanned = scanner.scan_all(limit=limit, passes=passes)
+        try:
+            scanned = scanner.scan_all(limit=limit, passes=passes)
+        except Exception:
+            # 连续只读扫描也可能中途接管，先评分保存已接受的猫，再传播原异常。
+            try:
+                self._record_scanned_scores(scanner.scanned)
+            except Exception as exc:
+                logger.warning(f'[指挥喵-评分] 部分结果评分失败：{exc}')
+            try:
+                self._save_report()
+            except Exception as exc:
+                logger.warning(f'[指挥喵-评分] 部分结果保存失败：{exc}')
+            raise
         if not scanned:
             logger.warning('[指挥喵-评分] 扫描没有拿到任何指挥喵，'
                            '请确认游戏停留在「指挥喵 - 猫窝」页面后重试')
             return
 
+        self._record_scanned_scores(scanned)
+
+    def _record_scanned_scores(self, scanned):
+        """记录只读扫描已接受的非空天赋，供正常结束或中途接管时保存。"""
         for cat, talents, level in scanned:
+            if not talents:
+                # 连续遍历计数包含按策略跳过天赋评分的蓝猫，不生成空天赋评分卡。
+                continue
             result = evaluate(talents, cat=cat, level=level)
             rubric = result.rubrics[result.primary[0]] if result.primary else None
             logger.attr(f'{cat} 猫名', result.cat or '未知')

@@ -337,7 +337,7 @@ class SwipeFlowTests(unittest.TestCase):
                 patch.object(scanner, '_reset_swipe_cattery') as reset_top, \
                 patch.object(scanner, '_reset_cattery_scroll') as legacy_reset, \
                 patch.object(scanner.device, 'stuck_record_clear', create=True), \
-                patch.object(scanner, '_scan_by_swipe', return_value=[]) as fast_scan:
+                patch('module.meowfficer.scan_continuous.scan_continuous_detail', return_value=[]) as fast_scan:
             self.assertEqual(scanner.scan_all(), [])
         reset_top.assert_called_once_with()
         legacy_reset.assert_not_called()

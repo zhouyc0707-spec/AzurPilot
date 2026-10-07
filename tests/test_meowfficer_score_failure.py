@@ -13,7 +13,8 @@ import numpy as np
 from PIL import Image
 
 from module.exception import GameStuckError, GameTooManyClickError, RequestHumanTakeover
-from module.meowfficer.score_task import run_meowfficer_score
+from module.meowfficer.score import evaluate
+from module.meowfficer.score_task import MeowfficerScore, run_meowfficer_score
 
 
 class ScoreFailureSceneTests(unittest.TestCase):
@@ -275,6 +276,149 @@ class ScoreFailureSceneTests(unittest.TestCase):
                 self.assertEqual(self._scenes(), [])
                 self._assert_no_game_actions(device)
         self.logger.critical.assert_not_called()
+
+
+class ReadOnlyScanPartialReportTests(unittest.TestCase):
+    """扫描桩中途抛错，实际评分已有天赋；报告仅核验调用，不落盘。"""
+
+    def setUp(self):
+        self.task = object.__new__(MeowfficerScore)
+        self.task.config = SimpleNamespace(MeowfficerScore_LockByAdvice=False,
+                                           MeowfficerScore_ScanLimit=0, MeowfficerScore_ScanPasses=12)
+        self.task.device = SimpleNamespace(screenshot=Mock(), click=Mock(), swipe=Mock())
+        self.task.results = []
+        self.task.lock_actions = []
+        self.task._save_report = Mock()
+        logs = patch('module.meowfficer.score_task.logger')
+        self.logger = logs.start()
+        self.addCleanup(logs.stop)
+        self.scanned = [
+            ('林德喵', ['侵略如火'], 30),
+            ('蓝猫', [], 10),
+            ('林德喵', ['不动如山'], 30),
+        ]
+
+    def _scanner(self, error, scanned=None):
+        scanner = SimpleNamespace(scanned=self.scanned if scanned is None else scanned,
+                                  scan_all=Mock(side_effect=error))
+        constructor = patch('module.meowfficer.scan.MeowfficerScanner', return_value=scanner)
+        constructor.start()
+        self.addCleanup(constructor.stop)
+        return scanner
+
+    def _assert_no_game_actions(self):
+        self.task.device.screenshot.assert_not_called()
+        self.task.device.click.assert_not_called()
+        self.task.device.swipe.assert_not_called()
+
+    def test_partial_scores_keep_duplicate_names_in_order_and_skip_blue_cats(self):
+        original = RequestHumanTakeover('中途无法确认同名猫')
+        scanner = self._scanner(original)
+        saved = []
+        self.task._save_report.side_effect = lambda: saved.extend(self.task.results)
+        with patch('module.meowfficer.score_task.evaluate', wraps=evaluate) as scoring:
+            with self.assertRaises(RequestHumanTakeover) as raised:
+                self.task._run_scan()
+
+        self.assertIs(raised.exception, original)
+        self.assertEqual(scoring.call_count, 2)
+        self.assertEqual([call.args[0] for call in scoring.call_args_list],
+                         [['侵略如火'], ['不动如山']])
+        self.assertEqual([name for name, _result in self.task.results], ['林德喵', '林德喵'])
+        self.assertEqual([result.talents[0].name for _name, result in self.task.results],
+                         ['侵略如火', '不动如山'])
+        self.assertEqual(saved, self.task.results)
+        self.assertEqual(scanner.scanned, self.scanned)
+        self.task._save_report.assert_called_once_with()
+        scanner.scan_all.assert_called_once_with(limit=0, passes=12)
+        self._assert_no_game_actions()
+
+    def test_report_is_saved_before_the_original_scan_error_reaches_the_caller(self):
+        original = RequestHumanTakeover('同名扫描需要接管')
+        events = []
+        scanner = self._scanner(original)
+
+        def fail_scan(**kwargs):
+            events.append('scan')
+            raise original
+
+        scanner.scan_all.side_effect = fail_scan
+        self.task._save_report.side_effect = lambda: events.append('save')
+        try:
+            self.task._run_scan()
+        except RequestHumanTakeover as error:
+            self.assertIs(error, original)
+            events.append('caught')
+        else:
+            self.fail('扫描原异常应继续传播')
+        self.assertEqual(events, ['scan', 'save', 'caught'])
+        self._assert_no_game_actions()
+
+    def test_real_control_errors_also_preserve_partial_read_only_scores(self):
+        for error_type in (GameStuckError, GameTooManyClickError):
+            with self.subTest(error=error_type):
+                original = error_type('设备流程异常')
+                self.task.results = []
+                self.task._save_report.reset_mock()
+                self._scanner(original)
+                with self.assertRaises(error_type) as raised:
+                    self.task._run_scan()
+                self.assertIs(raised.exception, original)
+                self.assertEqual(len(self.task.results), 2)
+                self.task._save_report.assert_called_once_with()
+                self._assert_no_game_actions()
+
+    def test_secondary_scoring_failure_does_not_replace_the_primary_scan_error(self):
+        original = GameStuckError('需要保留的原设备异常')
+        self._scanner(original)
+        with patch('module.meowfficer.score_task.evaluate', side_effect=RuntimeError('次要评分故障')):
+            with self.assertRaises(GameStuckError) as raised:
+                self.task._run_scan()
+        self.assertIs(raised.exception, original)
+        self.assertIn('部分结果评分失败', self.logger.warning.call_args.args[0])
+        self.assertIn('次要评分故障', self.logger.warning.call_args.args[0])
+        self.task._save_report.assert_called_once_with()
+        self._assert_no_game_actions()
+
+    def test_later_scoring_failure_still_saves_the_scores_already_converted(self):
+        original = RequestHumanTakeover('需要保留的原接管原因')
+        self._scanner(original)
+        first = evaluate(['侵略如火'], cat='林德喵', level=30)
+        saved = []
+        self.task._save_report.side_effect = lambda: saved.extend(self.task.results)
+        with patch('module.meowfficer.score_task.evaluate', side_effect=[first, RuntimeError('第二只评分失败')]):
+            with self.assertRaises(RequestHumanTakeover) as raised:
+                self.task._run_scan()
+        self.assertIs(raised.exception, original)
+        self.assertEqual(self.task.results, [('林德喵', first)])
+        self.assertEqual(saved, self.task.results)
+        self.task._save_report.assert_called_once_with()
+        self.assertIn('第二只评分失败', self.logger.warning.call_args.args[0])
+        self._assert_no_game_actions()
+
+    def test_secondary_report_failure_does_not_replace_the_primary_takeover(self):
+        original = RequestHumanTakeover('需要保留的原接管原因')
+        self._scanner(original)
+        self.task._save_report.side_effect = OSError('次要报告故障')
+        with self.assertRaises(RequestHumanTakeover) as raised:
+            self.task._run_scan()
+        self.assertIs(raised.exception, original)
+        self.assertEqual(len(self.task.results), 2)
+        self.assertIn('部分结果保存失败', self.logger.warning.call_args.args[0])
+        self.assertIn('次要报告故障', self.logger.warning.call_args.args[0])
+        self._assert_no_game_actions()
+
+    def test_empty_partial_scan_does_not_score_a_fabricated_cat(self):
+        original = RequestHumanTakeover('首猫识别失败')
+        self._scanner(original, scanned=[])
+        with patch('module.meowfficer.score_task.evaluate') as scoring:
+            with self.assertRaises(RequestHumanTakeover) as raised:
+                self.task._run_scan()
+        self.assertIs(raised.exception, original)
+        self.assertEqual(self.task.results, [])
+        scoring.assert_not_called()
+        self.task._save_report.assert_called_once_with()
+        self._assert_no_game_actions()
 
 
 if __name__ == '__main__':

@@ -6524,7 +6524,7 @@
     },
     "ScanPasses": {
       "name": "Max list pages",
-      "help": "How many pages of the cattery list to walk in scan-all mode (12 cats per page); stops early at the end of the list"
+      "help": "Used only for EN/JP/TW cattery list scans (12 cats per page); stops early at the end. CN scans continuously on the talent page until the owned-cat count or max cat limit is reached; this setting does not limit CN"
     }
   },
   "OpsiSimulatorParameters": {
