@@ -135,14 +135,14 @@ class SingleGestureCaptureTests(unittest.TestCase):
         return capture_current_cat(scanner, _AnonymousOCR() if ocr is None else ocr,
                                    '限定蒂奇喵', 30)
 
-    def test_five_learned_slots_require_one_top_and_one_bottom_gesture(self):
+    def test_confirmed_top_five_learned_slots_require_only_bottom_gesture(self):
         device = _AnimatedDevice()
         scanner = self._scanner(device)
         capture = self._capture(scanner)
         self.assertTrue(capture.complete, capture.reasons)
         self.assertTrue(capture.talents_complete)
         self.assertEqual([talent.name for talent in capture.talents], list(NAMES))
-        self.assertEqual(self._directions(device), ['top', 'bottom'])
+        self.assertEqual(self._directions(device), ['bottom'])
         self.assertEqual(scanner._read_current_cat.call_count, 2)
         self.assertGreater(device.screenshots, len(device.swipes))
 
@@ -154,12 +154,12 @@ class SingleGestureCaptureTests(unittest.TestCase):
         self.assertTrue(capture.complete, capture.reasons)
         self.assertEqual(self._directions(device), ['top', 'bottom'])
 
-    def test_complete_first_empty_prefix_ends_after_single_top_gesture(self):
+    def test_confirmed_top_first_empty_prefix_ends_without_gestures(self):
         device = _Device(_empty_frame())
         capture = self._capture(self._scanner(device), _EmptyOCR())
         self.assertTrue(capture.complete, capture.reasons)
         self.assertEqual([talent.name for talent in capture.talents], list(NAMES[:3]))
-        self.assertEqual(self._directions(device), ['top'])
+        self.assertEqual(self._directions(device), [])
 
     def test_fifth_row_still_clipped_cannot_fast_stop_after_failed_bottom_motion(self):
         device = _Device(_animated_talent_frame())
@@ -167,7 +167,7 @@ class SingleGestureCaptureTests(unittest.TestCase):
         self.assertFalse(capture.talents_complete)
         self.assertFalse(capture.complete)
         self.assertIn('第 5 行天赋未能完整确认，不能排除漏读', capture.reasons)
-        self.assertEqual(self._directions(device), ['top', 'bottom', 'bottom'])
+        self.assertEqual(self._directions(device), ['bottom', 'bottom'])
 
     def test_unverified_motion_cannot_merge_fifth_slot_or_continue_more_gestures(self):
         device = _Device(_animated_talent_frame(), bottom_frames=(
@@ -175,7 +175,7 @@ class SingleGestureCaptureTests(unittest.TestCase):
         capture = self._capture(self._scanner(device))
         self.assertFalse(capture.complete)
         self.assertIn('天赋滚动前后重叠位移未能确认，不能排除漏行', capture.reasons)
-        self.assertEqual(self._directions(device), ['top', 'bottom'])
+        self.assertEqual(self._directions(device), ['bottom'])
         _capture, frames = self.diagnostics.call_args.args
         self.assertEqual(frames[-1].stage, 'unverified')
         self.assertIsNone(frames[-1].offset)
@@ -216,7 +216,7 @@ class SingleGestureCaptureTests(unittest.TestCase):
         capture = self._capture(scanner)
         self.assertFalse(capture.identity_confirmed)
         self.assertFalse(capture.complete)
-        self.assertEqual(self._directions(device), ['top', 'bottom'])
+        self.assertEqual(self._directions(device), ['bottom'])
 
 
 if __name__ == '__main__':

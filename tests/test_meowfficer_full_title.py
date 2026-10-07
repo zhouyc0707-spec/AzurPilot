@@ -237,7 +237,7 @@ class CompleteEmptyPrefixAfterTitleRecoveryTests(unittest.TestCase):
             handle.start()
             self.addCleanup(handle.stop)
 
-    def test_third_title_recovery_and_complete_fourth_empty_end_with_one_top_no_bottom(self):
+    def test_third_title_recovery_and_complete_fourth_empty_end_without_gestures(self):
         image = _empty_frame()
         scanner = Mock(device=_Device(image))
         scanner._read_current_cat.return_value = ('约翰喵', 30)
@@ -247,9 +247,7 @@ class CompleteEmptyPrefixAfterTitleRecoveryTests(unittest.TestCase):
         self.assertTrue(capture.complete, capture.reasons)
         self.assertTrue(capture.talents_complete)
         self.assertEqual([talent.name for talent in capture.talents], [NAMES[0], NAMES[1], TITLE])
-        self.assertEqual(len(scanner.device.swipes), 1)
-        start, end, _duration = scanner.device.swipes[0]
-        self.assertLess(start[1], end[1])
+        self.assertEqual(scanner.device.swipes, [])
         self.assertEqual(ocr.supplemental_calls, 2)
         self.assertEqual(scanner._read_current_cat.call_count, 2)
         retry.assert_not_called()

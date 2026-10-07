@@ -405,7 +405,9 @@ def capture_current_cat(scanner, ocr, display_name, level, *, reset_history=True
 
     每次滚动必须确认实际重叠位移，已学边缘半行须由相邻截图补全。确认顶部及
     到首个完整未习得栏的连续已学行后可结束。国服已校准五槽全部连续读全也可
-    结束，其他布局仍核验物理底部与全部行。最终核验当前猫身份，不猜测到底。
+    结束，其他布局仍核验物理底部与全部行。国服当前稳定帧已确认在顶部时，
+    直接读取继承的位置，不重复回顶；其他位置沿用有界回顶与身份核验。
+    最终核验当前猫身份，不猜测到底。
     """
     reasons = []
     capture = ScanCapture(display_name, [], level, _exact_breed(display_name), None, False, False, reasons)
@@ -442,11 +444,18 @@ def capture_current_cat(scanner, ocr, display_name, level, *, reset_history=True
     frame, stable = _stable_frame(scanner)
     if not stable:
         _add_reason(reasons, '天赋面板未稳定')
-    top_confirmed = False
-    cn_layout_confirmed = False
+    # 切猫会继承前一只的列表位置；以本只新帧确认顶部，避免缓存过期的位置。
+    top_confirmed = (stable and detail_page_confirmed(frame)
+                     and _mean_diff(capture.identity_image, _crop(frame, IDENTITY_AREA)) < 3
+                     and cn_talent_top_confirmed(frame))
+    cn_layout_confirmed = top_confirmed
+    if top_confirmed:
+        logger.attr('[指挥喵-扫描] 天赋列表位置', '已确认顶部，跳过重复回顶')
     same = 0
     steps = 0
     for _ in range(4):
+        if top_confirmed:
+            break
         before = frame.copy()
         _scroll(scanner, toward_bottom=False, reference=capture.identity_image)
         steps += 1

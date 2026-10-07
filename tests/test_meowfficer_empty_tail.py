@@ -246,7 +246,7 @@ class FirstEmptyCaptureTests(unittest.TestCase):
         self.assertTrue(capture.complete, capture.reasons)
         self.assertTrue(capture.talents_complete)
         self.assertEqual([talent.name for talent in capture.talents], list(NAMES[:3]))
-        self.assertEqual(len(scanner.device.swipes), 1)
+        self.assertEqual(scanner.device.swipes, [])
         self.assertEqual(self._bottom_swipes(scanner.device), [])
         self.assertEqual(scanner._read_current_cat.call_count, 2)
         retry.assert_not_called()
@@ -325,7 +325,7 @@ class FirstEmptyCaptureTests(unittest.TestCase):
 
     def test_final_page_loss_rejects_fast_complete(self):
         scanner = self._scanner()
-        # 初始画面及一次向顶部滑动前正常，最终复核时离开天赋页。
+        # 初始画面及新稳定帧顶部核验正常，最终复核时离开天赋页。
         self.page.side_effect = [True, True, False]
         capture = self._capture(scanner)
         self.assertFalse(capture.identity_confirmed)

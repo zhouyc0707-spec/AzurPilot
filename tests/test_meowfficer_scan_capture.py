@@ -461,10 +461,13 @@ class CaptureSafetyTests(unittest.TestCase):
             capture_current_cat(scanner, _OCR(), '林德喵', 5)
         self.assertEqual(scanner.device.swipes, [])
         scanner = _Scanner()
-        self.guard.side_effect = [True, True, False]
+        scanner.device.click_record_remove = Mock()
+        # 页面在真实首个手势之后丢失，不依赖顶部守卫调用了多少次。
+        self.guard.side_effect = lambda _image: not scanner.device.swipes
         with self.assertRaises(RequestHumanTakeover):
             capture_current_cat(scanner, _OCR(), '林德喵', 5)
         self.assertEqual(len(scanner.device.swipes), 1)
+        scanner.device.click_record_remove.assert_called_once_with('SWIPE')
 
     def test_bad_screenshot_geometry_and_failed_top_confirmation_are_protected(self):
         scanner = _Scanner(image=np.zeros((360, 640, 3), dtype=np.uint8))

@@ -195,9 +195,11 @@ class SwipeStageHistoryTests(unittest.TestCase):
         scanner = self.scanner()
         device = scanner.device
         device.click_record.extend(['SWIPE', 'BEFORE_BUTTON'])
-        self.guard.side_effect = [True, True, False]
+        # 页面随首个实际手势进入丢失阶段，新增只读守卫不能提前触发故障。
+        self.guard.side_effect = lambda _image: not device.swipes
         with self.assertRaises(RequestHumanTakeover):
             capture_current_cat(scanner, _OCR(), '林德喵', 5)
+        self.assertEqual(len(device.swipes), 1)
         self.assertEqual(len(device.removals), 1)
         self.assertEqual(list(device.click_record), ['BEFORE_BUTTON', 'SWIPE'])
 

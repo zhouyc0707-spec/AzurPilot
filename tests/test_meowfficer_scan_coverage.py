@@ -206,7 +206,8 @@ class AnimatedTalentCoverageTests(unittest.TestCase):
         self.assertTrue(capture.complete, capture.reasons)
         self.assertEqual(capture.reasons, [])
         self.assertEqual([talent.name for talent in capture.talents], list(NAMES))
-        self.assertEqual(len(device.swipes), 2)
+        self.assertEqual(len(device.swipes), 1)
+        self.assertGreater(device.swipes[0][0][1], device.swipes[0][1][1])
         self.assertGreater(device.screenshots, len(device.swipes))
 
     def test_title_mutation_during_actual_bottom_read_keeps_full_capture_protected(self):
