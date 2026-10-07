@@ -14,7 +14,8 @@ def swipe_next_cat(scanner, ocr, current_name, current_level):
 
     Returns:
         tuple | None: 新猫的姓名、等级；同名同级或未切换时返回 None，
-            交给猫窝位置核验，不能据此断言已到末尾。
+            交给调用方继续核验，不能据此断言已到末尾。国服连续遍历通过
+            完整天赋与静态属性比较，不返回猫窝。
 
     Raises:
         RequestHumanTakeover: 页面、身份或稳定性无法确认。

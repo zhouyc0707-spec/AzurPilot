@@ -7,7 +7,8 @@ import numpy as np
 
 from module.exception import GameStuckError, GameTooManyClickError, RequestHumanTakeover
 from module.meowfficer.scan_capture import (IDENTITY_AREA, ScanCapture, _exact_breed,
-                                           _read_rarity, _read_rows, _rgb_variants, _visible_rows,
+                                           _read_rarity, _read_row_records, _read_rows,
+                                           _rgb_variants, _visible_rows,
                                            capture_current_cat)
 from module.meowfficer.scan_coverage import SCROLL_AREA, measure_talent_shift
 
@@ -183,6 +184,15 @@ class RowCompletenessTests(unittest.TestCase):
         self.assertFalse(complete)
         self.assertIn('天赋图标行与识别标题数量不一致', reasons)
 
+    def test_unknown_title_readings_are_retained_without_accepting_the_talent(self):
+        rows = _read_row_records(_frame(1), _OCR(
+            title_outputs=[[('未知原文', BOX, 0.86)]]), [])
+        self.assertIsNone(rows[0].talent)
+        self.assertFalse(rows[0].complete)
+        self.assertEqual(rows[0].readings, [{
+            'variant': 'plain', 'results': [{'text': '未知原文', 'confidence': 0.86}],
+        }])
+
     def test_no_icon_rows_does_not_mean_complete_zero_talents(self):
         reasons = []
         talents, complete = _read_rows(_frame(0), _OCR(), reasons)
@@ -246,6 +256,9 @@ class CaptureSafetyTests(unittest.TestCase):
         self.page_guard = patch('module.meowfficer.score_lock.detail_page_confirmed', return_value=True)
         self.guard = self.page_guard.start()
         self.addCleanup(self.page_guard.stop)
+        diagnostics = patch('module.meowfficer.scan_diagnostics.save_incomplete_capture')
+        self.diagnostics = diagnostics.start()
+        self.addCleanup(diagnostics.stop)
 
     def test_complete_initial_cat_confirms_both_boundaries_and_identity(self):
         scanner = _Scanner()
@@ -369,6 +382,11 @@ class CaptureSafetyTests(unittest.TestCase):
         self.assertFalse(capture.complete)
         self.assertTrue(any('位移' in reason or '覆盖' in reason for reason in capture.reasons), capture.reasons)
         self.assertEqual(len(capture.talents), 3)
+        _, frames = self.diagnostics.call_args.args
+        self.assertEqual(frames[-1].stage, 'unverified')
+        self.assertIsNone(frames[-1].offset)
+        self.assertTrue(all(row.talent is None for row in frames[-1].rows))
+        np.testing.assert_array_equal(frames[-1].image, scanner.device.image)
 
     def test_clipped_extra_row_remains_incomplete_even_if_the_four_titles_are_known(self):
         scanner = _Scanner(image=_frame(5))
@@ -376,6 +394,43 @@ class CaptureSafetyTests(unittest.TestCase):
         self.assertFalse(capture.complete)
         self.assertEqual(len(capture.talents), 4)
         self.assertIn('天赋行被裁切或行框不完整', capture.reasons)
+
+    def test_incomplete_first_border_does_not_shift_the_remaining_row_numbers(self):
+        frame = _frame()
+        # 首行起点正常，底框局部缺损；第 2 行不能被重编号为第 1 行。
+        frame[230:240, 756:762] = (231, 223, 222)
+        frame[230:240, 835:842] = (231, 223, 222)
+        capture = capture_current_cat(_Scanner(image=frame), _OCR(names=NAMES[1:]), '林德喵', 5)
+        self.assertFalse(capture.complete)
+        self.assertEqual([talent.name for talent in capture.talents], NAMES[1:])
+        self.assertIn('第 1 行天赋未能完整确认，不能排除漏读', capture.reasons)
+        self.assertNotIn('天赋行位置与实际滚动位移不一致，不能排除漏行', capture.reasons)
+        self.assertFalse(any('第 2 行天赋' in reason or '第 3 行天赋' in reason
+                             for reason in capture.reasons))
+        saved_capture, frames = self.diagnostics.call_args.args
+        self.assertIs(saved_capture, capture)
+        self.assertEqual(frames[0].stage, 'top')
+        self.assertEqual(frames[0].rows[0].top, 153)
+        self.assertFalse(frames[0].rows[0].complete)
+        self.assertTrue(all(frame.offset == 0 for frame in frames))
+        np.testing.assert_array_equal(frames[0].image, frame)
+
+    def test_capture_recovers_transient_title_failure_without_extra_swipes(self):
+        failed = [[(NAMES[0], BOX, 0.89)]] + [
+            [(name, BOX, 0.99)] for name in NAMES[1:] for _ in range(2)]
+        complete = [[(name, BOX, 0.99)] for name in NAMES for _ in range(2)]
+        scanner = _Scanner()
+        capture = capture_current_cat(scanner, _OCR(
+            title_outputs=failed + complete + complete), '林德喵', 5)
+        self.assertTrue(capture.complete, capture.reasons)
+        self.assertEqual([talent.name for talent in capture.talents], NAMES)
+        self.assertEqual(len(scanner.device.swipes), 4)
+        self.assertEqual(capture.reasons, [])
+        _, frames = self.diagnostics.call_args.args
+        self.assertEqual([frame.stage for frame in frames], ['top', 'reread', 'bottom'])
+        self.assertFalse(frames[0].rows[0].complete)
+        self.assertTrue(all(row.complete for row in frames[1].rows))
+        self.assertTrue(all(frame.offset == 0 for frame in frames))
 
     def test_scroll_limit_is_bounded_and_cannot_confirm_an_unreached_bottom(self):
         frames = []
@@ -426,6 +481,9 @@ class MultiFrameCoverageTests(unittest.TestCase):
     """顶部到底部逐行覆盖才能完整，未知位移和矛盾识别不能取最高级掩盖。"""
 
     def setUp(self):
+        diagnostics = patch('module.meowfficer.scan_diagnostics.save_incomplete_capture')
+        diagnostics.start()
+        self.addCleanup(diagnostics.stop)
         guard = patch('module.meowfficer.score_lock.detail_page_confirmed',
                       side_effect=lambda image: bool(image[0, 1, 0]))
         guard.start()

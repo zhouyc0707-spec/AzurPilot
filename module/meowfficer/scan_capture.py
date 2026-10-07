@@ -53,6 +53,7 @@ class TalentRow:
     talent: Talent | None = None
     empty: bool = False
     complete: bool = False
+    readings: list[dict] = field(default_factory=list)
 
 
 def _add_reason(reasons, text):
@@ -245,8 +246,15 @@ def _read_row_records(image, ocr, reasons):
         template_name = read_exact_talent_title(crop)
         template_ref = TALENT_INDEX.get(normalize(template_name)) if template_name else None
         matches = []
-        for variant in _rgb_variants(crop).values():
+        for variant_name, variant in _rgb_variants(crop).items():
             details = _details(ocr, variant, reasons, '天赋标题')
+            # 保存真实 OCR 证据供保护现场复盘，不参与放宽标题接受条件。
+            record.readings.append({
+                'variant': variant_name,
+                'results': ([{'text': text, 'confidence': confidence if np.isfinite(confidence)
+                              else str(confidence)} for text, confidence in details]
+                            if details is not None else None),
+            })
             if details == [] and template_ref is not None:
                 matches.append((template_ref, f'{template_name}（图像模板）'))
                 continue
@@ -391,16 +399,29 @@ def capture_current_cat(scanner, ocr, display_name, level, *, reset_history=True
     if not top_confirmed:
         _add_reason(reasons, '未确认天赋列表顶部')
     from module.meowfficer.scan_coverage import TalentCoverage, measure_talent_shift, uncovered_tail
+    from module.meowfficer.scan_diagnostics import TalentReadFrame, save_incomplete_capture
+    from module.meowfficer.scan_retry import retry_talent_rows
 
     issues = []
     rows = _read_row_records(frame, ocr, issues)
+    read_frames = [TalentReadFrame('top', frame.copy(), list(rows), list(issues))]
     # 起点由顶部正向核验约束；未知标题也保留物理行位置，不能靠 OCR 数量减行。
     full_rows = [row for row in rows if row.top > 152 and row.bottom < 588
                  and 78 <= row.bottom - row.top <= 94]
-    origin = full_rows[0].top if full_rows else 153
+    # 顶部已正向确认时，首框仍是第 1 行；首框缺损不能让第 2 行变成起点。
+    origin = rows[0].top if top_confirmed and rows else (full_rows[0].top if full_rows else 153)
     row_height = full_rows[0].bottom - full_rows[0].top if full_rows else 87
     coverage = TalentCoverage(origin, row_height)
     coverage.add(rows, issues=issues)
+    frame, batches, retry_reason = retry_talent_rows(
+        scanner, ocr, frame, rows, issues, capture.identity_image)
+    for retry_frame, retry_rows, retry_issues in batches:
+        coverage.add(retry_rows, issues=retry_issues)
+        read_frames.append(TalentReadFrame(
+            'reread', retry_frame, list(retry_rows), list(retry_issues), coverage.offset))
+        rows = retry_rows
+    if retry_reason:
+        _add_reason(reasons, retry_reason)
     bottom_confirmed = False
     same = 0
     while steps < MAX_SCROLL_STEPS:
@@ -414,12 +435,28 @@ def capture_current_cat(scanner, ocr, display_name, level, *, reset_history=True
         same = same + 1 if stable and not changed else 0
         shift = measure_talent_shift(before, frame) if changed else 0
         if changed and (shift is None or shift <= 0):
-            _add_reason(reasons, '天赋滚动前后重叠位移未能确认，不能排除漏行')
+            issue = '天赋滚动前后重叠位移未能确认，不能排除漏行'
+            _add_reason(reasons, issue)
+            # 未核验位置仅保留现场，不能把该帧按旧偏移加入覆盖或评分。
+            read_frames.append(TalentReadFrame(
+                'unverified', frame.copy(), [TalentRow(top, bottom)
+                                             for top, bottom in _visible_rows(frame)], [issue], None))
             break
         if changed or same >= 2:
             issues = []
             rows = _read_row_records(frame, ocr, issues)
             coverage.add(rows, shift=shift, issues=issues)
+            read_frames.append(TalentReadFrame(
+                'bottom', frame.copy(), list(rows), list(issues), coverage.offset))
+            frame, batches, retry_reason = retry_talent_rows(
+                scanner, ocr, frame, rows, issues, capture.identity_image)
+            for retry_frame, retry_rows, retry_issues in batches:
+                coverage.add(retry_rows, issues=retry_issues)
+                read_frames.append(TalentReadFrame(
+                    'reread', retry_frame, list(retry_rows), list(retry_issues), coverage.offset))
+                rows = retry_rows
+            if retry_reason:
+                _add_reason(reasons, retry_reason)
         if same >= 2:
             bottom_confirmed = True
             break
@@ -443,4 +480,5 @@ def capture_current_cat(scanner, ocr, display_name, level, *, reset_history=True
     if capture.breed is None:
         _add_reason(reasons, '自定义猫名未能确定原始猫种')
     capture.complete = capture.talents_complete and capture.breed is not None
+    save_incomplete_capture(capture, read_frames)
     return capture

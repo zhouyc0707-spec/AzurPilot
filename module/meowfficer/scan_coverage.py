@@ -112,6 +112,8 @@ class TalentCoverage:
         self.last_index = -1
         self.covered = {}
         self.pending = {}
+        # 几何完整性不足的行也可能已精确确认标题；保留正向证据用于永久冲突检查。
+        self.known = {}
         self.reasons = []
 
     def _reason(self, text):
@@ -134,19 +136,17 @@ class TalentCoverage:
                 self._reason('天赋行位置与实际滚动位移不一致，不能排除漏行')
                 continue
             self.last_index = max(self.last_index, index)
-            previous = self.covered.get(index)
             identity = (row.talent.name, row.talent.line, row.talent.level) if row.talent else None
-            # 行框有其他不完整原因，也不能忽略这次已经精确读出的矛盾标题或空位。
-            if previous is not None and (row.talent is not None or row.empty):
-                old = None if previous.empty else (previous.talent.name, previous.talent.line,
-                                                   previous.talent.level)
-                if identity != old:
+            if row.talent is not None or row.empty:
+                # 未知或裁边没有正向身份；明确空位的 None 用 membership 区分未读取。
+                if index in self.known and identity != self.known[index]:
                     self._reason('同一天赋行跨截图识别结果不一致')
                     continue
-            if identity is not None and any(
-                    other_index != index and not other.empty and other.talent.line == row.talent.line
-                    for other_index, other in self.covered.items()):
-                self._reason('不同天赋行识别为重复天赋线')
+                if identity is not None and any(
+                        other_index != index and other is not None and other[1] == identity[1]
+                        for other_index, other in self.known.items()):
+                    self._reason('不同天赋行识别为重复天赋线')
+                self.known[index] = identity
             if not row.complete:
                 self.pending[index] = list(issues)
                 continue

@@ -8,7 +8,7 @@ import numpy as np
 from module.meowfficer.scan_capture import (PANEL_AREA, TalentRow, _rgb_variants, _visible_rows,
                                            capture_current_cat)
 from module.meowfficer.scan_coverage import SCROLL_AREA, TalentCoverage, measure_talent_shift
-from module.meowfficer.score import Talent
+from module.meowfficer.score import TALENT_INDEX, Talent, normalize
 from module.meowfficer.scan_utils import _crop, _mean_diff
 
 
@@ -114,6 +114,11 @@ class _AnonymousOCR:
 class AnimatedTalentCoverageTests(unittest.TestCase):
     """只依据静态行标题和独立行框恢复滚动，保留缺证据保护。"""
 
+    def setUp(self):
+        diagnostics = patch('module.meowfficer.scan_diagnostics.save_incomplete_capture')
+        diagnostics.start()
+        self.addCleanup(diagnostics.stop)
+
     def test_body_marquee_and_icon_flash_do_not_hide_valid_scroll(self):
         before = _animated_talent_frame()
         for distance in (40, 75, 160):
@@ -214,6 +219,109 @@ class AnimatedTalentCoverageTests(unittest.TestCase):
         self.assertFalse(capture.complete)
         self.assertIn('天赋滚动前后重叠位移未能确认，不能排除漏行', capture.reasons)
         self.assertIn('未确认天赋列表底部', capture.reasons)
+
+
+class KnownIncompleteRowTests(unittest.TestCase):
+    """已知标题或明确空位独立保留；几何失败不得掩盖后来出现的真实矛盾。"""
+
+    @staticmethod
+    def _row(name=None, *, index=0, complete=False, empty=False, offset=0):
+        top = 153 + index * 102 - offset
+        ref = TALENT_INDEX[normalize(name)] if name else None
+        talent = (Talent(ref.name, ref.line, ref.level, ref.kind, raw=ref.name)
+                  if ref else None)
+        return TalentRow(top, top + 87, talent, empty=empty, complete=complete)
+
+    def test_known_incomplete_title_does_not_count_as_complete_coverage(self):
+        coverage = TalentCoverage(153, 87)
+        coverage.add([self._row(NAMES[0])], issues=['天赋行框间距异常，不能排除漏行'])
+        self.assertFalse(coverage.finish())
+        self.assertEqual(coverage.talents(), [])
+        self.assertIn('第 1 行天赋未能完整确认，不能排除漏读', coverage.reasons)
+
+    def test_incomplete_known_title_conflicts_are_permanent_before_completion(self):
+        for changed in ('熟练炮手·主力', NAMES[1]):
+            with self.subTest(changed=changed):
+                coverage = TalentCoverage(153, 87)
+                coverage.add([self._row(NAMES[0])], issues=['天赋行框间距异常，不能排除漏行'])
+                coverage.add([self._row(changed, complete=True)])
+                # 后来的完整初始名称也不能撤销曾出现的精确名称或等级冲突。
+                coverage.add([self._row(NAMES[0], complete=True)])
+                self.assertFalse(coverage.finish())
+                self.assertIn('同一天赋行跨截图识别结果不一致', coverage.reasons)
+
+    def test_each_known_identity_field_must_match_even_when_first_row_is_incomplete(self):
+        for field, changed in (('name', NAMES[1]), ('line', NAMES[1]), ('level', 2)):
+            with self.subTest(field=field):
+                coverage = TalentCoverage(153, 87)
+                coverage.add([self._row(NAMES[0])])
+                later = self._row(NAMES[0], complete=True)
+                setattr(later.talent, field, changed)
+                coverage.add([later])
+                coverage.add([self._row(NAMES[0], complete=True)])
+                self.assertFalse(coverage.finish())
+                self.assertIn('同一天赋行跨截图识别结果不一致', coverage.reasons)
+
+    def test_known_empty_and_known_talent_cannot_replace_each_other(self):
+        for empty_first in (False, True):
+            with self.subTest(empty_first=empty_first):
+                coverage = TalentCoverage(153, 87)
+                first = self._row(empty=empty_first, name=None if empty_first else NAMES[0])
+                second = self._row(empty=not empty_first, complete=True,
+                                   name=NAMES[0] if empty_first else None)
+                coverage.add([first], issues=['天赋行框间距异常，不能排除漏行'])
+                coverage.add([second])
+                coverage.add([self._row(empty=empty_first, complete=True,
+                                       name=None if empty_first else NAMES[0])])
+                self.assertFalse(coverage.finish())
+                self.assertIn('同一天赋行跨截图识别结果不一致', coverage.reasons)
+
+    def test_same_known_title_or_empty_can_be_completed_without_inheriting_geometry_failure(self):
+        for empty in (False, True):
+            with self.subTest(empty=empty):
+                coverage = TalentCoverage(153, 87)
+                name = None if empty else NAMES[0]
+                coverage.add([self._row(name, empty=empty)],
+                             issues=['天赋行框间距异常，不能排除漏行'])
+                coverage.add([self._row(name, empty=empty, complete=True)])
+                self.assertTrue(coverage.finish(), coverage.reasons)
+                self.assertEqual([talent.name for talent in coverage.talents()],
+                                 [] if empty else [NAMES[0]])
+
+    def test_unknown_or_partial_row_is_not_a_known_empty_or_title(self):
+        for later_empty in (False, True):
+            with self.subTest(empty=later_empty):
+                coverage = TalentCoverage(153, 87)
+                partial = self._row()
+                partial.bottom -= 12
+                coverage.add([partial], issues=['天赋行被裁切或行框不完整'])
+                coverage.add([self._row(None if later_empty else NAMES[0],
+                                       empty=later_empty, complete=True)])
+                self.assertTrue(coverage.finish(), coverage.reasons)
+
+    def test_unknown_intermediate_read_does_not_erase_known_conflict_evidence(self):
+        coverage = TalentCoverage(153, 87)
+        coverage.add([self._row(NAMES[0])])
+        coverage.add([self._row()], issues=['天赋标题不是高置信度的精确已知名称'])
+        coverage.add([self._row('熟练炮手·主力', complete=True)])
+        self.assertFalse(coverage.finish())
+        self.assertIn('同一天赋行跨截图识别结果不一致', coverage.reasons)
+
+    def test_duplicate_talent_line_keeps_incomplete_position_evidence(self):
+        coverage = TalentCoverage(153, 87)
+        coverage.add([self._row(NAMES[0]), self._row(index=1)])
+        coverage.add([self._row(NAMES[0], complete=True),
+                      self._row('熟练炮手·主力', index=1, complete=True)])
+        self.assertFalse(coverage.finish())
+        self.assertIn('不同天赋行识别为重复天赋线', coverage.reasons)
+
+    def test_shifted_known_row_preserves_its_original_position(self):
+        coverage = TalentCoverage(153, 87)
+        coverage.add([self._row(NAMES[0], complete=True), self._row(NAMES[1], index=1)])
+        coverage.add([self._row('熟练雷击士·潜艇', index=1, complete=True, offset=75)], shift=75)
+        self.assertFalse(coverage.finish())
+        self.assertIn('同一天赋行跨截图识别结果不一致', coverage.reasons)
+        self.assertNotIn('不同天赋行识别为重复天赋线', coverage.reasons)
 
 
 if __name__ == '__main__':
