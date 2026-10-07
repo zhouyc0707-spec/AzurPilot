@@ -6,7 +6,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 from uuid import UUID
 
 import numpy as np
@@ -330,7 +330,7 @@ class ReadOnlyScanPartialReportTests(unittest.TestCase):
         self.assertEqual(saved, self.task.results)
         self.assertEqual(scanner.scanned, self.scanned)
         self.task._save_report.assert_called_once_with()
-        scanner.scan_all.assert_called_once_with(limit=0, passes=12)
+        scanner.scan_all.assert_called_once_with(limit=0, passes=12, on_result=ANY)
         self._assert_no_game_actions()
 
     def test_report_is_saved_before_the_original_scan_error_reaches_the_caller(self):

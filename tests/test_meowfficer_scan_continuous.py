@@ -293,6 +293,23 @@ class ContinuousDetailTests(unittest.TestCase):
         self.assertEqual(result[-1][0], '匿名指挥喵350')
         self.assert_single_entry(scanner)
 
+    def test_readonly_progress_is_published_before_next_swipe_without_lock_sort_requirement(self):
+        scanner = _ContinuousScanner(_different_cats(3))
+        published = []
+        with _FlowHarness(scanner) as flow:
+            flow.sort_check.return_value = False
+
+            def on_result(current, entry):
+                self.assertIs(current, scanner)
+                self.assertEqual(entry, current.scanned[-1])
+                published.append((len(current.scanned), flow.next.call_count))
+
+            result = scan_continuous_detail(scanner, scanner.ocr, on_result=on_result)
+            flow.sort_check.assert_not_called()
+        self.assertEqual(published, [(1, 0), (2, 1), (3, 2)])
+        self.assertEqual(len(result), 3)
+        self.assert_single_entry(scanner)
+
     def test_total_or_limit_finishes_without_extra_last_cat_gesture(self):
         for total, limit, expected in ((1, 0, 1), (3, 20, 3), (5, 1, 1), (5, 0, 5)):
             with self.subTest(total=total, limit=limit):
@@ -307,6 +324,7 @@ class ContinuousDetailTests(unittest.TestCase):
     def test_fifth_identical_transition_is_not_recorded_or_locked_and_keeps_protection(self):
         scanner = _ContinuousScanner([_capture() for _ in range(10)])
         locked = []
+        published = []
 
         def on_cat(active, capture):
             locked.append(active.capture_count)
@@ -314,7 +332,8 @@ class ContinuousDetailTests(unittest.TestCase):
             return {'status': 'changed'}
 
         with _FlowHarness(scanner) as flow:
-            result = scan_continuous_detail(scanner, scanner.ocr, on_cat=on_cat)
+            result = scan_continuous_detail(scanner, scanner.ocr, on_cat=on_cat,
+                                            on_result=lambda active, entry: published.append(active.capture_count))
             self.assertEqual(flow.read.call_count, 6)
             self.assertEqual(flow.next.call_count, 5)
             flow.logger.warning.assert_called_once()
@@ -322,6 +341,7 @@ class ContinuousDetailTests(unittest.TestCase):
             self.assertTrue(any('5/10' in str(call) for call in flow.logger.attr.call_args_list))
         self.assertEqual(len(result), 5)
         self.assertEqual(locked, [1, 2, 3, 4, 5])
+        self.assertEqual(published, [1, 2, 3, 4, 5])
         self.assert_unaccepted_stage_protected(scanner, 6)
         self.assert_single_entry(scanner)
 
@@ -561,7 +581,7 @@ class ScanAllRoutingTests(unittest.TestCase):
             with patch('module.meowfficer.scan.logger'):
                 result = scanner.scan_all(limit=20, passes=1, on_cat=on_cat)
         self.assertIs(result, sentinel)
-        continuous.assert_called_once_with(scanner, scanner.ocr, limit=20, on_cat=on_cat)
+        continuous.assert_called_once_with(scanner, scanner.ocr, limit=20, on_cat=on_cat, on_result=None)
         self.assertEqual(scanner.scanned, [])
         self.assertEqual(scanner.events[:2], [('ensure',), ('reset_cn',)])
         self.assertNotIn(('reset_legacy',), scanner.events)

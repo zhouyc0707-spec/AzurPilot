@@ -71,6 +71,11 @@ def report(configs, instance, limit=100):
     cats = [cat for cat in data['cats'] if isinstance(cat, dict)][-count_limit:]
     result = {'instance': instance, 'generatedAt': str(data.get('generatedAt', '')),
               'count': len(cats), 'cats': cats}
+    if 'scannedCount' in data:
+        scanned_count = data['scannedCount']
+        if type(scanned_count) is not int or scanned_count < 0:
+            raise ApiError('INTERNAL', '评分报告的已读取数量不正确')
+        result['scannedCount'] = scanned_count
     # 老报告不增加字段；同名猫保持各自的一条记录，不按名字合并。
     if 'lockActions' in data:
         result['lockActions'] = _lock_actions(data['lockActions'], count_limit)

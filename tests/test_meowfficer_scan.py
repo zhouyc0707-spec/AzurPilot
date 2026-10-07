@@ -303,7 +303,7 @@ class ScanOrchestrationTests(unittest.TestCase):
 class _FakeConfig:
     """只提供 ``_run_scan`` 用到的配置项。"""
 
-    def __init__(self, limit=0, passes=12, report_path='./log/meowfficer_score.md'):
+    def __init__(self, limit=0, passes=12, report_path=''):
         self.MeowfficerScore_ScanLimit = limit
         self.MeowfficerScore_ScanPasses = passes
         self.MeowfficerScore_ReportPath = report_path
@@ -318,9 +318,14 @@ class _FakeScanner:
         self.config = config
         self.device = device
 
-    def scan_all(self, limit=0, passes=12):
+    def scan_all(self, limit=0, passes=12, on_result=None):
         _FakeScanner.calls.append((limit, passes))
-        return list(self.results)
+        self.scanned = []
+        for entry in self.results:
+            self.scanned.append(entry)
+            if on_result is not None:
+                on_result(self, entry)
+        return self.scanned
 
 
 class ScanToReportTests(unittest.TestCase):
@@ -329,7 +334,7 @@ class ScanToReportTests(unittest.TestCase):
     def setUp(self):
         _FakeScanner.calls = []
 
-    def _task(self, results, report_path='./log/meowfficer_score.md', limit=0, passes=1):
+    def _task(self, results, report_path='', limit=0, passes=1):
         from module.meowfficer.score_task import MeowfficerScore
 
         task = object.__new__(MeowfficerScore)          # 跳过需要配置名的 __init__

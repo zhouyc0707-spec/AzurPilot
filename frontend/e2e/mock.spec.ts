@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import type { EmulatorStatus, MeowfficerCat, MeowfficerLockAction } from '../src/api/types'
+import type { EmulatorStatus, MeowfficerCat, MeowfficerLockAction, MeowfficerScoreReport } from '../src/api/types'
 
 for (const theme of ['light', 'legacy-light']) {
   test(`${theme} 模拟器运行状态实时更新、失败提示与窄屏布局`, async ({page}) => {
@@ -1219,8 +1219,7 @@ for (const theme of ['light', 'legacy-light']) {
     await expect(expand).toHaveAttribute('aria-expanded', 'false')
     await expect(body).toBeHidden()
     await expand.click()
-    // 刷新重新取得报告后打开子口径，再单独收起/展开验证 DOM 状态不会被卸载。
-    await otherRubrics.locator('summary').click()
+    // 手动刷新、自动更新和报告收起/展开，都保留已打开的子口径 DOM。
     await expect(otherRubrics).toHaveAttribute('open', '')
     await panel.getByRole('button', {name: '收起报告', exact: true}).click()
     await expand.click()
@@ -1228,6 +1227,123 @@ for (const theme of ['light', 'legacy-light']) {
     await panel.getByRole('button', {name: '收起报告', exact: true}).click()
     await panel.scrollIntoViewIfNeeded()
     await page.screenshot({path: testInfo.outputPath(`meowfficer-report-collapsed-${theme}.png`), fullPage: true, animations: 'disabled'})
+    expect(errors).toEqual([])
+  })
+}
+
+for (const theme of ['light', 'legacy-light']) {
+  test(`${theme} 指挥喵逐只报告自动出现并保留展开状态、清空防旧响应`, async ({page}, testInfo) => {
+    const errors: string[] = []
+    page.on('pageerror', error => errors.push(error.message))
+    await page.addInitScript(value => {
+      localStorage.setItem('azurpilot.theme', value)
+      localStorage.setItem('azurpilot.language', 'zh-CN')
+      localStorage.setItem('azurpilot.background', JSON.stringify({source: 'off'}))
+    }, theme)
+    let report: MeowfficerScoreReport | undefined
+    let holdNext = false
+    let pendingResponse: (() => void) | undefined
+    let disconnect: () => void = () => {throw new Error('尚未连接模拟服务')}
+    const requestLimits: number[] = []
+    await page.routeWebSocket('**/api/v1/ws', socket => {
+      disconnect = () => socket.close({code: 1012, reason: '模拟同实例重连'})
+      const server = socket.connectToServer()
+      socket.onMessage(message => {
+        const request = JSON.parse(String(message))
+        if (request.method === 'meowfficer.scoreReport') {
+          requestLimits.push(request.params.limit)
+          const response = report
+            ? {v: 1, type: 'response', id: request.id, ok: true, result: structuredClone(report)}
+            : {v: 1, type: 'response', id: request.id, ok: false, error: {code: 'NOT_FOUND', message: '尚无报告'}}
+          const send = () => socket.send(JSON.stringify(response))
+          if (holdNext) {holdNext = false; pendingResponse = send}
+          else send()
+        } else if (request.method === 'meowfficer.clearReport') {
+          report = undefined
+          socket.send(JSON.stringify({v: 1, type: 'response', id: request.id, ok: true, result: {cleared: true}}))
+        } else server.send(message)
+      })
+      server.onMessage(message => socket.send(message))
+    })
+    await page.goto('/#/i/demo-main/task/MeowfficerScore')
+    const panel = page.locator('.meow-panel')
+    await expect(panel).toContainText('还没跑过评分任务')
+    report = {instance: 'demo-main', generatedAt: '2026-10-07 12:00:00', count: 0, scannedCount: 0, cats: []}
+    await expect(panel.locator('.meow-summary')).toContainText('已读取 0 只 · 评分 0 只', {timeout: 3000})
+    await expect(panel).toContainText('暂无评分结果')
+    await expect(panel).not.toContainText('还没跑过评分任务')
+    // 蓝猫已读但不产生虚构评分，读取计数和完整报告入口仍立即更新。
+    report.scannedCount = 1
+    await expect(panel.locator('.meow-summary')).toContainText('已读取 1 只 · 评分 0 只', {timeout: 3000})
+    await expect(panel.getByRole('link', {name: '查看完整报告', exact: true})).toBeVisible()
+    await expect(panel.locator('.meow-card')).toHaveCount(0)
+    const first: MeowfficerCat = {cat: '实时猫一', level: 30, talents: [{name: '狼群之首', kind: 'special'}], rubrics: [
+      {label: '潜艇猫', primary: true, tier: '准毕业', score: 90},
+      {key: 'minor', label: '其他测试口径', primary: false, tier: '过渡可用', score: 40},
+    ]}
+    report = {...report, scannedCount: 2, count: 1, cats: [first]}
+    await expect(panel.locator('.meow-summary')).toContainText('已读取 2 只 · 评分 1 只', {timeout: 3000})
+    const expand = panel.getByRole('button', {name: '展开报告', exact: true})
+    await expect(expand).toHaveAttribute('aria-expanded', 'false')
+    await expand.click()
+    const details = panel.locator('details.meow-others').first()
+    await details.locator('summary').click()
+    await expect(details).toHaveAttribute('open', '')
+    report = {...report, scannedCount: 3, count: 2, cats: [first, {...first, cat: '实时猫二'}]}
+    await expect(panel.locator('.meow-card')).toHaveCount(2, {timeout: 3000})
+    await expect(panel.getByRole('button', {name: '收起报告', exact: true})).toHaveAttribute('aria-expanded', 'true')
+    await expect(details).toHaveAttribute('open', '')
+    // 同一秒、同一数量的修正也会更新，报告主体不闪回加载界面。
+    report = {...report, cats: [{...first, note: '同一秒内更新的评分说明'}, report.cats[1]]}
+    await expect(panel).toContainText('同一秒内更新的评分说明', {timeout: 3000})
+    await panel.getByRole('button', {name: '刷新', exact: true}).click()
+    await expect(panel.getByRole('button', {name: '刷新', exact: true})).toBeEnabled()
+    await expect(details).toHaveAttribute('open', '')
+    await panel.screenshot({path: testInfo.outputPath(`meowfficer-live-report-${theme}.png`), animations: 'disabled'})
+    // 控制 clear Promise 的完成时间，使旧连接请求在新取数器建立后才返回。
+    // 普通 WebSocket 断线会立即拒绝请求，此夹具补充覆盖更晚的异步完成时序。
+    await page.evaluate(async () => {
+      const modulePath = '/src/api/client.ts'
+      const {api} = await import(modulePath)
+      const original = api.request.bind(api)
+      let delayNextClear = true
+      api.request = (method: string, params: unknown) => {
+        if (method === 'meowfficer.clearReport' && delayNextClear) {
+          delayNextClear = false
+          return new Promise(resolve => {
+            ;(window as Window & {finishDelayedClear?: () => void}).finishDelayedClear = () => resolve({cleared: true})
+          })
+        }
+        return original(method, params)
+      }
+    })
+    await panel.getByRole('button', {name: '清空报告', exact: true}).click()
+    await page.locator('.modal').getByRole('button', {name: '确认清空', exact: true}).click()
+    await expect(page.locator('.modal').getByRole('button', {name: '正在清空…', exact: true})).toBeDisabled()
+    report = {...report, scannedCount: 4, count: 3, cats: [...report.cats, {...first, cat: '重连后的新猫'}]}
+    disconnect()
+    await expect(page.locator('.modal')).toHaveCount(0)
+    await expect(panel.locator('.meow-card')).toHaveCount(3, {timeout: 10000})
+    await expect(panel.getByRole('button', {name: '清空报告', exact: true})).toBeEnabled()
+    await expect(panel.getByRole('button', {name: '刷新', exact: true})).toBeEnabled()
+    await expect(details).toHaveAttribute('open', '')
+    await page.evaluate(() => (window as Window & {finishDelayedClear?: () => void}).finishDelayedClear?.())
+    await expect(panel.locator('.meow-card')).toHaveCount(3)
+    await expect(panel.locator('.meow-summary')).toContainText('已读取 4 只 · 评分 3 只')
+    // 清空时故意保留一个旧请求，迟到结果不能让已删除报告重新出现。
+    holdNext = true
+    await expect.poll(() => !!pendingResponse, {timeout: 3000}).toBe(true)
+    const beforeClearRequests = requestLimits.length
+    await panel.getByRole('button', {name: '清空报告', exact: true}).click()
+    await page.locator('.modal').getByRole('button', {name: '确认清空', exact: true}).click()
+    await expect(panel).toContainText('还没跑过评分任务')
+    pendingResponse!()
+    pendingResponse = undefined
+    await expect.poll(() => requestLimits.length, {timeout: 3000}).toBeGreaterThan(beforeClearRequests)
+    await expect(panel).toContainText('还没跑过评分任务')
+    await expect(panel.locator('.meow-card')).toHaveCount(0)
+    await expect(panel.getByRole('link', {name: '查看完整报告', exact: true})).toHaveCount(0)
+    expect(requestLimits.every(limit => limit === 500)).toBe(true)
     expect(errors).toEqual([])
   })
 }

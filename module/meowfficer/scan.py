@@ -770,7 +770,7 @@ class MeowfficerScanner(MeowfficerBase):
             start_index = 12 - rows * 4
         return self.scanned
 
-    def scan_all(self, limit: int = 0, passes: int = 12, on_cat=None) -> list:
+    def scan_all(self, limit: int = 0, passes: int = 12, on_cat=None, on_result=None) -> list:
         """遍历猫窝列表，返回每只猫的天赋。
 
         指挥喵**可以自定义名字**，自定义名甚至可能和天赋名一样（用户就有一只猫叫
@@ -782,6 +782,8 @@ class MeowfficerScanner(MeowfficerBase):
             passes (int): EN／JP／TW 最多翻几屏；CN 按实际拥有数连续读取。
             on_cat (Callable, optional): 当前猫仍在天赋页时的逐猫回调，接收
                 ``(scanner, ScanCapture)``；启用后严格检查身份和天赋完整性。
+            on_result (Callable, optional): 接受一条读取结果后、访问下一只前的只读回调，
+                接收 ``(scanner, (猫名, 天赋列表, 等级))``；不启用锁操作或改变排序要求。
 
         Returns:
             list[tuple[str, list[Talent], int | None]]: ``(猫名, 天赋列表, 等级)`` 列表；
@@ -801,7 +803,7 @@ class MeowfficerScanner(MeowfficerBase):
             logger.info('[指挥喵-扫描] 从首猫连续左滑读取，按猫窝拥有数结束；'
                         f'扫描上限 {limit if limit > 0 else "不限"} 只')
             from module.meowfficer.scan_continuous import scan_continuous_detail
-            return scan_continuous_detail(self, ocr, limit=limit, on_cat=on_cat)
+            return scan_continuous_detail(self, ocr, limit=limit, on_cat=on_cat, on_result=on_result)
 
         logger.info(f'[指挥喵-扫描] 最多 {passes} 屏，上限 '
                     f'{limit if limit > 0 else "不限"} 只')
@@ -881,6 +883,8 @@ class MeowfficerScanner(MeowfficerBase):
 
                 read_in_page += 1
                 self.scanned.append((cat, talents, level))
+                if on_result is not None:
+                    on_result(self, self.scanned[-1])
                 logger.attr('[指挥喵-扫描] 已扫描', f'{len(self.scanned)} 只')
 
             logger.info(f'[指挥喵-扫描] 第 {page} 屏结束，读到 {read_in_page} 只，'

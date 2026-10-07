@@ -35,6 +35,29 @@ class MeowfficerLockReportApiTests(unittest.TestCase):
         self.assertEqual(report(self.configs, 'testpilot'),
                          {'instance': 'testpilot', 'generatedAt': 'T', 'count': 1, 'cats': [{'cat': 'A'}]})
 
+    def test_scan_progress_counts_blue_cats_without_fabricating_scores(self):
+        self.write_report({'generatedAt': 'T', 'cats': [], 'scannedCount': 3})
+        self.assertEqual(report(self.configs, 'testpilot'),
+                         {'instance': 'testpilot', 'generatedAt': 'T', 'count': 0,
+                          'cats': [], 'scannedCount': 3})
+        self.write_report({'cats': [], 'scannedCount': 0})
+        self.assertEqual(report(self.configs, 'testpilot')['scannedCount'], 0)
+
+    def test_read_progress_is_not_reduced_by_the_display_limit(self):
+        self.write_report({'cats': [{'cat': 'A'}, {'cat': 'B'}], 'scannedCount': 12})
+        result = report(self.configs, 'testpilot', limit=1)
+        self.assertEqual(result['count'], 1)
+        self.assertEqual(result['cats'], [{'cat': 'B'}])
+        self.assertEqual(result['scannedCount'], 12)
+
+    def test_invalid_progress_is_rejected_instead_of_claiming_a_read_count(self):
+        for value in (True, False, -1, 1.5, '3', None, []):
+            with self.subTest(value=value):
+                self.write_report({'cats': [], 'scannedCount': value})
+                with self.assertRaises(ApiError) as caught:
+                    report(self.configs, 'testpilot')
+                self.assertEqual(caught.exception.code, 'INTERNAL')
+
     def test_zero_scores_preserve_blue_and_failed_actions_with_latest_limit(self):
         first = action('更早的蓝猫')
         second = action('同名蓝猫')

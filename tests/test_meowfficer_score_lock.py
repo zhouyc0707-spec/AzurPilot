@@ -6,7 +6,7 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 import numpy as np
 from PIL import Image
@@ -327,12 +327,12 @@ class ScanLockTaskTests(unittest.TestCase):
         with patch('module.meowfficer.scan.MeowfficerScanner', return_value=scanner), \
                 patch.object(task, '_score_and_apply_lock') as action:
             task._run_scan()
-        scanner.scan_all.assert_called_once_with(limit=0, passes=12)
+        scanner.scan_all.assert_called_once_with(limit=0, passes=12, on_result=ANY)
         action.assert_not_called()
         self.assertEqual(len(task.results), 1)
         self.assertEqual(task.lock_actions, [])
 
-    def test_unsupported_server_uses_readonly_scan_without_callback(self):
+    def test_unsupported_server_uses_readonly_progress_without_lock_callback(self):
         for server in ('en', 'jp', 'tw'):
             with self.subTest(server=server):
                 task = runner()
@@ -343,7 +343,7 @@ class ScanLockTaskTests(unittest.TestCase):
                         patch('module.meowfficer.scan.MeowfficerScanner', return_value=scanner), \
                         patch.object(task, '_score_and_apply_lock') as action:
                     task._run_scan()
-                scanner.scan_all.assert_called_once_with(limit=0, passes=12)
+                scanner.scan_all.assert_called_once_with(limit=0, passes=12, on_result=ANY)
                 action.assert_not_called()
                 self.assertEqual(len(task.results), 1)
                 self.assertEqual(task.lock_actions, [])

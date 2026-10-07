@@ -24,6 +24,7 @@ from uuid import uuid4
 
 from rich.table import Table
 
+from deploy.atomic import atomic_write
 from module.base.utils import save_image
 from module.config.config import AzurLaneConfig
 from module.exception import RequestHumanTakeover
@@ -134,6 +135,7 @@ class MeowfficerScore:
         if score is not None:
             logger.attr(f'{name} 评分', f'{score.label} {score.tier} {score.score100}/100')
         self.results.append((name, result))
+        self._publish_report()
         return result
 
     def _load_ocr(self):
@@ -278,17 +280,27 @@ class MeowfficerScore:
         logger.hr('评分汇总', level=1)
         logger.print(table, justify='center')
 
-    def _save_report(self):
-        """把评分卡写成 Markdown + 自包含 HTML 报告（HTML 用于好看地查看/分享）。"""
+    def _publish_report(self):
+        """逐只静默发布，报告失败不阻断游戏流程或掩盖原设备异常。"""
+        try:
+            self._save_report(quiet=True)
+        except Exception as exc:
+            logger.warning(f'[指挥喵-评分] 实时报告保存失败：{exc}')
+
+    def _save_report(self, quiet=False):
+        """原子更新 Markdown、HTML、JSON；逐只发布时不重复输出文件路径日志。"""
         path = self._cfg('ReportPath', './log/meowfficer_score.md')
         actions = getattr(self, 'lock_actions', [])
-        if not path or (not self.results and not actions):
+        scanned_count = getattr(self, 'scanned_count', None)
+        if not path or (not self.results and not actions and scanned_count is None):
             return
         stamp = f'{datetime.now():%Y-%m-%d %H:%M:%S}'
         lines = ['# 指挥喵天赋评分报告', '',
                  f'生成时间：{stamp}',
                  f'共 {len(self.results)} 只', '',
                  '> 评分口径来自公开攻略（28法则执行篇 / 详细上手攻略），不是游戏官方数值。', '']
+        if scanned_count is not None:
+            lines[4:4] = [f'已读取 {scanned_count} 只（蓝猫跳过评分）', '']
         if actions:
             from module.meowfficer.score_report import render_lock_actions_text
             lines.extend(['## 锁定／解锁处理记录', '', render_lock_actions_text(actions), ''])
@@ -304,9 +316,9 @@ class MeowfficerScore:
         json_path = os.path.splitext(path)[0] + '.json'
         try:
             os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-            with open(path, 'w', encoding='utf-8') as f:
-                f.write('\n'.join(lines))
-            logger.info(f'[指挥喵-评分] Markdown 报告已写入 {path}')
+            atomic_write(path, '\n'.join(lines))
+            if not quiet:
+                logger.info(f'[指挥喵-评分] Markdown 报告已写入 {path}')
         except OSError as e:
             logger.warning(f'[指挥喵-评分] Markdown 报告写入失败：{e}')
 
@@ -315,14 +327,17 @@ class MeowfficerScore:
             payload = to_payload(self.results, generated_at=stamp)
             if actions:
                 payload['lockActions'] = actions
+            if scanned_count is not None:
+                payload['scannedCount'] = scanned_count
             os.makedirs(os.path.dirname(os.path.abspath(html_path)), exist_ok=True)
-            with open(html_path, 'w', encoding='utf-8') as f:
-                f.write(render_html(self.results, generated_at=stamp, lock_actions=actions))
-            logger.info(f'[指挥喵-评分] HTML 报告已写入 {html_path}'
-                        '（也可在 WebUI 打开 /reports/meowfficer_score 查看）')
-            with open(json_path, 'w', encoding='utf-8') as f:
-                json.dump(payload, f, ensure_ascii=False, indent=1)
-            logger.info(f'[指挥喵-评分] JSON 报告已写入 {json_path}（供 WebUI 面板读取）')
+            atomic_write(html_path, render_html(self.results, generated_at=stamp,
+                                                lock_actions=actions, scanned_count=scanned_count))
+            # JSON 最后替换，页面只能读到完整旧版或完整新版，不能撞上写了一半的文件。
+            atomic_write(json_path, json.dumps(payload, ensure_ascii=False, indent=1))
+            if not quiet:
+                logger.info(f'[指挥喵-评分] HTML 报告已写入 {html_path}'
+                            '（也可在 WebUI 打开 /reports/meowfficer_score 查看）')
+                logger.info(f'[指挥喵-评分] JSON 报告已写入 {json_path}（供 WebUI 面板读取）')
         except Exception as e:
             logger.warning(f'[指挥喵-评分] HTML/JSON 报告写入失败：{e}')
 
@@ -343,6 +358,7 @@ class MeowfficerScore:
         passes = max(1, int(self._cfg('ScanPasses', 12) or 12))
 
         scanner = MeowfficerScanner(self.config, self.device)
+        self.scanned_count = 0
         if self._cfg('LockByAdvice', False):
             import module.config.server as server
             if server.server == 'cn':
@@ -351,16 +367,26 @@ class MeowfficerScore:
                     scanner.scan_all(limit=limit, passes=passes, on_cat=self._score_and_apply_lock)
                 except Exception:
                     # 现场接管或设备异常前保留已经核验的操作记录，不掩盖原异常。
-                    self._save_report()
+                    self._publish_report()
                     raise
                 return
             logger.warning('[指挥喵-评分] 当前服尚未校准锁状态资源，本次只评分、不操作锁定')
+        reported = 0
+
+        def on_result(current, entry):
+            nonlocal reported
+            self._record_scanned_scores([entry])
+            reported += 1
+            self.scanned_count = reported
+            self._publish_report()
+
         try:
-            scanned = scanner.scan_all(limit=limit, passes=passes)
+            scanned = scanner.scan_all(limit=limit, passes=passes, on_result=on_result)
         except Exception:
             # 连续只读扫描也可能中途接管，先评分保存已接受的猫，再传播原异常。
             try:
-                self._record_scanned_scores(scanner.scanned)
+                self.scanned_count = len(scanner.scanned)
+                self._record_scanned_scores(scanner.scanned[reported:])
             except Exception as exc:
                 logger.warning(f'[指挥喵-评分] 部分结果评分失败：{exc}')
             try:
@@ -373,7 +399,11 @@ class MeowfficerScore:
                            '请确认游戏停留在「指挥喵 - 猫窝」页面后重试')
             return
 
-        self._record_scanned_scores(scanned)
+        # 兼容未调用逐项回调的扫描器；已实时评分的前缀不能再次加入报告。
+        self.scanned_count = len(scanned)
+        self._record_scanned_scores(scanned[reported:])
+        if reported < len(scanned):
+            self._publish_report()
 
     def _record_scanned_scores(self, scanned):
         """记录只读扫描已接受的非空天赋，供正常结束或中途接管时保存。"""
@@ -408,7 +438,9 @@ class MeowfficerScore:
         target, reason = lock_target(capture, result)
         action = new_lock_action(capture, target, reason)
         self.lock_actions.append(action)
+        self.scanned_count = len(self.lock_actions)
         set_lock_state(scanner, capture, target, reason, entry=action)
+        self._publish_report()
         logger.attr(f'[指挥喵-锁定] {capture.display_name}',
                     f'{action["status"]}：{action["reason"]}')
         if action['status'] == 'unconfirmed':
@@ -424,7 +456,14 @@ class MeowfficerScore:
         """
         logger.hr('指挥喵天赋评分', level=1)
         source = self._cfg('Source', 'screenshot')
+        self.results = []
         self.lock_actions = []
+        if source == 'scan':
+            # 新扫描以零进度替换上次报告，首只蓝猫也能呈现本次真实读取数量。
+            self.scanned_count = 0
+            self._publish_report()
+        elif hasattr(self, 'scanned_count'):
+            del self.scanned_count
         logger.attr('评分来源', source)
         if self._cfg('LockByAdvice', False) and source != 'scan':
             logger.info('[指挥喵-评分] 按建议锁定仅在自动遍历模式生效，本次不操作游戏')

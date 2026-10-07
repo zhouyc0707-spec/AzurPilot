@@ -126,6 +126,8 @@ export interface MeowfficerLockAction {
 /** 「指挥喵评分」任务的结构化报告；蓝猫或失败项可能只有动作记录，没有评分。 */
 export interface MeowfficerScoreReport {
   instance: string; generatedAt: string; count: number; cats: MeowfficerCat[]
+  /** 扫描时已接受的猫数，包含不评分的蓝猫；旧报告和截图评分模式可省略。 */
+  scannedCount?: number
   lockActions?: MeowfficerLockAction[]
 }
 /** 旧版统计页的列描述：`key` 是 `Gui.Stat.*` 翻译键，非 `Gui.` 开头时按原文显示。 */

@@ -298,7 +298,7 @@ API 模块自身的行为参数来自部署配置 `config/deploy.yaml`（经 `St
 | 导入源 | `config/import/*.json` | 上传落盘，供创建实例选用 |
 | 删除备份 | `config/backup/{name}-{时间戳}.json` | 删除实例时移入，不自动清理 |
 | 自动生成密码 | `password.txt`（仓库根） | 仅公网监听且未设密码时生成一次 |
-| 指挥喵评分报告 | `log/meowfficer_score.json|md|html` | 评分任务产出；API 只读/删除；新报告可选逐猫 `lockActions`，无评分时仍可读取动作记录 |
+| 指挥喵评分报告 | `log/meowfficer_score.json|md|html` | 评分任务逐只原子更新；API 只读/删除；新报告可选逐猫 `lockActions`、非负整数 `scannedCount`（含不评分的蓝猫），无评分时仍可读取进度和动作记录；进度不受查询条数上限裁切 |
 
 ## 14. 生命周期
 

@@ -571,7 +571,8 @@ def render_text(result) -> str:
     return '\n'.join(lines)
 
 
-def render_html(results, title: str = '指挥喵天赋评分报告', generated_at: str = '', lock_actions=None) -> str:
+def render_html(results, title: str = '指挥喵天赋评分报告', generated_at: str = '',
+                lock_actions=None, scanned_count=None) -> str:
     """把若干 (来源名, ScoreResult) 渲染成自包含 HTML。
 
     Args:
@@ -579,6 +580,7 @@ def render_html(results, title: str = '指挥喵天赋评分报告', generated_a
         title (str, optional): 报告标题。
         generated_at (str, optional): 生成时间文本。
         lock_actions (list[dict], optional): 自动扫描的逐猫锁状态核验记录。
+        scanned_count (int, optional): 已读取猫数，包含按策略跳过评分的蓝猫。
 
     Returns:
         str: 完整 HTML 文档字符串。
@@ -605,6 +607,8 @@ def render_html(results, title: str = '指挥喵天赋评分报告', generated_a
                    '<th>主口径</th><th>档位</th><th>参考分</th></tr></thead><tbody>'
                    + ''.join(rows) + '</tbody></table>')
 
+    count_summary = (f'已读取 {_e(scanned_count)} 只 · 评分 {len(results)} 只'
+                     if scanned_count is not None else f'共 {len(results)} 只')
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -617,7 +621,7 @@ def render_html(results, title: str = '指挥喵天赋评分报告', generated_a
 <div class="wrap">
   <div class="page-head">
     <h1>{_e(title)}</h1>
-    <div class="sub">共 {len(results)} 只 · {_e(generated_at)}</div>
+    <div class="sub">{count_summary} · {_e(generated_at)}</div>
   </div>
   <div class="pills">
     <span>口径：<b>28法则执行篇 / 详细上手攻略</b></span>

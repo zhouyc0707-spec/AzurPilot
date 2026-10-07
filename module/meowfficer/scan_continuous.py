@@ -33,7 +33,7 @@ def identical_capture(previous, current, previous_image, current_image, ocr):
     return (previous.rarity, first_talents, first) == (current.rarity, second_talents, second)
 
 
-def scan_continuous_detail(scanner, ocr, limit=0, on_cat=None):
+def scan_continuous_detail(scanner, ocr, limit=0, on_cat=None, on_result=None):
     """只在启动时访问猫窝，进入首猫后保持天赋页连续读取。
 
     Pages:
@@ -82,6 +82,8 @@ def scan_continuous_detail(scanner, ocr, limit=0, on_cat=None):
         if on_cat is not None:
             on_cat(scanner, capture)
         scanner.scanned.append((name, capture.talents, capture.level))
+        if on_result is not None:
+            on_result(scanner, scanner.scanned[-1])
         logger.attr('[指挥喵-扫描] 已扫描', f'{len(scanner.scanned)}/{target} 只')
         previous, previous_image = capture, image
         # 用户允许相同内容的前四次继续；仅在完整比较并接受本次读取后结束旧阶段。
