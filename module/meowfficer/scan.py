@@ -32,6 +32,7 @@ from module.meowfficer.assets import MEOWFFICER_TALENT_TAB
 from module.meowfficer.base import MeowfficerBase
 from module.meowfficer.score import Talent
 from module.meowfficer.scan_utils import _crop, _mean_diff, parse_level, pick_cat_name, scroll_offset
+from module.meowfficer.scan_level import FLOW_ERRORS, read_cat_level
 from module.meowfficer.score_ocr import recognize
 from module.ui.assets import MEOWFFICER_GOTO_DORMMENU
 from module.meowfficer.scan_utils import (CATTERY_PANEL_AREA, CATTERY_SCREEN_HEIGHT, CATTERY_SWIPE_STEP,
@@ -267,7 +268,8 @@ class MeowfficerScanner(MeowfficerBase):
 
         猫名可能是玩家自定义的，所以这里不强行匹配天赋库里的猫名，
         只读取姓名框并去噪后原样返回，用于身份核验与日志，不将所属舰队名
-        作为候选。等级单独从经验条读取，用来辅助区分同名猫。
+        作为候选。等级单独从经验条读取，用来辅助区分同名猫；漏检时只在
+        等级条内部进行完整白字双路补证，不默认填值或继承前猫等级。
 
         Args:
             ocr (AlOcr): 已初始化的 OCR 实例。
@@ -278,16 +280,28 @@ class MeowfficerScanner(MeowfficerBase):
         from module.meowfficer.score_ocr import _iter_det_results
 
         fields = []
+        level_results = None
+        level_failed = False
         for label, area in (('猫名', CURRENT_CAT_NAME_AREA), ('等级', CURRENT_CAT_LEVEL_AREA)):
             image = self._crop_scale(_crop(self.device.image, area))
             try:
-                texts = [text for text, _score in _iter_det_results(ocr.det(image))]
+                results = ocr.det(image)
+                texts = [text for text, _score in _iter_det_results(results)]
+                if label == '等级':
+                    level_results = results
+            except FLOW_ERRORS:
+                raise
             except Exception as e:
                 logger.warning(f'[指挥喵-扫描] {label}识别失败：{e}')
                 texts = []
+                if label == '等级':
+                    level_failed = True
             fields.append(texts)
         name = pick_cat_name(fields[0])
+        # 沿用已有普通解析（满级经验条可被 OCR 连成 LV30D），仅对漏读新增严格补证。
         level = parse_level(fields[1])
+        if level is None and not level_failed:
+            level = read_cat_level(self.device.image, ocr, level_results)
         # 注意：指挥喵**可以自定义名字**，自定义名完全可能和天赋重名
         # （用户就有一只猫叫「不动如山」），所以这里绝不能用天赋库过滤猫名
         logger.debug(f'[指挥喵-扫描] 当前猫 OCR -> 姓名 {fields[0]}，等级 {fields[1]}，取 {name!r} Lv{level}')

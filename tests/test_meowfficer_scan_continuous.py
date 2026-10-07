@@ -254,6 +254,42 @@ class IdenticalCaptureTests(unittest.TestCase):
                                               self.image, self.image, self.ocr))
         attributes.assert_not_called()
 
+    def test_complete_talent_difference_proves_switch_without_one_or_both_levels(self):
+        first = [Talent('炮击新手·主力', '炮击新手·主力', 1),
+                 Talent('炮击新手·巡洋', '炮击新手·巡洋', 1),
+                 Talent('精锐指挥官·白鹰', '新晋指挥官·白鹰', 2)]
+        second = [Talent('炮击新手·主力', '炮击新手·主力', 1),
+                  Talent('精锐指挥官·白鹰', '新晋指挥官·白鹰', 2)]
+        for levels in ((None, 1), (1, None), (None, None)):
+            with self.subTest(levels=levels):
+                with patch(f'{MODULE}.read_static_attributes') as attributes:
+                    self.assertFalse(identical_capture(
+                        _capture(name='奥古喵', level=levels[0], talents=first),
+                        _capture(name='奥古喵', level=levels[1], talents=second),
+                        self.image, self.image, self.ocr))
+                attributes.assert_not_called()
+
+    def test_same_complete_talents_with_unknown_level_cannot_count_as_identical(self):
+        for levels in ((None, 1), (1, None), (None, None)):
+            with self.subTest(levels=levels):
+                with patch(f'{MODULE}.read_static_attributes') as attributes:
+                    with self.assertRaisesRegex(RequestHumanTakeover, '等级未能确认'):
+                        identical_capture(_capture(level=levels[0]), _capture(level=levels[1]),
+                                          self.image, self.image, self.ocr)
+                attributes.assert_not_called()
+
+    def test_incomplete_different_subset_cannot_prove_switch_when_levels_are_unknown(self):
+        for levels in ((None, 1), (1, None), (None, None)):
+            for incomplete_first in (False, True):
+                with self.subTest(levels=levels, incomplete_first=incomplete_first):
+                    previous = _capture(level=levels[0], talents_complete=not incomplete_first)
+                    current = _capture(level=levels[1], talents=[],
+                                       talents_complete=incomplete_first)
+                    with patch(f'{MODULE}.read_static_attributes') as attributes:
+                        with self.assertRaisesRegex(RequestHumanTakeover, '全部天赋未能完整确认'):
+                            identical_capture(previous, current, self.image, self.image, self.ocr)
+                    attributes.assert_not_called()
+
     def test_unrelated_image_change_does_not_prove_different_cat(self):
         changed = np.full_like(self.image, 255)
         with patch(f'{MODULE}.read_static_attributes', return_value=(131, 180, 220)):
@@ -458,6 +494,43 @@ class ContinuousDetailTests(unittest.TestCase):
             result = scan_continuous_detail(scanner, scanner.ocr)
             flow.attr.assert_not_called()
         self.assertEqual([row[2] for row in result], list(range(1, 21)))
+
+    def test_unknown_levels_with_distinct_complete_talents_still_publish_in_detail(self):
+        for levels in ((None, 1), (1, None), (None, None)):
+            with self.subTest(levels=levels):
+                scanner = _ContinuousScanner([
+                    _capture(name='奥古喵', level=levels[0], talent_level=1),
+                    _capture(name='奥古喵', level=levels[1], talent_level=2)],
+                    attributes=[None, None])
+                on_cat = Mock()
+                on_result = Mock()
+                with _FlowHarness(scanner) as flow:
+                    result = scan_continuous_detail(
+                        scanner, scanner.ocr, on_cat=on_cat, on_result=on_result)
+                    flow.attr.assert_not_called()
+                    self.assertEqual(flow.next.call_count, 1)
+                    flow.logger.warning.assert_not_called()
+                self.assertEqual(len(result), 2)
+                self.assertEqual([entry[2] for entry in result], list(levels))
+                self.assertEqual(on_cat.call_count, 2)
+                self.assertEqual(on_result.call_count, 2)
+                self.assertEqual(scanner.device.records, {'OTHER'})
+                self.assert_single_entry(scanner)
+
+    def test_same_complete_talents_with_unknown_level_stop_before_second_callback(self):
+        scanner = _ContinuousScanner([_capture(level=None), _capture(level=None)])
+        on_cat = Mock()
+        on_result = Mock()
+        with _FlowHarness(scanner) as flow:
+            with self.assertRaisesRegex(RequestHumanTakeover, '等级未能确认'):
+                scan_continuous_detail(
+                    scanner, scanner.ocr, on_cat=on_cat, on_result=on_result)
+            flow.attr.assert_not_called()
+        self.assertEqual(len(scanner.scanned), 1)
+        self.assertEqual(on_cat.call_count, 1)
+        self.assertEqual(on_result.call_count, 1)
+        self.assert_unaccepted_stage_protected(scanner, 2)
+        self.assert_single_entry(scanner)
 
     def test_unknown_breed_still_uses_complete_talents_for_continuous_comparison(self):
         scanner = _ContinuousScanner([_capture(breed=None, complete=False) for _ in range(3)])

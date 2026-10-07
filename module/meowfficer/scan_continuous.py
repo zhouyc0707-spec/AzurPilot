@@ -11,25 +11,26 @@ IDENTICAL_LIMIT = 5
 
 
 def identical_capture(previous, current, previous_image, current_image, ocr):
-    """同名同级时比较完整天赋和精确属性，不把滚动子集变化当作新猫。
+    """同名猫先比较已确认差异，再核验完全相同所需的等级与属性。
 
     蓝猫按既定策略不读取天赋、不评分，仅比较明确品质与三项属性。
-    完整天赋或已确认品质不同即可确认下一只，无需额外依赖属性 OCR。
+    完整天赋不同即可确认下一只，不因无关等级或属性 OCR 失败停止。
+    天赋相同后仍须确认等级、品质和属性，未知等级不能计入连续相同次数。
     无法完整读取时不能断言相同或不同，也不能累计到五次停止条件。
     """
     if previous.display_name != current.display_name:
         return False
-    if previous.level is None or current.level is None:
-        raise RequestHumanTakeover('同名猫等级未能确认，已停在天赋页并保留结果')
-    if previous.level != current.level:
+    if previous.level is not None and current.level is not None and previous.level != current.level:
         return False
     if not previous.talents_complete or not current.talents_complete:
-        raise RequestHumanTakeover('同名同级猫的全部天赋未能完整确认，已停在天赋页并保留结果')
+        raise RequestHumanTakeover('同名猫的全部天赋未能完整确认，已停在天赋页并保留结果')
     first_talents = sorted((t.name, t.line, t.level, t.kind) for t in previous.talents)
     second_talents = sorted((t.name, t.line, t.level, t.kind) for t in current.talents)
-    # 全部天赋已完整读取，明确差异足以确认切换，避免无关属性 OCR 失败中断扫描。
+    # 全部天赋已完整读取，明确差异足以确认切换，避免无关等级或属性漏读中断扫描。
     if first_talents != second_talents:
         return False
+    if previous.level is None or current.level is None:
+        raise RequestHumanTakeover('同名猫等级未能确认，已停在天赋页并保留结果')
     if previous.rarity not in ('R', 'SR', 'SSR') or current.rarity not in ('R', 'SR', 'SSR'):
         raise RequestHumanTakeover('同名同级猫的品质未能精确确认，已停在天赋页并保留结果')
     if previous.rarity != current.rarity:
