@@ -10,7 +10,7 @@ from module.meowfficer.assets import MEOWFFICER_TALENT_TAB
 from module.meowfficer.scan import MeowfficerScanner
 from module.meowfficer.scan_capture import capture_current_cat
 from module.ui.assets import MEOWFFICER_GOTO_DORMMENU
-from tests.test_meowfficer_scan_capture import _Device, _OCR, _Scanner, _frame
+from tests.test_meowfficer_scan_capture import _Device, _OCR, _Scanner, _coverage_frame, _frame
 
 
 class _HistoryDevice(_Device):
@@ -52,14 +52,13 @@ class _HistoryDevice(_Device):
 
     def prepare_cat(self, swipes):
         """顶部两次不动，底部移动若干次后两次不动，共产生指定数量手势。"""
-        self.image = _frame()
+        self.image = _coverage_frame()
         self.pending = None
         self.top_frames = []
         self.bottom_frames = []
         for index in range(swipes - 4):
-            image = _frame()
-            image[152:588, 1100:1244] = 40 + index * 40
-            self.bottom_frames.append(image)
+            # 同一匿名长图真实平移，保留可独立验证的重叠，不把颜色变化当作滚动。
+            self.bottom_frames.append(_coverage_frame(offset=50 * (index + 1)))
 
 
 class SwipeStageHistoryTests(unittest.TestCase):

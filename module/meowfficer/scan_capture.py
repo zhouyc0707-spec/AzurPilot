@@ -1,7 +1,7 @@
 """已有指挥喵自动锁定所需的保守识别。
 
 锁定操作与扫描遍历由调用方负责。本模块只收集当前天赋页的身份、品质与天赋，
-保留不完整原因；单屏可覆盖全部天赋时才给出可用于自动解锁的完整结果。
+保留不完整原因；通过顶部、底部和连续行覆盖后才给出可用于自动解锁的完整结果。
 """
 
 from dataclasses import dataclass, field
@@ -12,6 +12,7 @@ from module.exception import (EmulatorNotRunningError, GameBugError, GameNotRunn
                               GamePageUnknownError, GameStuckError, GameTooManyClickError,
                               RequestHumanTakeover, ScriptEnd, ScriptError)
 from module.meowfficer.cat_data import CATS
+from module.meowfficer.scan_talent_template import read_exact_talent_title
 from module.meowfficer.scan_utils import _crop, _mean_diff
 from module.meowfficer.score import TALENT_INDEX, Talent, normalize
 from module.meowfficer.score_ocr import build_variants
@@ -42,10 +43,26 @@ class ScanCapture:
     identity_image: np.ndarray | None = None
 
 
+@dataclass
+class TalentRow:
+    """可见图标框及其正向读取证据；边缘半行等待相邻截图补全。"""
+
+    top: int
+    bottom: int
+    talent: Talent | None = None
+    empty: bool = False
+    complete: bool = False
+
+
 def _add_reason(reasons, text):
     """同一失败原因只记录一次。"""
     if text not in reasons:
         reasons.append(text)
+
+
+def _rgb_variants(image):
+    """设备截图是 RGB；现有预处理与 AlOcr 的数组输入使用 BGR。"""
+    return build_variants(image[..., ::-1].copy())
 
 
 def _exact_breed(display_name):
@@ -84,23 +101,62 @@ def _details(ocr, image, reasons, context):
     return details
 
 
+def _rarity_glyph_variants(crop):
+    """按彩色品质字形去掉描边与背景，提供两种独立颜色分割证据。"""
+    high, low = crop.max(axis=2), crop.min(axis=2)
+    difference = high.astype(np.int16) - low.astype(np.int16)
+    # SSR 金字、SR 紫字与 R 蓝字都比浅色底纹饱和；不以颜色本身判定品质。
+    for threshold in (100, 110):
+        glyph = np.where(difference >= threshold, 0, 255).astype(np.uint8)
+        monochrome = np.repeat(glyph[:, :, None], 3, axis=2)
+        yield build_variants(monochrome)['plain']
+
+
+def _rarity_candidate(details):
+    """返回精确品质、尚未确认或无效证据；高置信度矛盾不能被补读掩盖。"""
+    if details is None or len(details) > 1:
+        return None, False
+    if not details:
+        return None, True
+    raw, confidence = details[0]
+    if not np.isfinite(confidence):
+        return None, False
+    text = normalize(raw).upper()
+    if confidence < 0.9:
+        return None, True
+    return (text, True) if text in ('SSR', 'SR', 'R') else (None, False)
+
+
 def _read_rarity(image, ocr, reasons):
-    """在独立品质区域正向识别 SSR/SR/R，两种预处理必须一致。"""
+    """精确核验品质；艺术字增强变体偏低时用独立颜色字形补读，门槛不变。"""
     found = []
-    for variant in build_variants(_crop(image, RARITY_AREA)).values():
+    crop = _crop(image, RARITY_AREA)
+    for variant in _rgb_variants(crop).values():
         details = _details(ocr, variant, reasons, '品质')
-        valid = {(normalize(text).upper(), score) for text, score in details or []}
-        if len(valid) != 1:
+        text, usable = _rarity_candidate(details)
+        if not usable:
             _add_reason(reasons, '品质标记未能明确识别')
             return None
-        text, confidence = next(iter(valid))
-        if text not in ('SSR', 'SR', 'R') or not np.isfinite(confidence) or confidence < 0.9:
-            _add_reason(reasons, '品质标记未能明确识别')
-            return None
-        found.append(text)
-    if len(set(found)) != 1:
+        if text is not None:
+            found.append(text)
+    if len(set(found)) > 1:
         _add_reason(reasons, '品质标记多次识别不一致')
         return None
+    if len(found) == 2:
+        return found[0]
+    if not found:
+        _add_reason(reasons, '品质标记未能明确识别')
+        return None
+    # 至少有一个原始变体精确确认后才补读；两种字形分割也必须各自高置信度。
+    for variant in _rarity_glyph_variants(crop):
+        details = _details(ocr, variant, reasons, '品质字形')
+        text, usable = _rarity_candidate(details)
+        if not usable or text is None:
+            _add_reason(reasons, '品质标记未能明确识别')
+            return None
+        if text != found[0]:
+            _add_reason(reasons, '品质标记多次识别不一致')
+            return None
     return found[0]
 
 
@@ -110,6 +166,8 @@ def _visible_rows(image):
     两条窄带位于图标两侧，不依赖 OCR 是否读到名字。颜色条件不依赖 RGB/BGR
     的通道顺序；不满足实拍几何时由调用方保护处理，不能把检测失败当成零天赋。
     """
+    if image is None or image.shape != (720, 1280, 3):
+        return []
     bands = np.concatenate((image[152:588, 756:762], image[152:588, 835:842]), axis=1)
     bright = bands.max(axis=2)
     dark = bands.min(axis=2)
@@ -125,52 +183,112 @@ def _visible_rows(image):
             for group in groups if len(group) >= 5]
 
 
-def _read_rows(image, ocr, reasons):
-    """每个独立完整图标框必须对应一个精确已知的标题，两个变体相互核对。"""
+def _blank_talent_body(image, top):
+    """正向确认未习得的浅青空图标和空白正文，排除漏读已学标题或效果。"""
+    # 避开左侧圆角和上下虚线；实拍空位此区域超过 99% 为浅色背景。
+    body = _crop(image, (866, top + 20, 1116, top + 68))
+    dark = body.min(axis=2)
+    icon = _crop(image, (765, top + 24, 833, top + 68))
+    low, high = icon.min(axis=2), icon.max(axis=2)
+    difference = high.astype(np.int16) - low.astype(np.int16)
+    cyan = (low >= 185) & (high >= 218) & (difference >= 22) & (difference <= 60)
+    return bool(body.size and (dark >= 220).mean() >= 0.99 and not (dark < 200).any()
+                and cyan.mean() >= 0.8)
+
+
+def _read_empty_row(image, top, ocr, reasons):
+    """空白面板须同时具备两个高置信度的精确「未习得」图标标签。"""
+    crop = _crop(image, (765, top + 24, 833, top + 68))
+    for variant in _rgb_variants(crop).values():
+        details = _details(ocr, variant, reasons, '未习得标记')
+        if details is None or len(details) != 1:
+            return False
+        raw, confidence = details[0]
+        if normalize(raw) != normalize('未习得') or not np.isfinite(confidence) or confidence < 0.9:
+            return False
+    return True
+
+
+def _read_row_records(image, ocr, reasons):
+    """逐框读取标题或明确空位；半截行保留位置，等待相邻截图补全。
+
+    普通天赋的精确名称已包含对应等级，不能用模糊标题或罗马图标猜出另一等级。
+    未习得必须通过独立图标文字和空白正文共同确认，不把没读到标题当作空位。
+    """
     rows = _visible_rows(image)
     if not rows:
         _add_reason(reasons, '没有确认到天赋图标行')
-        return [], False
-    talents = []
-    valid = True
-    if any(not 98 <= second[0] - first[0] <= 106 for first, second in zip(rows, rows[1:])):
+        return []
+    # 顶部半截行只剩底边可测，使用相邻底边距离；底部半截则使用上边距离。
+    gaps = [(second[1] - first[1] if first[0] <= 152 else second[0] - first[0])
+            for first, second in zip(rows, rows[1:])]
+    geometry_valid = all(98 <= gap <= 106 for gap in gaps)
+    if not geometry_valid:
         _add_reason(reasons, '天赋行框间距异常，不能排除漏行')
-        valid = False
+    records = []
     for top, bottom in rows:
+        record = TalentRow(top, bottom)
+        records.append(record)
         height = bottom - top
         if top <= 152 or bottom >= 588 or not 78 <= height <= 94:
             _add_reason(reasons, '天赋行被裁切或行框不完整')
-            valid = False
+            continue
+        if _blank_talent_body(image, top):
+            if _read_empty_row(image, top, ocr, reasons):
+                record.empty = True
+                record.complete = geometry_valid
+            else:
+                _add_reason(reasons, '空白天赋框未能高置信度确认未习得标记')
             continue
         crop = _crop(image, (855, top + 3, 1120, top + 42))
+        template_name = read_exact_talent_title(crop)
+        template_ref = TALENT_INDEX.get(normalize(template_name)) if template_name else None
         matches = []
-        for variant in build_variants(crop).values():
+        for variant in _rgb_variants(crop).values():
             details = _details(ocr, variant, reasons, '天赋标题')
+            if details == [] and template_ref is not None:
+                matches.append((template_ref, f'{template_name}（图像模板）'))
+                continue
             if details is None or len(details) != 1:
                 _add_reason(reasons, '天赋图标行与识别标题数量不一致')
-                valid = False
                 break
             raw, confidence = details[0]
             ref = TALENT_INDEX.get(normalize(raw))
-            if ref is None or not np.isfinite(confidence) or confidence < 0.9:
+            if not np.isfinite(confidence):
                 _add_reason(reasons, '天赋标题不是高置信度的精确已知名称')
-                valid = False
+                break
+            if ref is None or confidence < 0.9:
+                if template_ref is not None:
+                    # 完整字形独立确认标题，不能仅由 OCR 的「风之眼」等错字推断。
+                    matches.append((template_ref, f'{template_name}（图像模板）'))
+                    continue
+                _add_reason(reasons, '天赋标题不是高置信度的精确已知名称')
+                break
+            if template_ref is not None and template_ref.name != ref.name:
+                _add_reason(reasons, '同一天赋行多次识别不一致')
                 break
             matches.append((ref, raw))
         if len(matches) != 2:
             continue
         if matches[0][0].name != matches[1][0].name:
             _add_reason(reasons, '同一天赋行多次识别不一致')
-            valid = False
             continue
         ref, raw = matches[0]
-        talents.append(Talent(name=ref.name, line=ref.line, level=ref.level, kind=ref.kind, raw=raw))
+        record.talent = Talent(name=ref.name, line=ref.line, level=ref.level, kind=ref.kind, raw=raw)
+        record.complete = geometry_valid
+    talents = [row.talent for row in records if row.talent is not None]
     if len({talent.line for talent in talents}) != len(talents):
         _add_reason(reasons, '不同天赋行识别为重复天赋线')
-        valid = False
-    if len(talents) != len(rows):
-        valid = False
-    return talents, valid
+        for row in records:
+            row.complete = False
+    return records
+
+
+def _read_rows(image, ocr, reasons):
+    """兼容单帧读取：完整已学行和正向确认的空位共同构成全部可见行。"""
+    rows = _read_row_records(image, ocr, reasons)
+    talents = [row.talent for row in rows if row.talent is not None]
+    return talents, bool(rows) and all(row.complete for row in rows)
 
 
 def _same_panel(before, after):
@@ -211,8 +329,8 @@ def capture_current_cat(scanner, ocr, display_name, level):
         in: 当前猫的天赋页，已有可用的 1280×720 截图。
         out: 同一只猫的天赋页；本函数不点击锁按钮、不修改天赋。
 
-    滚动场景仍收集已确认天赋用于报告，但目前不能独立证明所有行已被完整读取，
-    因而保持 ``complete=False``。读取和滚动次数有限，不能用「没有新名字」证明到底。
+    每次滚动必须确认实际重叠位移，边缘半行须由相邻截图补全。只有顶部、底部、
+    全部行与当前猫身份都有正向证据时才完整；不能用「没有新名字」证明到底。
     """
     reasons = []
     capture = ScanCapture(display_name, [], level, _exact_breed(display_name), None, False, False, reasons)
@@ -265,10 +383,17 @@ def capture_current_cat(scanner, ocr, display_name, level):
             break
     if not top_confirmed:
         _add_reason(reasons, '未确认天赋列表顶部')
-    talents, all_rows_known = _read_rows(frame, ocr, reasons)
-    top_talents = [(talent.name, talent.level) for talent in talents]
-    found = {talent.line: talent for talent in talents}
-    single_screen = True
+    from module.meowfficer.scan_coverage import TalentCoverage, measure_talent_shift, uncovered_tail
+
+    issues = []
+    rows = _read_row_records(frame, ocr, issues)
+    # 起点由顶部正向核验约束；未知标题也保留物理行位置，不能靠 OCR 数量减行。
+    full_rows = [row for row in rows if row.top > 152 and row.bottom < 588
+                 and 78 <= row.bottom - row.top <= 94]
+    origin = full_rows[0].top if full_rows else 153
+    row_height = full_rows[0].bottom - full_rows[0].top if full_rows else 87
+    coverage = TalentCoverage(origin, row_height)
+    coverage.add(rows, issues=issues)
     bottom_confirmed = False
     same = 0
     while steps < MAX_SCROLL_STEPS:
@@ -279,33 +404,33 @@ def capture_current_cat(scanner, ocr, display_name, level):
         if not stable:
             _add_reason(reasons, '天赋面板未稳定')
         changed = not _same_panel(before, frame)
-        if changed:
-            single_screen = False
         same = same + 1 if stable and not changed else 0
+        shift = measure_talent_shift(before, frame) if changed else 0
+        if changed and (shift is None or shift <= 0):
+            _add_reason(reasons, '天赋滚动前后重叠位移未能确认，不能排除漏行')
+            break
         if changed or same >= 2:
-            page_talents, known = _read_rows(frame, ocr, reasons)
-            all_rows_known = all_rows_known and known
-            for talent in page_talents:
-                old = found.get(talent.line)
-                if old is None or talent.level > old.level:
-                    found[talent.line] = talent
-            if single_screen and [(talent.name, talent.level) for talent in page_talents] != top_talents:
-                _add_reason(reasons, '同一完整面板重复读取结果不一致')
+            issues = []
+            rows = _read_row_records(frame, ocr, issues)
+            coverage.add(rows, shift=shift, issues=issues)
         if same >= 2:
             bottom_confirmed = True
             break
     if not bottom_confirmed:
         _add_reason(reasons, '未确认天赋列表底部')
-    if not single_screen:
-        _add_reason(reasons, '天赋需滚动读取，尚不能独立证明全部行完整')
+    elif uncovered_tail(frame, rows):
+        _add_reason(reasons, '列表底部仍有未对应行框的内容，不能排除漏行')
+    covered = coverage.finish()
+    for issue in coverage.reasons:
+        _add_reason(reasons, issue)
     shown, final_level = scanner._read_current_cat(ocr)
     if not detail_page_confirmed(scanner.device.image) or not shown \
             or normalize(shown) != normalize(display_name) or final_level != actual_level \
             or _mean_diff(capture.identity_image, _crop(scanner.device.image, IDENTITY_AREA)) >= 3:
         capture.identity_confirmed = False
         _add_reason(reasons, '读取期间当前猫身份发生变化或未能再次确认')
-    capture.talents = list(found.values())
+    capture.talents = coverage.talents()
     capture.complete = (capture.identity_confirmed and capture.breed is not None
                         and capture.rarity in ('SSR', 'SR') and top_confirmed and bottom_confirmed
-                        and single_screen and all_rows_known and bool(capture.talents) and not reasons)
+                        and covered and bool(capture.talents) and not reasons)
     return capture
