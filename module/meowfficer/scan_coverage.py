@@ -10,14 +10,65 @@ SCROLL_AREA = (748, 152, 1120, 588)
 ROW_STEP = 102
 
 
+def _matching_titles(before, after, distance):
+    """全部重叠完整行须匹配；至少两个非空标题才能独立证明位移。"""
+    from module.meowfficer.scan_capture import _visible_rows
+
+    def full_rows(image):
+        return [(top, bottom) for top, bottom in _visible_rows(image)
+                if top > 152 and bottom < 588 and 78 <= bottom - top <= 94]
+
+    first, second = full_rows(before), full_rows(after)
+    supported = 0
+    for top, bottom in first:
+        moved_top, moved_bottom = top - distance, bottom - distance
+        if moved_top <= 152 or moved_bottom >= 588:
+            continue
+        if (moved_top, moved_bottom) not in second:
+            return False
+        a = cv2.GaussianBlur(_crop(before, (855, top + 3, 1120, top + 42)), (3, 3), 0)
+        b = cv2.GaussianBlur(_crop(after, (855, moved_top + 3, 1120, moved_top + 42)), (3, 3), 0)
+        difference = np.abs(a.astype(np.int16) - b.astype(np.int16))
+        if _mean_diff(a, b) > 3 or (difference.max(axis=2) > 20).mean() > 0.02:
+            return False
+        ink_a, ink_b = np.count_nonzero(a.min(axis=2) < 180), np.count_nonzero(b.min(axis=2) < 180)
+        if (ink_a >= 32) != (ink_b >= 32):
+            return False
+        if ink_a >= 32:
+            # 均差容易被浅色背景稀释，字形还须独立满足完整标题模板的严格相似度。
+            similarity = float(cv2.matchTemplate(a, b, cv2.TM_CCOEFF_NORMED)[0, 0])
+            if not np.isfinite(similarity) or similarity < 0.97:
+                return False
+            supported += 1
+    return supported >= 2
+
+
+def talent_panel_unchanged(before, after):
+    """行框与全部完整标题保持原位时，正文跑马灯和图标闪光不算纵向滚动。"""
+    from module.meowfficer.scan_capture import _visible_rows
+
+    return (_visible_rows(before) == _visible_rows(after)
+            and _matching_titles(before, after, 0))
+
+
+def _title_shift(before, after):
+    """由行框提出候选，再以静态标题证明唯一位移；不能只凭周期边框猜测。"""
+    from module.meowfficer.scan_capture import _visible_rows
+
+    first, second = _visible_rows(before), _visible_rows(after)
+    candidates = {top - moved_top for top, bottom in first for moved_top, moved_bottom in second
+                  if top > 152 and bottom < 588 and moved_top > 152 and moved_bottom < 588
+                  and 0 < top - moved_top <= 240}
+    accepted = [distance for distance in candidates if _matching_titles(before, after, distance)]
+    return accepted[0] if len(accepted) == 1 else None
+
+
 def measure_talent_shift(before, after):
     """返回可由重叠内容确认的向上位移；未知变化不能当作零位移。"""
     first, second = _crop(before, SCROLL_AREA), _crop(after, SCROLL_AREA)
     if _mean_diff(first, second) < 1:
         return 0
     shift = scroll_offset(first, second, max_shift=240)
-    if shift <= 0:
-        return None
     # 去掉视口边缘的抗锯齿，保留至少近两行重叠；不接受仅凭行距猜出的位移。
     def matches(distance):
         a, b = first[distance + 4:-4], second[4:-distance - 4]
@@ -29,8 +80,11 @@ def measure_talent_shift(before, after):
         difference = np.abs(a.astype(np.int16) - b.astype(np.int16))
         return _mean_diff(a, b) <= 3 and (difference.max(axis=2) > 20).mean() <= 0.02
 
-    if not matches(shift):
-        return None
+    if shift <= 0 or not matches(shift):
+        # 效果说明会横向滚动，图标也会闪光；只用静态完整标题补证，不放宽原阈值。
+        if talent_panel_unchanged(before, after):
+            return 0
+        return _title_shift(before, after)
     # 连续空位外观相同，整行周期的其他位移也匹配时不能猜测移动了几行。
     if any(matches(other) for other in (shift - ROW_STEP, shift + ROW_STEP)
            if 0 < other <= 240):

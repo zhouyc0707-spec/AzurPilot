@@ -294,8 +294,13 @@ def _read_rows(image, ocr, reasons):
 
 def _same_panel(before, after):
     """行框实际位移也算变化，避免整面板平均差稀释了小范围滚动。"""
-    return (_visible_rows(before) == _visible_rows(after)
-            and _mean_diff(_crop(before, PANEL_AREA), _crop(after, PANEL_AREA)) < 3)
+    if _visible_rows(before) != _visible_rows(after):
+        return False
+    if _mean_diff(_crop(before, PANEL_AREA), _crop(after, PANEL_AREA)) < 3:
+        return True
+    from module.meowfficer.scan_coverage import talent_panel_unchanged
+
+    return talent_panel_unchanged(before, after)
 
 
 def _stable_frame(scanner):
