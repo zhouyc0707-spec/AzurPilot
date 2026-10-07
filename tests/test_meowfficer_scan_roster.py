@@ -1,12 +1,15 @@
 """猫窝拥有数与等级排序的离线回归，使用匿名截图和 OCR 输出夹具。"""
 
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
+from PIL import Image
 
 from module.exception import GameStuckError, GameTooManyClickError, RequestHumanTakeover
 from module.meowfficer.scan_roster import (COUNT_AREA, SORT_AREA, STATIC_ATTRIBUTE_AREAS,
+                                          _attribute_glyph_variants,
                                           lock_independent_sort, read_roster_count,
                                           read_static_attributes)
 
@@ -235,6 +238,19 @@ def _attribute_frame():
     return image
 
 
+def _digit_frame():
+    """匿名夹具仅保存三块数字区域，不包含账号、猫名、立绘或资源。"""
+    path = Path(__file__).parent / 'fixtures/meowfficer/static_attributes_180_171_190.png'
+    digits = np.asarray(Image.open(path).convert('RGB'))
+    image = _frame()
+    offset = 0
+    for x0, y0, x1, y1 in STATIC_ATTRIBUTE_AREAS:
+        width = x1 - x0
+        image[y0:y1, x0:x1] = digits[:, offset:offset + width]
+        offset += width + 3
+    return image
+
+
 class StaticAttributeTests(unittest.TestCase):
 
     def setUp(self):
@@ -284,6 +300,145 @@ class StaticAttributeTests(unittest.TestCase):
                 with self.assertRaises(error_type) as raised:
                     read_static_attributes(_attribute_frame(), _AttributeOCR({'command': [error]}))
                 self.assertIs(raised.exception, error)
+
+
+class StaticAttributeGlyphTests(unittest.TestCase):
+
+    def setUp(self):
+        guard = patch('module.config.server.server', 'cn')
+        guard.start()
+        self.addCleanup(guard.stop)
+
+    def _ocr(self, command):
+        return _AttributeOCR({'logistics': [_result('180')] * 2,
+                              'command': command, 'tactics': [_result('190')] * 2})
+
+    def test_real_gray_digits_offer_two_different_complete_segmentations(self):
+        image = _digit_frame()
+        for x0, y0, x1, y1 in STATIC_ATTRIBUTE_AREAS:
+            with self.subTest(area=(x0, y0, x1, y1)):
+                variants = _attribute_glyph_variants(image[y0:y1, x0:x1])
+                self.assertEqual(len(variants), 2)
+                self.assertFalse(np.array_equal(*variants))
+                for variant in variants:
+                    self.assertEqual(variant.shape, ((y1 - y0 + 16) * 3, (x1 - x0 + 16) * 3, 3))
+                    self.assertTrue(np.all(variant[:20] == 255))
+                    self.assertTrue(np.all(variant[-20:] == 255))
+                    np.testing.assert_array_equal(variant[:, :, 0], variant[:, :, 1])
+                    np.testing.assert_array_equal(variant[:, :, 0], variant[:, :, 2])
+
+    def test_one_original_confirmation_requires_both_high_confidence_glyphs(self):
+        outputs = [_result('171', .92578), _result('171', .84439),
+                   _result('171', .97328), _result('171', .99969)]
+        ocr = self._ocr(outputs)
+        self.assertEqual(read_static_attributes(_digit_frame(), ocr), (180, 171, 190))
+        self.assertEqual(ocr.calls, {'logistics': 2, 'command': 4, 'tactics': 2})
+        self.assertFalse(np.array_equal(ocr.inputs['command'][2], ocr.inputs['command'][3]))
+
+    def test_missing_original_and_low_first_variant_can_be_supplemented(self):
+        for original in (([], _result('171')), (_result('171', .84), _result('171'))):
+            with self.subTest(original=original):
+                ocr = self._ocr([*original, _result('171'), _result('171')])
+                self.assertEqual(read_static_attributes(_digit_frame(), ocr), (180, 171, 190))
+
+    def test_normal_double_confirmation_does_not_run_extra_ocr(self):
+        ocr = self._ocr([_result('171')] * 2)
+        with patch('module.meowfficer.scan_roster._attribute_glyph_variants') as supplementary:
+            self.assertEqual(read_static_attributes(_digit_frame(), ocr), (180, 171, 190))
+            supplementary.assert_not_called()
+        self.assertEqual(ocr.calls['command'], 2)
+
+    def test_supplement_cannot_cover_unknown_originals_or_contradictory_numbers(self):
+        originals = [(_result('171', .89), _result('171', .84)),
+                     ([], []), (_result('171'), _result('191', .84)),
+                     (_result('171'), _result('191'))]
+        for original in originals:
+            with self.subTest(original=original):
+                ocr = self._ocr([*original, _result('171'), _result('171')])
+                self.assertIsNone(read_static_attributes(_digit_frame(), ocr))
+                self.assertEqual(ocr.calls['command'], 2)
+
+    def test_invalid_original_is_never_overridden_by_clear_glyphs(self):
+        invalid = [_result('指挥171', .84), _result('171') + _result('1'),
+                   _result('171', float('nan')), _result('171', float('inf')),
+                   _result('171', None), _result('171', -1), _result('171', 1.1),
+                   [{'text': '171'}], _result('10001'), RuntimeError('模型故障')]
+        for result in invalid:
+            with self.subTest(result=result):
+                ocr = self._ocr([_result('171'), result, _result('171'), _result('171')])
+                self.assertIsNone(read_static_attributes(_digit_frame(), ocr))
+                self.assertEqual(ocr.calls['command'], 2)
+
+    def test_each_supplement_requires_exact_valid_matching_high_confidence(self):
+        invalid = [[], _result('171', .899), _result('171', float('nan')),
+                   _result('171', float('inf')), _result('171', None),
+                   _result('1O1'), _result('171指挥'), _result('191'),
+                   _result('171') + _result('1'), RuntimeError('模型故障')]
+        for result in invalid:
+            for index in (2, 3):
+                with self.subTest(result=result, variant=index):
+                    outputs = [_result('171'), _result('171', .84),
+                               _result('171'), _result('171')]
+                    outputs[index] = result
+                    self.assertIsNone(read_static_attributes(_digit_frame(), self._ocr(outputs)))
+
+    def test_clipped_or_extra_gray_edge_ink_cannot_be_supplemented(self):
+        x0, y0, x1, y1 = STATIC_ATTRIBUTE_AREAS[1]
+        for edge in ('left', 'right', 'top', 'bottom'):
+            with self.subTest(edge=edge):
+                image = _digit_frame()
+                crop = image[y0:y1, x0:x1]
+                if edge == 'left':
+                    crop[10:20, 0] = 80
+                elif edge == 'right':
+                    crop[10:20, -1] = 80
+                elif edge == 'top':
+                    crop[0, 10:20] = 80
+                else:
+                    crop[-1, 10:20] = 80
+                ocr = self._ocr([_result('171'), _result('171', .84),
+                                 _result('171'), _result('171')])
+                self.assertIsNone(read_static_attributes(image, ocr))
+                self.assertEqual(ocr.calls['command'], 2)
+
+    def test_color_shapes_and_absent_or_tiny_digit_ink_are_not_supplementary_evidence(self):
+        for color in ((30, 90, 160), (255, 255, 255), (0, 0, 0)):
+            with self.subTest(color=color):
+                crop = np.full((31, 42, 3), color, dtype=np.uint8)
+                self.assertIsNone(_attribute_glyph_variants(crop))
+        crop = np.full((31, 42, 3), 255, dtype=np.uint8)
+        crop[10:14, 10:18] = 80
+        self.assertIsNone(_attribute_glyph_variants(crop))
+
+    def test_colored_extra_text_cannot_be_filtered_away_from_valid_gray_digits(self):
+        x0, y0, x1, y1 = STATIC_ATTRIBUTE_AREAS[1]
+        image = _digit_frame()
+        image[y0 + 10:y0 + 20, x0 + 2:x0 + 5] = (30, 130, 230)
+        self.assertIsNone(_attribute_glyph_variants(image[y0:y1, x0:x1]))
+        ocr = self._ocr([_result('171'), _result('171', .84),
+                         _result('171'), _result('171')])
+        self.assertIsNone(read_static_attributes(image, ocr))
+        self.assertEqual(ocr.calls['command'], 2)
+
+    def test_supplementary_flow_exceptions_propagate(self):
+        for error_type in (GameStuckError, GameTooManyClickError, RequestHumanTakeover):
+            with self.subTest(error=error_type):
+                error = error_type('流程中断')
+                ocr = self._ocr([_result('171'), _result('171', .84), error])
+                with self.assertRaises(error_type) as raised:
+                    read_static_attributes(_digit_frame(), ocr)
+                self.assertIs(raised.exception, error)
+
+    def test_failure_log_names_field_and_raw_scores_without_other_text(self):
+        ocr = self._ocr([_result('171', .92578), _result('171', .84439),
+                         _result('171', .84), _result('171')])
+        with patch('module.meowfficer.scan_roster.logger.warning') as warning:
+            self.assertIsNone(read_static_attributes(_digit_frame(), ocr))
+        message = warning.call_args[0][0]
+        self.assertIn('指挥静态属性核验失败', message)
+        self.assertIn('0.92578', message)
+        self.assertIn('0.84439', message)
+        self.assertIn('灰字补证', message)
 
 
 if __name__ == '__main__':

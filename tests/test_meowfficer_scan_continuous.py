@@ -216,6 +216,44 @@ class IdenticalCaptureTests(unittest.TestCase):
         self.assertFalse(self.compare(_capture(), _capture(), ((131, 180, 220), (132, 180, 220))))
         self.assertFalse(self.compare(_capture(), _capture(rarity='SR')))
 
+    def test_complete_talent_or_known_rarity_difference_does_not_read_attributes(self):
+        previous = _capture(name='约翰喵', talents=[Talent('新人雷击士·驱逐', '雷击士·驱逐', 1)])
+        differing = (_capture(name='约翰喵', talents=[Talent('装填新手·战列', '装填手·战列', 1)]),
+                     replace(previous, rarity='SR'))
+        for current in differing:
+            with self.subTest(current=current):
+                with patch(f'{MODULE}.read_static_attributes',
+                           side_effect=AssertionError('已确认不同猫不应读取属性')) as attributes:
+                    self.assertFalse(identical_capture(previous, current, self.image, self.image, self.ocr))
+                attributes.assert_not_called()
+
+    def test_incomplete_talents_cannot_prove_switch_even_if_talents_or_rarity_differ(self):
+        for current in (_capture(talent_level=2, talents_complete=False),
+                        _capture(rarity='SR', talents_complete=False)):
+            with self.subTest(current=current):
+                with patch(f'{MODULE}.read_static_attributes') as attributes:
+                    with self.assertRaisesRegex(RequestHumanTakeover, '全部天赋未能完整确认'):
+                        identical_capture(_capture(), current, self.image, self.image, self.ocr)
+                attributes.assert_not_called()
+
+    def test_unknown_rarity_with_same_talents_is_protected_before_reading_attributes(self):
+        for previous, current in ((_capture(rarity=None), _capture()),
+                                  (_capture(), _capture(rarity=None)),
+                                  (_capture(rarity=None), _capture(rarity=None)),
+                                  (_capture(rarity='未知品质'), _capture())):
+            with self.subTest(previous=previous.rarity, current=current.rarity):
+                with patch(f'{MODULE}.read_static_attributes') as attributes:
+                    with self.assertRaisesRegex(RequestHumanTakeover, '品质未能精确确认'):
+                        identical_capture(previous, current, self.image, self.image, self.ocr)
+                attributes.assert_not_called()
+
+    def test_complete_talent_difference_is_conclusive_without_rarity_evidence(self):
+        with patch(f'{MODULE}.read_static_attributes') as attributes:
+            self.assertFalse(identical_capture(_capture(rarity=None),
+                                              _capture(rarity=None, talent_level=2),
+                                              self.image, self.image, self.ocr))
+        attributes.assert_not_called()
+
     def test_unrelated_image_change_does_not_prove_different_cat(self):
         changed = np.full_like(self.image, 255)
         with patch(f'{MODULE}.read_static_attributes', return_value=(131, 180, 220)):
@@ -388,6 +426,32 @@ class ContinuousDetailTests(unittest.TestCase):
                 self.assertEqual(len(result), 14)
                 self.assert_single_entry(scanner)
 
+    def test_complete_different_talents_with_unreadable_attributes_are_accepted_and_published(self):
+        captures = [_capture(name='约翰喵', talents=[Talent('新人雷击士·驱逐', '雷击士·驱逐', 1)]),
+                    _capture(name='约翰喵', talents=[Talent('装填新手·战列', '装填手·战列', 1)])]
+        scanner = _ContinuousScanner(captures, attributes=[None, None])
+        locked = []
+        published = []
+
+        def on_cat(active, capture):
+            locked.append(capture.talents[0].name)
+            active.events.append(('lock', active.capture_count))
+
+        def on_result(active, entry):
+            published.append((entry[1][0].name, len(active.scanned)))
+            self.assertEqual(locked[-1], entry[1][0].name)
+
+        with _FlowHarness(scanner) as flow:
+            result = scan_continuous_detail(scanner, scanner.ocr, on_cat=on_cat, on_result=on_result)
+            flow.attr.assert_not_called()
+            self.assertEqual(flow.next.call_count, 1)
+            flow.logger.warning.assert_not_called()
+        self.assertEqual(len(result), 2)
+        self.assertEqual(locked, ['新人雷击士·驱逐', '装填新手·战列'])
+        self.assertEqual(published, [('新人雷击士·驱逐', 1), ('装填新手·战列', 2)])
+        self.assertEqual(scanner.device.records, {'OTHER'})
+        self.assert_single_entry(scanner)
+
     def test_same_name_different_level_is_counted_without_attribute_compare(self):
         scanner = _ContinuousScanner([_capture(level=i) for i in range(1, 21)])
         with _FlowHarness(scanner) as flow:
@@ -463,16 +527,33 @@ class ContinuousDetailTests(unittest.TestCase):
         self.assert_unaccepted_stage_protected(scanner, 2)
         self.assert_single_entry(scanner)
 
+    def test_incomplete_different_talents_stop_before_lock_and_report_callback(self):
+        scanner = _ContinuousScanner([_capture(), _capture(talent_level=2, talents_complete=False)],
+                                     attributes=[None, None])
+        on_cat = Mock()
+        on_result = Mock()
+        with _FlowHarness(scanner) as flow:
+            with self.assertRaisesRegex(RequestHumanTakeover, '全部天赋未能完整确认'):
+                scan_continuous_detail(scanner, scanner.ocr, on_cat=on_cat, on_result=on_result)
+            flow.attr.assert_not_called()
+        self.assertEqual(len(scanner.scanned), 1)
+        self.assertEqual(on_cat.call_count, 1)
+        self.assertEqual(on_result.call_count, 1)
+        self.assert_unaccepted_stage_protected(scanner, 2)
+        self.assert_single_entry(scanner)
+
     def test_unknown_same_identity_attributes_stop_without_accepting_or_clearing(self):
         for attributes in ((None, (131, 180, 220)), ((131, 180, 220), None)):
             with self.subTest(attributes=attributes):
                 scanner = _ContinuousScanner([_capture(), _capture()], attributes=list(attributes))
                 on_cat = Mock(return_value={'status': 'changed'})
+                on_result = Mock()
                 with _FlowHarness(scanner):
                     with self.assertRaisesRegex(RequestHumanTakeover, '三项属性未能精确确认'):
-                        scan_continuous_detail(scanner, scanner.ocr, on_cat=on_cat)
+                        scan_continuous_detail(scanner, scanner.ocr, on_cat=on_cat, on_result=on_result)
                 self.assertEqual(len(scanner.scanned), 1)
                 self.assertEqual(on_cat.call_count, 1)
+                self.assertEqual(on_result.call_count, 1)
                 self.assert_unaccepted_stage_protected(scanner, 2)
 
     def test_unknown_current_identity_stops_and_preserves_partial_results(self):

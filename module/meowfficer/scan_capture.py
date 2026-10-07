@@ -13,6 +13,7 @@ from module.exception import (EmulatorNotRunningError, GameBugError, GameNotRunn
                               RequestHumanTakeover, ScriptEnd, ScriptError)
 from module.meowfficer.cat_data import CATS
 from module.meowfficer.scan_talent_template import read_exact_talent_title
+from module.meowfficer.scan_title import split_title_may_retry, split_title_variants
 from module.meowfficer.scan_utils import _crop, _mean_diff
 from module.meowfficer.score import TALENT_INDEX, Talent, normalize
 from module.meowfficer.score_ocr import build_variants
@@ -75,7 +76,7 @@ def _exact_breed(display_name):
     return next((cat for cat in CATS if normalize(cat) == name), None)
 
 
-def _details(ocr, image, reasons, context):
+def _details(ocr, image, reasons, context, *, boxes=None):
     """读取原始行信息，OCR 失败记录为不完整，游戏控制异常仍向上传播。"""
     try:
         results = ocr.det(image)
@@ -87,9 +88,14 @@ def _details(ocr, image, reasons, context):
     details = []
     for item in results or []:
         if isinstance(item, dict):
-            text, score = item.get('text', ''), item.get('score', 0)
+            if 'score' not in item:
+                _add_reason(reasons, f'{context} 缺少 OCR 置信度')
+                return None
+            text, score = item.get('text', ''), item['score']
+            box = item.get('box')
         elif isinstance(item, (tuple, list)) and len(item) >= 3:
             text, score = item[0], item[2]
+            box = item[1]
         else:
             _add_reason(reasons, f'{context} 缺少 OCR 置信度')
             return None
@@ -100,6 +106,8 @@ def _details(ocr, image, reasons, context):
                 _add_reason(reasons, f'{context} OCR 置信度无效')
                 return None
             details.append((str(text), confidence))
+            if boxes is not None:
+                boxes.append(box)
     return details
 
 
@@ -246,8 +254,11 @@ def _read_row_records(image, ocr, reasons):
         template_name = read_exact_talent_title(crop)
         template_ref = TALENT_INDEX.get(normalize(template_name)) if template_name else None
         matches = []
+        split_title = False
+        invalid_evidence = False
         for variant_name, variant in _rgb_variants(crop).items():
-            details = _details(ocr, variant, reasons, '天赋标题')
+            boxes = []
+            details = _details(ocr, variant, reasons, '天赋标题', boxes=boxes)
             # 保存真实 OCR 证据供保护现场复盘，不参与放宽标题接受条件。
             record.readings.append({
                 'variant': variant_name,
@@ -259,27 +270,62 @@ def _read_row_records(image, ocr, reasons):
                 matches.append((template_ref, f'{template_name}（图像模板）'))
                 continue
             if details is None or len(details) != 1:
+                if details is not None and template_ref is None \
+                        and split_title_may_retry(details, boxes, variant.shape):
+                    split_title = True
+                    continue
                 _add_reason(reasons, '天赋图标行与识别标题数量不一致')
+                invalid_evidence = True
                 break
             raw, confidence = details[0]
             ref = TALENT_INDEX.get(normalize(raw))
-            if not np.isfinite(confidence):
+            if not np.isfinite(confidence) or not 0 <= confidence <= 1:
                 _add_reason(reasons, '天赋标题不是高置信度的精确已知名称')
+                invalid_evidence = True
                 break
             if ref is None or confidence < 0.9:
                 if template_ref is not None:
                     # 完整字形独立确认标题，不能仅由 OCR 的「风之眼」等错字推断。
                     matches.append((template_ref, f'{template_name}（图像模板）'))
                     continue
+                if split_title and 0 <= confidence <= 1:
+                    continue
                 _add_reason(reasons, '天赋标题不是高置信度的精确已知名称')
+                invalid_evidence = True
                 break
             if template_ref is not None and template_ref.name != ref.name:
                 _add_reason(reasons, '同一天赋行多次识别不一致')
+                invalid_evidence = True
                 break
             matches.append((ref, raw))
-        if len(matches) != 2:
+        if split_title and not invalid_evidence:
+            # 分框只触发整幅字形补读，原碎片不拼接为名字、不参与置信度合并。
+            recovered = []
+            for variant_name, variant in split_title_variants(crop):
+                details = _details(ocr, variant, reasons, '天赋标题字形')
+                record.readings.append({
+                    'variant': variant_name,
+                    'results': ([{'text': text, 'confidence': confidence if np.isfinite(confidence)
+                                  else str(confidence)} for text, confidence in details]
+                                if details is not None else None),
+                })
+                if details is None or len(details) != 1:
+                    _add_reason(reasons, '天赋图标行与识别标题数量不一致')
+                    invalid_evidence = True
+                    break
+                raw, confidence = details[0]
+                ref = TALENT_INDEX.get(normalize(raw))
+                if ref is None or not np.isfinite(confidence) or not 0.9 <= confidence <= 1:
+                    _add_reason(reasons, '天赋标题不是高置信度的精确已知名称')
+                    invalid_evidence = True
+                    break
+                recovered.append((ref, raw))
+            if len(recovered) != 2:
+                continue
+            matches.extend(recovered)
+        if invalid_evidence or len(matches) < 2:
             continue
-        if matches[0][0].name != matches[1][0].name:
+        if len({ref.name for ref, _ in matches}) != 1:
             _add_reason(reasons, '同一天赋行多次识别不一致')
             continue
         ref, raw = matches[0]

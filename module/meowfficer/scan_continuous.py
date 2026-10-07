@@ -14,6 +14,7 @@ def identical_capture(previous, current, previous_image, current_image, ocr):
     """同名同级时比较完整天赋和精确属性，不把滚动子集变化当作新猫。
 
     蓝猫按既定策略不读取天赋、不评分，仅比较明确品质与三项属性。
+    完整天赋或已确认品质不同即可确认下一只，无需额外依赖属性 OCR。
     无法完整读取时不能断言相同或不同，也不能累计到五次停止条件。
     """
     if previous.display_name != current.display_name:
@@ -24,13 +25,20 @@ def identical_capture(previous, current, previous_image, current_image, ocr):
         return False
     if not previous.talents_complete or not current.talents_complete:
         raise RequestHumanTakeover('同名同级猫的全部天赋未能完整确认，已停在天赋页并保留结果')
+    first_talents = sorted((t.name, t.line, t.level, t.kind) for t in previous.talents)
+    second_talents = sorted((t.name, t.line, t.level, t.kind) for t in current.talents)
+    # 全部天赋已完整读取，明确差异足以确认切换，避免无关属性 OCR 失败中断扫描。
+    if first_talents != second_talents:
+        return False
+    if previous.rarity not in ('R', 'SR', 'SSR') or current.rarity not in ('R', 'SR', 'SSR'):
+        raise RequestHumanTakeover('同名同级猫的品质未能精确确认，已停在天赋页并保留结果')
+    if previous.rarity != current.rarity:
+        return False
     first = read_static_attributes(previous_image, ocr)
     second = read_static_attributes(current_image, ocr)
     if first is None or second is None:
         raise RequestHumanTakeover('同名同级猫的三项属性未能精确确认，已停在天赋页并保留结果')
-    first_talents = sorted((t.name, t.line, t.level, t.kind) for t in previous.talents)
-    second_talents = sorted((t.name, t.line, t.level, t.kind) for t in current.talents)
-    return (previous.rarity, first_talents, first) == (current.rarity, second_talents, second)
+    return first == second
 
 
 def scan_continuous_detail(scanner, ocr, limit=0, on_cat=None, on_result=None):
