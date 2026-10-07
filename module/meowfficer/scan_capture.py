@@ -1,7 +1,7 @@
 """已有指挥喵自动锁定所需的保守识别。
 
 锁定操作与扫描遍历由调用方负责。本模块只收集当前天赋页的身份、品质与天赋，
-保留不完整原因；通过顶部、底部和连续行覆盖后才给出可用于自动解锁的完整结果。
+保留不完整原因；确认顶部及已学天赋连续覆盖与终点后才给出可用于自动解锁的完整结果。
 """
 
 from dataclasses import dataclass, field
@@ -11,6 +11,7 @@ import numpy as np
 from module.exception import (EmulatorNotRunningError, GameBugError, GameNotRunningError,
                               GamePageUnknownError, GameStuckError, GameTooManyClickError,
                               RequestHumanTakeover, ScriptEnd, ScriptError)
+from module.logger import logger
 from module.meowfficer.cat_data import CATS
 from module.meowfficer.scan_talent_template import read_exact_talent_title
 from module.meowfficer.scan_title import split_title_may_retry, split_title_variants
@@ -214,7 +215,8 @@ def _read_empty_row(image, top, ocr, reasons):
         if details is None or len(details) != 1:
             return False
         raw, confidence = details[0]
-        if normalize(raw) != normalize('未习得') or not np.isfinite(confidence) or confidence < 0.9:
+        if normalize(raw) != normalize('未习得') or not np.isfinite(confidence) \
+                or not 0.9 <= confidence <= 1:
             return False
     return True
 
@@ -389,8 +391,9 @@ def capture_current_cat(scanner, ocr, display_name, level, *, reset_history=True
         in: 当前猫的天赋页，已有可用的 1280×720 截图。
         out: 同一只猫的天赋页；本函数不点击锁按钮、不修改天赋。
 
-    每次滚动必须确认实际重叠位移，边缘半行须由相邻截图补全。只有顶部、底部、
-    全部行与当前猫身份都有正向证据时才完整；不能用「没有新名字」证明到底。
+    每次滚动必须确认实际重叠位移，已学边缘半行须由相邻截图补全。确认顶部及
+    到首个完整未习得栏的连续已学行后可结束；没有可靠空栏时仍确认物理底部与
+    全部行。最终核验当前猫身份，不能用「没有新名字」证明到底。
     """
     reasons = []
     capture = ScanCapture(display_name, [], level, _exact_breed(display_name), None, False, False, reasons)
@@ -459,18 +462,26 @@ def capture_current_cat(scanner, ocr, display_name, level, *, reset_history=True
     row_height = full_rows[0].bottom - full_rows[0].top if full_rows else 87
     coverage = TalentCoverage(origin, row_height)
     coverage.add(rows, issues=issues)
-    frame, batches, retry_reason = retry_talent_rows(
-        scanner, ocr, frame, rows, issues, capture.identity_image)
-    for retry_frame, retry_rows, retry_issues in batches:
-        coverage.add(retry_rows, issues=retry_issues)
-        read_frames.append(TalentReadFrame(
-            'reread', retry_frame, list(retry_rows), list(retry_issues), coverage.offset))
-        rows = retry_rows
-    if retry_reason:
-        _add_reason(reasons, retry_reason)
+
+    def can_finish_at_empty():
+        return top_confirmed and not reasons and coverage.first_empty_end() is not None
+
+    # 已学前缀已完整时，后续空槽的裁边或暂时读取失败不再增加补读和滑动。
+    at_first_empty = can_finish_at_empty()
+    if not at_first_empty:
+        frame, batches, retry_reason = retry_talent_rows(
+            scanner, ocr, frame, rows, issues, capture.identity_image)
+        for retry_frame, retry_rows, retry_issues in batches:
+            coverage.add(retry_rows, issues=retry_issues)
+            read_frames.append(TalentReadFrame(
+                'reread', retry_frame, list(retry_rows), list(retry_issues), coverage.offset))
+            rows = retry_rows
+        if retry_reason:
+            _add_reason(reasons, retry_reason)
+        at_first_empty = can_finish_at_empty()
     bottom_confirmed = False
     same = 0
-    while steps < MAX_SCROLL_STEPS:
+    while not at_first_empty and steps < MAX_SCROLL_STEPS:
         before = frame.copy()
         _scroll(scanner, toward_bottom=True, reference=capture.identity_image)
         steps += 1
@@ -494,23 +505,28 @@ def capture_current_cat(scanner, ocr, display_name, level, *, reset_history=True
             coverage.add(rows, shift=shift, issues=issues)
             read_frames.append(TalentReadFrame(
                 'bottom', frame.copy(), list(rows), list(issues), coverage.offset))
-            frame, batches, retry_reason = retry_talent_rows(
-                scanner, ocr, frame, rows, issues, capture.identity_image)
-            for retry_frame, retry_rows, retry_issues in batches:
-                coverage.add(retry_rows, issues=retry_issues)
-                read_frames.append(TalentReadFrame(
-                    'reread', retry_frame, list(retry_rows), list(retry_issues), coverage.offset))
-                rows = retry_rows
-            if retry_reason:
-                _add_reason(reasons, retry_reason)
+            at_first_empty = can_finish_at_empty()
+            if not at_first_empty:
+                frame, batches, retry_reason = retry_talent_rows(
+                    scanner, ocr, frame, rows, issues, capture.identity_image)
+                for retry_frame, retry_rows, retry_issues in batches:
+                    coverage.add(retry_rows, issues=retry_issues)
+                    read_frames.append(TalentReadFrame(
+                        'reread', retry_frame, list(retry_rows), list(retry_issues), coverage.offset))
+                    rows = retry_rows
+                if retry_reason:
+                    _add_reason(reasons, retry_reason)
+                at_first_empty = can_finish_at_empty()
+        if at_first_empty:
+            break
         if same >= 2:
             bottom_confirmed = True
             break
-    if not bottom_confirmed:
+    if not at_first_empty and not bottom_confirmed:
         _add_reason(reasons, '未确认天赋列表底部')
-    elif uncovered_tail(frame, rows):
+    elif not at_first_empty and uncovered_tail(frame, rows):
         _add_reason(reasons, '列表底部仍有未对应行框的内容，不能排除漏行')
-    covered = coverage.finish()
+    covered = coverage.finish(at_first_empty=at_first_empty)
     for issue in coverage.reasons:
         _add_reason(reasons, issue)
     shown, final_level = scanner._read_current_cat(ocr)
@@ -521,8 +537,12 @@ def capture_current_cat(scanner, ocr, display_name, level, *, reset_history=True
         _add_reason(reasons, '读取期间当前猫身份发生变化或未能再次确认')
     capture.talents = coverage.talents()
     capture.talents_complete = (capture.identity_confirmed and capture.rarity in ('SSR', 'SR')
-                               and top_confirmed and bottom_confirmed and covered
+                               and top_confirmed and (bottom_confirmed or at_first_empty) and covered
                                and bool(capture.talents) and not reasons)
+    if at_first_empty and capture.talents_complete:
+        end = coverage.first_empty_end()
+        logger.attr('[指挥喵-扫描] 已学天赋读取完成',
+                    f'第 {end + 1} 行未习得，前 {end} 行连续完整，跳过剩余空槽')
     if capture.breed is None:
         _add_reason(reasons, '自定义猫名未能确定原始猫种')
     capture.complete = capture.talents_complete and capture.breed is not None

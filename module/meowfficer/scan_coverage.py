@@ -153,16 +153,42 @@ class TalentCoverage:
             self.covered[index] = row
             self.pending.pop(index, None)
 
-    def finish(self):
-        """顶部和底部由调用方另行证明，本处要求中间所有行均有完整证据。"""
-        if self.last_index < 0:
+    def first_empty_end(self):
+        """探测连续已学行后的完整空栏终点，不把后续裁边空槽算作漏读。
+
+        游戏把已学天赋排列在未习得栏之前。调用方仍须确认顶部和当前猫；此处
+        要求起点到首空栏逐行完整，永久矛盾或空栏后出现已学证据时不能提前结束。
+        探测不修改覆盖或原因，条件不足仍可继续原来的滚动读取。
+        """
+        if self.reasons:
+            return None
+        empty_indices = [index for index, row in self.covered.items()
+                         if row.complete and row.empty and row.talent is None]
+        if not empty_indices:
+            return None
+        end = min(empty_indices)
+        for index in range(end):
+            row = self.covered.get(index)
+            if row is None or not row.complete or row.empty or row.talent is None:
+                return None
+        if any(index > end and identity is not None for index, identity in self.known.items()):
+            return None
+        return end
+
+    def finish(self, *, at_first_empty=False):
+        """顶部及物理底部或首空栏终点由调用方证明，本处要求所需行连续完整。"""
+        end = self.first_empty_end() if at_first_empty else self.last_index
+        if end is None:
+            self._reason('未能以完整未习得栏确认已学天赋终点')
+            return False
+        if end < 0:
             self._reason('没有确认到天赋图标行')
-        for index in range(self.last_index + 1):
+        for index in range(end + 1):
             if index not in self.covered:
                 self._reason(f'第 {index + 1} 行天赋未能完整确认，不能排除漏读')
                 for issue in self.pending.get(index, ()):
                     self._reason(issue)
-        return not self.reasons and self.last_index >= 0
+        return not self.reasons and end >= 0
 
     def talents(self):
         """按实际行序返回已确认天赋，未习得占位不参与评分。"""
