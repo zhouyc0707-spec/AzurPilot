@@ -630,15 +630,13 @@ class MeowfficerScanner(MeowfficerBase):
                 return
         raise RequestHumanTakeover('天赋页或目标猫身份未能正向确认，已停止指挥喵扫描')
 
-    def _return_verified_list(self, before, index):
-        """核对返回后的视口、排序和选中位置，不能继续使用失效的卡位。"""
+    def _confirm_cattery_position(self, index, before=None, other_index=None):
+        """连续两帧确认选中位置；有基准截图时同时核验全页顺序。"""
         from module.meowfficer.scan_list import cattery_order_unchanged, selected_card
 
-        if not self._back_to_cattery():
-            raise RequestHumanTakeover('未能返回猫窝列表，已停止指挥喵扫描')
-        # 整个面板均值稳定不代表选择环动画已经完成；未知帧只等待新截图，
-        # 连续两帧正向确认前不选择下一格，也不放宽位置和顺序要求。
+        # 整个面板均值稳定不代表选择环动画已经完成；未知帧只等待新截图。
         stable = 0
+        previous = None
         reason = '未能正向确认猫窝列表页'
         for _ in range(12):
             self.device.screenshot()
@@ -647,20 +645,50 @@ class MeowfficerScanner(MeowfficerBase):
                 reason = '未能正向确认猫窝列表页'
                 continue
             selected = selected_card(self.device.image)
-            if selected != index:
+            if selected is None or selected not in (index, other_index):
                 stable = 0
                 actual = '未知' if selected is None else f'第 {selected + 1} 格'
                 reason = f'猫窝选中位置未通过核验：预期第 {index + 1} 格，实际 {actual}'
                 continue
-            if not cattery_order_unchanged(before, self.device.image):
+            if before is not None and not cattery_order_unchanged(before, self.device.image):
                 stable = 0
                 reason = '猫窝名单顺序或滚动视口未通过核验'
                 continue
             reason = '猫窝返回状态尚未连续两帧确认'
-            stable += 1
+            stable = stable + 1 if selected == previous else 1
+            previous = selected
             if stable >= 2:
-                return
+                return selected
         raise RequestHumanTakeover(f'{reason}；已停止扫描，避免重复读取或错配')
+
+    def _return_verified_list(self, before, index, ocr=None, entry_identity=None, current_identity=None):
+        """以相同选中状态核验完整名单，再恢复刚读完的猫作为下一步锚点。
+
+        Pages:
+            in: 刚读完的猫的天赋页。
+            out: 猫窝列表，完整名单与原视口一致，刚读完的猫正向选中。
+        """
+        from module.meowfficer.scan_list import selected_card
+
+        anchor = selected_card(before)
+        if anchor is None:
+            raise RequestHumanTakeover('进入天赋页前的猫窝选中位置未知，已停止扫描')
+        if anchor != index and (ocr is None or entry_identity is None or current_identity is None):
+            raise RequestHumanTakeover('猫窝选中状态核验缺少入口或当前猫身份，已停止扫描')
+        if not self._back_to_cattery():
+            raise RequestHumanTakeover('未能返回猫窝列表，已停止指挥喵扫描')
+        if anchor == index:
+            self._confirm_cattery_position(index, before=before)
+            return
+
+        # 选中圈会遮住姓名及等级笔画，不能把圈换位后的图像直接当成名单变化。
+        # 先确认返回位置，再恢复基准图的选择状态；不裁掉文字、不放宽比较阈值。
+        selected = self._confirm_cattery_position(index, other_index=anchor)
+        if selected != anchor:
+            self._select_verified_card(anchor, ocr, entry_identity)
+        self._confirm_cattery_position(anchor, before=before)
+        # 恢复刚读完的卡位，保留页末滚动重叠核验所需的最后一只锚点。
+        self._select_verified_card(index, ocr, current_identity)
 
     def _scan_by_swipe(self, ocr, limit, passes, on_cat):
         """保留每屏位置锚点，在相邻身份可区分时连续左滑读取。"""
@@ -685,6 +713,7 @@ class MeowfficerScanner(MeowfficerBase):
                 if not in_detail:
                     identity = self._select_verified_card(index, ocr, identities[index])
                     before = self.device.image.copy()
+                    entry_identity = identity
                     if not self._open_talent():
                         raise RequestHumanTakeover('打开天赋页失败，已停止指挥喵扫描')
                     self._confirm_talent_identity(ocr, identity)
@@ -725,7 +754,8 @@ class MeowfficerScanner(MeowfficerBase):
                         logger.info(f'[指挥喵-扫描] 天赋页左滑切换到 {identity[0]} Lv{identity[1]}')
                         continue
                     logger.info('[指挥喵-扫描] 左滑未确认下一只，返回猫窝按位置核验')
-                self._return_verified_list(before, index)
+                self._return_verified_list(before, index, ocr=ocr,
+                                           entry_identity=entry_identity, current_identity=identity)
                 in_detail = False
                 if reached_limit:
                     logger.info(f'[指挥喵-扫描] 已达到上限 {limit} 只，结束')

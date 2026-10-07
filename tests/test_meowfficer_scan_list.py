@@ -25,6 +25,51 @@ def _select(image, index, offset=0):
         image[cy + top + offset:cy + top + offset + 5, cx + 52:cx + 56] = (245, 195, 80)
 
 
+def _glyph_image():
+    """用相同姓名等级的匿名深色字形验证头像仍参与位置核验。"""
+    image = _image()
+    for index in range(12):
+        cx, cy = card_center(index)
+        name = image[cy + 49:min(cy + 77, 550), cx - 60:cx + 60]
+        level = image[cy + 27:cy + 45, cx - 43:cx - 23]
+        name[:] = (240, 228, 220)
+        level[:] = (240, 228, 220)
+        # 匿名的三枚几何字形，深色笔画和浅色间隙独立于账号及真实文字。
+        for left in (28, 48, 68):
+            name[5:19, left:left + 2] = (86, 82, 78)
+            name[5:19, left + 10:left + 12] = (86, 82, 78)
+            name[5:7, left:left + 12] = (86, 82, 78)
+            name[11:13, left:left + 12] = (86, 82, 78)
+            name[17:19, left:left + 12] = (86, 82, 78)
+        for left in (1, 11):
+            level[2:16, left:left + 2] = (86, 82, 78)
+            level[2:16, left + 5:left + 7] = (86, 82, 78)
+            level[2:4, left:left + 7] = (86, 82, 78)
+            level[8:10, left:left + 7] = (86, 82, 78)
+            level[14:16, left:left + 7] = (86, 82, 78)
+    return image
+
+
+def _selection_glow(image, index, color=(255, 255, 251)):
+    """选择虚线环换位的浅色光晕，仅改变底板并保留可辨认的字形。"""
+    cx, cy = card_center(index)
+    name = image[cy + 49:min(cy + 77, 550), cx - 60:cx + 60]
+    level = image[cy + 27:cy + 45, cx - 43:cx - 23]
+    for region in (name, level):
+        halo = np.zeros(region.shape[:2], dtype=bool)
+        if region.shape[1] == 120:
+            halo[2:7, 12:108] = True
+            halo[17:22, 12:108] = True
+        else:
+            halo[:4] = True
+            halo[15:] = True
+        background = region.min(axis=2) > 150
+        region[halo & background] = color
+        # 选中效果轻微改变墨色，但不移动或抹掉文字轮廓。
+        ink = region.max(axis=2) < 130
+        region[ink] += 4
+
+
 class _OCR:
     def __init__(self, results=None):
         self.results = iter(results or [('林德喵', 0.99)] * 2 + [('30', 0.99)] * 2)
@@ -136,6 +181,105 @@ class ScanListTests(unittest.TestCase):
         _select(after, 1)
         after[165:207, 772:814] = (120, 70, 110)
         self.assertFalse(cattery_order_unchanged(before, after))
+
+
+class SelectionGlowOrderTests(unittest.TestCase):
+    """选择光晕换位不能直接放宽名单核验，先恢复同一选中状态再比较。"""
+
+    @staticmethod
+    def _pair(color=(255, 255, 251)):
+        before, after = _glyph_image(), _glyph_image()
+        _select(before, 0)
+        _selection_glow(before, 0, color)
+        _select(after, 5)
+        _selection_glow(after, 5, color)
+        return before, after
+
+    @staticmethod
+    def _aligned_pair():
+        """恢复相同选择状态后，基准必须先通过完整名单比较。"""
+        before, after = _glyph_image(), _glyph_image()
+        for image in (before, after):
+            _select(image, 0)
+            _selection_glow(image, 0)
+        return before, after
+
+    def test_white_and_pale_yellow_halos_require_matching_selection_before_comparison(self):
+        for color in ((255, 255, 251), (253, 246, 211)):
+            with self.subTest(color=color):
+                before, after = self._pair(color)
+                self.assertEqual(selected_card(before), 0)
+                self.assertEqual(selected_card(after), 5)
+                self.assertFalse(cattery_order_unchanged(before, after))
+                restored = _glyph_image()
+                _select(restored, 0)
+                _selection_glow(restored, 0, color)
+                self.assertEqual(selected_card(restored), 0)
+                self.assertTrue(cattery_order_unchanged(before, restored))
+
+    def test_same_name_same_level_different_portrait_still_rejects_selected_card(self):
+        for index in (0, 5):
+            with self.subTest(index=index):
+                before, after = self._aligned_pair()
+                self.assertTrue(cattery_order_unchanged(before, after))
+                cx, cy = card_center(index)
+                # 每格的名字和等级完全相同，不能借相同文字忽略头像变化。
+                after[cy - 20:cy + 22, cx - 12:cx + 30] = (150, 90, 180)
+                self.assertFalse(cattery_order_unchanged(before, after))
+
+    def test_real_name_or_level_ink_change_is_rejected_on_old_and_new_selection(self):
+        for index in (0, 5):
+            for changed in ('name', 'level'):
+                with self.subTest(index=index, changed=changed):
+                    before, after = self._aligned_pair()
+                    self.assertTrue(cattery_order_unchanged(before, after))
+                    cx, cy = card_center(index)
+                    if changed == 'name':
+                        # 抹掉第一枚字形并重画为不同的笔画，不只是背景变亮。
+                        after[cy + 54:cy + 68, cx - 32:cx - 20] = (240, 228, 220)
+                        after[cy + 54:cy + 68, cx - 28:cx - 24] = (86, 82, 78)
+                    else:
+                        # 等级徽章的首位由空心轮廓改为实心深色块。
+                        after[cy + 29:cy + 43, cx - 42:cx - 35] = (86, 82, 78)
+                    self.assertFalse(cattery_order_unchanged(before, after))
+
+    def test_unselected_card_text_background_change_cannot_use_glow_exception(self):
+        before, after = self._aligned_pair()
+        self.assertTrue(cattery_order_unchanged(before, after))
+        _selection_glow(after, 6)
+        self.assertFalse(cattery_order_unchanged(before, after))
+
+    def test_viewport_displacement_is_not_treated_as_selection_glow(self):
+        before, after = self._aligned_pair()
+        self.assertTrue(cattery_order_unchanged(before, after))
+        after[132:550, 718:1245] = np.roll(after[132:550, 718:1245], 5, axis=0)
+        self.assertFalse(cattery_order_unchanged(before, after))
+
+    def test_unknown_or_multiple_selection_rings_do_not_authorize_glow_fallback(self):
+        for unknown in ('missing', 'multiple'):
+            with self.subTest(unknown=unknown):
+                before, after = _glyph_image(), _glyph_image()
+                _select(before, 0)
+                _selection_glow(before, 0)
+                _selection_glow(after, 5)
+                if unknown == 'multiple':
+                    _select(after, 0)
+                    _select(after, 5)
+                self.assertIsNone(selected_card(after))
+                self.assertFalse(cattery_order_unchanged(before, after))
+
+    def test_erased_or_excessively_masked_text_cannot_confirm_unchanged_identity(self):
+        for erased in ('name', 'level', 'name_dark_mask'):
+            with self.subTest(erased=erased):
+                before, after = self._aligned_pair()
+                self.assertTrue(cattery_order_unchanged(before, after))
+                cx, cy = card_center(5)
+                if erased.startswith('name'):
+                    after[cy + 49:min(cy + 77, 550), cx - 60:cx + 60] = (
+                        (100, 100, 100) if erased == 'name_dark_mask' else (255, 255, 251))
+                else:
+                    after[cy + 27:cy + 45, cx - 43:cx - 23] = (255, 255, 251)
+                self.assertFalse(cattery_order_unchanged(before, after))
 
 
 if __name__ == '__main__':

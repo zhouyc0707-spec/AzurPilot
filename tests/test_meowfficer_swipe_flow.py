@@ -8,6 +8,8 @@ import numpy as np
 
 from module.exception import RequestHumanTakeover
 from module.meowfficer.scan import MeowfficerScanner
+from module.meowfficer.scan_list import cattery_order_unchanged, selected_card
+from tests.test_meowfficer_scan_list import _glyph_image, _select, _selection_glow
 
 
 EMPTY = object()
@@ -47,6 +49,7 @@ class _FlowScanner(MeowfficerScanner):
         self.confirm_error = None
         self.list_ok = True
         self.advance_rows = []
+        self.return_contexts = []
 
     def appear(self, button, **kwargs):
         return self.list_ok and not self.in_detail
@@ -72,8 +75,9 @@ class _FlowScanner(MeowfficerScanner):
         if self.confirm_error is not None:
             raise self.confirm_error
 
-    def _return_verified_list(self, before, index):
+    def _return_verified_list(self, before, index, ocr=None, entry_identity=None, current_identity=None):
         self.events.append(('return', self.page, index))
+        self.return_contexts.append((ocr, entry_identity, current_identity))
         if self.return_error is not None:
             raise self.return_error
         self.in_detail = False
@@ -151,6 +155,10 @@ class SwipeFlowTests(unittest.TestCase):
         self.assertEqual(self._events(scanner, 'return'), [('return', 0, 11)])
         self.assertEqual(len(self._events(scanner, 'next')), 11)
         self.assertEqual(len(self._events(scanner, 'callback')), 12)
+        ocr, entry, current = scanner.return_contexts[0]
+        self.assertIsNotNone(ocr)
+        self.assertEqual(entry, cats[0])
+        self.assertEqual(current, cats[-1])
 
     def test_same_name_same_level_uses_both_positions_without_dedup_or_swipe(self):
         scanner = _FlowScanner([[('林德喵', 5), ('林德喵', 5)]],
@@ -451,7 +459,7 @@ class VerifiedCardHelpersTests(unittest.TestCase):
         before = scanner.device.image.copy()
         with patch('module.meowfficer.scan_list.selected_card', side_effect=lambda image: scanner.marker), \
                 patch('module.meowfficer.scan_list.cattery_order_unchanged', return_value=True) as order:
-            scanner._return_verified_list(before, 2)
+            scanner._confirm_cattery_position(2, before=before)
         self.assertEqual(scanner.device.screenshots, 2)
         self.assertEqual(order.call_count, 2)
         self.assertTrue(all(call.args[0] is before for call in order.call_args_list))
@@ -461,7 +469,7 @@ class VerifiedCardHelpersTests(unittest.TestCase):
         scanner = _HelperScanner([(None, identity, True)] + [(2, identity, True)] * 2)
         with patch('module.meowfficer.scan_list.selected_card', side_effect=lambda image: scanner.marker), \
                 patch('module.meowfficer.scan_list.cattery_order_unchanged', return_value=True):
-            scanner._return_verified_list(scanner.device.image.copy(), 2)
+            scanner._confirm_cattery_position(2, before=scanner.device.image.copy())
         self.assertEqual(scanner.device.screenshots, 3)
         self.assertEqual(scanner.device.clicks, [])
         self.assertEqual(scanner.device.clears, 0)
@@ -471,7 +479,7 @@ class VerifiedCardHelpersTests(unittest.TestCase):
         scanner = _HelperScanner([(2, identity, False)] + [(2, identity, True)] * 2)
         with patch('module.meowfficer.scan_list.selected_card', side_effect=lambda image: scanner.marker), \
                 patch('module.meowfficer.scan_list.cattery_order_unchanged', return_value=True):
-            scanner._return_verified_list(scanner.device.image.copy(), 2)
+            scanner._confirm_cattery_position(2, before=scanner.device.image.copy())
         self.assertEqual(scanner.device.screenshots, 3)
         self.assertEqual(scanner.device.clicks, [])
 
@@ -480,7 +488,7 @@ class VerifiedCardHelpersTests(unittest.TestCase):
         with patch('module.meowfficer.scan_list.selected_card', side_effect=lambda image: scanner.marker), \
                 patch('module.meowfficer.scan_list.cattery_order_unchanged',
                       side_effect=[False, True, True]):
-            scanner._return_verified_list(scanner.device.image.copy(), 2)
+            scanner._confirm_cattery_position(2, before=scanner.device.image.copy())
         self.assertEqual(scanner.device.screenshots, 3)
         self.assertEqual(scanner.device.clicks, [])
 
@@ -497,7 +505,7 @@ class VerifiedCardHelpersTests(unittest.TestCase):
                         patch('module.meowfficer.scan_list.cattery_order_unchanged',
                               side_effect=[True, False, True, True] if interruption == 'order' else None,
                               return_value=True):
-                    scanner._return_verified_list(scanner.device.image.copy(), 2)
+                    scanner._confirm_cattery_position(2, before=scanner.device.image.copy())
                 self.assertEqual(scanner.device.screenshots, 4)
                 self.assertEqual(scanner.device.clicks, [])
 
@@ -507,8 +515,18 @@ class VerifiedCardHelpersTests(unittest.TestCase):
         with patch('module.meowfficer.scan_list.selected_card', side_effect=lambda image: scanner.marker), \
                 patch('module.meowfficer.scan_list.cattery_order_unchanged', return_value=True):
             with self.assertRaises(RequestHumanTakeover):
-                scanner._return_verified_list(scanner.device.image.copy(), 2)
+                scanner._confirm_cattery_position(2, before=scanner.device.image.copy())
         self.assertEqual(scanner.device.screenshots, 12)
+        self.assertEqual(scanner.device.clicks, [])
+
+    def test_alternating_allowed_positions_never_count_as_two_consecutive_frames(self):
+        scanner = _HelperScanner([(5 if index % 2 else 0, ('林德喵', 5), True)
+                                  for index in range(12)])
+        with patch('module.meowfficer.scan_list.selected_card', side_effect=lambda image: scanner.marker):
+            with self.assertRaises(RequestHumanTakeover) as raised:
+                scanner._confirm_cattery_position(5, other_index=0)
+        self.assertEqual(scanner.device.screenshots, 12)
+        self.assertIn('连续两帧', str(raised.exception))
         self.assertEqual(scanner.device.clicks, [])
 
     def test_return_persistent_order_position_or_page_failure_is_bounded_and_explained(self):
@@ -521,7 +539,7 @@ class VerifiedCardHelpersTests(unittest.TestCase):
                         patch('module.meowfficer.scan_list.cattery_order_unchanged',
                               return_value=failure != 'order'):
                     with self.assertRaises(RequestHumanTakeover) as raised:
-                        scanner._return_verified_list(scanner.device.image.copy(), 2)
+                        scanner._confirm_cattery_position(2, before=scanner.device.image.copy())
                 self.assertEqual(scanner.device.screenshots, 12)
                 self.assertEqual(scanner.device.clicks, [])
                 reason = str(raised.exception)
@@ -541,7 +559,7 @@ class VerifiedCardHelpersTests(unittest.TestCase):
         with patch('module.meowfficer.scan_list.selected_card', side_effect=lambda image: scanner.marker), \
                 patch('module.meowfficer.scan_list.cattery_order_unchanged', return_value=True):
             with self.assertRaises(RequestHumanTakeover) as raised:
-                scanner._return_verified_list(scanner.device.image.copy(), 2)
+                scanner._confirm_cattery_position(2, before=scanner.device.image.copy())
         self.assertEqual(scanner.device.screenshots, 12)
         reason = str(raised.exception)
         self.assertIn('选中', reason)
@@ -550,11 +568,174 @@ class VerifiedCardHelpersTests(unittest.TestCase):
 
     def test_failed_return_never_checks_or_assumes_list_order(self):
         scanner = _HelperScanner([], back_ok=False)
-        with patch('module.meowfficer.scan_list.cattery_order_unchanged') as order:
+        with patch('module.meowfficer.scan_list.selected_card', return_value=2), \
+                patch('module.meowfficer.scan_list.cattery_order_unchanged') as order:
             with self.assertRaises(RequestHumanTakeover):
                 scanner._return_verified_list(scanner.device.image.copy(), 2)
         self.assertEqual(scanner.device.screenshots, 0)
+        scanner._back_to_cattery.assert_called_once_with()
         order.assert_not_called()
+
+
+class _NormalizedDevice:
+    """卡片点击只切换匿名图像的选择环与光晕，不连接设备。"""
+
+    def __init__(self, scanner, selected):
+        self.scanner = scanner
+        self.selected = selected
+        self.base = _glyph_image()
+        self.image = self.render(selected)
+        self.screenshots = 0
+        self.clicks = []
+        self.clears = 0
+
+    def render(self, index):
+        image = self.base.copy()
+        if index is not None:
+            _select(image, index)
+            _selection_glow(image, index)
+        return image
+
+    def screenshot(self):
+        self.screenshots += 1
+        self.image = self.render(self.selected)
+        self.scanner.events.append(('screenshot', self.selected))
+
+    def click(self, button):
+        index = int(button.name.rsplit('_', 1)[1])
+        self.selected = index
+        self.clicks.append(index)
+        self.image = self.render(index)
+        self.scanner.events.append(('select', index))
+
+    def stuck_record_clear(self):
+        self.clears += 1
+
+
+class _NormalizedScanner(MeowfficerScanner):
+    def __init__(self, selected=5):
+        self.events = []
+        self.page_ok = True
+        self.identities = {0: ('林德喵', 5), 5: ('埃弗喵', 9)}
+        self.device = _NormalizedDevice(self, selected)
+        self._back_to_cattery = Mock(return_value=True)
+
+    def appear(self, button, **kwargs):
+        return self.page_ok
+
+    def _read_current_cat(self, ocr):
+        return self.identities[self.device.selected]
+
+
+class ReturnSelectionNormalizationTests(unittest.TestCase):
+    """使用真实匿名视觉检测，先还原入口选择圈再严格核验所有卡片。"""
+
+    @staticmethod
+    def _return(scanner, before, index=5, **overrides):
+        context = {'ocr': object(), 'entry_identity': ('林德喵', 5),
+                   'current_identity': ('埃弗喵', 9)}
+        context.update(overrides)
+        return scanner._return_verified_list(before, index, **context)
+
+    def test_normalizes_entry_selection_checks_all_cards_then_restores_current(self):
+        scanner = _NormalizedScanner()
+        before = scanner.device.render(0)
+        self.assertEqual(selected_card(before), 0)
+        self.assertEqual(selected_card(scanner.device.image), 5)
+        self.assertFalse(cattery_order_unchanged(before, scanner.device.image))
+
+        def compare(first, second):
+            scanner.events.append(('compare', selected_card(second)))
+            return cattery_order_unchanged(first, second)
+
+        with patch('module.meowfficer.scan_list.cattery_order_unchanged', side_effect=compare):
+            self._return(scanner, before)
+        self.assertEqual(scanner.device.clicks, [0, 5])
+        self.assertEqual(selected_card(scanner.device.image), 5)
+        comparisons = [index for index, event in enumerate(scanner.events) if event[0] == 'compare']
+        restore_current = scanner.events.index(('select', 5))
+        self.assertEqual(len(comparisons), 2)
+        self.assertTrue(all(scanner.events[index] == ('compare', 0) for index in comparisons))
+        self.assertTrue(all(index < restore_current for index in comparisons))
+
+    def test_return_already_selected_entry_only_restores_current_after_comparison(self):
+        scanner = _NormalizedScanner(selected=0)
+        before = scanner.device.render(0)
+        self._return(scanner, before)
+        self.assertEqual(scanner.device.clicks, [5])
+        self.assertEqual(selected_card(scanner.device.image), 5)
+
+    def test_any_card_changed_stops_after_normalization_without_restoring_current(self):
+        for changed in (0, 5, 11):
+            with self.subTest(changed=changed):
+                scanner = _NormalizedScanner()
+                before = scanner.device.render(0)
+                # 相同名字和等级也不能掩盖入口、当前或其他卡片头像发生变化。
+                from module.meowfficer.scan_list import card_center
+                cx, cy = card_center(changed)
+                scanner.device.base[cy - 20:cy + 22, cx - 12:cx + 30] = (150, 90, 180)
+                with self.assertRaises(RequestHumanTakeover) as raised:
+                    self._return(scanner, before)
+                self.assertIn('顺序', str(raised.exception))
+                self.assertEqual(scanner.device.clicks, [0])
+                self.assertEqual(selected_card(scanner.device.image), 0)
+
+    def test_unknown_or_unexpected_return_position_never_selects_entry_or_current(self):
+        for selected in (None, 7):
+            with self.subTest(selected=selected):
+                scanner = _NormalizedScanner(selected=selected)
+                before = scanner.device.render(0)
+                with self.assertRaises(RequestHumanTakeover):
+                    self._return(scanner, before)
+                self.assertEqual(scanner.device.screenshots, 12)
+                self.assertEqual(scanner.device.clicks, [])
+
+    def test_unknown_list_page_never_selects_any_card(self):
+        scanner = _NormalizedScanner()
+        scanner.page_ok = False
+        with self.assertRaises(RequestHumanTakeover):
+            self._return(scanner, scanner.device.render(0))
+        self.assertEqual(scanner.device.screenshots, 12)
+        self.assertEqual(scanner.device.clicks, [])
+
+    def test_unknown_entry_marker_or_missing_context_stops_before_returning(self):
+        cases = [('marker', {}), ('ocr', {'ocr': None}),
+                 ('entry', {'entry_identity': None}), ('current', {'current_identity': None})]
+        for unknown, overrides in cases:
+            with self.subTest(unknown=unknown):
+                scanner = _NormalizedScanner()
+                before = scanner.device.render(None if unknown == 'marker' else 0)
+                with self.assertRaises(RequestHumanTakeover):
+                    self._return(scanner, before, **overrides)
+                scanner._back_to_cattery.assert_not_called()
+                self.assertEqual(scanner.device.clicks, [])
+                self.assertEqual(scanner.device.screenshots, 0)
+
+    def test_entry_identity_mismatch_never_restores_current_card(self):
+        scanner = _NormalizedScanner()
+        scanner.identities[0] = ('不符的猫', 5)
+        with self.assertRaises(RequestHumanTakeover):
+            self._return(scanner, scanner.device.render(0))
+        self.assertEqual(scanner.device.clicks, [0, 0])
+        self.assertNotIn(5, scanner.device.clicks)
+
+    def test_current_identity_mismatch_stops_before_following_processing(self):
+        scanner = _NormalizedScanner()
+        scanner.identities[5] = ('不是当前猫', 9)
+        following = Mock()
+        with self.assertRaises(RequestHumanTakeover):
+            self._return(scanner, scanner.device.render(0))
+            following()
+        following.assert_not_called()
+        self.assertEqual(scanner.device.clicks, [0, 5, 5])
+
+    def test_last_card_selection_is_restored_for_page_overlap_anchor(self):
+        scanner = _NormalizedScanner(selected=11)
+        scanner.identities[11] = ('基德喵', 30)
+        self._return(scanner, scanner.device.render(0), index=11,
+                     current_identity=('基德喵', 30))
+        self.assertEqual(scanner.device.clicks, [0, 11])
+        self.assertEqual(selected_card(scanner.device.image), 11)
 
 
 if __name__ == '__main__':
