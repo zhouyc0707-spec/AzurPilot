@@ -456,19 +456,97 @@ class VerifiedCardHelpersTests(unittest.TestCase):
         self.assertEqual(order.call_count, 2)
         self.assertTrue(all(call.args[0] is before for call in order.call_args_list))
 
-    def test_return_reorder_or_second_frame_position_loss_stops(self):
-        for failure in ('order', 'position', 'page'):
-            with self.subTest(failure=failure):
-                frames = [(2, ('林德喵', 5), True),
-                          (0 if failure == 'position' else 2, ('林德喵', 5), failure != 'page')]
+    def test_return_transient_missing_selection_ring_recovers_without_game_actions(self):
+        identity = ('林德喵', 5)
+        scanner = _HelperScanner([(None, identity, True)] + [(2, identity, True)] * 2)
+        with patch('module.meowfficer.scan_list.selected_card', side_effect=lambda image: scanner.marker), \
+                patch('module.meowfficer.scan_list.cattery_order_unchanged', return_value=True):
+            scanner._return_verified_list(scanner.device.image.copy(), 2)
+        self.assertEqual(scanner.device.screenshots, 3)
+        self.assertEqual(scanner.device.clicks, [])
+        self.assertEqual(scanner.device.clears, 0)
+
+    def test_return_transient_page_transition_recovers(self):
+        identity = ('林德喵', 5)
+        scanner = _HelperScanner([(2, identity, False)] + [(2, identity, True)] * 2)
+        with patch('module.meowfficer.scan_list.selected_card', side_effect=lambda image: scanner.marker), \
+                patch('module.meowfficer.scan_list.cattery_order_unchanged', return_value=True):
+            scanner._return_verified_list(scanner.device.image.copy(), 2)
+        self.assertEqual(scanner.device.screenshots, 3)
+        self.assertEqual(scanner.device.clicks, [])
+
+    def test_return_one_frame_order_comparison_failure_can_recover(self):
+        scanner = _HelperScanner([(2, ('林德喵', 5), True)] * 3)
+        with patch('module.meowfficer.scan_list.selected_card', side_effect=lambda image: scanner.marker), \
+                patch('module.meowfficer.scan_list.cattery_order_unchanged',
+                      side_effect=[False, True, True]):
+            scanner._return_verified_list(scanner.device.image.copy(), 2)
+        self.assertEqual(scanner.device.screenshots, 3)
+        self.assertEqual(scanner.device.clicks, [])
+
+    def test_return_valid_confirmations_separated_by_unknown_frame_are_not_consecutive(self):
+        identity = ('林德喵', 5)
+        for interruption in ('position', 'page', 'order'):
+            with self.subTest(interruption=interruption):
+                frames = [(2, identity, True),
+                          (None if interruption == 'position' else 2, identity, interruption != 'page'),
+                          (2, identity, True), (2, identity, True)]
                 scanner = _HelperScanner(frames)
                 with patch('module.meowfficer.scan_list.selected_card',
                            side_effect=lambda image: scanner.marker), \
                         patch('module.meowfficer.scan_list.cattery_order_unchanged',
-                              side_effect=[True, failure != 'order']):
-                    with self.assertRaises(RequestHumanTakeover):
+                              side_effect=[True, False, True, True] if interruption == 'order' else None,
+                              return_value=True):
+                    scanner._return_verified_list(scanner.device.image.copy(), 2)
+                self.assertEqual(scanner.device.screenshots, 4)
+                self.assertEqual(scanner.device.clicks, [])
+
+    def test_return_one_valid_confirmation_at_budget_end_still_stops(self):
+        identity = ('林德喵', 5)
+        scanner = _HelperScanner([(None, identity, True)] * 11 + [(2, identity, True)])
+        with patch('module.meowfficer.scan_list.selected_card', side_effect=lambda image: scanner.marker), \
+                patch('module.meowfficer.scan_list.cattery_order_unchanged', return_value=True):
+            with self.assertRaises(RequestHumanTakeover):
+                scanner._return_verified_list(scanner.device.image.copy(), 2)
+        self.assertEqual(scanner.device.screenshots, 12)
+        self.assertEqual(scanner.device.clicks, [])
+
+    def test_return_persistent_order_position_or_page_failure_is_bounded_and_explained(self):
+        for failure in ('order', 'position', 'page'):
+            with self.subTest(failure=failure):
+                frames = [(0 if failure == 'position' else 2, ('林德喵', 5), failure != 'page')] * 12
+                scanner = _HelperScanner(frames)
+                with patch('module.meowfficer.scan_list.selected_card',
+                           side_effect=lambda image: scanner.marker), \
+                        patch('module.meowfficer.scan_list.cattery_order_unchanged',
+                              return_value=failure != 'order'):
+                    with self.assertRaises(RequestHumanTakeover) as raised:
                         scanner._return_verified_list(scanner.device.image.copy(), 2)
-                self.assertEqual(scanner.device.screenshots, 2)
+                self.assertEqual(scanner.device.screenshots, 12)
+                self.assertEqual(scanner.device.clicks, [])
+                reason = str(raised.exception)
+                if failure == 'page':
+                    self.assertRegex(reason, r'猫窝列表(?:页面|页)')
+                    self.assertTrue('未确认' in reason or '无法确认' in reason
+                                    or '未能正向确认' in reason, reason)
+                elif failure == 'position':
+                    self.assertIn('选中', reason)
+                    self.assertRegex(reason, r'实际.*(?:第\s*)?1')
+                    self.assertRegex(reason, r'预期.*(?:第\s*)?3')
+                else:
+                    self.assertTrue('顺序' in reason or '视口' in reason, reason)
+
+    def test_return_persistent_unknown_selection_reports_unknown_actual_position(self):
+        scanner = _HelperScanner([(None, ('林德喵', 5), True)] * 12)
+        with patch('module.meowfficer.scan_list.selected_card', side_effect=lambda image: scanner.marker), \
+                patch('module.meowfficer.scan_list.cattery_order_unchanged', return_value=True):
+            with self.assertRaises(RequestHumanTakeover) as raised:
+                scanner._return_verified_list(scanner.device.image.copy(), 2)
+        self.assertEqual(scanner.device.screenshots, 12)
+        reason = str(raised.exception)
+        self.assertIn('选中', reason)
+        self.assertTrue('未知' in reason or '未确认' in reason, reason)
+        self.assertRegex(reason, r'预期.*(?:第\s*)?3')
 
     def test_failed_return_never_checks_or_assumes_list_order(self):
         scanner = _HelperScanner([], back_ok=False)

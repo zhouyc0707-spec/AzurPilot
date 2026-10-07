@@ -17,10 +17,10 @@
 
 import json
 import os
-import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
+from uuid import uuid4
 
 from rich.table import Table
 
@@ -437,8 +437,18 @@ def _save_failure_scene(device, reason):
     try:
         root = Path('log/error/meowfficer_score')
         root.mkdir(parents=True, exist_ok=True)
-        # 时间便于查找，随机后缀避免同一瞬间的多次失败互相覆盖。
-        scene = Path(tempfile.mkdtemp(prefix=f'{datetime.now():%Y-%m-%d_%H-%M-%S-%f}_', dir=root))
+        # 普通 mkdir 继承父目录权限；Windows 上 tempfile 的 0700 会限制普通进程读取。
+        # 时间便于查找，UUID 避免同一瞬间互相覆盖；碰撞时只换目录，不动已有原件。
+        stamp = f'{datetime.now():%Y-%m-%d_%H-%M-%S-%f}'
+        for _attempt in range(8):
+            scene = root / f'{stamp}_{uuid4().hex}'
+            try:
+                scene.mkdir()
+            except FileExistsError:
+                continue
+            break
+        else:
+            raise FileExistsError('无法创建唯一的指挥喵评分现场目录，已有现场已保留')
         # 设备统一截图管线输出 RGB，复用 PIL 保存，不做额外红蓝通道交换。
         save_image(image, scene / 'screen.png')
         (scene / 'reason.txt').write_text(reason + '\n', encoding='utf-8')

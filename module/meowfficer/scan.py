@@ -636,14 +636,31 @@ class MeowfficerScanner(MeowfficerBase):
 
         if not self._back_to_cattery():
             raise RequestHumanTakeover('未能返回猫窝列表，已停止指挥喵扫描')
-        # _back_to_cattery 已等待列表稳定，此处仍用新截图确认正向选中标记。
-        for _ in range(2):
+        # 整个面板均值稳定不代表选择环动画已经完成；未知帧只等待新截图，
+        # 连续两帧正向确认前不选择下一格，也不放宽位置和顺序要求。
+        stable = 0
+        reason = '未能正向确认猫窝列表页'
+        for _ in range(12):
             self.device.screenshot()
-            if (not self.appear(MEOWFFICER_TALENT_TAB, offset=TALENT_TAB_OFFSET)
-                    or selected_card(self.device.image) != index
-                    or not cattery_order_unchanged(before, self.device.image)):
-                raise RequestHumanTakeover(
-                    '猫窝选中位置、排序或滚动视口发生变化，已停止扫描；请检查筛选与排序后重试')
+            if not self.appear(MEOWFFICER_TALENT_TAB, offset=TALENT_TAB_OFFSET):
+                stable = 0
+                reason = '未能正向确认猫窝列表页'
+                continue
+            selected = selected_card(self.device.image)
+            if selected != index:
+                stable = 0
+                actual = '未知' if selected is None else f'第 {selected + 1} 格'
+                reason = f'猫窝选中位置未通过核验：预期第 {index + 1} 格，实际 {actual}'
+                continue
+            if not cattery_order_unchanged(before, self.device.image):
+                stable = 0
+                reason = '猫窝名单顺序或滚动视口未通过核验'
+                continue
+            reason = '猫窝返回状态尚未连续两帧确认'
+            stable += 1
+            if stable >= 2:
+                return
+        raise RequestHumanTakeover(f'{reason}；已停止扫描，避免重复读取或错配')
 
     def _scan_by_swipe(self, ocr, limit, passes, on_cat):
         """保留每屏位置锚点，在相邻身份可区分时连续左滑读取。"""
