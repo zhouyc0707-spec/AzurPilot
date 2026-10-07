@@ -101,7 +101,7 @@ def scan_continuous_detail(scanner, ocr, limit=0, on_cat=None, on_result=None):
         scanner.device.stuck_record_clear()
         if ordinal == target:
             break
-        following = swipe_next_cat(scanner, ocr, name, capture.level)
+        following = swipe_next_cat(scanner, ocr, name, capture.level, defer_same_name=True)
         # None 表示持续稳定地读到同名同级；完整天赋与属性在下一轮再核对。
         identity = following if following is not None else (name, capture.level)
     logger.info(f'[指挥喵-扫描] 连续读取结束，已记录 {len(scanner.scanned)}/{total} 只，停在天赋页')

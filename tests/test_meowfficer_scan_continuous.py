@@ -11,6 +11,8 @@ from module.exception import GameStuckError, RequestHumanTakeover
 from module.meowfficer.scan import MeowfficerScanner
 from module.meowfficer.scan_capture import ScanCapture
 from module.meowfficer.scan_continuous import identical_capture, scan_continuous_detail
+from module.meowfficer.scan_next import swipe_next_cat
+from module.meowfficer.scan_utils import CURRENT_CAT_LEVEL_AREA, CURRENT_CAT_NAME_AREA
 from module.meowfficer.score import Talent
 
 
@@ -128,20 +130,69 @@ class _ContinuousScanner(MeowfficerScanner):
         raise AssertionError('连续读取不应依赖每屏十二个卡片位置')
 
 
+class _DetailSequenceDevice(_MemoryDevice):
+    """匿名天赋页按一次立绘手势切换，供真实切猫原语持续截图。"""
+
+    def __init__(self, scanner):
+        super().__init__(scanner)
+        self.image = self.frame()
+
+    def frame(self):
+        image = np.zeros((720, 1280, 3), dtype=np.uint8)
+        image[0, 0, 0] = 255
+        for area in (CURRENT_CAT_NAME_AREA, CURRENT_CAT_LEVEL_AREA):
+            x0, y0, x1, y1 = area
+            image[y0:y1, x0:x1] = 30 + self.scanner.index
+        return image
+
+    def screenshot(self):
+        self.image = self.frame()
+        self.scanner.events.append(('screenshot', self.scanner.index))
+
+    def swipe(self, start, end, duration, name):
+        if ((start, end, duration, name)
+                != ((560, 350), (220, 350), 0.45, 'MEOWFFICER_NEXT')):
+            raise AssertionError('集成验证只允许一次既有立绘左滑')
+        if self.scanner.index + 1 >= len(self.scanner.captures):
+            raise AssertionError('已读取目标数量后仍发送立绘手势')
+        self.records.update(('MEOWFFICER_NEXT', 'SWIPE'))
+        self.scanner.events.append(('portrait_swipe', self.scanner.capture_count))
+        self.scanner.index += 1
+
+
+class _RealNextScanner(_ContinuousScanner):
+    """完整天赋使用夹具，切猫由真实状态机读取每帧身份。"""
+
+    def __init__(self, captures):
+        super().__init__(captures)
+        self.device = _DetailSequenceDevice(self)
+
+    def _read_current_cat(self, ocr):
+        capture = self.captures[self.index]
+        identity = capture.display_name, capture.level
+        self.events.append(('current_identity', self.index, identity))
+        return identity
+
+
 class _FlowHarness:
     """仅替换输入识别和操作原语，保留实际连续比较与结束编排。"""
 
-    def __init__(self, scanner, total=None, sort=True):
+    def __init__(self, scanner, total=None, sort=True, real_next=False):
         self.scanner = scanner
         self.total = len(scanner.captures) if total is None else total
         self.sort = sort
+        self.real_next = real_next
 
     def __enter__(self):
         self.stack = ExitStack()
         self.count = self.stack.enter_context(patch(f'{MODULE}.read_roster_count', return_value=self.total))
         self.sort_check = self.stack.enter_context(patch(f'{MODULE}.lock_independent_sort', return_value=self.sort))
         self.read = self.stack.enter_context(patch(f'{MODULE}.capture_current_cat', side_effect=self.capture))
-        self.next = self.stack.enter_context(patch(f'{MODULE}.swipe_next_cat', side_effect=self.swipe))
+        self.next = self.stack.enter_context(patch(
+            f'{MODULE}.swipe_next_cat', side_effect=self.observe_next if self.real_next else self.swipe))
+        if self.real_next:
+            self.stack.enter_context(patch('module.meowfficer.scan_next.detail_page_confirmed',
+                                           side_effect=lambda image: bool(image[0, 0, 0])))
         self.attr = self.stack.enter_context(patch(f'{MODULE}.read_static_attributes', side_effect=self.attributes))
         self.logger = self.stack.enter_context(patch(f'{MODULE}.logger'))
         return self
@@ -167,7 +218,9 @@ class _FlowHarness:
             raise AssertionError('编排把新猫内容配给了错误的姓名或等级')
         return capture
 
-    def swipe(self, scanner, ocr, name, level):
+    def swipe(self, scanner, ocr, name, level, *, defer_same_name=True):
+        if not defer_same_name:
+            raise AssertionError('连续读取必须把同名未知等级交给完整天赋核验')
         scanner.events.append(('next', scanner.index, name, level))
         scanner.device.records.update(('MEOWFFICER_NEXT', 'SWIPE'))
         if scanner.index in scanner.next_errors:
@@ -178,6 +231,11 @@ class _FlowHarness:
         following = scanner.captures[scanner.index]
         identity = following.display_name, following.level
         return None if identity == (name, level) else identity
+
+    def observe_next(self, scanner, ocr, name, level, *, defer_same_name=True):
+        following = swipe_next_cat(scanner, ocr, name, level, defer_same_name=defer_same_name)
+        scanner.events.append(('next_observed', following))
+        return following
 
     def attributes(self, image, ocr):
         index = int(image[0, 0, 0]) + 256 * int(image[0, 0, 1])
@@ -531,6 +589,89 @@ class ContinuousDetailTests(unittest.TestCase):
         self.assertEqual(on_result.call_count, 1)
         self.assert_unaccepted_stage_protected(scanner, 2)
         self.assert_single_entry(scanner)
+
+    def test_real_swipe_unknown_grade_handoff_reads_complete_different_talents_before_cleanup(self):
+        for levels in ((1, None), (None, 1), (None, None)):
+            with self.subTest(levels=levels):
+                scanner = _RealNextScanner([
+                    _capture(name='莫里喵', level=levels[0], talent_level=1),
+                    _capture(name='莫里喵', level=levels[1], talent_level=2)])
+                observed = []
+
+                def on_cat(active, capture):
+                    observed.append((capture.level, set(active.device.records)))
+                    active.events.append(('lock', active.capture_count))
+
+                on_result = Mock()
+                with _FlowHarness(scanner, real_next=True) as flow:
+                    result = scan_continuous_detail(
+                        scanner, scanner.ocr, on_cat=on_cat, on_result=on_result)
+                    flow.next.assert_called_once_with(
+                        scanner, scanner.ocr, '莫里喵', levels[0], defer_same_name=True)
+                    self.assertEqual(flow.read.call_args_list[1].args[2:], ('莫里喵', levels[1]))
+                    flow.attr.assert_not_called()
+                    flow.logger.warning.assert_not_called()
+                self.assertEqual([entry[2] for entry in result], list(levels))
+                self.assertEqual([level for level, _ in observed], list(levels))
+                self.assertEqual(on_result.call_count, 2)
+                handoff = None if levels[0] == levels[1] else ('莫里喵', levels[1])
+                self.assertIn(('next_observed', handoff), scanner.events)
+                self.assertIn('MEOWFFICER_NEXT', observed[1][1])
+                self.assertIn('SWIPE', observed[1][1])
+                sent = scanner.events.index(('portrait_swipe', 1))
+                accepted = scanner.events.index(('lock', 2))
+                self.assertFalse(any(event[0] in ('remove', 'clear')
+                                     for event in scanner.events[sent:accepted]))
+                self.assertLess(accepted, scanner.events.index(('remove', 2, 'MEOWFFICER_NEXT')))
+                self.assertEqual(scanner.device.records, {'OTHER'})
+                self.assert_single_entry(scanner)
+
+    def test_real_swipe_same_complete_talents_unknown_grade_stops_without_counting_identical(self):
+        scanner = _RealNextScanner([
+            _capture(name='莫里喵', level=1), _capture(name='莫里喵', level=None)])
+        on_cat = Mock()
+        on_result = Mock()
+        with _FlowHarness(scanner, real_next=True) as flow:
+            with self.assertRaisesRegex(RequestHumanTakeover, '等级未能确认'):
+                scan_continuous_detail(scanner, scanner.ocr, on_cat=on_cat, on_result=on_result)
+            flow.next.assert_called_once_with(
+                scanner, scanner.ocr, '莫里喵', 1, defer_same_name=True)
+            self.assertEqual(flow.read.call_args_list[1].args[2:], ('莫里喵', None))
+            flow.attr.assert_not_called()
+            flow.logger.warning.assert_not_called()
+            self.assertFalse(any('连续第' in str(call) for call in flow.logger.info.call_args_list))
+        self.assertIn(('next_observed', ('莫里喵', None)), scanner.events)
+        self.assertEqual([entry[2] for entry in scanner.scanned], [1])
+        self.assertEqual(on_cat.call_count, 1)
+        self.assertEqual(on_result.call_count, 1)
+        self.assert_unaccepted_stage_protected(scanner, 2)
+        self.assert_single_entry(scanner)
+
+    def test_real_swipe_unknown_grade_different_incomplete_subset_keeps_pending_stage(self):
+        talents = [Talent('侵略如火', '侵略如火', 1), Talent('其徐如林', '其徐如林', 1)]
+        for incomplete_first in (False, True):
+            with self.subTest(incomplete_first=incomplete_first):
+                scanner = _RealNextScanner([
+                    _capture(name='莫里喵', level=1, talents=talents,
+                             talents_complete=not incomplete_first),
+                    _capture(name='莫里喵', level=None, talents=talents[:1],
+                             talents_complete=incomplete_first)])
+                on_cat = Mock()
+                on_result = Mock()
+                with _FlowHarness(scanner, real_next=True) as flow:
+                    with self.assertRaisesRegex(RequestHumanTakeover, '全部天赋未能完整确认'):
+                        scan_continuous_detail(scanner, scanner.ocr, on_cat=on_cat, on_result=on_result)
+                    flow.next.assert_called_once_with(
+                        scanner, scanner.ocr, '莫里喵', 1, defer_same_name=True)
+                    self.assertEqual(flow.read.call_args_list[1].args[2:], ('莫里喵', None))
+                    flow.attr.assert_not_called()
+                    flow.logger.warning.assert_not_called()
+                self.assertIn(('next_observed', ('莫里喵', None)), scanner.events)
+                self.assertEqual(len(scanner.scanned), 1)
+                self.assertEqual(on_cat.call_count, 1)
+                self.assertEqual(on_result.call_count, 1)
+                self.assert_unaccepted_stage_protected(scanner, 2)
+                self.assert_single_entry(scanner)
 
     def test_unknown_breed_still_uses_complete_talents_for_continuous_comparison(self):
         scanner = _ContinuousScanner([_capture(breed=None, complete=False) for _ in range(3)])

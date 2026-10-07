@@ -7,7 +7,7 @@ from unittest.mock import patch
 import numpy as np
 
 from module.exception import GameStuckError, RequestHumanTakeover
-from module.meowfficer.scan_next import swipe_next_cat
+from module.meowfficer.scan_next import MAX_SWITCH_OBSERVATIONS, swipe_next_cat
 from module.meowfficer.scan_utils import CURRENT_CAT_AREA, TALENT_PANEL_AREA
 
 
@@ -97,7 +97,7 @@ class _Scanner:
 
 
 class SwipeNextCatTests(unittest.TestCase):
-    """确认身份变化才能清理上一阶段保护；疑似末尾交给列表核验。"""
+    """确认身份变化才能清理保护；同名候选交给完整天赋核验。"""
 
     def setUp(self):
         guard = patch('module.meowfficer.scan_next.detail_page_confirmed',
@@ -160,7 +160,7 @@ class SwipeNextCatTests(unittest.TestCase):
         self.assertIsNone(self._run(scanner))
         self._assert_history_kept(scanner)
 
-    def test_same_name_same_level_with_changed_talents_requires_list_fallback(self):
+    def test_same_name_same_level_with_changed_talents_requires_complete_comparison(self):
         scanner = _Scanner([_shot(identity_color=120, panel_color=180)] * 12)
         self.assertIsNone(self._run(scanner))
         self._assert_one_swipe(scanner)
@@ -199,7 +199,7 @@ class SwipeNextCatTests(unittest.TestCase):
         scanner = _Scanner([_shot(page=False)] * 12)
         with self.assertRaises(RequestHumanTakeover):
             self._run(scanner)
-        self.assertEqual(scanner.device.screenshots, 13)
+        self.assertEqual(scanner.device.screenshots, MAX_SWITCH_OBSERVATIONS + 1)
         self._assert_one_swipe(scanner)
         self._assert_history_kept(scanner)
         self.assertEqual(scanner.reads, [(OLD_NAME, OLD_LEVEL)])
@@ -231,7 +231,7 @@ class SwipeNextCatTests(unittest.TestCase):
         for changing in ('identity', 'talent'):
             with self.subTest(changing=changing):
                 frames = []
-                for index in range(12):
+                for index in range(MAX_SWITCH_OBSERVATIONS):
                     color = 20 if index % 2 else 180
                     frames.append(_shot(NEW_NAME, 8,
                                         identity_color=color if changing == 'identity' else 80,
@@ -244,7 +244,7 @@ class SwipeNextCatTests(unittest.TestCase):
 
     def test_ocr_identity_flicker_on_stable_pixels_is_not_confirmed(self):
         scanner = _Scanner([_shot(NEW_NAME if index % 2 else '蒂奇喵', 8)
-                            for index in range(12)])
+                            for index in range(MAX_SWITCH_OBSERVATIONS)])
         with self.assertRaises(RequestHumanTakeover):
             self._run(scanner)
         self._assert_one_swipe(scanner)
