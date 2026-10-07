@@ -19090,6 +19090,14 @@
           "scan"
         ]
       },
+      "ScanStart": {
+        "type": "select",
+        "value": "cattery",
+        "option": [
+          "cattery",
+          "current"
+        ]
+      },
       "LockByAdvice": {
         "type": "checkbox",
         "value": false

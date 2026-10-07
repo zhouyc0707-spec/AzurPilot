@@ -1,4 +1,6 @@
-"""国服从首猫开始连续读取天赋，不依赖逐屏卡片预读或返回猫窝。"""
+"""国服从首猫或当前天赋页连续读取，不依赖逐屏卡片预读或返回猫窝。"""
+
+from itertools import count
 
 from module.exception import RequestHumanTakeover
 from module.logger import logger
@@ -42,28 +44,44 @@ def identical_capture(previous, current, previous_image, current_image, ocr):
     return first == second
 
 
-def scan_continuous_detail(scanner, ocr, limit=0, on_cat=None, on_result=None):
-    """只在启动时访问猫窝，进入首猫后保持天赋页连续读取。
+def scan_continuous_detail(scanner, ocr, limit=0, on_cat=None, on_result=None, *, start_current=False):
+    """确定起点后保持天赋页连续读取；当前起点不访问猫窝。
 
     Pages:
-        in: 猫窝列表顶部，已有稳定截图。
+        in: 猫窝列表顶部；start_current 时为用户打开的目标猫天赋页。
         out: 最后读取的猫的天赋页；拥有数为零时保持猫窝。
 
-    总数来自猫窝拥有数，不用画面不变推断末猫。用户明确选择允许相同内容：
+    首猫模式以拥有数结束，当前模式只知道本次上限，不猜起始位置或剩余数量。
+    用户明确选择允许相同内容：
     连续第 1～4 次相同仍按下一只记录，第 5 次认定手势未生效，停止且不再记录。
     """
-    total = read_roster_count(scanner.device.image, ocr)
-    if total is None:
-        raise RequestHumanTakeover('猫窝拥有数量未能精确确认，已停止，避免猜测扫描范围')
-    logger.attr('[指挥喵-扫描] 猫窝拥有数', total)
-    if total == 0:
-        return scanner.scanned
-    if on_cat is not None and not lock_independent_sort(scanner.device.image, ocr):
-        raise RequestHumanTakeover('连续改锁需要猫窝按等级排序，请调整后重试；未操作任何锁按钮')
-    target = min(total, limit) if limit > 0 else total
-    identity = scanner._select_verified_card(0, ocr, None)
-    if not scanner._open_talent():
-        raise RequestHumanTakeover('打开首猫天赋页失败，已停止连续扫描')
+    if start_current:
+        from module.meowfficer.score_lock import detail_page_confirmed
+        scanner.device.screenshot()
+        if not detail_page_confirmed(scanner.device.image):
+            raise RequestHumanTakeover('从当前开始需要先手动打开目标指挥喵的天赋页；未导航或改锁')
+        identity = scanner._read_current_cat(ocr)
+        if not identity[0] or identity[1] is None:
+            raise RequestHumanTakeover('当前天赋页的猫名或等级未能确认；未导航或改锁')
+        total = None
+        target = limit if limit > 0 else None
+        logger.attr('[指挥喵-扫描] 起点', f'当前天赋页：{identity[0]} Lv{identity[1]}，列表位置未知')
+        if on_cat is not None:
+            logger.info('[指挥喵-扫描] 当前天赋页不能核验猫窝排序；'
+                        '请在启动前按等级排序并关闭按锁状态筛选，以保持改锁后的遍历顺序')
+    else:
+        total = read_roster_count(scanner.device.image, ocr)
+        if total is None:
+            raise RequestHumanTakeover('猫窝拥有数量未能精确确认，已停止，避免猜测扫描范围')
+        logger.attr('[指挥喵-扫描] 猫窝拥有数', total)
+        if total == 0:
+            return scanner.scanned
+        if on_cat is not None and not lock_independent_sort(scanner.device.image, ocr):
+            raise RequestHumanTakeover('连续改锁需要猫窝按等级排序，请调整后重试；未操作任何锁按钮')
+        target = min(total, limit) if limit > 0 else total
+        identity = scanner._select_verified_card(0, ocr, None)
+        if not scanner._open_talent():
+            raise RequestHumanTakeover('打开首猫天赋页失败，已停止连续扫描')
     scanner._confirm_talent_identity(ocr, identity)
     # 新扫描的首猫与页面均已确认，结束上一次任务的手势阶段。
     scanner.device.click_record_remove('MEOWFFICER_NEXT')
@@ -75,9 +93,10 @@ def scan_continuous_detail(scanner, ocr, limit=0, on_cat=None, on_result=None):
     # 仅建议锁定回调需要异常恢复资料；只读扫描不增加缓存或属性识别。
     from module.meowfficer.lock_recovery import TalentPageRecovery
     recovery = TalentPageRecovery(scanner, ocr) if on_cat is not None else None
-    for ordinal in range(1, target + 1):
+    for ordinal in count(1):
         name, level = identity
-        logger.hr(f'连续读取第 {ordinal}/{target} 只：{name}', level=3)
+        progress = f'{ordinal}/{target}' if target is not None else str(ordinal)
+        logger.hr(f'连续读取第 {progress} 只：{name}', level=3)
         capture = capture_current_cat(scanner, ocr, name, level, reset_history=False)
         if not capture.identity_confirmed:
             raise RequestHumanTakeover('当前猫身份无法确认，已停在天赋页并保留结果')
@@ -87,7 +106,10 @@ def scan_continuous_detail(scanner, ocr, limit=0, on_cat=None, on_result=None):
         if identical_runs >= IDENTICAL_LIMIT:
             logger.warning('[指挥喵-扫描] 连续五次左滑后姓名、等级、天赋及属性完全相同，'
                            '按用户设置认定手势未生效；停在天赋页，保留已读结果')
-            logger.attr('[指挥喵-扫描] 已记录/猫窝拥有数', f'{len(scanner.scanned)}/{total}')
+            if total is None:
+                logger.attr('[指挥喵-扫描] 本次已记录', len(scanner.scanned))
+            else:
+                logger.attr('[指挥喵-扫描] 已记录/猫窝拥有数', f'{len(scanner.scanned)}/{total}')
             return scanner.scanned
         if same:
             logger.info(f'[指挥喵-扫描] 连续第 {identical_runs} 次内容相同，按下一只记录')
@@ -106,16 +128,17 @@ def scan_continuous_detail(scanner, ocr, limit=0, on_cat=None, on_result=None):
         scanner.scanned.append((name, capture.talents, capture.level))
         if on_result is not None:
             on_result(scanner, scanner.scanned[-1])
-        logger.attr('[指挥喵-扫描] 已扫描', f'{len(scanner.scanned)}/{target} 只')
+        recorded = f'{len(scanner.scanned)}/{target}' if target is not None else str(len(scanner.scanned))
+        logger.attr('[指挥喵-扫描] 本次已扫描', f'{recorded} 只')
         previous, previous_image = capture, image
         # 用户允许相同内容的前四次继续；仅在完整比较并接受本次读取后结束旧阶段。
         scanner.device.click_record_remove('MEOWFFICER_NEXT')
         scanner.device.click_record_remove('SWIPE')
         scanner.device.stuck_record_clear()
-        if ordinal == target:
+        if target is not None and ordinal >= target:
             break
         following = swipe_next_cat(scanner, ocr, name, capture.level, defer_same_name=True)
         # None 表示持续稳定地读到同名同级；完整天赋与属性在下一轮再核对。
         identity = following if following is not None else (name, capture.level)
-    logger.info(f'[指挥喵-扫描] 连续读取结束，已记录 {len(scanner.scanned)}/{total} 只，停在天赋页')
+    logger.info(f'[指挥喵-扫描] 连续读取结束，本次已记录 {len(scanner.scanned)} 只，停在天赋页')
     return scanner.scanned

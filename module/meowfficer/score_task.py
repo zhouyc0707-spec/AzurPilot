@@ -5,7 +5,7 @@
 - ``screenshot``：扫描本地截图目录，逐张识别天赋并评分（默认）。
   可以直接指向 ``DropRecord_MeowfficerTalent`` 落盘的天赋截图，或自己的截图目录。
 - ``device``：截图当前设备画面并评分，适合手动逐只翻猫时连续跑。
-- ``scan``：自动遍历猫窝列表，逐只选中猫、打开天赋页截图识别，覆盖全部已拥有的猫。
+- ``scan``：按扫描起点读取，从猫窝首只开始或从已打开的当前天赋页向后连续识别。
   页面操作在 :mod:`module.meowfficer.scan` 里，本模块只负责评分与报告。
 
 前两种模式**不操作游戏、不做页面导航**，因此按 ``module/daemon/ocr_benchmark.py`` 的形态
@@ -41,7 +41,7 @@ class MeowfficerScore:
 
     Attributes:
         config (AzurLaneConfig): 配置实例。
-        device (Device): 设备实例，仅 ``device`` 模式使用，可为 ``None``。
+        device (Device): 设备实例，``device`` 和 ``scan`` 模式使用，可为 ``None``。
         results (list): 本次运行收集到的评分结果，元素为
             ``(来源名, ScoreResult)``。
     """
@@ -342,7 +342,7 @@ class MeowfficerScore:
             logger.warning(f'[指挥喵-评分] HTML/JSON 报告写入失败：{e}')
 
     def _run_scan(self):
-        """``scan`` 模式：自动遍历猫窝，逐只读取天赋并评分。
+        """``scan`` 模式：按所选起点连续读取天赋并评分。
 
         页面操作全部交给 :class:`~module.meowfficer.scan.MeowfficerScanner`，
         这里只把每只猫的天赋送去评分并记录结果。
@@ -356,6 +356,10 @@ class MeowfficerScore:
 
         limit = max(0, int(self._cfg('ScanLimit', 0) or 0))
         passes = max(1, int(self._cfg('ScanPasses', 12) or 12))
+        start = self._cfg('ScanStart', 'cattery')
+        if start not in ('cattery', 'current'):
+            raise RequestHumanTakeover('指挥喵扫描起点配置无效，请重新选择猫窝首只或当前天赋页')
+        scan_options = {'start_current': True} if start == 'current' else {}
 
         scanner = MeowfficerScanner(self.config, self.device)
         self.scanned_count = 0
@@ -364,7 +368,8 @@ class MeowfficerScore:
             if server.server == 'cn':
                 self.lock_actions = []
                 try:
-                    scanner.scan_all(limit=limit, passes=passes, on_cat=self._score_and_apply_lock)
+                    scanner.scan_all(limit=limit, passes=passes, on_cat=self._score_and_apply_lock,
+                                     **scan_options)
                 except Exception:
                     # 现场接管或设备异常前保留已经核验的操作记录，不掩盖原异常。
                     self._publish_report()
@@ -381,7 +386,7 @@ class MeowfficerScore:
             self._publish_report()
 
         try:
-            scanned = scanner.scan_all(limit=limit, passes=passes, on_result=on_result)
+            scanned = scanner.scan_all(limit=limit, passes=passes, on_result=on_result, **scan_options)
         except Exception:
             # 连续只读扫描也可能中途接管，先评分保存已接受的猫，再传播原异常。
             try:
@@ -445,12 +450,16 @@ class MeowfficerScore:
             scanner.device.click_record_remove(LOCK_BUTTON)
         from module.meowfficer.lock_refresh import (LOCK_REFRESH_INTERVAL, new_refresh_action,
                                                     refresh_lock_state)
-        if (self.scanned_count % LOCK_REFRESH_INTERVAL == 0
+        starting_refresh = (self._cfg('ScanStart', 'cattery') == 'current'
+                            and self.scanned_count == 1)
+        if ((starting_refresh or self.scanned_count % LOCK_REFRESH_INTERVAL == 0)
                 and action['status'] != 'unconfirmed'):
             refresh = new_refresh_action(capture)
             refresh['ordinal'] = self.scanned_count
+            refresh['trigger'] = 'current_start' if starting_refresh else 'periodic'
             action['periodicRefresh'] = refresh
-            logger.hr(f'已读取 {self.scanned_count} 只，双切锁状态刷新客户端记录', level=3)
+            label = '当前起点首只刷新' if starting_refresh else f'每 {LOCK_REFRESH_INTERVAL} 只刷新'
+            logger.hr(f'已读取 {self.scanned_count} 只，{label}，双切锁状态刷新客户端记录', level=3)
             try:
                 if action['status'] in ('changed', 'unchanged'):
                     refresh_lock_state(scanner, capture, entry=refresh)
@@ -459,7 +468,7 @@ class MeowfficerScore:
             finally:
                 if refresh['status'] == 'pending':
                     refresh.update(status='unconfirmed', reason='周期双切在开始前中断，未开始切换')
-                action['reason'] += f'；每 {LOCK_REFRESH_INTERVAL} 只刷新：{refresh["reason"]}'
+                action['reason'] += f'；{label}：{refresh["reason"]}'
                 if refresh['status'] != 'verified':
                     action['status'] = 'unconfirmed'
                     action['after'] = refresh['after']

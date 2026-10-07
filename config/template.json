@@ -3727,6 +3727,7 @@
   "MeowfficerScore": {
     "MeowfficerScore": {
       "Source": "screenshot",
+      "ScanStart": "cattery",
       "LockByAdvice": false,
       "Folder": "./screenshots/meowfficer_talent",
       "MaxImages": 50,

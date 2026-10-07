@@ -6489,14 +6489,20 @@
     },
     "Source": {
       "name": "Score Source",
-      "help": "Local screenshots: scan a folder in batch; Auto follow: keep capturing and score whenever a new talent panel shows up - just flip cats in game; Scan all: walks the cattery list and reads every cat's talents (drives the game automatically, CN client only)",
+      "help": "Local screenshots: score a folder in batches; Auto follow: keep capturing and score each new talent panel while you switch cats in the game; Scan all: automatically read talents within the range selected by Scan start. This mode operates the game.",
       "screenshot": "Local screenshots",
       "device": "Auto follow current screen",
       "scan": "Scan all meowfficers"
     },
+    "ScanStart": {
+      "name": "Scan start",
+      "help": "Applies only to Scan all meowfficers. First cat in cattery keeps the existing cattery workflow. Current talent page supports only the CN Chinese client: sort the cattery by level and disable lock-state filtering, manually open the starting cat's talent page, then start. Scan forward from that cat without returning to the cattery; other servers stop with a message. With lock by advice enabled, refresh the lock state after normal advice handling for cats 12, 24, and so on in this run. Starting on the current talent page adds a refresh after advice handling for the first cat; starting from the cattery has no extra first-cat refresh.",
+      "cattery": "First cat in cattery",
+      "current": "Current talent page"
+    },
     "LockByAdvice": {
       "name": "Lock or unlock by advice during scans",
-      "help": "Only applies to Scan all meowfficers and changes existing cats' lock states. Fully recognized gold and purple cats are unlocked when the final training advice recommends feeding them; all other advice locks them. Confirmed blue cats skip scoring and are set to unlocked, including removal of an existing lock. Incomplete recognition or an unknown cat type triggers a protective lock only after confirming the current cat, page, and lock state. If any of these cannot be confirmed, no lock operation is performed; incomplete results never trigger automatic unlocking. The report records each action; this does not feed cats, spend talent points, or reroll talents. Local screenshots and auto follow remain read-only. Only the CN Chinese client is currently calibrated; lock operations are skipped on other servers. Automatic unlocking currently requires all talents to be fully confirmed on one screen; cats whose talents require scrolling are protectively locked."
+      "help": "Only applies to Scan all meowfficers and changes existing cats' lock states. Fully recognized gold and purple cats are unlocked when the final training advice recommends feeding them; all other advice locks them. Confirmed blue cats skip scoring and are set to unlocked, including removal of an existing lock. Incomplete recognition or an unknown cat type triggers a protective lock only after confirming the current cat, page, and lock state. If any of these cannot be confirmed, no lock operation is performed; incomplete results never trigger automatic unlocking. The report records each action; this does not feed cats, spend talent points, or reroll talents. Local screenshots and auto follow remain read-only. Only the CN Chinese client is currently calibrated; lock operations are skipped on other servers. All learned talents may be fully confirmed across multiple frames after scrolling. Automatic unlocking requires confirmed identity, breed, rarity, all talents, and valid final advice."
     },
     "Folder": {
       "name": "Screenshot Folder",
@@ -6520,11 +6526,11 @@
     },
     "ScanLimit": {
       "name": "Max cats to scan",
-      "help": "How many cats to scan at most in scan-all mode; 0 means no limit"
+      "help": "Maximum cats recorded in this run, including blue cats; 0 sets no count limit. When starting on the current talent page, five consecutive observations with identical name, level, complete talents, rarity, and static attributes end the scan under the no-switch rule. Starting from the cattery also uses the owned-cat count to end the scan."
     },
     "ScanPasses": {
       "name": "Max list pages",
-      "help": "Used only for EN/JP/TW cattery list scans (12 cats per page); stops early at the end. CN scans continuously on the talent page until the owned-cat count or max cat limit is reached; this setting does not limit CN"
+      "help": "Used only for EN/JP/TW scans starting from the cattery (12 cats per page); stops early at the end of the list. CN scans continuously on the talent page and this setting does not apply."
     }
   },
   "OpsiSimulatorParameters": {

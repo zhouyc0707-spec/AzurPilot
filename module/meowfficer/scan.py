@@ -1,7 +1,7 @@
 """扫描全部指挥喵的天赋（工具评分任务的自动遍历方式）。
 
 与 ``screenshot`` / ``device`` 两种方式不同，本模式**自己操作游戏**：
-国服只在启动时核验猫窝起点与拥有数，进入首猫后在立绘上连续左滑；
+国服支持从猫窝首只或用户当前打开的天赋页起步，之后在立绘上连续左滑；
 同名同级按完整天赋与属性核对，结束时保持天赋页。其他服务器沿用卡片遍历。
 默认结束后统一评分；启用建议锁定时，在当前猫的天赋页内评分并确认锁状态。
 
@@ -46,7 +46,7 @@ class MeowfficerScanner(MeowfficerBase):
     """自动遍历猫窝并识别每只猫天赋的扫描器。
 
     负责「取图 + 识别」与逐只访问，评分、建议与报告由
-    :class:`~module.meowfficer.score_task.MeowfficerScore` 负责；可通过回调在返回列表前处理当前猫。
+    :class:`~module.meowfficer.score_task.MeowfficerScore` 负责；可通过回调在天赋页内处理当前猫。
 
     Attributes:
         scanned (list[tuple[str, list[Talent], int | None]]): 扫描结果列表，按扫描顺序存储 (猫名, 天赋列表, 等级)。
@@ -784,7 +784,8 @@ class MeowfficerScanner(MeowfficerBase):
             start_index = 12 - rows * 4
         return self.scanned
 
-    def scan_all(self, limit: int = 0, passes: int = 12, on_cat=None, on_result=None) -> list:
+    def scan_all(self, limit: int = 0, passes: int = 12, on_cat=None, on_result=None,
+                 *, start_current: bool = False) -> list:
         """遍历猫窝列表，返回每只猫的天赋。
 
         指挥喵**可以自定义名字**，自定义名甚至可能和天赋名一样（用户就有一只猫叫
@@ -798,13 +799,30 @@ class MeowfficerScanner(MeowfficerBase):
                 ``(scanner, ScanCapture)``；启用后严格检查身份和天赋完整性。
             on_result (Callable, optional): 接受一条读取结果后、访问下一只前的只读回调，
                 接收 ``(scanner, (猫名, 天赋列表, 等级))``；不启用锁操作或改变排序要求。
+            start_current (bool): 仅 CN，从已打开的当前天赋页开始，不访问猫窝。
+                需预先按等级排序且关闭按锁状态筛选；上限计本次记录数，
+                不限时按五次完全相同策略停止，不推断猫窝拥有数或起始位置。
+
+        Pages:
+            in: any；start_current 时必须是目标猫的天赋页。
+            out: CN 为最后读取的猫的天赋页，其他服务器为猫窝。
 
         Returns:
             list[tuple[str, list[Talent], int | None]]: ``(猫名, 天赋列表, 等级)`` 列表；
             等级读不到时为 ``None``。
         """
         self.scanned = []
+        if start_current and not self._supports_talent_swipe():
+            raise RequestHumanTakeover('从当前天赋页开始仅支持已校准的国服中文客户端；未导航或改锁')
         ocr = self._load_ocr()
+
+        if start_current:
+            logger.hr('从当前天赋页扫描指挥喵', level=2)
+            logger.info('[指挥喵-扫描] 起始位置与剩余数量未知；'
+                        f'本次上限 {limit if limit > 0 else "不限"} 只，连续五次资料完全相同时停止')
+            from module.meowfficer.scan_continuous import scan_continuous_detail
+            return scan_continuous_detail(self, ocr, limit=limit, on_cat=on_cat,
+                                          on_result=on_result, start_current=True)
 
         self._ensure_cattery()
         if self._supports_talent_swipe():
