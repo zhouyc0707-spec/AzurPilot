@@ -72,6 +72,9 @@ def scan_continuous_detail(scanner, ocr, limit=0, on_cat=None, on_result=None):
     previous = None
     previous_image = None
     identical_runs = 0
+    # 仅建议锁定回调需要异常恢复资料；只读扫描不增加缓存或属性识别。
+    from module.meowfficer.lock_recovery import TalentPageRecovery
+    recovery = TalentPageRecovery(scanner, ocr) if on_cat is not None else None
     for ordinal in range(1, target + 1):
         name, level = identity
         logger.hr(f'连续读取第 {ordinal}/{target} 只：{name}', level=3)
@@ -89,7 +92,17 @@ def scan_continuous_detail(scanner, ocr, limit=0, on_cat=None, on_result=None):
         if same:
             logger.info(f'[指挥喵-扫描] 连续第 {identical_runs} 次内容相同，按下一只记录')
         if on_cat is not None:
-            on_cat(scanner, capture)
+            recovery.remember(capture, image)
+            sentinel = object()
+            prior = getattr(scanner, '_meowfficer_lock_recovery', sentinel)
+            scanner._meowfficer_lock_recovery = recovery
+            try:
+                on_cat(scanner, capture)
+            finally:
+                if prior is sentinel:
+                    del scanner._meowfficer_lock_recovery
+                else:
+                    scanner._meowfficer_lock_recovery = prior
         scanner.scanned.append((name, capture.talents, capture.level))
         if on_result is not None:
             on_result(scanner, scanner.scanned[-1])

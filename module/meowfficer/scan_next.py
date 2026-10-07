@@ -24,7 +24,8 @@ def _switch_view_unchanged(before, after):
     return _same_panel(before, after)
 
 
-def swipe_next_cat(scanner, ocr, current_name, current_level, *, defer_same_name=False):
+def swipe_next_cat(scanner, ocr, current_name, current_level, *, defer_same_name=False,
+                   reset_history=True):
     """在立绘区域向左滑动一次，持续截图确认下一只。
 
     Pages:
@@ -37,6 +38,8 @@ def swipe_next_cat(scanner, ocr, current_name, current_level, *, defer_same_name
         current_name: 刚读完的当前猫姓名。
         current_level: 当前猫已读等级，未知时为 None。
         defer_same_name: 仅连续扫描启用，将未知等级的同名候选交回完整比较。
+        reset_history: 普通扫描在新姓名或等级确认后结束旧阶段；异常恢复关闭，
+            由调用方在完整核验预期猫之后清理，错误跳转仍保留保护记录。
 
     Returns:
         tuple | None: 实际候选姓名、等级；同名同级时返回 None，不能据此断言
@@ -104,9 +107,10 @@ def swipe_next_cat(scanner, ocr, current_name, current_level, *, defer_same_name
                    or (current_level is not None and level is not None and level != current_level))
         if changed and confirmed >= 2:
             # 只清理已证实完成的阶段，未知状态不消除重复操作保护。
-            scanner.device.click_record_remove('MEOWFFICER_NEXT')
-            scanner.device.click_record_remove('SWIPE')
-            scanner.device.stuck_record_clear()
+            if reset_history:
+                scanner.device.click_record_remove('MEOWFFICER_NEXT')
+                scanner.device.click_record_remove('SWIPE')
+                scanner.device.stuck_record_clear()
             return identity
         if confirmed >= 2 and name == current_name:
             reason = '同名猫等级尚未完整确认'

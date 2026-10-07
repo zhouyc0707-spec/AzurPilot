@@ -386,6 +386,52 @@ class IdenticalCaptureTests(unittest.TestCase):
 class ContinuousDetailTests(unittest.TestCase):
     """拥有数、扫描上限、锁操作和异常边界均不触发返回列表。"""
 
+    def test_recovery_context_exists_only_during_callback_and_has_current_read_prefix(self):
+        scanner = _ContinuousScanner(_different_cats(3))
+        contexts = []
+
+        def on_cat(active, capture):
+            context = active._meowfficer_lock_recovery
+            self.assertIs(context.records[-1].original, capture)
+            self.assertEqual(len(context.records), len(active.scanned) + 1)
+            contexts.append(context)
+
+        def on_result(active, _entry):
+            self.assertFalse(hasattr(active, '_meowfficer_lock_recovery'))
+
+        with _FlowHarness(scanner):
+            scan_continuous_detail(scanner, scanner.ocr, on_cat=on_cat, on_result=on_result)
+        self.assertTrue(all(context is contexts[0] for context in contexts))
+        self.assertEqual(len(contexts), 3)
+        self.assertFalse(hasattr(scanner, '_meowfficer_lock_recovery'))
+
+    def test_recovery_context_is_removed_after_callback_device_error(self):
+        scanner = _ContinuousScanner(_different_cats(1))
+
+        def on_cat(active, _capture):
+            self.assertTrue(hasattr(active, '_meowfficer_lock_recovery'))
+            raise GameStuckError('隔离回调错误')
+
+        with _FlowHarness(scanner):
+            with self.assertRaises(GameStuckError):
+                scan_continuous_detail(scanner, scanner.ocr, on_cat=on_cat)
+        self.assertFalse(hasattr(scanner, '_meowfficer_lock_recovery'))
+        self.assertEqual(scanner.scanned, [])
+
+    def test_previous_context_is_restored_after_callback_and_readonly_has_no_context(self):
+        scanner = _ContinuousScanner(_different_cats(1))
+        old_context = object()
+        scanner._meowfficer_lock_recovery = old_context
+        with _FlowHarness(scanner):
+            scan_continuous_detail(scanner, scanner.ocr, on_cat=lambda active, _capture:
+                                   self.assertIsNot(active._meowfficer_lock_recovery, old_context))
+        self.assertIs(scanner._meowfficer_lock_recovery, old_context)
+        readonly = _ContinuousScanner(_different_cats(1))
+        with _FlowHarness(readonly), patch('module.meowfficer.lock_recovery.TalentPageRecovery') as factory:
+            scan_continuous_detail(readonly, readonly.ocr)
+        factory.assert_not_called()
+        self.assertFalse(hasattr(readonly, '_meowfficer_lock_recovery'))
+
     def assert_single_entry(self, scanner):
         self.assertEqual([event for event in scanner.events if event[0] == 'select'], [('select', 0, None)])
         self.assertEqual(sum(event[0] == 'open' for event in scanner.events), 1)

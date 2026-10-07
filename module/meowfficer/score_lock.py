@@ -74,7 +74,8 @@ def set_lock_state(scanner, capture, target: bool | None, reason: str, entry=Non
     """设置目标状态并持续截图确认，单次只切换一次，不返回猫窝。
 
     点击后页面或身份暂时失配只继续截图，不能据其他猫的锁状态确认结果。
-    原猫与目标锁状态连续两帧确认后才完成，等待到限仍无法确认则停止保护。
+    到限仍显示别猫时，仅连续扫描的本轮已读序列可用于一次天赋页恢复。
+    回到原猫后两次完整核验资料与同帧目标锁状态，任何恢复失败仍停止，不重复点击。
 
     Pages:
         in: meowfficer_talent
@@ -92,6 +93,38 @@ def set_lock_state(scanner, capture, target: bool | None, reason: str, entry=Non
     """
     if entry is None:
         entry = new_lock_action(capture, target, reason)
+    _apply_lock_state(scanner, capture, target, entry)
+    recovery = getattr(scanner, '_meowfficer_lock_recovery', None)
+    if (entry['status'] == 'unconfirmed' and recovery is not None
+            and detail_page_confirmed(scanner.device.image)
+            and _mean_diff(capture.identity_image, _crop(scanner.device.image, IDENTITY_AREA)) >= 3
+            and recovery.restore(capture, entry)):
+        if _verify_restored_lock(scanner, capture, target, entry, recovery):
+            entry['reason'] = reason + '；列表刷新后已在天赋页沿已读序列恢复原猫并核验锁状态'
+    return entry
+
+
+def _verify_restored_lock(scanner, capture, target, entry, recovery):
+    """两次完整读取并在同帧读锁，禁止仅凭姓名等级认错猫、再次导航或切锁。"""
+    for _ in range(2):
+        if not recovery.target_confirmed(capture):
+            entry['after'] = None
+            entry['recovery'].update(status='failed', reason='恢复后原目标完整资料未能再次确认')
+            entry['reason'] += '；恢复后原目标完整资料未能再次确认，未重复切锁'
+            return False
+        state = read_lock_state(scanner.device.image)
+        entry['after'] = state
+        if state is not target:
+            entry['recovery'].update(status='failed', reason='原目标锁状态未能连续确认')
+            entry['reason'] += '；已恢复原猫，但目标锁状态仍未确认，未重复切锁'
+            return False
+    entry['status'] = 'changed'
+    entry['recovery'].update(status='verified', reason='原目标完整资料及目标锁状态连续两次确认')
+    return True
+
+
+def _apply_lock_state(scanner, capture, target, entry):
+    """原位最多点击一次，等待原猫的两帧目标锁状态；不在此阶段导航。"""
     if target is None or server.server != 'cn' or not capture.identity_confirmed:
         return entry
     reference = capture.identity_image
