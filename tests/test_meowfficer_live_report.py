@@ -35,7 +35,8 @@ class LiveReportTests(unittest.TestCase):
                                            MeowfficerScore_ScanLimit=0,
                                            MeowfficerScore_ScanPasses=12,
                                            MeowfficerScore_ReportPath=str(self.report))
-        self.task.device = SimpleNamespace(screenshot=Mock(), click=Mock(), swipe=Mock())
+        self.task.device = SimpleNamespace(screenshot=Mock(), click=Mock(), swipe=Mock(),
+                                           click_record_remove=Mock())
         self.task.results = []
         self.task.lock_actions = []
         self.task.scanned_count = 0
@@ -264,7 +265,7 @@ class LiveReportTests(unittest.TestCase):
             return entry
 
         with patch('module.meowfficer.score_lock.set_lock_state', side_effect=confirm):
-            self.task._score_and_apply_lock(object(), current)
+            self.task._score_and_apply_lock(SimpleNamespace(device=self.task.device), current)
         payload = self._payload()
         self.assertEqual(payload['count'], 2)
         self.assertEqual(payload['lockActions'][0]['status'], 'changed')
@@ -279,7 +280,7 @@ class LiveReportTests(unittest.TestCase):
 
         with patch('module.meowfficer.score_lock.set_lock_state', side_effect=confirm):
             with self.assertRaises(RequestHumanTakeover):
-                self.task._score_and_apply_lock(object(), current)
+                self.task._score_and_apply_lock(SimpleNamespace(device=self.task.device), current)
         payload = self._payload()
         self.assertEqual(payload['count'], 1)
         self.assertEqual(payload['lockActions'][0]['status'], 'unconfirmed')
@@ -317,7 +318,7 @@ class LiveReportTests(unittest.TestCase):
 
         with patch('module.meowfficer.score_task.evaluate') as scoring, \
                 patch('module.meowfficer.score_lock.set_lock_state', side_effect=confirm):
-            self.task._score_and_apply_lock(object(), current)
+            self.task._score_and_apply_lock(SimpleNamespace(device=self.task.device), current)
         scoring.assert_not_called()
         payload = self._payload()
         self.assertEqual(payload['count'], 0)

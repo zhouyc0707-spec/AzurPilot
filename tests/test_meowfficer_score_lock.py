@@ -73,7 +73,7 @@ class DetailPage:
             with Image.open(path) as source:
                 self.templates[name] = np.array(source.convert('RGB'))
         self.device = SimpleNamespace(image=self.frame(), screenshot=Mock(side_effect=self.screenshot),
-                                      click=Mock(side_effect=self.click))
+                                      click=Mock(side_effect=self.click), click_record_remove=Mock())
 
     def frame(self):
         image = np.zeros((720, 1280, 3), dtype=np.uint8)

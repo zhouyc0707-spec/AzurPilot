@@ -422,7 +422,7 @@ class MeowfficerScore:
 
     def _score_and_apply_lock(self, scanner, capture):
         """当前猫尚在天赋页时评分、设置锁状态并记录核验结果。"""
-        from module.meowfficer.score_lock import lock_target, new_lock_action, set_lock_state
+        from module.meowfficer.score_lock import LOCK_BUTTON, lock_target, new_lock_action, set_lock_state
         result = None
         if capture.rarity != 'R' and capture.talents:
             try:
@@ -440,6 +440,29 @@ class MeowfficerScore:
         self.lock_actions.append(action)
         self.scanned_count = len(self.lock_actions)
         set_lock_state(scanner, capture, target, reason, entry=action)
+        if action['status'] in ('changed', 'unchanged'):
+            # 本只建议操作已正向完成，结束该按钮阶段，避免合法跨猫点击累计误报。
+            scanner.device.click_record_remove(LOCK_BUTTON)
+        from module.meowfficer.lock_refresh import (LOCK_REFRESH_INTERVAL, new_refresh_action,
+                                                    refresh_lock_state)
+        if (self.scanned_count % LOCK_REFRESH_INTERVAL == 0
+                and action['status'] != 'unconfirmed'):
+            refresh = new_refresh_action(capture)
+            refresh['ordinal'] = self.scanned_count
+            action['periodicRefresh'] = refresh
+            logger.hr(f'已读取 {self.scanned_count} 只，双切锁状态刷新客户端记录', level=3)
+            try:
+                if action['status'] in ('changed', 'unchanged'):
+                    refresh_lock_state(scanner, capture, entry=refresh)
+                else:
+                    refresh.update(status='unconfirmed', reason='建议锁操作未能确认，未开始周期双切')
+            finally:
+                if refresh['status'] == 'pending':
+                    refresh.update(status='unconfirmed', reason='周期双切在开始前中断，未开始切换')
+                action['reason'] += f'；每 {LOCK_REFRESH_INTERVAL} 只刷新：{refresh["reason"]}'
+                if refresh['status'] != 'verified':
+                    action['status'] = 'unconfirmed'
+                    action['after'] = refresh['after']
         self._publish_report()
         logger.attr(f'[指挥喵-锁定] {capture.display_name}',
                     f'{action["status"]}：{action["reason"]}')
