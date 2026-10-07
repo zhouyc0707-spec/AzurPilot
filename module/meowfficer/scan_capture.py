@@ -16,7 +16,8 @@ from module.logger import logger
 from module.meowfficer.cat_data import CATS
 from module.meowfficer.scan_talent_template import read_exact_talent_title
 from module.meowfficer.scan_scroll import CN_TALENT_SLOT_COUNT, cn_talent_top_confirmed
-from module.meowfficer.scan_title import split_title_may_retry, split_title_variants
+from module.meowfficer.scan_title import (padded_title_variants, split_title_may_retry,
+                                         split_title_variants)
 from module.meowfficer.scan_utils import _crop, _mean_diff
 from module.meowfficer.score import TALENT_INDEX, Talent, normalize
 from module.meowfficer.score_ocr import build_variants
@@ -259,6 +260,7 @@ def _read_row_records(image, ocr, reasons):
         template_ref = TALENT_INDEX.get(normalize(template_name)) if template_name else None
         matches = []
         split_title = False
+        unknown_title = False
         invalid_evidence = False
         for variant_name, variant in _rgb_variants(crop).items():
             boxes = []
@@ -294,6 +296,12 @@ def _read_row_records(image, ocr, reasons):
                     continue
                 if split_title and 0 <= confidence <= 1:
                     continue
+                if variant_name == 'clahe' and ref is None and confidence >= 0.9 \
+                        and len(matches) == 1:
+                    # 原图已有高置信精确已知名；增强误字只触发两份整幅字形补证。
+                    # 未知文字不设别名、不参与接受，新的读数还必须与原图一致。
+                    unknown_title = True
+                    continue
                 _add_reason(reasons, '天赋标题不是高置信度的精确已知名称')
                 invalid_evidence = True
                 break
@@ -302,10 +310,11 @@ def _read_row_records(image, ocr, reasons):
                 invalid_evidence = True
                 break
             matches.append((ref, raw))
-        if split_title and not invalid_evidence:
-            # 分框只触发整幅字形补读，原碎片不拼接为名字、不参与置信度合并。
+        if (split_title or unknown_title) and not invalid_evidence:
+            # 分框或增强误字只触发整幅字形补读，不拼接原碎片、不合并置信度。
             recovered = []
-            for variant_name, variant in split_title_variants(crop):
+            variants = padded_title_variants(crop) if unknown_title else split_title_variants(crop)
+            for variant_name, variant in variants:
                 details = _details(ocr, variant, reasons, '天赋标题字形')
                 record.readings.append({
                     'variant': variant_name,
@@ -325,6 +334,7 @@ def _read_row_records(image, ocr, reasons):
                     break
                 recovered.append((ref, raw))
             if len(recovered) != 2:
+                _add_reason(reasons, '天赋标题不是高置信度的精确已知名称')
                 continue
             matches.extend(recovered)
         if invalid_evidence or len(matches) < 2:

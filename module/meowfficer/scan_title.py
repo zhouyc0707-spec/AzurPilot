@@ -1,5 +1,6 @@
-"""完整天赋行的分框补读；不拼接 OCR 碎片，也不放宽精确名称门槛。"""
+"""完整天赋标题的字形补读；不拼接碎片，也不放宽精确名称门槛。"""
 
+import cv2
 import numpy as np
 
 from module.meowfficer.score import TALENT_INDEX, normalize
@@ -58,3 +59,21 @@ def split_title_variants(crop):
         glyph = np.where(low < threshold, 0, 255).astype(np.uint8)
         image = np.repeat(glyph[:, :, None], 3, axis=2)
         yield f'whole_title_glyph_{threshold}', build_variants(image)['plain']
+
+
+def padded_title_variants(crop):
+    """原图已确认完整已知名、增强图误读未知字时，补读两份完整原始字形。
+
+    原始深色笔画须位于标题裁剪内部；先排除碰边裁切，再补白边，避免检测器
+    在放大后的近边界笔画上多切出一个文字框。名称接受条件仍由调用方严格核验。
+    """
+    if crop.shape != (39, 265, 3) or crop.dtype != np.uint8:
+        return
+    mask = crop.min(axis=2) < 185
+    if not mask.any() or mask[0].any() or mask[-1].any() \
+            or mask[:, 0].any() or mask[:, -1].any():
+        return
+    padded = cv2.copyMakeBorder(crop, 8, 8, 8, 8,
+                               cv2.BORDER_CONSTANT, value=(255, 255, 255))
+    for name, variant in split_title_variants(padded):
+        yield name.replace('whole_title_', 'whole_title_padded_'), variant
