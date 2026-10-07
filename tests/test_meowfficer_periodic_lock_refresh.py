@@ -230,6 +230,13 @@ class _HistoryPage(DetailPage):
         self.click_record_check()
         super().click(button)
 
+    def frame(self):
+        image = super().frame()
+        # 已读蓝猫也有完整空槽行框，周期预检不把黑画布当作真实静态证据。
+        image[154:241, 756:842] = (192, 227, 236)
+        image[162:190, 858:1110] = (244, 235, 221)
+        return image
+
 
 class PeriodicClickHistoryTests(unittest.TestCase):
     def test_thirty_six_normal_unlocks_and_three_pairs_keep_click_protection_working(self):
@@ -239,6 +246,7 @@ class PeriodicClickHistoryTests(unittest.TestCase):
         with patch('module.config.server.server', 'cn'), \
                 patch('module.meowfficer.score_lock.Timer', side_effect=lambda *a, **kw: _FrameTimer(4)), \
                 patch('module.meowfficer.lock_refresh.Timer', side_effect=lambda *a, **kw: _FrameTimer(4)), \
+                patch('module.meowfficer.lock_refresh.sleep') as pause, \
                 patch('module.meowfficer.score_task.logger'), patch('module.meowfficer.lock_refresh.logger'):
             for _ in range(36):
                 page.steps = 0
@@ -248,6 +256,8 @@ class PeriodicClickHistoryTests(unittest.TestCase):
                 self.assertIs(action['after'], False)
                 self.assertEqual(tuple(page.click_record), ('OTHER_KEEP',))
         self.assertEqual(page.device.click.call_count, 42)
+        self.assertEqual(pause.call_count, 3)
+        self.assertTrue(all(call.args == (0.5,) for call in pause.call_args_list))
         self.assertEqual(len(task.lock_actions), 36)
         self.assertEqual([action['periodicRefresh']['ordinal'] for action in task.lock_actions
                           if 'periodicRefresh' in action], [12, 24, 36])
