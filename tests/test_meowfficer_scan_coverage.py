@@ -72,7 +72,8 @@ class _AnimatedDevice:
     def screenshot(self):
         self.screenshots += 1
         self.animated = not self.animated
-        changes = {2} if self.mutate_at_bottom and self.downward_swipes >= 2 else ()
+        # 在首次实际下移后的读取阶段改变标题，不能等已经读全后的多余手势才变化。
+        changes = {2} if self.mutate_at_bottom and self.downward_swipes >= 1 else ()
         self.image = _animated_talent_frame(self.offset, animated=self.animated,
                                            changed_title_indices=changes)
 
@@ -205,10 +206,10 @@ class AnimatedTalentCoverageTests(unittest.TestCase):
         self.assertTrue(capture.complete, capture.reasons)
         self.assertEqual(capture.reasons, [])
         self.assertEqual([talent.name for talent in capture.talents], list(NAMES))
-        self.assertEqual(len(device.swipes), 5)
+        self.assertEqual(len(device.swipes), 2)
         self.assertGreater(device.screenshots, len(device.swipes))
 
-    def test_zero_shift_title_mutation_keeps_full_capture_protected(self):
+    def test_title_mutation_during_actual_bottom_read_keeps_full_capture_protected(self):
         device = _AnimatedDevice(mutate_at_bottom=True)
         scanner = Mock(device=device)
         scanner._read_current_cat.return_value = ('限定蒂奇喵', 30)

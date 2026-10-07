@@ -63,6 +63,11 @@ class _HistoryDevice(_Device):
 
 class SwipeStageHistoryTests(unittest.TestCase):
     def setUp(self):
+        # 本组故意使用六行长布局复现历史队列保护，走未知布局的有界端点核验。
+        # 五槽已校准页的一次手势行为由 scroll_endpoints 专项独立覆盖。
+        layout_patch = patch('module.meowfficer.scan_capture.cn_talent_top_confirmed', return_value=False)
+        layout_patch.start()
+        self.addCleanup(layout_patch.stop)
         # 真正标题识别有独立资源回归；这里用正向页状态隔离真实队列的边界。
         self.guard_patch = patch('module.meowfficer.score_lock.detail_page_confirmed', return_value=True)
         self.guard = self.guard_patch.start()

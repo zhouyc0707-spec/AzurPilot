@@ -246,7 +246,7 @@ class FirstEmptyCaptureTests(unittest.TestCase):
         self.assertTrue(capture.complete, capture.reasons)
         self.assertTrue(capture.talents_complete)
         self.assertEqual([talent.name for talent in capture.talents], list(NAMES[:3]))
-        self.assertEqual(len(scanner.device.swipes), 2)
+        self.assertEqual(len(scanner.device.swipes), 1)
         self.assertEqual(self._bottom_swipes(scanner.device), [])
         self.assertEqual(scanner._read_current_cat.call_count, 2)
         retry.assert_not_called()
@@ -292,7 +292,7 @@ class FirstEmptyCaptureTests(unittest.TestCase):
         self.assertIn('天赋行框间距异常，不能排除漏行', capture.reasons)
         self.assertGreaterEqual(len(self._bottom_swipes(scanner.device)), 1)
 
-    def test_learned_row_after_empty_forces_full_read_instead_of_fast_stop(self):
+    def test_learned_row_after_empty_requires_all_five_slots_instead_of_empty_prefix_stop(self):
         frames = []
         for offset in (0, 75):
             image, learned = _empty_frame(learned=1, offset=offset), _animated_talent_frame(offset)
@@ -304,7 +304,7 @@ class FirstEmptyCaptureTests(unittest.TestCase):
         capture = self._capture(scanner)
         self.assertTrue(capture.complete, capture.reasons)
         self.assertEqual([talent.name for talent in capture.talents], [NAMES[0], NAMES[2]])
-        self.assertEqual(len(self._bottom_swipes(scanner.device)), 3)
+        self.assertEqual(len(self._bottom_swipes(scanner.device)), 1)
 
     def test_first_empty_does_not_excuse_unconfirmed_top(self):
         # 两次稳定的不动画面仍因首框偏移而无法正向证明已回到顶部。
@@ -325,8 +325,8 @@ class FirstEmptyCaptureTests(unittest.TestCase):
 
     def test_final_page_loss_rejects_fast_complete(self):
         scanner = self._scanner()
-        # 初始画面、两次向顶部滑动前正常，最终复核时离开天赋页。
-        self.page.side_effect = [True, True, True, False]
+        # 初始画面及一次向顶部滑动前正常，最终复核时离开天赋页。
+        self.page.side_effect = [True, True, False]
         capture = self._capture(scanner)
         self.assertFalse(capture.identity_confirmed)
         self.assertFalse(capture.complete)
@@ -347,14 +347,14 @@ class FirstEmptyCaptureTests(unittest.TestCase):
         self.assertFalse(capture.talents_complete)
         self.assertEqual(capture.talents, [])
 
-    def test_all_learned_without_empty_still_confirms_physical_bottom(self):
+    def test_all_learned_without_empty_reads_fifth_slot_then_skips_duplicate_bottom_confirmation(self):
         device = _AnimatedDevice()
         scanner = Mock(device=device)
         scanner._read_current_cat.return_value = ('限定蒂奇喵', 30)
         capture = self._capture(scanner, _AnonymousOCR())
         self.assertTrue(capture.complete, capture.reasons)
         self.assertEqual([talent.name for talent in capture.talents], list(NAMES))
-        self.assertEqual(len(self._bottom_swipes(device)), 3)
+        self.assertEqual(len(self._bottom_swipes(device)), 1)
 
 
 if __name__ == '__main__':

@@ -175,9 +175,26 @@ class TalentCoverage:
             return None
         return end
 
-    def finish(self, *, at_first_empty=False):
-        """顶部及物理底部或首空栏终点由调用方证明，本处要求所需行连续完整。"""
-        end = self.first_empty_end() if at_first_empty else self.last_index
+    def all_slots_complete(self, slot_count):
+        """已知总槽数内逐行读全时可结束；观测到额外行则禁用固定槽快路径。"""
+        if slot_count <= 0 or self.reasons or self.last_index != slot_count - 1:
+            return False
+        for index in range(slot_count):
+            row = self.covered.get(index)
+            if row is None or not row.complete \
+                    or row.empty != (row.talent is None):
+                return False
+        return True
+
+    def finish(self, *, at_first_empty=False, slot_count=None):
+        """顶部与物理底部、首空栏或已知总槽数由调用方证明，所需行须连续完整。"""
+        if slot_count is not None:
+            if not self.all_slots_complete(slot_count):
+                self._reason('未能连续完整确认全部已知天赋槽')
+                return False
+            end = slot_count - 1
+        else:
+            end = self.first_empty_end() if at_first_empty else self.last_index
         if end is None:
             self._reason('未能以完整未习得栏确认已学天赋终点')
             return False
