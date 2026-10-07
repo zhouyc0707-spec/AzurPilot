@@ -251,7 +251,9 @@ class LockStateTests(unittest.TestCase):
                 page = DetailPage()
                 page.after_click = (lambda: setattr(page, 'page_visible', False)) if change == 'page' \
                     else lambda: setattr(page, 'identity_changed', True)
-                action = set_lock_state(page, page.snapshot(), False, '培养建议')
+                # 永久失配仍到限停止；过渡恢复的多帧核验由 lock_transition 专项覆盖。
+                with fast_timer():
+                    action = set_lock_state(page, page.snapshot(), False, '培养建议')
                 self.assertEqual(action['status'], 'unconfirmed')
                 page.device.click.assert_called_once_with(LOCK_BUTTON)
 

@@ -2,6 +2,7 @@
 
 from module.base.button import Button
 from module.base.timer import Timer
+from module.logger import logger
 import module.config.server as server
 from module.meowfficer.advice import VERDICT_FEED, reset_advice
 from module.meowfficer.assets import (TEMPLATE_MEOWFFICER_DETAIL_LOCKED,
@@ -70,7 +71,10 @@ def new_lock_action(capture, target, reason) -> dict:
 
 
 def set_lock_state(scanner, capture, target: bool | None, reason: str, entry=None) -> dict:
-    """设置目标状态并截图确认，未知页面不点击，单次只切换一次。
+    """设置目标状态并持续截图确认，单次只切换一次，不返回猫窝。
+
+    点击后页面或身份暂时失配只继续截图，不能据其他猫的锁状态确认结果。
+    原猫与目标锁状态连续两帧确认后才完成，等待到限仍无法确认则停止保护。
 
     Pages:
         in: meowfficer_talent
@@ -97,33 +101,62 @@ def set_lock_state(scanner, capture, target: bool | None, reason: str, entry=Non
 
     timer = Timer(8, count=12).start()
     clicked = False
+    confirmed = 0
+    transition_logged = False
+    pending_reason = '锁状态未能确认，未重复点击'
     while True:
         scanner.device.screenshot()
         current = scanner.device.image
         if not detail_page_confirmed(current):
-            entry['status'] = 'unconfirmed' if clicked else 'skipped'
-            entry['reason'] += '；天赋页无法确认'
-            return entry
-        if _mean_diff(reference, _crop(current, IDENTITY_AREA)) >= 3:
-            entry['status'] = 'unconfirmed' if clicked else 'skipped'
-            entry['reason'] += '；当前猫信息发生变化'
-            return entry
-        state = read_lock_state(current)
-        if state is not None:
-            if entry['before'] is None:
-                entry['before'] = state
-            entry['after'] = state
-            if state == target:
-                entry['status'] = 'changed' if clicked else 'unchanged'
-                return entry
+            pending_reason = '天赋页无法确认'
+            confirmed = 0
+            entry['after'] = None
             if not clicked:
-                # 已识别相反状态才点击；切换按钮再次点击会撤销前次操作，故不盲目重试。
-                entry['status'] = 'unconfirmed'
+                entry['status'] = 'skipped'
+                entry['reason'] += f'；{pending_reason}'
+                return entry
+        elif _mean_diff(reference, _crop(current, IDENTITY_AREA)) >= 3:
+            pending_reason = '当前猫信息发生变化'
+            confirmed = 0
+            entry['after'] = None
+            if not clicked:
+                entry['status'] = 'skipped'
+                entry['reason'] += f'；{pending_reason}'
+                return entry
+        else:
+            state = read_lock_state(current)
+            if state is not None:
+                if entry['before'] is None:
+                    entry['before'] = state
+                if state == target:
+                    confirmed += 1
+                    if not clicked or confirmed >= 2:
+                        entry['after'] = state
+                        entry['status'] = 'changed' if clicked else 'unchanged'
+                        return entry
+                    entry['after'] = None
+                    pending_reason = '目标锁状态尚未连续确认，未重复点击'
+                else:
+                    confirmed = 0
+                    entry['after'] = state
+                    pending_reason = '锁状态未能确认，未重复点击'
+                    if not clicked:
+                        # 只切换一次；从真实点击开始验证，后续过渡不延长计时。
+                        entry['status'] = 'unconfirmed'
+                        entry['after'] = None
+                        scanner.device.click(LOCK_BUTTON)
+                        clicked = True
+                        timer.reset()
+                        continue
+            else:
+                confirmed = 0
                 entry['after'] = None
-                scanner.device.click(LOCK_BUTTON)
-                clicked = True
-                continue
+                pending_reason = '锁状态未能确认，未重复点击'
+        if clicked and not transition_logged and pending_reason in (
+                '天赋页无法确认', '当前猫信息发生变化'):
+            logger.info('[指挥喵-锁定] 点击后当前页面尚未稳定，继续截图核验，不重复点击')
+            transition_logged = True
         if timer.reached():
             entry['status'] = 'unconfirmed' if clicked else 'skipped'
-            entry['reason'] += '；锁状态未能确认，未重复点击'
+            entry['reason'] += f'；{pending_reason}'
             return entry
