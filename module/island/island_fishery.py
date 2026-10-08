@@ -49,7 +49,10 @@ from module.logger import logger
 DISPATCH_STAMINA_MIN = 98
 
 
-class IslandFishery(Island, WarehouseOCR, LoginHandler):
+from module.island.planned_dispatch import PlannedProductionMixin, recipe_for_local_name
+
+
+class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
     """岛屿渔场自动化管理器。
 
     继承 Island（岛屿基础操作）、WarehouseOCR（仓库 OCR 识别）和
@@ -149,7 +152,8 @@ class IslandFishery(Island, WarehouseOCR, LoginHandler):
         for item_config in self.FISHERY_ITEMS:
             item_name = item_config['name']
             count = inventory.get(item_name, 0)
-            threshold = self.fishery_threshold.get(item_name, 50)
+            from module.island.production_planner import planner_target
+            threshold = planner_target(self.config, item_name, self.fishery_threshold.get(item_name, 50))
             yield_amount = item_config.get('yield', 1)
             if count < threshold:
                 deficit = threshold - count
@@ -520,6 +524,10 @@ class IslandFishery(Island, WarehouseOCR, LoginHandler):
         """
         self.island_error = False
 
+        self._planner_actual_stocks = {}
+        self._planner_dispatched = {}
+        self._planner_in_production = {}
+
         # 重置渔场时间追踪列表
         self.fishery_times = [None] * self.fishery_positions
 
@@ -557,6 +565,7 @@ class IslandFishery(Island, WarehouseOCR, LoginHandler):
                     'post_id': post_id,
                     'button': button,
                     'index': i,
+                    'time_var_name': f'time_fishery_{i}',
                 })
 
         if collected_posts:
@@ -575,6 +584,28 @@ class IslandFishery(Island, WarehouseOCR, LoginHandler):
         self.post_close()
 
         logger.info(f"[岛屿-渔场] \n空闲岗位统计: {len(idle_posts)}个空闲岗位")
+
+        from module.island.production_planner import planner_active
+        if planner_active(self.config):
+            from module.island.data import DIC_ISLAND_RECIPE
+            from module.island.item_ids import LOCAL_TO_ITEM_ID
+            from module.island.production_planner import get_planned_recipe_items
+            unknown = any(info.get('state') == 'working' and
+                          (not info.get('crop') or not info.get('runs')) for info in self.posts.values())
+            for info in self.posts.values():
+                if info.get('state') == 'working' and info.get('crop') and info.get('runs'):
+                    name = info['crop']
+                    item = LOCAL_TO_ITEM_ID[name]
+                    recipe = DIC_ISLAND_RECIPE[recipe_for_local_name(name)]
+                    self._planner_in_production[item] = self._planner_in_production.get(item, 0) + info['runs'] * recipe['commission_product'][item]
+            if unknown:
+                logger.info('[岛屿-生产规划] 渔场有未知在制品，收获前暂停追加')
+            elif idle_posts:
+                self._planned_dispatch_category(idle_posts, get_planned_recipe_items(self.config, 'fishery', self.FISHERY_ITEMS),
+                                                self.inventory_counts, self.rancher_filter)
+                for post in idle_posts:
+                    self.fishery_times[post['index']] = getattr(self, post['time_var_name'], None)
+            idle_posts = []
 
         if not idle_posts:
             logger.info("[岛屿-渔场] 没有空闲岗位，跳过养殖")
@@ -633,6 +664,10 @@ class IslandFishery(Island, WarehouseOCR, LoginHandler):
                         logger.info(f"[岛屿-渔场] 养殖渔场岗位{post_info['post_id']}成功: {product_to_plant}")
 
         logger.info("[岛屿-渔场] \n渔场管理完成！")
+
+        if planner_active(self.config):
+            from module.island.fish_exchange import ensure_fish_meat_targets
+            ensure_fish_meat_targets(self)
 
         # 设置下次运行时间：合并牧场和渔场的计时器，取最早的时间
         future_finish = []

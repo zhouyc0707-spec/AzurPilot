@@ -24,7 +24,10 @@ from module.island.warehouse import *
 from module.logger import logger
 
 
-class IslandFarm(Island, WarehouseOCR, LoginHandler):
+from module.island.planned_dispatch import PlannedProductionMixin, recipe_for_local_name
+
+
+class IslandFarm(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
     """
     岛屿农场自动化管理器。
 
@@ -279,7 +282,9 @@ class IslandFarm(Island, WarehouseOCR, LoginHandler):
                     if not self._is_nursery_crop_in_season(item_name):
                         logger.info(f"[岛屿-农田] 跳过非当季苗圃作物: {self._item_cn(item_name)}")
                         continue
-                if count < threshold:
+                from module.island.production_planner import planner_target
+                item_threshold = planner_target(self.config, item_name, threshold)
+                if count < item_threshold:
                     self.to_plant_lists[category].append(item_name)
             # 库存最少的作物排最前，轮转分配时优先补种
             self.to_plant_lists[category].sort(key=lambda name: inventory.get(name, 0))
@@ -392,16 +397,22 @@ class IslandFarm(Island, WarehouseOCR, LoginHandler):
             time_var_name (str): 对应的时间变量名，用于存储完成时间。
         """
         self.post_close()
+        self.posts[post_id]['state'] = 'unknown'
+        self.posts[post_id]['runs'] = 0
         self.post_open(post_button)
         self.device.screenshot()
         if self.appear(ISLAND_WORK_COMPLETE, offset=1):
             self.posts[post_id]['crop'] = None
+            self.posts[post_id]['state'] = 'idle'
             setattr(self, time_var_name, None)
         elif self.appear(ISLAND_WORKING):
             product_name = self.post_plant_check(category)
             if product_name in self.to_plant_lists[category]:
                 self.to_plant_lists[category].remove(product_name)
             self.posts[post_id]['crop'] = product_name
+            self.posts[post_id]['state'] = 'working'
+            self.posts[post_id]['runs'] = Digit(OCR_POST_NUMBER, letter=(57, 58, 60),
+                                               threshold=100, alphabet='0123456789').ocr(self.device.image)
             time_work = Duration(ISLAND_WORKING_TIME)
             time_value = time_work.ocr(self.device.image)
             finish_time = current_time() + time_value
@@ -411,6 +422,7 @@ class IslandFarm(Island, WarehouseOCR, LoginHandler):
                 self.time_vars[category][post_index] = finish_time
         elif self.appear(ISLAND_POST_SELECT, offset=1):
             self.posts[post_id]['crop'] = None
+            self.posts[post_id]['state'] = 'idle'
             setattr(self, time_var_name, None)
         self.post_get_and_close()
 
@@ -532,6 +544,11 @@ class IslandFarm(Island, WarehouseOCR, LoginHandler):
             GameBugError: 遇到游戏内部错误需要重启时抛出。
         """
         self.island_error = False
+        from module.island.production_planner import planner_active, refresh_production_plan
+        refresh_production_plan(self.config, self.device)
+        self._planner_actual_stocks = {}
+        self._planner_dispatched = {}
+        self._planner_in_production = {}
         self.ui_ensure(page_island)
         self.check_inventory_and_prepare_lists()
 
@@ -589,7 +606,7 @@ class IslandFarm(Island, WarehouseOCR, LoginHandler):
                 button = post_id_to_button[post_id]
                 self.decided_lists(button, post_id, category, time_var_name)
 
-                if self.posts[post_id]['crop'] is None:
+                if self.posts[post_id].get('state') == 'idle':
                     idle_posts[category].append({
                         'post_id': post_id,
                         'button': button,
@@ -612,7 +629,7 @@ class IslandFarm(Island, WarehouseOCR, LoginHandler):
             button = post_id_to_button[post_id]
             self.decided_lists(button, post_id, category, time_var_name)
 
-            if self.posts[post_id]['crop'] is None:
+            if self.posts[post_id].get('state') == 'idle':
                 idle_posts[category].append({
                     'post_id': post_id,
                     'button': button,
@@ -623,6 +640,36 @@ class IslandFarm(Island, WarehouseOCR, LoginHandler):
         logger.info(f"[岛屿-农田] \n空闲岗位统计:")
         for category in ['farm', 'orchard', 'nursery']:
             logger.info(f"[岛屿-农田] {category}: {len(idle_posts[category])}个空闲岗位")
+
+        if planner_active(self.config):
+            from module.island.data import DIC_ISLAND_RECIPE
+            from module.island.item_ids import LOCAL_TO_ITEM_ID
+            from module.island.production_planner import get_planned_recipe_items
+            for category in ('farm', 'orchard', 'nursery'):
+                posts = [info for pid, info in self.posts.items() if pid.startswith(f'ISLAND_{category.upper()}_POST')]
+                unknown = any(info.get('state') == 'working' and
+                              (info.get('crop') is None or not info.get('runs')) for info in posts)
+                for info in posts:
+                    if info.get('state') == 'working' and info.get('crop') and info.get('runs'):
+                        name = info['crop']
+                        item_id = LOCAL_TO_ITEM_ID[name]
+                        recipe = DIC_ISLAND_RECIPE[recipe_for_local_name(name)]
+                        self._planner_in_production[item_id] = self._planner_in_production.get(item_id, 0) + info['runs'] * recipe['commission_product'][item_id]
+                if unknown:
+                    logger.info(f'[岛屿-生产规划] {category} 有未知在制品，收获前暂停追加')
+                elif idle_posts[category]:
+                    if category == 'nursery':
+                        self.post_manage_swipe_until_appear(ISLAND_NURSERY_POST1, min_swipes=1)
+                    else:
+                        self.post_manage_swipe_to_top()
+                    group = 'field' if category == 'farm' else category
+                    items = get_planned_recipe_items(self.config, group, self.INVENTORY_CONFIG[category]['items'])
+                    worker = self.get_orchard_character_filter if category == 'orchard' else self.worker_filters[category]
+                    self._planned_dispatch_category(idle_posts[category], items, self.inventory_counts[category], worker)
+                    for post in idle_posts[category]:
+                        self.time_vars[category][post['index']] = getattr(self, post['time_var_name'], None)
+                # 有效计划不继续执行原来的最低库存或默认岗位配置。
+                idle_posts[category] = []
 
         all_plants_to_plant = {'farm': [], 'orchard': [], 'nursery': []}
 

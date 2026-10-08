@@ -17,7 +17,10 @@ from module.config.time_source import now as current_time
 DISPATCH_STAMINA_MIN = 80
 
 
-class IslandMineForest(Island,LoginHandler):
+from module.island.planned_dispatch import PlannedProductionMixin, recipe_for_local_name
+
+
+class IslandMineForest(PlannedProductionMixin, Island,LoginHandler):
     def __init__(self, *args, **kwargs):
         Island.__init__(self, *args, **kwargs)
         self.dispatch_stamina_min = DISPATCH_STAMINA_MIN
@@ -87,10 +90,13 @@ class IslandMineForest(Island,LoginHandler):
         mine_products = ['Copper', 'Aluminium', 'Iron', 'Sulphur', 'Silver']
         forest_products = ['Elegant', 'Practical', 'Selected']
         if product_name in mine_products:
-            return getattr(self.config, f'IslandMine_Min{product_name}', 0)
+            manual = getattr(self.config, f'IslandMine_Min{product_name}', 0)
         elif product_name in forest_products:
-            return getattr(self.config, f'IslandForest_Min{product_name}', 0)
-        return 0
+            manual = getattr(self.config, f'IslandForest_Min{product_name}', 0)
+        else:
+            manual = 0
+        from module.island.production_planner import planner_target
+        return planner_target(self.config, product_name, manual)
 
     @staticmethod
     def _post_available_for_dispatch(post_info):
@@ -184,9 +190,11 @@ class IslandMineForest(Island,LoginHandler):
         """
         needs = {'mine': [], 'forest': []}
         self.needs_count = {}
+        self.inventory_counts = {}
 
         for category in ['mine', 'forest']:
             inventory = self.warehouse_inventory(category)
+            self.inventory_counts[category] = inventory
             for item in self.inventory_config[category]['items']:
                 name = item['name']
                 warehouse_count = inventory.get(name, 0)
@@ -406,6 +414,12 @@ class IslandMineForest(Island,LoginHandler):
           4. 执行生产
         """
         self.island_error = False
+        self._planner_actual_stocks = {}
+        self._planner_dispatched = {}
+        self._planner_in_production = {}
+
+        from module.island.production_planner import refresh_production_plan
+        refresh_production_plan(self.config, self.device)
 
         # ===== 读取岗位数量 =====
         mine_positions = self.config.IslandMine_Positions
@@ -482,6 +496,34 @@ class IslandMineForest(Island,LoginHandler):
                     idle_posts[category].append(pid)
 
         logger.info(f"[岛屿-矿山林场] 空闲岗位: 矿山 {len(idle_posts['mine'])} 个, 林场 {len(idle_posts['forest'])} 个")
+
+        from module.island.production_planner import planner_active
+        if planner_active(self.config):
+            from module.island.data import DIC_ISLAND_RECIPE
+            from module.island.item_ids import LOCAL_TO_ITEM_ID
+            from module.island.production_planner import get_planned_recipe_items
+            for category, post_ids in (('mine', self.mine_post_ids), ('forest', self.forest_post_ids)):
+                unknown = any(self.posts[pid].get('state') == 'working' and
+                              (not self.posts[pid].get('crop') or not self.posts[pid].get('runs')) for pid in post_ids)
+                for pid in post_ids:
+                    info = self.posts[pid]
+                    if info.get('state') == 'working' and info.get('crop') and info.get('runs'):
+                        name = info['crop']
+                        item = LOCAL_TO_ITEM_ID[name]
+                        recipe = DIC_ISLAND_RECIPE[recipe_for_local_name(name)]
+                        self._planner_in_production[item] = self._planner_in_production.get(item, 0) + info['runs'] * recipe['commission_product'][item]
+                if unknown:
+                    logger.info(f'[岛屿-生产规划] {category} 有未知在制品，收获前暂停追加')
+                elif idle_posts[category]:
+                    if category == 'mine':
+                        self.post_manage_swipe_to_top()
+                    else:
+                        self.post_manage_swipe_until_appear(ISLAND_FOREST_POST1, min_swipes=1)
+                    posts = [{'post_id': pid, 'time_var_name': f'time_{pid}'} for pid in idle_posts[category]]
+                    group = 'wood' if category == 'forest' else category
+                    items = get_planned_recipe_items(self.config, group, self.inventory_config[category]['items'])
+                    self._planned_dispatch_category(posts, items, self.inventory_counts[category], self.worker_filters[category])
+                idle_posts[category] = []
 
         # 产物有缺口的先分配（库存最少优先轮转），剩下的默认
         all_to_plant = {'mine': [], 'forest': []}

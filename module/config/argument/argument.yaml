@@ -1640,6 +1640,62 @@ IslandPlan:
   TaskAlignment:
     value: half_hour
     option: [ half_hour, hour, disabled ]
+IslandProductionPlanner:
+  Enabled: true
+  TechnologyStatus:
+    value: ""
+    type: textarea
+  RescanTechnology: false
+  FieldsEfficiency:
+    value: 0.0
+    option: [ 0, 0.04, 0.12 ]
+  OrchardEfficiency:
+    value: 0.0
+    option: [ 0, 0.04, 0.12 ]
+  NurseryEfficiency:
+    value: 0.0
+    option: [ 0, 0.04, 0.12 ]
+  DailyProfitLowerLimit: 0
+  DailyBufferSafetyMargin: 0.0
+  TaskTarget:
+    value: "{}"
+    type: textarea
+  HardFloorItems:
+    value: "{}"
+    type: textarea
+  DailyBufferItems:
+    value: "{}"
+    type: textarea
+    display: hide
+  IdleAccumulatingItems:
+    value: "{}"
+    type: textarea
+    display: hide
+  PlannerTargets:
+    value: "{}"
+    type: textarea
+    display: hide
+  PlannerStatus:
+    value: ""
+    type: state
+  PlanFingerprint:
+    value: ""
+    display: hide
+  OrderManufactureTargets:
+    value: "{}"
+    display: hide
+  OrderManufactureFinalTargets:
+    value: "{}"
+    display: hide
+  AutoManufactureActive:
+    value: false
+    display: hide
+  AutoManufactureNextRun:
+    value: ""
+    display: hide
+  CompletedManufactureOrderId:
+    value: 0
+    display: hide
 IslandFarm:
   Positions:
     value: 3
@@ -2021,6 +2077,9 @@ IslandDailyOrder:
     value: "Cheese > Tofu"
   UrgentDetectRefreshTime:
     value: "2020-01-01 00:00:00"
+  StuckSeasonOrderId:
+    value: 0
+    display: hide
 
 IslandDailyInteract:
   WeeklyPhoto:
@@ -2173,6 +2232,13 @@ _IslandBusinessProduct5: &IslandBusinessProduct5
     - fruity_fruitier
 
 IslandBusinessShop1:
+  Grade: &IslandBusinessGrade
+    value: bronze
+    option: [ bronze, silver, gold, diamond ]
+  PlannedMenu: &IslandBusinessPlannedMenu
+    value: ""
+    type: textarea
+    display: hide
   Char1:
     <<: *IslandBusinessChar
   Char2:
@@ -2205,6 +2271,10 @@ IslandBusinessShop1:
       30 > 20 > 10
 
 IslandBusinessShop2:
+  Grade:
+    <<: *IslandBusinessGrade
+  PlannedMenu:
+    <<: *IslandBusinessPlannedMenu
   Char1:
     <<: *IslandBusinessChar
   Char2:
@@ -2239,6 +2309,10 @@ IslandBusinessShop2:
       30 > 20 > strawberry_honey > fruit_paradise > 10
 
 IslandBusinessShop3:
+  Grade:
+    <<: *IslandBusinessGrade
+  PlannedMenu:
+    <<: *IslandBusinessPlannedMenu
   Char1:
     <<: *IslandBusinessChar
   Char2:
@@ -2258,6 +2332,10 @@ IslandBusinessShop3:
       30 > 20 > succulently_sweet > 10
 
 IslandBusinessShop4:
+  Grade:
+    <<: *IslandBusinessGrade
+  PlannedMenu:
+    <<: *IslandBusinessPlannedMenu
   Char1:
     <<: *IslandBusinessChar
   Char2:
@@ -2277,6 +2355,10 @@ IslandBusinessShop4:
       30 > 20 > 10
 
 IslandBusinessShop5:
+  Grade:
+    <<: *IslandBusinessGrade
+  PlannedMenu:
+    <<: *IslandBusinessPlannedMenu
   Char1:
     <<: *IslandBusinessChar
   Char2:

@@ -395,6 +395,7 @@ Island:
   tasks:
     IslandPlan:
       - IslandPlan
+      - IslandProductionPlanner
     IslandBusiness:
       - Scheduler
       - IslandBusiness

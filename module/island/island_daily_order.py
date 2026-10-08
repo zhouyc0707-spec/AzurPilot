@@ -1,7 +1,8 @@
 """岛屿每日订单模块。
 
-处理岛屿每日订单的自动化交付，包括紧急委托检测、订单刷新与货物筹备状态判断。
-支持订单页面状态识别（为空/紧急/可交付/驳回）与左侧挑战图标的逐个处理。
+保留本地订单入口导航、紧急周配额、过滤模板和严格交付确认原语。
+公共 run() 转入 order.IslandOrder 的 ALAS 普通／紧急／季节流程；旧私有
+步骤仅供兼容回归，不再由调度器按挑战／轻松徽标追加扫描。
 """
 from module.island.island import Island
 import module.island_daily_order.assets as daily_order_assets
@@ -20,13 +21,7 @@ from module.config.utils import get_nearest_weekday_date, get_server_next_update
 
 class IslandDailyOrder(Island):
     """
-    每日订单功能。
-
-    流程：
-      ① 检测紧急委托 → 刷新时间到则交付，资源不足则 OCR 冷却
-      ② 检测右侧订单页面 → 为空/紧急/可交付/驳回
-      ③ 检测左侧所有挑战/轻松图标 → 逐个处理
-      ④ 退出判断 → 筹备中则等待，否则延后
+    本地每日订单共享原语；实际任务由 ALAS 订单适配类执行。
 
     Pages:
         in: page_island_phone
@@ -68,6 +63,11 @@ class IslandDailyOrder(Island):
     _urgent_template_cache = None
 
     def run(self):
+        # 公共旧入口也进入新的订单流程，保留下方独立识别/恢复原语的兼容性。
+        from module.island.order import IslandOrder
+        return IslandOrder(config=self.config, device=self.device).run()
+
+    def _run_legacy(self):
         logger.hr('岛屿每日订单', level=1)
 
         self.ui_ensure(page_island)
@@ -715,7 +715,7 @@ class IslandDailyOrder(Island):
             return True
         return False
 
-    def _check_items_for_reject(self):
+    def _check_items_for_reject(self, skip_screenshot=False):
         """
         检测三个货物格子是否包含配置中需要驳回的物品。
         """
@@ -725,7 +725,8 @@ class IslandDailyOrder(Island):
         if not reject_cheese and not reject_tofu:
             return False
 
-        self.device.screenshot()
+        if not skip_screenshot:
+            self.device.screenshot()
         for slot_index, slot_area in enumerate(self.ITEM_SLOT_AREAS):
             slot_image = self.image_crop(slot_area, copy=False)
             if reject_cheese and \

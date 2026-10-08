@@ -1,7 +1,8 @@
 """岛屿制造工坊模块。
 
 继承 IslandShopBase，实现制造工坊的产品配置与岗位管理。
-支持固定位置按钮（如荠菜）、滑动配置及制造时间前缀设置，管理工坊自动化生产流程。
+关闭规划时使用原手工目录；有效规划通过完整配方目录与真实名称确认执行制造链。
+保留原角色选择、荠菜按钮、岗位及时间记录，临时工坊只在季节委托成品入库后关闭。
 """
 from module.island.island import *
 from module.island_manufacture.assets import *
@@ -23,8 +24,8 @@ FIXED_SELECT_SHEPHERD_PURSE = Button(
 
 
 # 季节限定手工产品配置（按 SEASONAL_ITEMS['handmade'] 的键引用）
-# 注意：清单中的部分物品（如夏季茉莉精油、秋季花束）有意不在此配置内，
-# 即季节定义保留但工厂不实际制作。
+# 此表仅限定关闭规划时的原手工生产目录。规划使用 manufacture_catalog 完整目录，
+# 包括茉莉精油、秋季花束等已解锁且在活动期限内的配方。
 SEASONAL_HANDMADE_ITEMS = {
     'shepherd_purse': {
         'name': 'shepherd_purse', 'template': TEMPLATE_SHEPHERD_PURSE,
@@ -54,6 +55,8 @@ class IslandManufacture(IslandShopBase):
         shop_items (list): 展平的所有产品配置列表。
         unavailable_products (set): 当前批次已确认材料不足的产品集合。
     """
+    POST_PRODUCE_LIMIT = 12
+
     def __init__(self, *args, **kwargs):
         # 先初始化基类
         IslandShopBase.__init__(self, *args, **kwargs)
@@ -148,6 +151,185 @@ class IslandManufacture(IslandShopBase):
 
         # 本批生产已确认材料不足的物品（同一批内后续岗位直接跳过）
         self.unavailable_products = set()
+        self._legacy_manufacture = self.manufacture
+        # 错用文件柜模板会把未知滤芯库存当成另一商品，必须留给选品页实读。
+        for item in self._legacy_manufacture['electronic_processing']['items']:
+            if item['name'] == 'filter_element':
+                item['template'] = None
+        self._unknown_working_categories = set()
+        self._manufacture_scheduled = {}
+
+    @staticmethod
+    def _post_category(post_id):
+        if 'WOOD_PROCESSING' in post_id:
+            return 'wood_processing'
+        if 'ELECTRONIC_PROCESSING' in post_id:
+            return 'electronic_processing'
+        if 'INDUSTRIAL' in post_id:
+            return 'industrial_production'
+        return 'handmade'
+
+    def _use_planned_catalog(self, enabled):
+        """计划使用完整配方；关闭后恢复原有固定生产目录和角色逻辑。"""
+        if enabled:
+            from module.island.manufacture_catalog import get_catalog
+            from module.island.production_planner import get_planned_recipe_items
+            groups = {'wood_processing': 'manufacturing_lumber', 'industrial_production': 'manufacturing_machinery',
+                      'electronic_processing': 'manufacturing_electronic', 'handmade': 'manufacturing_crafts'}
+            self.manufacture = {category: {'items': get_planned_recipe_items(self.config, groups[category], items)}
+                                for category, items in get_catalog().items()}
+            # 花生油常驻等本地原件不删除；游戏当前不可见时选品会明确失败。
+            for category, data in self._legacy_manufacture.items():
+                existing = {item['name'] for item in self.manufacture[category]['items']}
+                for item in data['items']:
+                    if item['name'] not in existing:
+                        self.manufacture[category]['items'].append(item)
+        else:
+            self.manufacture = self._legacy_manufacture
+        self.shop_items = [item for category in self.manufacture.values() for item in category['items']]
+        self.name_to_config = {item['name']: item for item in self.shop_items}
+
+    def post_product_check(self):
+        """没有工作详情模板的产品保持未知，不能冒用其他产物或把在制品当零。"""
+        self._last_manufacture_product = None
+        for item in self.shop_items:
+            if item.get('post_action') is not None and self.appear(item['post_action']):
+                self._last_manufacture_product = item['name']
+                return item['name']
+        return None
+
+    def post_check(self, post_id, time_var_name):
+        self._last_manufacture_product = None
+        super().post_check(post_id, time_var_name)
+        if self.posts[post_id]['status'] == 'working' and getattr(self, '_last_manufacture_product', None) is None:
+            category = self._post_category(post_id)
+            self._unknown_working_categories.add(category)
+            logger.info(f'[岛屿-制造业] {category} 存在未知在制品，收取前暂停该类别追加派遣')
+
+    def get_warehouse_counts(self):
+        """真实旧模板先读；缺图产品保持未知，选品时按物品编号读取现货。"""
+        self.warehouse_filter(self.filter_asset)
+        image = self.device.screenshot()
+        templates = {item['name']: item['template'] for item in self.shop_items if item.get('template') is not None}
+        self.warehouse_counts = self.ocr_item_quantities(image, templates) if templates else {}
+        return self.warehouse_counts
+
+    def _prepare_planned_recipe_page(self, post_id):
+        """选择岗位和原有角色，正向确认选品页后交给独立识别阶段。"""
+        from module.island.planned_dispatch import PlannedProductionMixin
+        return PlannedProductionMixin._planned_open_product_page(self, post_id)
+
+    def _planned_dispatch_stage(self):
+        from module.island.planned_dispatch import PlannedProductionMixin
+        return PlannedProductionMixin._planned_dispatch_stage(self)
+
+    def _observe_final_manufacture_stock(self):
+        """关闭临时工坊前，逐个成品读真实现货；不因缺中间品先派出多余任务。"""
+        from module.island.manufacture_selector import read_selected_recipe_inventory, select_manufacture_recipe
+        from module.island.production_planner import read_config
+        from module.island.item_ids import ITEM_ID_TO_LOCAL
+        import json
+        if not read_config(self.config, 'AutoManufactureActive', False):
+            return
+        if any(post['status'] == 'working' for post in self.posts.values()):
+            return
+        finals = json.loads(read_config(self.config, 'OrderManufactureFinalTargets', '{}'))
+        for category, data in self.manufacture.items():
+            idle = self.get_idle_posts_by_category(category)
+            if not idle:
+                continue
+            for item in data['items']:
+                if str(item.get('item_id')) not in finals or not item.get('recipe_id'):
+                    continue
+                if not self._prepare_planned_recipe_page(idle[0]):
+                    continue
+                selected = select_manufacture_recipe(self, item['recipe_id'])
+                inventory = read_selected_recipe_inventory(self, item['recipe_id']) if selected else None
+                self.back_to_postmanage_from_dispatch()
+                if inventory is None:
+                    raise GameStuckError(f'关闭临时工坊前成品现货无法确认：{item["name"]}')
+                for item_id, observation in inventory.items():
+                    if item_id in ITEM_ID_TO_LOCAL:
+                        self.warehouse_counts[ITEM_ID_TO_LOCAL[item_id]] = observation['stock']
+
+    def _dispatch_planned_manufacture(self, post_id, item, target):
+        """同帧实读库存与原料，按产出率与可用材料选批次，确认成功后才记账。"""
+        from module.island.item_ids import ITEM_ID_TO_LOCAL
+        from module.island.manufacture_selector import (
+            read_selected_recipe_inventory, select_manufacture_recipe, set_manufacture_quantity,
+        )
+        if not self._prepare_planned_recipe_page(post_id):
+            return 0
+        if not select_manufacture_recipe(self, item['recipe_id']):
+            self.back_to_postmanage_from_dispatch()
+            raise GameStuckError(f'制造配方无法识别：{item["name"]}')
+        inventory = read_selected_recipe_inventory(self, item['recipe_id'])
+        if inventory is None:
+            self.back_to_postmanage_from_dispatch()
+            raise GameStuckError(f'制造配方库存或原料无法可靠读取：{item["name"]}')
+        for item_id, data in inventory.items():
+            if item_id in ITEM_ID_TO_LOCAL:
+                self.warehouse_counts[ITEM_ID_TO_LOCAL[item_id]] = data['stock']
+        name = item['name']
+        total = (inventory[item['item_id']]['stock'] + self.post_check_meal.get(name, 0)
+                 + self._manufacture_scheduled.get(name, 0))
+        missing = max(target - total, 0)
+        batches = min((missing + item['yield'] - 1) // item['yield'], item['production_limit'])
+        for item_id, data in inventory.items():
+            if data['cost'] <= 0:
+                continue
+            material = ITEM_ID_TO_LOCAL.get(item_id)
+            protected = self._planner_protection.get(material, 0)
+            batches = min(batches, max(data['stock'] - protected, 0) // data['cost'])
+        if batches <= 0:
+            self.back_to_postmanage_from_dispatch()
+            return 0
+        if not set_manufacture_quantity(self, batches):
+            self.back_to_postmanage_from_dispatch()
+            raise GameStuckError(f'制造次数无法正向确认：{name}')
+        preview, confirmed_at = self.confirm_food_dispatch(batches, f'{self._item_cn(name)}制造派遣')
+        actual_batches = self.finish_food_dispatch(
+            post_id, name, self._post_time_vars[post_id], batches, preview, confirmed_at)
+        quantity = actual_batches * item['yield']
+        self._manufacture_scheduled[name] = self._manufacture_scheduled.get(name, 0) + quantity
+        for material_id, cost in item['ingredients'].items():
+            material = ITEM_ID_TO_LOCAL.get(material_id)
+            if material in self.warehouse_counts:
+                self.warehouse_counts[material] = max(0, self.warehouse_counts[material] - actual_batches * cost)
+        return quantity
+
+    def schedule_planned_manufacture(self):
+        from module.island.production_planner import load_planner_targets, planner_idle_products, read_config
+        targets = load_planner_targets(self.config)
+        temporary = read_config(self.config, 'AutoManufactureActive', False)
+        for category, data in self.manufacture.items():
+            if category in self._unknown_working_categories:
+                continue
+            idle = self.get_idle_posts_by_category(category)
+            for post_id in idle:
+                products = [(item, False) for item in data['items']
+                            if item.get('recipe_id') and targets.get(item['item_id'], 0) > 0]
+                if not temporary:
+                    current = {name: stock + self._manufacture_scheduled.get(name, 0)
+                               for name, stock in self.warehouse_counts.items()}
+                    filler = planner_idle_products(self.config, [item['name'] for item in data['items']], current)
+                    products += [(item, True) for name in (filler or []) for item in data['items']
+                                 if item['name'] == name and item.get('recipe_id')]
+                for item, filler in products:
+                    target = targets.get(item['item_id'], 0)
+                    if filler:
+                        target = (self.warehouse_counts.get(item['name'], 0) + self._manufacture_scheduled.get(item['name'], 0)
+                                  + self.post_check_meal.get(item['name'], 0) + item['yield'] * item['production_limit'])
+                    if self._dispatch_planned_manufacture(post_id, item, target) > 0:
+                        break
+
+    def _finish_temporary_manufacture(self):
+        from module.island.item_ids import LOCAL_TO_ITEM_ID
+        from module.island.production_planner import finish_auto_manufacture
+        stocks = {LOCAL_TO_ITEM_ID[name]: count for name, count in self.warehouse_counts.items()
+                  if name in LOCAL_TO_ITEM_ID}
+        return finish_auto_manufacture(
+            self.config, stocks, working=any(post['status'] == 'working' for post in self.posts.values()))
 
     def _init_post_buttons(self):
         """根据配置初始化启用的制造业岗位按钮。
@@ -439,6 +621,14 @@ class IslandManufacture(IslandShopBase):
             GameBugError: 遇到游戏内部错误需要重启时抛出。
         """
         self.island_error = False
+        from module.island.production_planner import load_production_protection, refresh_production_plan
+        planned = refresh_production_plan(self.config, self.device)
+        self._use_planned_catalog(planned)
+        self._planner_protection = load_production_protection(self.config)
+        self._unknown_working_categories.clear()
+        self._manufacture_scheduled.clear()
+        self.post_check_meal.clear()
+        self._post_time_vars = {}
         # 每批生产开始时清空“材料不足”记忆，避免跨批沿用旧库存状态
         self.unavailable_products = set()
 
@@ -460,6 +650,7 @@ class IslandManufacture(IslandShopBase):
             time_var_name = f'{self.time_prefix}{post_index}'
             time_vars.append(time_var_name)
             setattr(self, time_var_name, None)
+            self._post_time_vars[post_id] = time_var_name
             self.post_check(post_id, time_var_name)
             post_index += 1
 
@@ -481,9 +672,18 @@ class IslandManufacture(IslandShopBase):
                 self.post_manage_up_swipe(450)
 
             # 安排生产
-            self.schedule_manufacture()
+            if planned:
+                self._observe_final_manufacture_stock()
+                if self._finish_temporary_manufacture():
+                    return
+                self.schedule_planned_manufacture()
+            else:
+                self.schedule_manufacture()
         else:
             logger.info("[岛屿-制造业] 没有空闲岗位，跳过生产安排")
+
+        if self._finish_temporary_manufacture():
+            return
 
         # 设置任务延迟
         finish_times = []

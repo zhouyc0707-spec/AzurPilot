@@ -45,6 +45,12 @@ module/island/                  # 全部逻辑所在的主包
 ├── island_juu_coffee.py / island_juu_eatery.py / island_manufacture.py
 ├── island_business.py          # 商区经营（最大的单文件，含按钮状态机与批次逻辑）
 ├── island_daily_gather.py / island_daily_interact.py / island_daily_order.py
+├── order.py / order_ocr.py / order_selection.py / order_stock.py
+├── data.py / item_ids.py / production_plan_calculator.py / production_planner.py
+├── technology_scanner.py / manufacture_catalog.py / manufacture_selector.py
+├── recipe_groups.py            # 统一历季配方场所，不把场所映射当作科技解锁
+├── planned_dispatch.py / raw_catalog.py / shop_selector.py / fish_exchange.py
+├── stock_probe.py              # 无旧模板副产物的仓库详情现货观测
 ├── island_air_drop.py / island_pearl_sell.py / island_cargo_preparation.py
 └── island_shop_base.py 所在的生产链各店无独立 run 以外的入口
 
@@ -61,6 +67,8 @@ module/island_farm/ 等 16 个目录  # 薄壳：仅 button_extract 生成的 as
 | `IslandShopBase.run()` | 六类店铺（含制造业覆盖版）的统一生产主流程 |
 | `IslandBusiness.run()` | 商区经营状态机（分批/传统两种模式） |
 | `IslandDailyGather/Interact/Order/AirDrop/PearlSell.run()` | 每日每周任务的独立入口 |
+| `IslandOrder.run()` | 普通／紧急／季节订单，实际 `island_daily_order` 调度入口；旧类保留兼容原语 |
+| `IslandProductionPlanner.run()` / `refresh_production_plan()` | 季节缺货和生产任务入口触发科技、岗位、配方与菜单规划 |
 | `IslandCargoPreparation.run()` | 货运委托入口（唯一基于 `IslandUI` 而非 `Island` 的主流程） |
 | `Island`（基类本身） | 无 `run()`，不作为任务运行；alas 的 `island()` 方法仅为导入基类存在 |
 | `tests/test_island_shop_production.py` | 离线验证店铺排产逻辑（假 UI，不连游戏） |
@@ -123,7 +131,7 @@ flowchart TD
     K[排产零产出时:<br>严格模式 check_materials → force_skip] -.-> F
 ```
 
-排产的核心约束：每个岗位单次最多生产 `POST_PRODUCE_LIMIT`（约 7）个；填岗循环最多 `_MAX_FILL_LOOP`（10）轮；套餐（`meal_compositions`）下单时实时 `deduct_materials` 扣减原料账目；「保留线」记录已处理槽位的最高目标，防止套餐把尚未达标产品的保底库存当原料吃掉。排产多次失败时先切严格模式（真零库存才跳过），仍失败则把缺口产品加入 `force_skip` 本轮不再停留。
+手工排产仍使用 `POST_PRODUCE_LIMIT` 和 `_MAX_FILL_LOOP` 的原有上限；规划派遣另外受官方配方 `production_limit` 限定，不把食品的次数上限套给工坊、种植或季节品。套餐（`meal_compositions`）下单时实时 `deduct_materials` 扣减原料账目；「保留线」记录已处理槽位的最高目标，防止套餐把尚未达标产品的保底库存当原料吃掉。排产多次失败时先切严格模式（真零库存才跳过），仍失败则把缺口产品加入 `force_skip` 本轮不再停留。
 
 ### 子玩法速览
 
@@ -142,7 +150,7 @@ flowchart TD
 | `island_business.py` | 商区经营 | `IslandBusiness` | 5 商店 × 蓝/黄/深蓝/灰按钮状态机；分批经营（默认批 1=简餐/餐馆/咖啡，批 2=饮品/烤肉）；季节商品库存 <7 时替换 fallback；加成（30/20/10%）档位替换；开始经营后 `task_delay` 触发对应餐馆生产任务补货 |
 | `island_daily_gather.py` | 每日采集 | `IslandDailyGather` | 每日 03:10 / 18:00 两次；三槽位派角色，体力阈值 100，忽略 WorkerJuu |
 | `island_daily_interact.py` | 摸猫、JUU 速运、商区外送、每周照相 | `IslandDailyInteract` | 以「开发计划」任务图标模板判断任务是否可做；地点交互共用 `delivery_location_flow`；失败 60 分钟重试 |
-| `island_daily_order.py` | 每日订单 | `IslandDailyOrder` | 紧急委托周配额 15（OCR 检测 + 周一刷新）；订单驳回按 `RejectFilter`；冷却 OCR 失败回退 8 小时 |
+| `order.py`（旧 `island_daily_order.py` 兼容转发） | 每日订单 | `IslandOrder` | 普通／紧急／季节订单；普通保留 `RejectFilter` 并扣除库存与菜单保留，季节缺货触发规划；紧急周配额保留，汇总冷却与每日刷新调度 |
 | `island_air_drop.py` | 每日空投 + 好友岛偷补给 | `IslandAirDrop` | 以服务器 0 点为每日边界；5 小时偷取冷却（`LastSteal` 落配置）；拜访次数 OCR 复检 |
 | `island_pearl_sell.py` | 珍珠每周采购售卖 | `IslandPearlSell` | 周一 01:00 交易窗口；本岛价不达标时按排行榜拜访好友岛比价（买 1.1 折算）；每日 03:00 可选价格刷新 |
 | `island_cargo_preparation.py` | 货运委托 | `IslandCargoPreparation` | 3 栏位状态机（locked/pending/running/finished/refreshing/empty）；牛奶黑名单触发换货；默认 2 小时重跑 |
@@ -161,13 +169,47 @@ flowchart TD
 
 离线回归入口：[经营确认与现场保存](../../../tests/test_island_business_confirm.py)。
 
-### 订单交付与原页连续处理
+### ALAS 订单与原页连续处理
 
-`IslandDailyOrder._submit_order()` 点击一次交付后持续截图，先处理资源不足、奖励及订单升级弹窗，再正向识别 `DAILY_ORDER_CHECK`。看见奖励，或从非筹备状态进入筹备状态，并在订单页稳定至少 1 秒、满足多帧确认后才返回成功；不再固定执行五轮两秒等待。资源不足必须在弹窗自动关闭并确认返回订单页后返回 `False`，以便调用方沿用已有驳回或紧急冷却规则。
+调度入口 `alas.py:island_daily_order` 使用 `order.IslandOrder`；旧 `IslandDailyOrder.run()` 也转入同一入口。按 ALAS 范围扫描左侧普通蓝圈、紧急紫圈、季节黄圈及普通冷却淡蓝圈，不单独遍历红色／绿色订单圆环，也不再按挑战／轻松徽标追加扫描。蓝色普通订单头像上的红色难度徽标不改变普通订单归类；用户提供的普通订单画面属于此类。圆环只在订单区检测，点击后确认需求页或冷却页才继续。
 
-确认成功后，普通订单留在原页重新识别挑战／轻松图标；紧急订单继续检查右侧及其他图标。交付后的空详情不触发无条件退出重进，只有未确认订单页或交付结果时才恢复导航。20 秒仍无法确认结果返回 `None`，调用方重进复核，不把未知结果当作缺货驳回；同一任务内再次交付超时抛 `GameStuckError`，使用现有现场保存和恢复机制。确认任一交付结果后清除这次超时记录。芝士／豆腐过滤、周配额检测、紧急委托刷新缓存和每日调度时间继续沿用原配置。
+普通订单先执行原 `RejectFilter` 芝士／豆腐过滤，名称识别和原图标模板共同保护过滤。即使临近每日刷新，过滤也优先。其他普通订单按 `现货 − HardFloorItems − 经营菜单一货架预留` 判断；缺货则驳回，确认进入冷却页后才累加 `RejectCount`。紧急、季节及距 `Scheduler.ServerUpdate` 不足两小时的普通订单沿用 ALAS 优先规则，只检查实物现货；紧急、季节不受芝士／豆腐过滤。紧急缺货保留并记录剩余时间（未知回退八小时）；季节缺货保留并触发生产规划。普通缺货仍驳回，不为普通订单开启制造。
 
-离线回归入口：[订单交付状态与连续处理](../../../tests/test_island_order_submit.py)。
+需求页批量读取最多三格的名称和「现货/需求」。空集合、漏名称、漏数字、零需求、重复货物或不可靠名称修正均为未知，不交付、不驳回，保存 `island_order_unknown` 现场并短延后复查。订单库存直接来自详情页，不额外打开仓库，也不使用含在制品的生产库存替代现货。
+
+交付点击后持续截图处理奖励／升级／资源不足，确认稳定返回订单页才结束。20 秒未确认结果时重进一次，再次未确认抛出 `GameStuckError`；未知结果不当作缺货。已确认交付继续原页处理，最后汇总全部订单冷却，取最早时间与每日刷新调度，再由全局 `IslandPlan.TaskAlignment` 对齐。紧急周配额检测及实例刷新缓存保留，`RejectCount` 是确认后的累计值，不按日期自动清零。
+
+订单圆环仅在左侧地图 `(60,40,832,700)` 内检测，覆盖底部冷却订单，并排除右侧货物图标。点击后以圆环外四个白色 L 角的完整、共同位移及唯一关联确认目标选中；蓝圈和绿色交付勾不代表选中，右侧货物相同也不能替代这一证据。目标未确认则保存现场、五分钟后复查，禁止读取上一单需求或冷却详情。圆环全部未识别时保留原季节需求，不当作订单已消失。
+
+尚未生成有效规划且手工经营餐品全空时，旧经营流程会选择全部可见菜品，无法从配置推断真实预留；保留普通订单并短延后，不按零预留误交付或误驳回。显式过滤和临近服务器刷新时的 ALAS 优先规则仍执行，紧急／季节不受此未知普通菜单分支阻断。
+
+离线回归入口：[ALAS 订单策略与识别](../../../tests/test_island_alas_order.py)、[选中标记与脱敏截图](../../../tests/test_island_order_selection.py)、[原交付确认原语](../../../tests/test_island_order_submit.py)、[菜单预留](../../../tests/test_island_order_stock.py)。
+
+### 自动生产规划与手工配置原件
+
+`IslandPlan.IslandProductionPlanner` 保存规划输入、科技缓存和独立输出。复用 ALAS 固定提交 `0078abb848de11d4dffb44fc558e82954f7ec682` 的物品、配方、活动、科技与纯计算器；本地适配文件包括 `production_planner.py`、`order_stock.py`、`manufacture_catalog.py` 和相关识别助手。纯计算来源沿用原仓库 GPL-3.0 许可，更新时须核对该固定版本及本地执行桥。
+
+首次使用或开启 `RescanTechnology` 时读取真实科技。导航走 `page_island_phone → page_island → page_island_technology`，科技入口在岛屿主界面，不能把该按钮直接连到手机页。科技页按官方科技树几何与分类 2–6 扫描；低相似度、缺节点、翻页停滞或超界明确失败，不假设科技全部解锁。成功后缓存状态，后续同一天相同输入不重复扫描或求解。
+
+规划同时考虑已启用任务、岗位、科技、活动期、额外目标和菜单。五家店铺 `Grade` 必须对应游戏内真实等级；新增配置的默认铜牌不能当作已检测等级。货架预留来自等级基础容量与两个实名经营角色的加成，同一菜品跨店相加，不按每日销量相乘。未生成的 `PlannedMenu` 为空字符串，已生成的空字典表示本店仅收取已有收益，不再次开业；不能误回退旧菜单。
+
+有效规划接管运行时生产目标与菜单，原 `Meal1..8`、各生产阈值、`Product1..5` 和角色配置保留原件；关闭 `Enabled` 后继续原手工生产。角色优先级、岗位数、套餐拆解及保护、派遣确认、预读时间复检、经营返回和分批定位保护仍由本地实现执行。规划验证全部输出后才原子保存；无可行解不写半份计划，`PlannerStatus` 标明原因，已有有效计划保留。
+
+制造工坊原本关闭时，仅缺货季节订单的制造依赖链允许临时开启。`OrderManufactureTargets` 保存依赖目标，`OrderManufactureFinalTargets` 保存订单成品目标，`AutoManufactureActive` 标记本机制拥有的启用状态。产够并确认实际入库、全部岗位收取后关闭并恢复原调度时间；在制品不等价于可交付现货。`CompletedManufactureOrderId` 阻止同一订单在下一任务或跨日求解时重复开启，唤醒订单后再以详情库存核验；若成品后来消耗导致重新缺货，订单撤销该标记并重新规划。用户原本主动启用的工坊不自动关闭；非季节的普通订单仍按缺货驳回处理，全局暂停时不自动开启。
+
+独立 `TaskTarget` 的制造需求需要用户主动开启工坊，不能借季节订单的临时开关承诺另一条制造任务；关闭工坊时此类输入明确报告规划能力不足。制造材料的 `HardFloorItems` 仍作为库存保留线，相关季节依赖目标叠加该保留量，不为无关制造品自行开工。
+
+完整工坊目录按官方四条产线维护 29 种配方，当前可派遣范围继续受季节、科技和用户岗位数限定。缺少旧图标的物品使用配方页的精确商品名、产物库存以及已确认配方的材料槽顺序与完整计数进行即时观测；`0` 是已读到的零库存，`None` 是无法确认。原料与产出都使用同一牧场科技倍率，副产需求不能因主产库存已达标而丢弃。
+
+固定 ALAS 岗位数据仅列当季活动配方，历季物品由 `recipe_groups.py` 使用本地已核实季节表、原有模块岗位归属及官方物品编号唯一关联，补齐 24 个春夏秋配方。求解器和选品器共用场所映射，但仍必须有真实活动、科技及启用岗位才能安排；有场所归属不代表已经解锁，也不能在夏季启用秋季商品。
+
+皮料、鸡蛋、羊毛等无可信旧仓库模板时，`stock_probe.read_item_stocks()` 在仓库查看模式按完整物品名定位卡片，打开详情、核对完整标题与「已拥有」计数后立即关闭；只在真实读到 0 时返回零。处于出售编辑模式不点击卡片，缺卡或滑动重复不推断零库存，可由同任务下游配方材料页面继续确认。每次使用新截图，无跨任务缓存；皮料是牛奶岗位的副产，不能误归到猪岗。
+
+仓库正常返回但副产物缺卡、下游没有空岗可读取时，保留该需求、跳过本岗并安排十五分钟复检，唤醒已启用的工坊；这不是页面卡死，不通过反复重启解决。其他岗位继续巡检，页面无法回到已知状态仍使用原异常恢复。
+
+种子、鱼苗等不足时按确切商品编号和所需数量补买，只允许已确认的岛屿金币商品，不用全选或猜价。鱼肉兑换保留原鱼直接需求、显式保留线及下一架经营菜单需求，按不足量分小批兑换；目前确认文字校验支持 CN／TW，其他服务器保留需求而不盲点。数量、商品、币种、确认文案或兑换后库存任一证据不符，保存现场并交上层恢复，不反复消费。
+
+离线回归入口：[生产规划与临时工坊生命周期](../../../tests/test_island_production_planner.py)、[科技扫描与定位](../../../tests/test_island_technology_scanner.py)、[工坊配方及库存识别](../../../tests/test_island_manufacture_selector.py)、[制造派遣桥](../../../tests/test_island_manufacture_bridge.py)、[原料与副产派遣](../../../tests/test_island_planned_dispatch.py)、[食品材料保护](../../../tests/test_island_planned_food_materials.py)、[仓库详情实读](../../../tests/test_island_stock_probe.py)、[耗材采购](../../../tests/test_island_material_shop.py)、[鱼肉兑换与库存保护](../../../tests/test_island_fish_exchange.py)。实际账号首次运行的科技、配方与兑换画面仍由正向识别保护，不把离线模型测试等同于真实游戏整条生产链验收。
 
 ### 经营列表与角色定位
 
@@ -181,7 +223,7 @@ flowchart TD
 
 食品店铺初次读取库存继续使用完整仓库筛选流程。`WarehouseOCR.ocr_item_quantities()` 先正向确认仓库页及 1280×720 尺寸，再一次裁出 12 格物品图、匹配目标图标，将不同数量框交给一次批量数字 OCR。同格的兼容名称共用数量结果；某框识别为空文本时只重读该框对应物品，批量引擎或结果异常则沿用原单项读取。数字 `0` 与空文本兜底 `0` 分开判断。
 
-配方选择页的局部「持有」数量不能替代排产前完整仓库统计，本次未引入这种替换。每次批量读取只复用传入的一张截图，不保留跨页面或跨任务库存缓存；店铺仍使用原有 `warehouse_counts`、扣料、在制品和 `produced_pass` 本轮账目。
+原有带图标食品继续采用仓库初读；规划新增的无旧模板配方，使用选品页经完整商品名与材料计数确认的现货补充本轮账目。该局部读取不能推断其他货物库存，也不能把在制品当作现货。每次批量读取只复用传入的一张截图，不保留跨页面或跨任务库存缓存；店铺仍使用原有 `warehouse_counts`、扣料、在制品和 `produced_pass` 本轮账目。
 
 离线回归入口：[仓库批量读取与降级](../../../tests/test_island_warehouse_batch.py)。
 
@@ -257,6 +299,9 @@ stateDiagram-v2
 | 配置 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
 | `IslandPlan.Season` | select | spring | 全局季节，驱动所有限定物品过滤（选项仅四季，冬季限定为空表） |
+| `IslandPlan.IslandProductionPlanner.Enabled` / `TechnologyStatus` / `RescanTechnology` | checkbox/textarea | true / 空 / false | 自动生产规划、实读科技缓存、主动重新扫描 |
+| `IslandPlan.IslandProductionPlanner.TaskTarget` / `HardFloorItems` | textarea | `{}` / `{}` | 额外积累需求与显式现货保留线；使用官方物品名或编号 |
+| `IslandPlan.IslandProductionPlanner.FieldsEfficiency` / `OrchardEfficiency` / `NurseryEfficiency` | select | 0 | 额外效率比例：0.04 表示 4%，0.12 表示 12% |
 | `IslandFarm.Positions` / `MinFarm` / `PlantPotatoes` / `WorkerFilter` | 数值/文本 | 3 / 660 / 4 / WorkerJuu | 农田岗位数、补种阈值、默认作物岗位数、工人优先级 |
 | `IslandOrchard.AmagiChanRubber` | checkbox | false | 小天城优先种橡胶 |
 | `IslandRancher.MinChicken` / `MinPork` | 数值 | — | 畜牧产品阈值 |
@@ -265,6 +310,7 @@ stateDiagram-v2
 | `IslandJuuCoffee.Friedrich` | checkbox | false | 特殊角色（腓特烈）派遣开关 |
 | `IslandBusiness.BatchEnabled` / `Batch1Shops` / `Batch2Shops` | checkbox/multiselect | true / [3,1,5] / [2,4] | 分批经营与批次划分 |
 | `IslandBusinessShop1~5.Product1~5` / `Char1~2` / `SeasonalFallback` / `BoostReplaceFilter` | select/文本 | — | 每商店餐品、角色、季节备选与加成档位 |
+| `IslandBusinessShop1~5.Grade` / `PlannedMenu` | select/隐藏文本 | bronze / 空 | 真实店铺等级与独立自动菜单；手工菜单原件保留 |
 | `IslandAirDrop.VisitOtherIsland` / `LastSteal` | checkbox/datetime | true / 2020-01-01 | 好友岛偷补给开关与冷却锚点（运行时写回） |
 | `IslandDailyOrder.RejectFilter` / `RejectCount` | 文本/数值 | "Cheese > Tofu" / 0 | 订单驳回条件与运行时计数 |
 | `IslandPearlSell.BuyPrice` / `SellPrice` / `DailyPriceRefresh` | 数值/checkbox | 200 / 1000 / false | 珍珠交易价格阈值与每日刷新开关 |
@@ -319,7 +365,8 @@ stateDiagram-v2
 
 - 所有坐标、路线（`island_up(3000)` 等长按序列）与固定坐标选品均按 1280×720 实测写死，游戏改版需重新校准。
 - `SEASONAL_ITEMS` 中冬季为空、代码保留的 `'none'` 季节分支在当前配置选项下不可达；赛季迭代（新季节物品上线）完全依赖手动维护代码。
-- 制造业部分季节物品（夏季茉莉精油、秋季花束）在季节表中保留但有意不配置制作；`filter_element` 复用了 `TEMPLATE_FILE_CABINET` 模板（资源未单独提取），为已知的临时妥协。
+- 关闭规划时，工坊继续使用原有固定生产目录；开启后使用完整制造目录。滤芯没有可信旧仓库模板，不能复用文件柜图标，其库存必须在配方页实读。
+- 菠萝汁支持生产，但所固定 ALAS 版本没有对应餐馆售卖资源与菜单条目，不强行加入经营货架。鱼肉兑换目前仅 CN／TW 确认文字可验证。
 - 货物黑名单目前只实现了 Milk 一种识别模板。
 - 各生产玩法每轮固定追加 6 小时兜底延时，依赖 `Duration` OCR 读取剩余时间，极端字体渲染下可能识别失败退化为兜底值。
 

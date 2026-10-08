@@ -8,6 +8,7 @@ import type { Instance, Schema } from '../api/types'
 import { resumeEditors } from '../config/editors'
 import { detectLanguage, isLanguage, languages, localeForLanguage, translateUi, type Language, type UiTranslator } from '../i18n'
 import { readDevMode, writeDevMode } from './devMode'
+import { translateConfig } from './configTranslation'
 import { applyTheme, getThemePreference, subscribeTheme, type Theme, type Palette, type ColorMode, type CustomPalette, type CompactRailSide, type CompactRailWidth, type Material } from './theme'
 import type { ResolvedMode } from './palettes'
 
@@ -106,9 +107,7 @@ export function AppProvider({children}: {children: ReactNode}) {
     return () => clearTimeout(timer)
   }, [toast])
   const t = useCallback((key: string) => {
-    let value: unknown = schema?.translations
-    for (const part of key.split('.')) value = value && typeof value === 'object' ? (value as Record<string, unknown>)[part] : undefined
-    return typeof value === 'string' && value !== key ? value : key.split('.').filter(item => item !== 'name' && item !== '_info').at(-1) ?? key
+    return translateConfig(schema?.translations, key)
   }, [schema])
   const ui = useCallback<UiTranslator>((key, params) => translateUi(language, key, params), [language])
   /* value 固定身份：provider 因 toast、连接状态等无关状态重渲染时，消费点不跟着重渲染。 */

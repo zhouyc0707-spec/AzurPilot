@@ -842,6 +842,28 @@ class GeneratedConfig:
     IslandPlan_Season = 'spring'  # spring, summer, autumn, winter
     IslandPlan_TaskAlignment = 'half_hour'  # half_hour, hour, disabled
 
+    # 配置组 `IslandProductionPlanner`
+    IslandProductionPlanner_Enabled = True
+    IslandProductionPlanner_TechnologyStatus = None
+    IslandProductionPlanner_RescanTechnology = False
+    IslandProductionPlanner_FieldsEfficiency = 0.0  # 0, 0.04, 0.12
+    IslandProductionPlanner_OrchardEfficiency = 0.0  # 0, 0.04, 0.12
+    IslandProductionPlanner_NurseryEfficiency = 0.0  # 0, 0.04, 0.12
+    IslandProductionPlanner_DailyProfitLowerLimit = 0
+    IslandProductionPlanner_DailyBufferSafetyMargin = 0.0
+    IslandProductionPlanner_TaskTarget = '{}'
+    IslandProductionPlanner_HardFloorItems = '{}'
+    IslandProductionPlanner_DailyBufferItems = '{}'
+    IslandProductionPlanner_IdleAccumulatingItems = '{}'
+    IslandProductionPlanner_PlannerTargets = '{}'
+    IslandProductionPlanner_PlannerStatus = None
+    IslandProductionPlanner_PlanFingerprint = None
+    IslandProductionPlanner_OrderManufactureTargets = '{}'
+    IslandProductionPlanner_OrderManufactureFinalTargets = '{}'
+    IslandProductionPlanner_AutoManufactureActive = False
+    IslandProductionPlanner_AutoManufactureNextRun = None
+    IslandProductionPlanner_CompletedManufactureOrderId = 0
+
     # 配置组 `IslandFarm`
     IslandFarm_Positions = 3  # 1, 2, 3, 4
     IslandFarm_WorkerFilter = 'WorkerJuu'
@@ -1045,6 +1067,7 @@ class GeneratedConfig:
     IslandDailyOrder_RejectCount = 0
     IslandDailyOrder_RejectFilter = 'Cheese > Tofu'
     IslandDailyOrder_UrgentDetectRefreshTime = datetime.datetime(2020, 1, 1, 0, 0)
+    IslandDailyOrder_StuckSeasonOrderId = 0
 
     # 配置组 `IslandDailyInteract`
     IslandDailyInteract_WeeklyPhoto = True  # True, False
@@ -1067,6 +1090,8 @@ class GeneratedConfig:
     IslandBusiness_SeasonalThreshold = 7
 
     # 配置组 `IslandBusinessShop1`
+    IslandBusinessShop1_Grade = 'bronze'  # bronze, silver, gold, diamond
+    IslandBusinessShop1_PlannedMenu = None
     IslandBusinessShop1_Char1 = 'None'  # None, WorkerJuu, Cheshire, YingSwei, Saratoga, Akashi, NewJersey, Tashkent, LeMalin, Shimakaze, Amagi_chan, Unicorn, ChaoHo, ChenHai, WilliamDPorter, Helena, Friedrich, Atago, Yixian, August, Eugen, Hood, Javelin, Laffey, Explorer, Navigator, OceanCrosser, FeiYun, Takao, Anchorage, Belfast, ChangFeng, Mogador, RoyalFortune, DaVinci, Taihou
     IslandBusinessShop1_Char2 = 'None'  # None, WorkerJuu, Cheshire, YingSwei, Saratoga, Akashi, NewJersey, Tashkent, LeMalin, Shimakaze, Amagi_chan, Unicorn, ChaoHo, ChenHai, WilliamDPorter, Helena, Friedrich, Atago, Yixian, August, Eugen, Hood, Javelin, Laffey, Explorer, Navigator, OceanCrosser, FeiYun, Takao, Anchorage, Belfast, ChangFeng, Mogador, RoyalFortune, DaVinci, Taihou
     IslandBusinessShop1_Product1 = 'None'  # None, double_bamboo_shoots, tofu_meat, tofu_combo, hearty_meal, fo_tiao, amaranth_rice_ball, matsutake_chicken_soup, persimmon_cake
@@ -1078,6 +1103,8 @@ class GeneratedConfig:
     IslandBusinessShop1_BoostReplaceFilter = '30 > 20 > 10'
 
     # 配置组 `IslandBusinessShop2`
+    IslandBusinessShop2_Grade = 'bronze'  # bronze, silver, gold, diamond
+    IslandBusinessShop2_PlannedMenu = None
     IslandBusinessShop2_Char1 = 'None'  # None, WorkerJuu, Cheshire, YingSwei, Saratoga, Akashi, NewJersey, Tashkent, LeMalin, Shimakaze, Amagi_chan, Unicorn, ChaoHo, ChenHai, WilliamDPorter, Helena, Friedrich, Atago, Yixian, August, Eugen, Hood, Javelin, Laffey, Explorer, Navigator, OceanCrosser, FeiYun, Takao, Anchorage, Belfast, ChangFeng, Mogador, RoyalFortune, DaVinci, Taihou
     IslandBusinessShop2_Char2 = 'None'  # None, WorkerJuu, Cheshire, YingSwei, Saratoga, Akashi, NewJersey, Tashkent, LeMalin, Shimakaze, Amagi_chan, Unicorn, ChaoHo, ChenHai, WilliamDPorter, Helena, Friedrich, Atago, Yixian, August, Eugen, Hood, Javelin, Laffey, Explorer, Navigator, OceanCrosser, FeiYun, Takao, Anchorage, Belfast, ChangFeng, Mogador, RoyalFortune, DaVinci, Taihou
     IslandBusinessShop2_Product1 = 'None'  # None, spring_flower_tea, strawberry_lemon, strawberry_honey, floral_fruity, fruit_paradise, lavender_tea, sunny_honey, watermelon_juice, chrysanthemum_tea, carrot_pear_juice
@@ -1089,6 +1116,8 @@ class GeneratedConfig:
     IslandBusinessShop2_BoostReplaceFilter = '30 > 20 > strawberry_honey > fruit_paradise > 10'
 
     # 配置组 `IslandBusinessShop3`
+    IslandBusinessShop3_Grade = 'bronze'  # bronze, silver, gold, diamond
+    IslandBusinessShop3_PlannedMenu = None
     IslandBusinessShop3_Char1 = 'None'  # None, WorkerJuu, Cheshire, YingSwei, Saratoga, Akashi, NewJersey, Tashkent, LeMalin, Shimakaze, Amagi_chan, Unicorn, ChaoHo, ChenHai, WilliamDPorter, Helena, Friedrich, Atago, Yixian, August, Eugen, Hood, Javelin, Laffey, Explorer, Navigator, OceanCrosser, FeiYun, Takao, Anchorage, Belfast, ChangFeng, Mogador, RoyalFortune, DaVinci, Taihou
     IslandBusinessShop3_Char2 = 'None'  # None, WorkerJuu, Cheshire, YingSwei, Saratoga, Akashi, NewJersey, Tashkent, LeMalin, Shimakaze, Amagi_chan, Unicorn, ChaoHo, ChenHai, WilliamDPorter, Helena, Friedrich, Atago, Yixian, August, Eugen, Hood, Javelin, Laffey, Explorer, Navigator, OceanCrosser, FeiYun, Takao, Anchorage, Belfast, ChangFeng, Mogador, RoyalFortune, DaVinci, Taihou
     IslandBusinessShop3_Product1 = 'None'  # None, orchard_duo, succulently_sweet, berry_orange, strawberry_charlotte, seafood_rice
@@ -1099,6 +1128,8 @@ class GeneratedConfig:
     IslandBusinessShop3_BoostReplaceFilter = '30 > 20 > succulently_sweet > 10'
 
     # 配置组 `IslandBusinessShop4`
+    IslandBusinessShop4_Grade = 'bronze'  # bronze, silver, gold, diamond
+    IslandBusinessShop4_PlannedMenu = None
     IslandBusinessShop4_Char1 = 'None'  # None, WorkerJuu, Cheshire, YingSwei, Saratoga, Akashi, NewJersey, Tashkent, LeMalin, Shimakaze, Amagi_chan, Unicorn, ChaoHo, ChenHai, WilliamDPorter, Helena, Friedrich, Atago, Yixian, August, Eugen, Hood, Javelin, Laffey, Explorer, Navigator, OceanCrosser, FeiYun, Takao, Anchorage, Belfast, ChangFeng, Mogador, RoyalFortune, DaVinci, Taihou
     IslandBusinessShop4_Char2 = 'None'  # None, WorkerJuu, Cheshire, YingSwei, Saratoga, Akashi, NewJersey, Tashkent, LeMalin, Shimakaze, Amagi_chan, Unicorn, ChaoHo, ChenHai, WilliamDPorter, Helena, Friedrich, Atago, Yixian, August, Eugen, Hood, Javelin, Laffey, Explorer, Navigator, OceanCrosser, FeiYun, Takao, Anchorage, Belfast, ChangFeng, Mogador, RoyalFortune, DaVinci, Taihou
     IslandBusinessShop4_Product1 = 'None'  # None, roasted_skewer, stir_fried_chicken, steak_bowl, crayfish_stir_fry, carnival, double_energy
@@ -1109,6 +1140,8 @@ class GeneratedConfig:
     IslandBusinessShop4_BoostReplaceFilter = '30 > 20 > 10'
 
     # 配置组 `IslandBusinessShop5`
+    IslandBusinessShop5_Grade = 'bronze'  # bronze, silver, gold, diamond
+    IslandBusinessShop5_PlannedMenu = None
     IslandBusinessShop5_Char1 = 'None'  # None, WorkerJuu, Cheshire, YingSwei, Saratoga, Akashi, NewJersey, Tashkent, LeMalin, Shimakaze, Amagi_chan, Unicorn, ChaoHo, ChenHai, WilliamDPorter, Helena, Friedrich, Atago, Yixian, August, Eugen, Hood, Javelin, Laffey, Explorer, Navigator, OceanCrosser, FeiYun, Takao, Anchorage, Belfast, ChangFeng, Mogador, RoyalFortune, DaVinci, Taihou
     IslandBusinessShop5_Char2 = 'None'  # None, WorkerJuu, Cheshire, YingSwei, Saratoga, Akashi, NewJersey, Tashkent, LeMalin, Shimakaze, Amagi_chan, Unicorn, ChaoHo, ChenHai, WilliamDPorter, Helena, Friedrich, Atago, Yixian, August, Eugen, Hood, Javelin, Laffey, Explorer, Navigator, OceanCrosser, FeiYun, Takao, Anchorage, Belfast, ChangFeng, Mogador, RoyalFortune, DaVinci, Taihou
     IslandBusinessShop5_Product1 = 'None'  # None, cheese, citrus_coffee, strawberry_milkshake, morning_light, wake_up_call, fruity_fruitier

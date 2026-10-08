@@ -15745,6 +15745,112 @@
         ]
       }
     },
+    "IslandProductionPlanner": {
+      "Enabled": {
+        "type": "checkbox",
+        "value": true
+      },
+      "TechnologyStatus": {
+        "type": "textarea",
+        "value": ""
+      },
+      "RescanTechnology": {
+        "type": "checkbox",
+        "value": false
+      },
+      "FieldsEfficiency": {
+        "type": "select",
+        "value": 0.0,
+        "option": [
+          0,
+          0.04,
+          0.12
+        ]
+      },
+      "OrchardEfficiency": {
+        "type": "select",
+        "value": 0.0,
+        "option": [
+          0,
+          0.04,
+          0.12
+        ]
+      },
+      "NurseryEfficiency": {
+        "type": "select",
+        "value": 0.0,
+        "option": [
+          0,
+          0.04,
+          0.12
+        ]
+      },
+      "DailyProfitLowerLimit": {
+        "type": "input",
+        "value": 0
+      },
+      "DailyBufferSafetyMargin": {
+        "type": "input",
+        "value": 0.0
+      },
+      "TaskTarget": {
+        "type": "textarea",
+        "value": "{}"
+      },
+      "HardFloorItems": {
+        "type": "textarea",
+        "value": "{}"
+      },
+      "DailyBufferItems": {
+        "type": "textarea",
+        "value": "{}",
+        "display": "hide"
+      },
+      "IdleAccumulatingItems": {
+        "type": "textarea",
+        "value": "{}",
+        "display": "hide"
+      },
+      "PlannerTargets": {
+        "type": "textarea",
+        "value": "{}",
+        "display": "hide"
+      },
+      "PlannerStatus": {
+        "type": "state",
+        "value": ""
+      },
+      "PlanFingerprint": {
+        "type": "input",
+        "value": "",
+        "display": "hide"
+      },
+      "OrderManufactureTargets": {
+        "type": "input",
+        "value": "{}",
+        "display": "hide"
+      },
+      "OrderManufactureFinalTargets": {
+        "type": "input",
+        "value": "{}",
+        "display": "hide"
+      },
+      "AutoManufactureActive": {
+        "type": "checkbox",
+        "value": false,
+        "display": "hide"
+      },
+      "AutoManufactureNextRun": {
+        "type": "input",
+        "value": "",
+        "display": "hide"
+      },
+      "CompletedManufactureOrderId": {
+        "type": "input",
+        "value": 0,
+        "display": "hide"
+      }
+    },
     "Storage": {
       "Storage": {
         "type": "storage",
@@ -15858,6 +15964,21 @@
       }
     },
     "IslandBusinessShop1": {
+      "Grade": {
+        "type": "select",
+        "value": "bronze",
+        "option": [
+          "bronze",
+          "silver",
+          "gold",
+          "diamond"
+        ]
+      },
+      "PlannedMenu": {
+        "type": "textarea",
+        "value": "",
+        "display": "hide"
+      },
       "Char1": {
         "type": "select",
         "value": "None",
@@ -16038,6 +16159,21 @@
       }
     },
     "IslandBusinessShop2": {
+      "Grade": {
+        "type": "select",
+        "value": "bronze",
+        "option": [
+          "bronze",
+          "silver",
+          "gold",
+          "diamond"
+        ]
+      },
+      "PlannedMenu": {
+        "type": "textarea",
+        "value": "",
+        "display": "hide"
+      },
       "Char1": {
         "type": "select",
         "value": "None",
@@ -16230,6 +16366,21 @@
       }
     },
     "IslandBusinessShop3": {
+      "Grade": {
+        "type": "select",
+        "value": "bronze",
+        "option": [
+          "bronze",
+          "silver",
+          "gold",
+          "diamond"
+        ]
+      },
+      "PlannedMenu": {
+        "type": "textarea",
+        "value": "",
+        "display": "hide"
+      },
       "Char1": {
         "type": "select",
         "value": "None",
@@ -16380,6 +16531,21 @@
       }
     },
     "IslandBusinessShop4": {
+      "Grade": {
+        "type": "select",
+        "value": "bronze",
+        "option": [
+          "bronze",
+          "silver",
+          "gold",
+          "diamond"
+        ]
+      },
+      "PlannedMenu": {
+        "type": "textarea",
+        "value": "",
+        "display": "hide"
+      },
       "Char1": {
         "type": "select",
         "value": "None",
@@ -16535,6 +16701,21 @@
       }
     },
     "IslandBusinessShop5": {
+      "Grade": {
+        "type": "select",
+        "value": "bronze",
+        "option": [
+          "bronze",
+          "silver",
+          "gold",
+          "diamond"
+        ]
+      },
+      "PlannedMenu": {
+        "type": "textarea",
+        "value": "",
+        "display": "hide"
+      },
       "Char1": {
         "type": "select",
         "value": "None",
@@ -18884,6 +19065,11 @@
       "UrgentDetectRefreshTime": {
         "type": "input",
         "value": "2020-01-01 00:00:00"
+      },
+      "StuckSeasonOrderId": {
+        "type": "input",
+        "value": 0,
+        "display": "hide"
       }
     },
     "Storage": {

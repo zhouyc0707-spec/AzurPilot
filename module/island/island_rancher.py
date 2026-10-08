@@ -14,7 +14,10 @@ from module.island.warehouse import *
 from module.logger import logger
 
 
-class IslandRancher(Island, WarehouseOCR, LoginHandler):
+from module.island.planned_dispatch import PlannedProductionMixin, recipe_runtime_terms
+
+
+class IslandRancher(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
     """岛屿牧场与磨坊自动化管理器。
 
     继承 Island、WarehouseOCR 和 LoginHandler，管理饲料加工、鸡猪牛羊养殖及任务调度。
@@ -210,15 +213,21 @@ class IslandRancher(Island, WarehouseOCR, LoginHandler):
         mill_needs = []
 
         wheat_flour_count = self.inventory_counts['mill'].get('wheat_flour', 0)
-        if wheat_flour_count < 150:
-            target = 200 - wheat_flour_count
+        from module.island.production_planner import planner_target
+        flour_threshold = planner_target(self.config, 'wheat_flour', 150)
+        flour_target = planner_target(self.config, 'wheat_flour', 200)
+        if wheat_flour_count < flour_threshold:
+            target = flour_target - wheat_flour_count
             mill_needs.append(('wheat_flour', target))
             logger.info(f"[岛屿-牧场] {self._item_cn('wheat_flour')}库存不足: {wheat_flour_count}/150，需加工 {target} 个补到 200")
 
         for _, feed_item in self.ranch_feed_map.items():
             current_quantity = self.inventory_counts['mill'].get(feed_item, 0)
-            if current_quantity < feed_target_quantity:
-                target = self.name_to_config[feed_item]['number']
+            item_target = planner_target(self.config, feed_item, feed_target_quantity)
+            if current_quantity < item_target:
+                from module.island.production_planner import planner_active
+                minimum = 0 if planner_active(self.config) else self.name_to_config[feed_item]['number']
+                target = max(minimum, (item_target - current_quantity + 9) // 10)
                 mill_needs.append((feed_item, target))
                 logger.info(f"[岛屿-牧场] {self._item_cn(feed_item)}库存不足: {current_quantity}/{feed_target_quantity}，固定加工 {target} 组")
 
@@ -272,6 +281,17 @@ class IslandRancher(Island, WarehouseOCR, LoginHandler):
         """
         mill_config = self.name_to_config[mill_item]
         required_material = mill_config['required_material']
+        from module.island.production_planner import load_production_protection, planner_active
+        if planner_active(self.config):
+            current_material = self.inventory_counts['farm'].get(required_material)
+            if current_material is None:
+                logger.warning(f'[岛屿-生产规划] {required_material} 现货未观测，暂不加工 {mill_item}')
+                return False
+            protected = load_production_protection(self.config).get(required_material, 0)
+            unit_cost = self.mill_material_needed(mill_item, 1)
+            quantity = min(quantity, max(current_material - protected, 0) // unit_cost)
+            if quantity <= 0:
+                return False
         material_needed = self.mill_material_needed(mill_item, quantity)
         current_material = self.inventory_counts['farm'].get(required_material)
 
@@ -675,12 +695,13 @@ class IslandRancher(Island, WarehouseOCR, LoginHandler):
         ranch_needs = []
 
         chicken_count = self.inventory_counts['ranch'].get('chicken', 0)
-        if chicken_count < self.ranch_chicken_threshold:
+        from module.island.production_planner import planner_target
+        if chicken_count < planner_target(self.config, 'chicken', self.ranch_chicken_threshold):
             ranch_needs.append('ISLAND_RANCH_POST1')
             logger.info("[岛屿-牧场] 需要执行养鸡任务")
 
         pork_count = self.inventory_counts['ranch'].get('pork', 0)
-        if pork_count < self.ranch_pork_threshold:
+        if pork_count < planner_target(self.config, 'pork', self.ranch_pork_threshold):
             ranch_needs.append('ISLAND_RANCH_POST2')
             logger.info("[岛屿-牧场] 需要执行养猪任务")
 
@@ -691,6 +712,119 @@ class IslandRancher(Island, WarehouseOCR, LoginHandler):
         logger.info("[岛屿-牧场] 需要执行养羊任务")
         return ranch_needs
 
+    def _probe_ranch_secondary_stock(self, item_id):
+        """优先从当前任务仓库读取副产物；无卡时借空下游岗位读材料真实零库存。"""
+        from module.island.stock_probe import read_item_stocks
+        observations = read_item_stocks(self, [item_id])
+        if item_id in observations:
+            return observations[item_id]
+        from module.island.island_manufacture import IslandManufacture
+        from module.island.manufacture_catalog import get_catalog
+        from module.island.manufacture_selector import read_selected_recipe_inventory, select_manufacture_recipe
+        from module.island.production_planner import read_config
+        from module.island.production_plan_calculator import ProductionPlanCalculator
+        from module.island.planner_utils import get_current_activity_list, load_technology_status
+        factory = IslandManufacture(config=self.config, device=self.device)
+        calc = ProductionPlanCalculator(technology_status=load_technology_status(read_config(self.config, 'TechnologyStatus', '')),
+                                       activity_list=get_current_activity_list())
+        self.goto_postmanage()
+        self.post_manage_mode(POST_MANAGE_PRODUCTION)
+        for category, items in get_catalog().items():
+            candidates = [item for item in items if item_id in item['ingredients'] and calc.recipe_available.get(item['recipe_id'], False)]
+            if not candidates:
+                continue
+            for pid in factory.post_buttons:
+                if factory._post_category(pid) != category:
+                    continue
+                factory.post_close()
+                if not factory.post_open(factory.posts[pid]['button']):
+                    continue
+                self.device.screenshot()
+                if not factory.appear(ISLAND_POST_SELECT, offset=1) or factory.appear(ISLAND_WORKING):
+                    factory.post_close()
+                    continue
+                if not factory._prepare_planned_recipe_page(pid):
+                    continue
+                for item in candidates:
+                    if not select_manufacture_recipe(factory, item['recipe_id']):
+                        continue
+                    stocks = read_selected_recipe_inventory(factory, item['recipe_id'])
+                    if stocks is not None and item_id in stocks:
+                        factory.back_to_postmanage_from_dispatch()
+                        return stocks[item_id]['stock']
+                factory.back_to_postmanage_from_dispatch()
+        return None
+
+    def run_planned_ranch(self, all_configs):
+        """计划有效时收取全部牧场岗位，仅按主副产物缺口或余岗积累派遣。"""
+        from module.base.timer import Timer
+        from module.exception import GameStuckError
+        from module.island.production_planner import load_planner_targets, load_production_protection, planner_idle_products
+        from module.island.item_ids import ITEM_ID_TO_LOCAL
+        definitions = [
+            ('egg', 101013, self.config.IslandRancher_ChickenFilter),
+            ('pork', 101015, self.config.IslandRancher_PigFilter),
+            ('milk', 101016, self.config.IslandRancher_RancherFilter),
+            ('wool', 101018, self.config.IslandRancher_WoolWorkerFilter),
+        ]
+        self.posts = {pid: {'button': self.posts_ranch[pid], 'state': 'unknown', 'crop': None}
+                      for pid, _ in all_configs}
+        self._planner_actual_stocks = {}
+        self._planner_dispatched = {}
+        self._planner_protection = load_production_protection(self.config)
+        targets = load_planner_targets(self.config)
+        for (pid, time_var), (name, recipe_id, worker) in zip(all_configs, definitions):
+            self.goto_postmanage()
+            self.post_manage_mode(POST_MANAGE_PRODUCTION)
+            self.post_manage_swipe_to_top()
+            self.post_close()
+            if not self.post_open(self.posts_ranch[pid]):
+                raise GameStuckError(f'{pid} 计划巡检未能打开岗位')
+            for _ in self.loop(timeout=Timer(20), skip_first=False):
+                if self.appear(ISLAND_WORKING):
+                    finish = self.ranch_ocr_finish_time(pid)
+                    if finish is not None:
+                        setattr(self, time_var, finish)
+                        self.posts[pid]['state'] = 'working'
+                        break
+                if self.appear(ISLAND_WORK_COMPLETE, offset=1) or self.appear(ISLAND_POST_SELECT, offset=1):
+                    self.posts[pid]['state'] = 'idle'
+                    break
+            else:
+                raise GameStuckError(f'{pid} 计划巡检状态无法确认')
+            if not self.post_get_and_close():
+                raise GameStuckError(f'{pid} 巡检后未返回管理页')
+            if self.posts[pid]['state'] == 'working':
+                continue
+            _, outputs = recipe_runtime_terms(self.config, recipe_id)
+            item_id = next(iter(outputs))
+            extra_stocks = {}
+            secondary_unknown = False
+            for extra in outputs:
+                if extra != item_id and targets.get(extra, 0) > 0:
+                    observed = self._probe_ranch_secondary_stock(extra)
+                    if observed is None:
+                        logger.info(f'[岛屿-生产规划] {ITEM_ID_TO_LOCAL.get(extra, extra)} 无明确库存且下游无空岗，保留目标稍后复检')
+                        setattr(self, time_var, current_time() + timedelta(minutes=15))
+                        if self.config.cross_get('IslandManufacture.Scheduler.Enable', default=False):
+                            self.config.task_delay(minute=0, task='IslandManufacture')
+                        secondary_unknown = True
+                        break
+                    extra_stocks[extra] = observed
+            if secondary_unknown:
+                continue
+            needed = any(targets.get(item, 0) > 0 for item in outputs)
+            filler = name in (planner_idle_products(self.config, [name]) or [])
+            if needed or filler:
+                self.goto_postmanage()
+                self.post_manage_mode(POST_MANAGE_PRODUCTION)
+                self.post_manage_swipe_to_top()
+                produced = self._planned_dispatch_recipe(pid, name, targets.get(item_id, 0), time_var,
+                                                         worker, extra_stocks=extra_stocks)
+                if produced <= 0 and filler:
+                    self._planned_dispatch_recipe(pid, name, targets.get(item_id, 0), time_var,
+                                                  worker, filler=True, extra_stocks=extra_stocks)
+
     def run(self):
         """运行牧场与磨坊自动化管理主流程。
 
@@ -700,6 +834,8 @@ class IslandRancher(Island, WarehouseOCR, LoginHandler):
             GameBugError: 遇到游戏内部错误需要重启时抛出。
         """
         self.island_error = False
+        from module.island.production_planner import refresh_production_plan
+        refresh_production_plan(self.config, self.device)
         self.ui_ensure(page_island)
         time_vars = ['time_ranch1', 'time_ranch2', 'time_ranch3', 'time_ranch4']
         all_configs = [
@@ -725,6 +861,10 @@ class IslandRancher(Island, WarehouseOCR, LoginHandler):
             logger.info("[岛屿-牧场] 本次运行未补充磨坊项目")
 
         ranch_needs = self.check_ranch_needs()
+        from module.island.production_planner import planner_active
+        if planner_active(self.config):
+            self.run_planned_ranch(all_configs)
+            ranch_needs = []
         self.goto_postmanage()
         self.post_manage_mode(POST_MANAGE_PRODUCTION)
         self.post_close()

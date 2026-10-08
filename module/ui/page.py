@@ -28,6 +28,7 @@ from module.retire.assets import DOCK_CHECK
 from module.secretary.assets import *
 from module.ui.assets import *
 from module.ui_white.assets import *
+from module.island_exchange.assets import ALAS_EXCHANGE_GOTO_SHOP, ALAS_EXCHANGE_SHOP_CHECK
 import module.config.server as server
 
 
@@ -434,10 +435,14 @@ page_island_visit = Page(ISLAND_VISIT_CHECK)
 page_island_mill = Page(ISLAND_MILL_CHECK)
 page_island_season = Page(ISLAND_SEASON_CHECK)
 page_island_phone = Page(ISLAND_PHONE_CHECK)
+page_island_exchange_shop = Page(ALAS_EXCHANGE_SHOP_CHECK)
+page_island_technology = Page(ALAS_ISLAND_TECHNOLOGY_CHECK)
 
 page_dormmenu.link(button=DORMMENU_GOTO_ISLAND, destination=page_island)
 page_island_message.link(button=DORMMENU_GOTO_ISLAND_MESSAGE, destination=page_island)
 page_island.link(button=ISLAND_GOTO_ISLAND_PHONE, destination=page_island_phone)
+page_island.link(button=ALAS_EXCHANGE_GOTO_SHOP, destination=page_island_exchange_shop)
+page_island_exchange_shop.link(button=BACK_ARROW_WHITE, destination=page_island)
 page_island.link(button=ISLAND_GOTO_MANAGEMENT, destination=page_island_management)
 page_island_management.link(button=ISLAND_MANAGEMENT_GOTO_ISLAND, destination=page_island)
 page_island_management.link(button=ISLAND_MANAGEMENT_GOTO_POSTMANAGE, destination=page_island_postmanage)
@@ -456,3 +461,6 @@ page_island_season.link(button=ISLAND_SEASON_GOTO_ISLAND, destination=page_islan
 page_island_phone.link(button=ISLAND_PHONE_GOTO_MAIN, destination=page_main)
 page_island_phone.link(button=ISLAND_PHONE_GOTO_ISLAND, destination=page_island)
 page_island_phone.link(button=ISLAND_PHONE_GOTO_ISLAND_MANAGE, destination=page_island_management)
+# 官方科技入口位于岛屿主界面；手机页沿已有返回连接进入，不能复用错误的手机坐标。
+page_island.link(button=ALAS_ISLAND_GOTO_TECHNOLOGY, destination=page_island_technology)
+page_island_technology.link(button=BACK_ARROW_WHITE, destination=page_island)

@@ -3075,6 +3075,28 @@
       "Season": "spring",
       "TaskAlignment": "half_hour"
     },
+    "IslandProductionPlanner": {
+      "Enabled": true,
+      "TechnologyStatus": null,
+      "RescanTechnology": false,
+      "FieldsEfficiency": 0.0,
+      "OrchardEfficiency": 0.0,
+      "NurseryEfficiency": 0.0,
+      "DailyProfitLowerLimit": 0,
+      "DailyBufferSafetyMargin": 0.0,
+      "TaskTarget": "{}",
+      "HardFloorItems": "{}",
+      "DailyBufferItems": "{}",
+      "IdleAccumulatingItems": "{}",
+      "PlannerTargets": "{}",
+      "PlannerStatus": null,
+      "PlanFingerprint": null,
+      "OrderManufactureTargets": "{}",
+      "OrderManufactureFinalTargets": "{}",
+      "AutoManufactureActive": false,
+      "AutoManufactureNextRun": null,
+      "CompletedManufactureOrderId": 0
+    },
     "Storage": {
       "Storage": {}
     }
@@ -3105,6 +3127,8 @@
       "SeasonalThreshold": 7
     },
     "IslandBusinessShop1": {
+      "Grade": "bronze",
+      "PlannedMenu": null,
       "Char1": "None",
       "Char2": "None",
       "Product1": "None",
@@ -3116,6 +3140,8 @@
       "BoostReplaceFilter": "30 > 20 > 10"
     },
     "IslandBusinessShop2": {
+      "Grade": "bronze",
+      "PlannedMenu": null,
       "Char1": "None",
       "Char2": "None",
       "Product1": "None",
@@ -3127,6 +3153,8 @@
       "BoostReplaceFilter": "30 > 20 > strawberry_honey > fruit_paradise > 10"
     },
     "IslandBusinessShop3": {
+      "Grade": "bronze",
+      "PlannedMenu": null,
       "Char1": "None",
       "Char2": "None",
       "Product1": "None",
@@ -3137,6 +3165,8 @@
       "BoostReplaceFilter": "30 > 20 > succulently_sweet > 10"
     },
     "IslandBusinessShop4": {
+      "Grade": "bronze",
+      "PlannedMenu": null,
       "Char1": "None",
       "Char2": "None",
       "Product1": "None",
@@ -3147,6 +3177,8 @@
       "BoostReplaceFilter": "30 > 20 > 10"
     },
     "IslandBusinessShop5": {
+      "Grade": "bronze",
+      "PlannedMenu": null,
       "Char1": "None",
       "Char2": "None",
       "Product1": "None",
@@ -3556,7 +3588,8 @@
     "IslandDailyOrder": {
       "RejectCount": 0,
       "RejectFilter": "Cheese > Tofu",
-      "UrgentDetectRefreshTime": "2020-01-01 00:00:00"
+      "UrgentDetectRefreshTime": "2020-01-01 00:00:00",
+      "StuckSeasonOrderId": 0
     },
     "Storage": {
       "Storage": {}

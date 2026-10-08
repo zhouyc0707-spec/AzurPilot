@@ -372,6 +372,10 @@ class IslandTeahouse(IslandShopBase):
                 return 0
             else:
                 self.post_add_one(number - 1)
+                number = self._limit_planned_food_batch(product, number)
+                if number <= 0:
+                    self.back_to_postmanage_from_dispatch()
+                    return 0
                 preview, confirmed_at = self.confirm_food_dispatch(
                     number, f'{self._item_cn(product)}生产派遣')
             return self.finish_food_dispatch(
