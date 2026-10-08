@@ -19,7 +19,7 @@ from module.private_quarters.assets import *
 from module.ui.page import page_private_quarters
 from module.ui.ui import UI
 
-# 等待与超时的秒数走 WebUI「运行参数」页（RunParams.UiWait），默认值集中在
+# 互动按钮与动作阶段的秒数走 WebUI「运行参数」页（RunParams.UiWait），默认值集中在
 # module/base/runtime_params.py（界面等待域）；帧数下限是与秒数成对使用的
 # 内部语义（慢设备上重新点击须同时满足秒数和帧数两个下限），不开放配置。
 PQ_INTERACT_BUTTON_FRAMES = 6  # 帧
@@ -27,6 +27,8 @@ PQ_INTERACT_CLICK_FRAMES = 2  # 帧
 PQ_INTERACT_START_FRAMES = 6  # 帧
 PQ_INTERACT_END_FRAMES = 10  # 帧
 PQ_INTERACT_EXIT_FRAMES = 6  # 帧
+# 房间气泡等待使用独立总窗口，不能因连续调整镜头而无限续期。
+PQ_TARGET_APPEAR_TIMEOUT = 8  # 秒
 
 
 class PQInteract(UI):
@@ -43,6 +45,41 @@ class PQInteract(UI):
         'nakhimov': (PRIVATE_QUARTERS_SHIP_NAKHIMOV, PRIVATE_QUARTERS_PAGE_LOCALE_VILLA),
         'implacable': (PRIVATE_QUARTERS_SHIP_IMPLACABLE, PRIVATE_QUARTERS_PAGE_LOCALE_VILLA),
     }
+
+    def _pq_target_appear(self):
+        """等待舰娘的就绪气泡，必要时小幅调整房间镜头。
+
+        入房对话已由 `_pq_goto_room_enter` 处理。加载及未知画面继续截图等待，
+        只有正向确认房间时才调整镜头；纠偏不重置总超时。
+
+        Returns:
+            bool: 任一已知气泡出现返回 True，等待超时返回 False。
+
+        Pages:
+            in: 已进入目标房间并处理入房对话。
+            out: 同一房间，气泡已确认或仍未就绪。
+        """
+        targets = (
+            PRIVATE_QUARTERS_ROOM_TARGET_CHECK_1,
+            PRIVATE_QUARTERS_ROOM_TARGET_CHECK_2,
+            PRIVATE_QUARTERS_ROOM_TARGET_CHECK_3,
+        )
+        adjust_timer = Timer(1.5, count=3)
+        for _ in self.loop(skip_first=True, timeout=Timer(PQ_TARGET_APPEAR_TIMEOUT)):
+            if self.appear(PRIVATE_QUARTERS_LOADING_CHECK, offset=(20, 20)):
+                continue
+            if any(self.appear(target, offset=(100, 100)) for target in targets):
+                return True
+            if self.appear(PRIVATE_QUARTERS_ROOM_CHECK, offset=(20, 20)) and adjust_timer.reached():
+                p1, p2 = random_rectangle_vector(
+                    (0, -30), box=PRIVATE_QUARTERS_ROOM_SAFE_CLICK_AREA.area,
+                    random_range=(-10, -10, 10, 10), padding=5)
+                self.device.drag(p1, p2, segments=2,
+                                 shake=(0, 25), point_random=(0, 0, 0, 0),
+                                 shake_random=(0, -5, 0, 5))
+                adjust_timer.reset()
+        logger.warning('[私人休息室-互动] 等待舰娘就绪气泡超时，交由入房流程有限重试')
+        return False
 
     def _pq_handle_dialogue(self):
         """处理舰船对话序列。
@@ -274,26 +311,6 @@ class PQInteract(UI):
         Returns:
             bool: 成功进入且舰船就绪返回 True，否则返回 False。
         """
-        success = False
-        target_title = target_ship.title().replace('_', ' ')
-        logger.hr(f'[私人休息室-互动] 进入 {target_title} 房间', level=1)
-
-        if not self._pq_goto_room_seek(target_ship):
-            return success
-
-        for _ in range(retry):
-            if not self._pq_goto_room_enter(target_ship):
-                break
-
-            if self._pq_target_appear():
-                logger.info(f'[私人休息室-互动] {target_title} 正在等待你的到来！')
-                success = True
-                break
-            logger.warning(f'[私人休息室-互动] {target_title} 未就绪，退出重试; 剩余次数={retry - (_ + 1)}')
-
-            self._pq_goto_room_exit()
-
-        return success
         success = False
         target_title = target_ship.title().replace('_', ' ')
         logger.hr(f'[私人休息室-互动] 进入 {target_title} 房间', level=1)

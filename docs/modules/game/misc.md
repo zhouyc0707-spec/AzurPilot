@@ -134,7 +134,9 @@ module/
 
 ### 私人休息室（module/private_quarters）
 
-`PrivateQuarters(PQInteract, PQShop)`：进入宿舍菜单 → 私人休息室；按配置购买每周玫瑰（金币）与蛋糕（钻石，商店复用 `module/shop` 的 `ShopClerk` 框架），再检查每日互动剩余次数（OCR），进入目标舰娘房间执行对话与触摸互动。`available_targets` 定义 7 位可用舰娘及其所在场景；`not_supported_filter` 声明服务器差异（JP 缺纳希莫夫，TW 缺大凤与纳希莫夫），TW 服无商店。
+`PrivateQuarters(PQInteract, PQShop)`：进入宿舍菜单 → 私人休息室；先读取每日互动剩余次数，再按配置购买每周玫瑰（金币）与蛋糕（钻石，商店复用 `module/shop` 的 `ShopClerk` 框架），进入目标舰娘房间执行对话与触摸互动。精力徽章必须为有效的 `0—3/3`；只有连续两次有效 `0/3` 才跳过互动，无法确认时继续交由互动流程的超时保护处理。`available_targets` 定义舰娘及其所在场景，实际可用范围由 `not_supported_filter` 按服务器限制，TW 服无商店。
+
+入房及对话处理成功后，`PQInteract._pq_target_appear()` 用三种既有气泡资源之一正向确认舰娘就绪。加载或未知画面只获取新截图；房间已确认但气泡尚未出现时，最多每 1.5 秒在安全区域小幅上拖约 30 像素纠正视角。独立 8 秒总等待窗口不因镜头动作重置；仍未就绪返回 `False`，由 `pq_goto_room(retry=3)` 执行有限的退房重试，不无条件进入互动。识别资源与既有互动按钮、动作、退出等待参数继续复用。离线回归见 [房间就绪检测](../../../tests/test_private_quarters_room_ready.py) 与 [每日精力次数保护](../../../tests/test_private_quarters_daily_count.py)。
 
 ### 船坞蓝图（module/shipyard）
 
