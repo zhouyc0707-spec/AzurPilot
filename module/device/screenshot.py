@@ -198,30 +198,35 @@ class Screenshot(AzurPilotAndroid, Adb, WSA, DroidCast, AScreenCap, Scrcpy, Nemu
         return deque(maxlen=length)
 
     def save_screenshot(self, genre='items', interval=None, to_base_folder=False):
-        """保存截图。使用毫秒时间戳作为文件名。
+        """将当前截图保存到 DropRecord_SaveFolder 下的分类目录。
 
         Args:
             genre: 截图类型。
-            interval: 两次保存之间的最小间隔（秒）。间隔内的保存将被跳过。
-            to_base_folder: 是否保存到基础文件夹。
+            interval: 两次保存之间的最小间隔（秒），默认 5 秒。
+                0 表示每次保存；非零间隔内的调用仍按原行为更新时间并跳过。
+            to_base_folder: 兼容旧调用的参数，现代配置统一使用 DropRecord_SaveFolder。
 
         Returns:
-            保存成功返回 True。
+            保存成功返回 True，间隔内跳过返回 False。
+
+        Raises:
+            OSError: 创建目录或写入截图失败；失败不会更新保存时间。
         """
         now = time.time()
         if interval is None:
-            interval = self.config.SCREEN_SHOT_SAVE_INTERVAL
+            interval = 5
 
-        if now - self._last_save_time.get(genre, 0) > interval:
+        if interval == 0 or now - self._last_save_time.get(genre, 0) > interval:
             fmt = 'png'
-            file = '%s.%s' % (int(now * 1000), fmt)
-
-            folder = self.config.SCREEN_SHOT_SAVE_FOLDER_BASE if to_base_folder else self.config.SCREEN_SHOT_SAVE_FOLDER
-            folder = os.path.join(folder, genre)
-            if not os.path.exists(folder):
-                os.mkdir(folder)
-
-            file = os.path.join(folder, file)
+            stem = str(int(now * 1000))
+            folder = os.path.join(str(self.config.DropRecord_SaveFolder), genre)
+            os.makedirs(folder, exist_ok=True)
+            file = os.path.join(folder, f'{stem}.{fmt}')
+            # 同一毫秒内的多次现场保存分别落盘，避免后来的图片覆盖原件。
+            suffix = 1
+            while os.path.exists(file):
+                file = os.path.join(folder, f'{stem}_{suffix}.{fmt}')
+                suffix += 1
             self.image_save(file)
             self._last_save_time[genre] = now
             return True

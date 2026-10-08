@@ -8,10 +8,13 @@
 import numpy as np
 
 
-# 校准图中圆心 (749, 247)，四角白色部分各 22×22；统一位移容忍圆心识别误差。
+# 四角白色部分各 22×22；统一位移容忍圆心识别误差。
+# 实际截图的上下角起点间距为 103 或 104 像素，只允许整体高度差一像素。
 CORNER_SIZE = 22
 CORNER_OFFSETS = ((-64, -63), (40, -63), (-64, 40), (40, 40))
 CENTER_TOLERANCE = 6
+VERTICAL_SPACING_VARIANTS = (0, 1)
+RIGHT_OVERLAY_LEFT = 832
 
 
 def _white_mask(image):
@@ -30,20 +33,27 @@ def _corner_matches(patch, index):
             and patch[9:, 9:].mean() <= 0.12)
 
 
-def _has_four_corners(mask, position):
+def _has_selection_corners(mask, position, *, allow_right_occlusion=False):
+    """共享位移与高度版本；右侧遮挡只可省略完全位于叠层内的两个右角。"""
     x, y = position
     height, width = mask.shape
     for dy in range(-CENTER_TOLERANCE, CENTER_TOLERANCE + 1):
         for dx in range(-CENTER_TOLERANCE, CENTER_TOLERANCE + 1):
-            for index, (ox, oy) in enumerate(CORNER_OFFSETS):
-                left, top = x + ox + dx, y + oy + dy
-                if left < 0 or top < 0 or left + CORNER_SIZE > width or top + CORNER_SIZE > height:
-                    break
-                patch = mask[top:top + CORNER_SIZE, left:left + CORNER_SIZE]
-                if not _corner_matches(patch, index):
-                    break
-            else:
-                return True
+            for vertical_extra in VERTICAL_SPACING_VARIANTS:
+                corners = []
+                for index, (ox, oy) in enumerate(CORNER_OFFSETS):
+                    left = x + ox + dx
+                    top = y + oy + dy + (vertical_extra if index >= 2 else 0)
+                    if left < 0 or top < 0 or left + CORNER_SIZE > width or top + CORNER_SIZE > height:
+                        break
+                    corners.append((left, mask[top:top + CORNER_SIZE, left:left + CORNER_SIZE]))
+                else:
+                    if not all(_corner_matches(corners[index][1], index) for index in (0, 2)):
+                        continue
+                    if all(_corner_matches(corners[index][1], index) for index in (1, 3)):
+                        return True
+                    if allow_right_occlusion and all(corners[index][0] >= RIGHT_OVERLAY_LEFT for index in (1, 3)):
+                        return True
     return False
 
 
@@ -59,15 +69,18 @@ def _unique_positions(positions):
     return result
 
 
-def get_selected_order_position(image, positions):
-    """返回唯一具有四个选中角标的圆心，任一证据不足返回 None。
+def get_selected_order_position(image, positions, *, allow_right_occlusion=False):
+    """返回唯一具备选中角标证据的圆心，任一可见角证据不足返回 None。
 
     Args:
         image (np.ndarray): 当前 RGB 游戏截图，尺寸必须为 1280×720。
         positions (Iterable[tuple[int, int]]): 当前所有订单种类的圆心，不能只传目标类别。
+        allow_right_occlusion (bool): 默认要求完整四角。调用方已在当前帧正向确认订单页、
+            需求及对应交付按钮，表明已知顶部和右侧叠层布局时，才可设为 True；
+            仅允许两个右角完整落在 x>=832 的已知叠层内，左侧角对仍须完整匹配。
 
     Returns:
-        tuple[int, int] | None: 唯一选中的订单圆心；缺角、多个选中或未知画面为 None。
+        tuple[int, int] | None: 唯一选中的订单圆心；可见角缺失、多个选中或未知画面为 None。
     """
     if not isinstance(image, np.ndarray) or image.shape != (720, 1280, 3):
         return None
@@ -75,11 +88,12 @@ def get_selected_order_position(image, positions):
     if not candidates:
         return None
     mask = _white_mask(image)
-    selected = [position for position in candidates if _has_four_corners(mask, position)]
+    selected = [position for position in candidates
+                if _has_selection_corners(mask, position, allow_right_occlusion=allow_right_occlusion)]
     return selected[0] if len(selected) == 1 else None
 
 
-def is_order_selected(image, target_position, positions):
-    """目标圆心必须与画面中唯一的四角选中标记关联才返回 True。"""
-    selected = get_selected_order_position(image, positions)
+def is_order_selected(image, target_position, positions, *, allow_right_occlusion=False):
+    """目标圆心必须与画面中唯一的选中标记关联；遮挡选项的前置条件同上。"""
+    selected = get_selected_order_position(image, positions, allow_right_occlusion=allow_right_occlusion)
     return selected is not None and np.linalg.norm(np.subtract(selected, target_position)) <= 12

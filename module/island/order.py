@@ -209,8 +209,11 @@ class IslandOrder(IslandDailyOrder):
             cooldown = self.appear(ALAS_ORDER_COOLDOWN_SPEED_UP, offset=20)
             accept = ALAS_ORDER_URGENT_ACCEPT if kind == 'urgent' else ALAS_ORDER_ACCEPT
             detail = self.appear(ALAS_ORDER_REQUIREMENTS_CHECK, offset=20) and self.appear(accept, offset=20)
-            selected = is_order_selected(self.device.image, target, positions)
-            if selected and self.appear(DAILY_ORDER_CHECK) and (cooldown or detail):
+            page_ready = self.appear(DAILY_ORDER_CHECK)
+            # 右侧详情和顶部栏会遮住靠右订单的右角，仅在当前帧确认该布局后允许左侧完整角标对。
+            selected = is_order_selected(self.device.image, target, positions,
+                                         allow_right_occlusion=page_ready and detail)
+            if selected and page_ready and (cooldown or detail):
                 stable.start()
                 if stable.reached():
                     return 'cooldown' if cooldown else 'detail'
@@ -218,7 +221,7 @@ class IslandOrder(IslandDailyOrder):
                 stable.clear()
         if self.appear(DAILY_ORDER_CHECK):
             self.device.save_screenshot(genre='island_order_unknown', interval=0)
-            logger.warning('[岛屿-订单] 未确认目标的四角选中标记，保留订单，五分钟后复查')
+            logger.warning('[岛屿-订单] 未完整确认目标选中及详情状态，保留订单，五分钟后复查')
             return 'unconfirmed'
         self._unknown('点击订单后页面未确认')
 

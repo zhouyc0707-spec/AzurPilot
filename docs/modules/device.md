@@ -187,6 +187,12 @@ flowchart TD
 
 两点值得强调：其一，方法分发发生在**每一次** `screenshot()` 里——字典查找 + 当前配置值，因此基准测试写回新方法后下一次截图立即生效，无需重建任何连接；其二，`check_screen_size`/`check_screen_black` 首次通过后即被短路，之后截图主路径只剩「分发 → 后处理」，这是热路径上刻意做的最小化。
 
+### 保存已有截图
+
+`device.save_screenshot(genre, interval=None, to_base_folder=False)` 保存当前 `device.image`，不重新截图或操作游戏。目录为用户配置的 `DropRecord.SaveFolder/genre`，父目录递归创建；旧 `to_base_folder` 参数仅保留调用兼容，现代配置使用统一根目录，不再读取已废弃的 `SCREEN_SHOT_SAVE_*` 属性。
+
+默认保存间隔为历史值 5 秒，按 `genre` 分别限流；非零间隔内跳过的调用仍按原行为更新时间。未知现场使用 `interval=0`，每次调用均保存，同一毫秒的图片增加数字后缀，保留各帧而不覆盖原件。目录或文件写入失败原样抛出异常，不更新时间，修复后可立即重试；保存成功不改变业务层的未知状态、有限重试或上层恢复决定。回归测试 `tests/test_screenshot_save.py` 使用临时目录与合成 RGB 图，覆盖真实写入、当前帧保持、目录兼容、间隔以及失败重试。
+
 ### 重试骨架（method/retry.py）
 
 所有后端的 `@retry` 都是 `retry_backend` 的 partial：最多 `RETRY_TRIES=5` 次，退避 0/0/1/3/3 秒；每轮先执行上一轮选出的恢复动作再重试。`recover(self, error, trial)` 返回下一个恢复函数，返回 `None` 表示无法自动恢复（升级为 `RequestHumanTakeover`）。`RequestHumanTakeover` 与 `EmulatorNotRunningError` 永不重试、原样上抛——前者是人工接管信号，后者是交给调度器的统一「设备离线」信号。重试耗尽的默认异常可由 `on_exhausted` 指定，截图类方法指定为 `EmulatorNotRunningError`，触控类保持 `RequestHumanTakeover`。

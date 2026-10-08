@@ -4,6 +4,7 @@ import unittest
 from contextlib import nullcontext
 from datetime import datetime, timedelta
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -13,7 +14,10 @@ import numpy as np
 from module.island.data import DIC_ISLAND_ITEM
 from module.island.item_ids import LOCAL_TO_ITEM_ID
 from module.island.order import IslandOrder, ORDER_COLORS, detect_order_circles
-from module.island.order import ALAS_ORDER_ACCEPT, ALAS_ORDER_BACKGROUND, ALAS_ORDER_LEVEL_UP, ALAS_ORDER_REQUIREMENTS_CHECK
+from module.island.order import (
+    ALAS_ORDER_ACCEPT, ALAS_ORDER_BACKGROUND, ALAS_ORDER_LEVEL_UP,
+    ALAS_ORDER_REQUIREMENTS_CHECK, ALAS_ORDER_URGENT_ACCEPT,
+)
 from module.island.order_ocr import OrderDigitCounter, match_item_name, validate_requirements
 from module.base.utils import load_image
 from module.island_daily_order.assets import DAILY_ORDER_CHECK, POPUP_RESOURCE_INSUFFICIENT
@@ -257,23 +261,22 @@ class OrderClickConfirmationTests(unittest.TestCase):
     frame = staticmethod(AlasSubmitTests.frame)
     make_order = AlasSubmitTests.make_order
 
-    def selected_frame(self, position):
-        from module.island.order_selection import CORNER_OFFSETS, CORNER_SIZE
-        image = self.frame(DAILY_ORDER_CHECK, ALAS_ORDER_ACCEPT)
-        tile = cv2.imread(str(Path(__file__).parent / 'fixtures/island_order_selection/selected_corners.png'),
+    def selected_frame(self, position, fixture='selected_corners.png', buttons=None):
+        image = self.frame(*(buttons if buttons is not None else (
+            DAILY_ORDER_CHECK, ALAS_ORDER_ACCEPT, ALAS_ORDER_REQUIREMENTS_CHECK)))
+        tile = cv2.imread(str(Path(__file__).parent / 'fixtures/island_order_selection' / fixture),
                           cv2.IMREAD_GRAYSCALE)
-        for dx, dy in CORNER_OFFSETS:
-            x, y = position[0] + dx, position[1] + dy
-            patch = tile[68 + dy:68 + dy + CORNER_SIZE, 69 + dx:69 + dx + CORNER_SIZE]
-            image[y:y + CORNER_SIZE, x:x + CORNER_SIZE] = patch[:, :, None]
+        # 整体贴入真实角标，保留原始间距；按生产偏移重新拼四角会掩盖几何错误。
+        center_x = 69 if fixture == 'selected_corners.png' else 68
+        x, y = position[0] - center_x, position[1] - 68
+        height, width = tile.shape
+        image[y:y + height, x:x + width] = tile[:, :, None]
         return image
 
     def make_click_order(self, selected):
         order, device = self.make_order(lambda device: self.selected_frame(selected))
         order._order_positions = [(200, 200), (700, 400)]
         order._handle_popups = Mock(return_value=False)
-        order.appear = Mock(side_effect=lambda button, **kwargs: button in (
-            DAILY_ORDER_CHECK, ALAS_ORDER_ACCEPT, ALAS_ORDER_REQUIREMENTS_CHECK))
         return order, device
 
     def test_click_reads_details_only_after_target_four_corners(self):
@@ -285,6 +288,84 @@ class OrderClickConfirmationTests(unittest.TestCase):
         order, _ = self.make_click_order((200, 200))
         self.assertEqual(order._click_order(order._order_button((700, 400)), 'regular'), 'unconfirmed')
         order.device.save_screenshot.assert_called_once_with(genre='island_order_unknown', interval=0)
+
+    def make_logged_order(self, position, fixture, buttons=None):
+        frame = self.selected_frame(position, fixture, buttons)
+        order, device = self.make_order(lambda device: frame.copy())
+        order._order_positions = [(200, 400), position]
+        order._handle_popups = Mock(return_value=False)
+        return order, device
+
+    def test_logged_urgent_full_corners_with_104_pixel_spacing_confirm(self):
+        position = (362, 151)
+        order, device = self.make_logged_order(position, 'urgent_0701_corners.png', (
+            DAILY_ORDER_CHECK, ALAS_ORDER_REQUIREMENTS_CHECK, ALAS_ORDER_URGENT_ACCEPT))
+        self.assertEqual(order._click_order(order._order_button(position), 'urgent'), 'detail')
+        self.assertGreaterEqual(device.now - 1000, 1.5)
+        self.assertEqual(len(device.clicks), 1)
+        device.save_screenshot.assert_not_called()
+
+    def test_logged_right_occlusion_confirms_only_with_known_details_layout(self):
+        position = (805, 79)
+        order, device = self.make_logged_order(position, 'regular_0302_occluded_corners.png')
+        self.assertEqual(order._click_order(order._order_button(position), 'regular'), 'detail')
+        self.assertGreaterEqual(device.now - 1000, 1.5)
+        device.save_screenshot.assert_not_called()
+
+    def test_right_occlusion_requires_requirements_and_correct_accept_on_same_frame(self):
+        position = (805, 79)
+        for buttons in (
+                (DAILY_ORDER_CHECK, ALAS_ORDER_ACCEPT),
+                (DAILY_ORDER_CHECK, ALAS_ORDER_REQUIREMENTS_CHECK),
+                (DAILY_ORDER_CHECK, ALAS_ORDER_REQUIREMENTS_CHECK, ALAS_ORDER_URGENT_ACCEPT)):
+            with self.subTest(buttons=[button.name for button in buttons]):
+                order, device = self.make_logged_order(position, 'regular_0302_occluded_corners.png', buttons)
+                self.assertEqual(order._click_order(order._order_button(position), 'regular'), 'unconfirmed')
+                device.save_screenshot.assert_called_once_with(genre='island_order_unknown', interval=0)
+
+    def test_occluded_order_without_page_header_remains_unknown(self):
+        position = (805, 79)
+        order, device = self.make_logged_order(position, 'regular_0302_occluded_corners.png', (
+            ALAS_ORDER_REQUIREMENTS_CHECK, ALAS_ORDER_ACCEPT))
+        with self.assertRaises(GameStuckError):
+            order._click_order(order._order_button(position), 'regular')
+        device.save_screenshot.assert_called_once_with(genre='island_order_unknown', interval=0)
+
+    def test_one_selected_frame_is_not_stable_confirmation(self):
+        position = (805, 79)
+        selected = self.selected_frame(position, 'regular_0302_occluded_corners.png')
+        unselected = self.frame(DAILY_ORDER_CHECK, ALAS_ORDER_REQUIREMENTS_CHECK, ALAS_ORDER_ACCEPT)
+        order, device = self.make_order(lambda device: selected if device.now == 1000.5 else unselected)
+        order._order_positions = [(200, 400), position]
+        order._handle_popups = Mock(return_value=False)
+        self.assertEqual(order._click_order(order._order_button(position), 'regular'), 'unconfirmed')
+        device.save_screenshot.assert_called_once()
+
+    def test_failed_selection_saves_real_current_frame_and_delays_without_processing(self):
+        from tests.test_screenshot_save import load_screenshot
+
+        order, device = self.make_click_order((200, 200))
+        order.next_runtime = []
+        order.scan_current_order_requirements = Mock(side_effect=AssertionError('未知选中不得读取货物'))
+        order._submit_order = Mock(side_effect=AssertionError('未知选中不得交付'))
+        order._reject_order = Mock(side_effect=AssertionError('未知选中不得驳回'))
+        screenshot = load_screenshot()
+        now = datetime(2026, 10, 9, 7)
+        with TemporaryDirectory() as folder:
+            device.config = SimpleNamespace(DropRecord_SaveFolder=folder)
+            device._last_save_time = {}
+            device.image_save = lambda path: screenshot.Screenshot.image_save(device, path)
+            device.save_screenshot = lambda **kwargs: screenshot.Screenshot.save_screenshot(device, **kwargs)
+            with patch('module.island.order.current_time', return_value=now):
+                self.assertFalse(order._process_order((700, 400), 'regular'))
+            images = list((Path(folder) / 'island_order_unknown').glob('*.png'))
+            self.assertEqual(len(images), 1)
+            np.testing.assert_array_equal(load_image(str(images[0])), device.image)
+        self.assertEqual(order.next_runtime, [now + timedelta(minutes=5)])
+        self.assertEqual(len(device.clicks), 1)
+        order.scan_current_order_requirements.assert_not_called()
+        order._submit_order.assert_not_called()
+        order._reject_order.assert_not_called()
 
 
 if __name__ == '__main__':

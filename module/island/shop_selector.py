@@ -180,7 +180,7 @@ def _confirm_purchase(main, plan, coins_before):
         if not clicked and main.appear_then_click(ALAS_SHOP_BUY_CONFIRM, offset=(20, 20), interval=2):
             clicked = True
     if clicked:
-        main.device.save_screenshot(genre='island_material_purchase_unknown')
+        main.device.save_screenshot(genre='island_material_purchase_unknown', interval=0)
         raise GameStuckError('岛屿材料购买未确认金币变化，停止重试并保留现场')
     return False
 
