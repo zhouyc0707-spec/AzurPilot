@@ -305,6 +305,74 @@ class OrderClickConfirmationTests(unittest.TestCase):
         self.assertEqual(len(device.clicks), 1)
         device.save_screenshot.assert_not_called()
 
+    def test_logged_regular_orders_with_103_pixel_width_and_map_noise_confirm(self):
+        for position, fixture in (
+                ((305, 307), 'regular_0719_complete_corners.png'),
+                ((632, 453), 'regular_0719_map_noise_corners.png')):
+            with self.subTest(position=position):
+                order, device = self.make_logged_order(position, fixture)
+                self.assertEqual(order._click_order(order._order_button(position), 'regular'), 'detail')
+                self.assertGreaterEqual(device.now - 1000, 1.5)
+                self.assertEqual(len(device.clicks), 1)
+                device.save_screenshot.assert_not_called()
+
+    def test_103_pixel_markers_cannot_confirm_adjacent_order_with_old_details(self):
+        selected = (305, 307)
+        target = (411, 331)
+        order, device = self.make_logged_order(selected, 'regular_0719_complete_corners.png')
+        order._order_positions = [selected, target, (632, 453)]
+        self.assertEqual(order._click_order(order._order_button(target), 'regular'), 'unconfirmed')
+        device.save_screenshot.assert_called_once_with(genre='island_order_unknown', interval=0)
+
+    def dialogue_frame(self, buttons=None):
+        image = self.frame(*(buttons if buttons is not None else (
+            DAILY_ORDER_CHECK, ALAS_ORDER_ACCEPT, ALAS_ORDER_REQUIREMENTS_CHECK)))
+        fixtures = Path(__file__).parent / 'fixtures'
+        panel = load_image(str(fixtures / 'island_order_dialogue/dialogue_edges.png'))
+        height, width = panel.shape[:2]
+        image[589:589 + height, 161:161 + width] = panel
+        tile = cv2.imread(str(fixtures / 'island_order_selection/regular_0719_dialogue_corners.png'),
+                          cv2.IMREAD_GRAYSCALE)
+        height, width = tile.shape
+        # 整体几何保持，非角标的黑色脱敏背景不覆盖已放入的真实对白边框。
+        image[491:491 + height, 241:241 + width][tile > 0] = 255
+        return image
+
+    def test_logged_bottom_order_confirms_with_actual_dialogue_and_visible_arms(self):
+        frame = self.dialogue_frame()
+        order, device = self.make_order(lambda device: frame.copy())
+        order._order_positions = [(305, 307), (632, 453), (309, 559)]
+        order._handle_popups = Mock(return_value=False)
+        self.assertEqual(order._click_order(order._order_button((309, 559)), 'regular'), 'detail')
+        self.assertGreaterEqual(device.now - 1000, 1.5)
+        device.save_screenshot.assert_not_called()
+
+    def test_bottom_order_without_actual_dialogue_frame_stays_unconfirmed(self):
+        order, device = self.make_logged_order((309, 559), 'regular_0719_dialogue_corners.png')
+        self.assertEqual(order._click_order(order._order_button((309, 559)), 'regular'), 'unconfirmed')
+        device.save_screenshot.assert_called_once_with(genre='island_order_unknown', interval=0)
+
+    def test_bottom_order_needs_page_requirements_and_correct_accept_on_same_frame(self):
+        for buttons in (
+                (DAILY_ORDER_CHECK, ALAS_ORDER_ACCEPT),
+                (DAILY_ORDER_CHECK, ALAS_ORDER_REQUIREMENTS_CHECK),
+                (DAILY_ORDER_CHECK, ALAS_ORDER_REQUIREMENTS_CHECK, ALAS_ORDER_URGENT_ACCEPT)):
+            with self.subTest(buttons=[button.name for button in buttons]):
+                frame = self.dialogue_frame(buttons)
+                order, device = self.make_order(lambda device: frame.copy())
+                order._order_positions = [(309, 559), (632, 453)]
+                order._handle_popups = Mock(return_value=False)
+                self.assertEqual(order._click_order(order._order_button((309, 559)), 'regular'), 'unconfirmed')
+                device.save_screenshot.assert_called_once_with(genre='island_order_unknown', interval=0)
+
+    def test_bottom_selected_order_cannot_confirm_a_different_target(self):
+        frame = self.dialogue_frame()
+        order, device = self.make_order(lambda device: frame.copy())
+        order._order_positions = [(309, 559), (632, 453)]
+        order._handle_popups = Mock(return_value=False)
+        self.assertEqual(order._click_order(order._order_button((632, 453)), 'regular'), 'unconfirmed')
+        device.save_screenshot.assert_called_once()
+
     def test_logged_right_occlusion_confirms_only_with_known_details_layout(self):
         position = (805, 79)
         order, device = self.make_logged_order(position, 'regular_0302_occluded_corners.png')

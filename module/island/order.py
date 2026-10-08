@@ -210,9 +210,10 @@ class IslandOrder(IslandDailyOrder):
             accept = ALAS_ORDER_URGENT_ACCEPT if kind == 'urgent' else ALAS_ORDER_ACCEPT
             detail = self.appear(ALAS_ORDER_REQUIREMENTS_CHECK, offset=20) and self.appear(accept, offset=20)
             page_ready = self.appear(DAILY_ORDER_CHECK)
-            # 右侧详情和顶部栏会遮住靠右订单的右角，仅在当前帧确认该布局后允许左侧完整角标对。
+            # 已确认详情布局后才允许已知叠层；对白还须识别实际边界并核验框外下角白臂。
             selected = is_order_selected(self.device.image, target, positions,
-                                         allow_right_occlusion=page_ready and detail)
+                                         allow_right_occlusion=page_ready and detail,
+                                         allow_dialogue_occlusion=page_ready and detail)
             if selected and page_ready and (cooldown or detail):
                 stable.start()
                 if stable.reached():

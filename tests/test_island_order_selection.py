@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 
 from module.island.order_selection import (
-    get_selected_order_position, is_order_selected,
+    _corner_matches, _has_selection_corners, _white_mask, get_selected_order_position, is_order_selected,
 )
 
 
@@ -18,14 +18,42 @@ FIXTURE_CENTERS = {
     'unselected': (69, 68),
     'urgent_0701': (68, 68),
     'regular_0302_occluded': (68, 68),
+    'regular_0719_complete': (68, 68),
+    'regular_0719_map_noise': (68, 68),
+    'regular_0719_dialogue': (68, 68),
 }
+
+
+def pre_0719_selection_matches(image, position, *, allow_horizontal_103=False):
+    """复现旧几何及整块空白校验，证明实际整体夹具能暴露这次误拒绝。"""
+    mask = (image.min(axis=2) >= 225) & (np.ptp(image, axis=2) <= 25)
+    x, y = position
+    widths = (103, 104) if allow_horizontal_103 else (104,)
+    for dy in range(-6, 7):
+        for dx in range(-6, 7):
+            for width in widths:
+                for height in (103, 104):
+                    for index in range(4):
+                        left = x - 64 + dx + (width if index % 2 else 0)
+                        top = y - 63 + dy + (height if index >= 2 else 0)
+                        patch = mask[top:top + 22, left:left + 22]
+                        if index >= 2:
+                            patch = patch[::-1]
+                        if index % 2:
+                            patch = patch[:, ::-1]
+                        if not (patch[:6, 8:].mean() >= 0.9 and patch[8:, :6].mean() >= 0.9
+                                and patch[9:, 9:].mean() <= 0.12):
+                            break
+                    else:
+                        return True
+    return False
 
 
 class OrderSelectionTest(unittest.TestCase):
     def setUp(self):
         self.image = np.zeros((720, 1280, 3), dtype=np.uint8)
 
-    def paste(self, position, name='selected', missing=None):
+    def paste(self, position, name='selected', missing=None, *, overlay=False):
         tile = cv2.imread(str(FIXTURES / f'{name}_corners.png'), cv2.IMREAD_GRAYSCALE)
         center_x, center_y = FIXTURE_CENTERS[name]
         if missing is not None:
@@ -39,7 +67,16 @@ class OrderSelectionTest(unittest.TestCase):
         x1, y1 = max(0, x), max(0, y)
         x2, y2 = min(1280, x + tile.shape[1]), min(720, y + tile.shape[0])
         # 整块平移，不按被测常量裁角或重排，避免把真实间距改成算法假设。
-        self.image[y1:y2, x1:x2] = tile[y1 - y:y2 - y, x1 - x:x2 - x, None]
+        clipped = tile[y1 - y:y2 - y, x1 - x:x2 - x]
+        if overlay:
+            self.image[y1:y2, x1:x2][clipped > 0] = 255
+        else:
+            self.image[y1:y2, x1:x2] = clipped[:, :, None]
+
+    def paste_dialogue(self):
+        panel = cv2.imread(str(FIXTURES.parent / 'island_order_dialogue/dialogue_edges.png'))[:, :, ::-1]
+        height, width = panel.shape[:2]
+        self.image[589:589 + height, 161:161 + width] = panel
 
     def test_real_four_corners_associate_with_selected_order_and_hough_error(self):
         self.paste((749, 247))
@@ -121,6 +158,32 @@ class OrderSelectionTest(unittest.TestCase):
                 self.image[325 + extra:375 + extra, 425:575] = lower
                 self.assertEqual(is_order_selected(self.image, (500, 300), [(500, 300)]), expected)
 
+    def test_horizontal_spacing_versions_are_bounded_to_one_pixel(self):
+        for extra, expected in ((-2, False), (-1, True), (0, True), (1, False)):
+            with self.subTest(horizontal_shift=extra):
+                self.image[:] = 0
+                self.paste((500, 300), name='urgent_0701')
+                right = self.image[225:375, 525:575].copy()
+                self.image[225:375, 525:575] = 0
+                self.image[225:375, 525 + extra:575 + extra] = right
+                self.assertEqual(is_order_selected(self.image, (500, 300), [(500, 300)]), expected)
+
+    def test_real_0719_complete_marker_exposes_old_horizontal_geometry(self):
+        self.paste((305, 307), name='regular_0719_complete')
+        self.assertFalse(pre_0719_selection_matches(self.image, (305, 307)))
+        self.assertTrue(pre_0719_selection_matches(self.image, (305, 307), allow_horizontal_103=True))
+        positions = [(305, 307), (632, 453), (309, 559), (361, 152)]
+        self.assertEqual(get_selected_order_position(self.image, positions), (305, 307))
+        self.assertFalse(is_order_selected(self.image, (632, 453), positions))
+
+    def test_real_0719_map_noise_requires_both_geometry_and_component_fix(self):
+        self.paste((632, 453), name='regular_0719_map_noise')
+        self.assertFalse(pre_0719_selection_matches(self.image, (632, 453)))
+        self.assertFalse(pre_0719_selection_matches(self.image, (632, 453), allow_horizontal_103=True))
+        positions = [(305, 307), (632, 453), (309, 559), (361, 151)]
+        self.assertEqual(get_selected_order_position(self.image, positions), (632, 453))
+        self.assertFalse(is_order_selected(self.image, (305, 307), positions))
+
     def test_real_occluded_marker_requires_explicit_keyword_permission(self):
         """靠近右上方的普通订单只有完整左侧角对，默认仍不确认。"""
         self.paste((805, 79), name='regular_0302_occluded')
@@ -136,8 +199,8 @@ class OrderSelectionTest(unittest.TestCase):
             is_order_selected(self.image, (805, 79), positions, True)
 
     def test_occlusion_boundary_requires_whole_right_corner_patch(self):
-        # 真实角标右角相对圆心为+41；831仅遮住其中21列，832才完整覆盖。
-        for x, expected in ((790, False), (791, True), (792, True)):
+        # 被遮住的宽度不能观测，103px版本也须完整在叠层内；不能只按104px推断。
+        for x, expected in ((790, False), (791, False), (792, True), (793, True)):
             with self.subTest(right_corner_left=x + 41):
                 self.image[:] = 0
                 self.paste((x, 300), name='urgent_0701', missing=(1, 3))
@@ -195,12 +258,115 @@ class OrderSelectionTest(unittest.TestCase):
                                                        allow_right_occlusion=True))
 
     def test_new_fixtures_contain_only_binary_marker_pixels(self):
-        for name, maximum_pixels in (('urgent_0701', 4 * 22 * 22), ('regular_0302_occluded', 2 * 22 * 22)):
+        for name, maximum_pixels in (('urgent_0701', 4 * 22 * 22), ('regular_0302_occluded', 2 * 22 * 22),
+                                     ('regular_0719_complete', 4 * 22 * 22), ('regular_0719_map_noise', 4 * 22 * 22)):
             with self.subTest(name=name):
                 tile = cv2.imread(str(FIXTURES / f'{name}_corners.png'), cv2.IMREAD_GRAYSCALE)
                 self.assertEqual(tile.shape, (136, 136))
                 self.assertEqual(set(np.unique(tile)), {0, 255})
                 self.assertLessEqual(np.count_nonzero(tile), maximum_pixels)
+
+
+    def test_real_dialogue_occlusion_requires_visible_bottom_arms_and_full_top_pair(self):
+        self.paste((309, 559), name='regular_0719_dialogue')
+        bounds = (177, 605, 638, 680)
+        self.assertIsNone(get_selected_order_position(self.image, [(309, 559)], allow_right_occlusion=True))
+        self.assertTrue(_has_selection_corners(_white_mask(self.image), (309, 559), dialogue_bounds=bounds))
+        for missing in range(4):
+            with self.subTest(missing=missing):
+                self.image[:] = 0
+                self.paste((309, 559), name='regular_0719_dialogue', missing=missing)
+                self.assertFalse(_has_selection_corners(_white_mask(self.image), (309, 559),
+                                                        dialogue_bounds=bounds))
+
+    def test_dialogue_mask_cannot_ignore_all_bottom_corner_evidence_or_round_edges(self):
+        self.paste((309, 559), name='regular_0719_dialogue')
+        for bounds in ((177, 600, 638, 680), (240, 605, 638, 680), (177, 605, 372, 680),
+                       (177, 605, 638, 625)):
+            with self.subTest(bounds=bounds):
+                self.assertFalse(_has_selection_corners(_white_mask(self.image), (309, 559),
+                                                        dialogue_bounds=bounds))
+
+    def test_visible_bottom_arm_fill_or_missing_pixels_cannot_hide_behind_dialogue(self):
+        for corrupted in ((247, 600, 269, 605), (350, 600, 372, 605)):
+            for color in (0, 255):
+                with self.subTest(corrupted=corrupted, color=color):
+                    self.image[:] = 0
+                    self.paste((309, 559), name='regular_0719_dialogue')
+                    x1, y1, x2, y2 = corrupted
+                    self.image[y1:y2, x1:x2] = color
+                    self.assertFalse(_has_selection_corners(_white_mask(self.image), (309, 559),
+                                                            dialogue_bounds=(177, 605, 638, 680)))
+
+    def test_public_dialogue_path_requires_actual_frame_and_explicit_keyword(self):
+        self.paste_dialogue()
+        self.paste((309, 559), name='regular_0719_dialogue', overlay=True)
+        positions = [(305, 307), (632, 453), (309, 559)]
+        self.assertIsNone(get_selected_order_position(self.image, positions))
+        self.assertEqual(get_selected_order_position(self.image, positions, allow_dialogue_occlusion=True), (309, 559))
+        self.assertTrue(is_order_selected(self.image, (309, 559), positions, allow_dialogue_occlusion=True))
+        self.assertFalse(is_order_selected(self.image, (632, 453), positions, allow_dialogue_occlusion=True))
+        self.image[589:692, 161:654] = 0
+        self.paste((309, 559), name='regular_0719_dialogue', overlay=True)
+        self.assertIsNone(get_selected_order_position(self.image, positions, allow_dialogue_occlusion=True))
+
+    def test_full_and_partial_or_two_partial_candidates_remain_ambiguous(self):
+        for second in ('selected', 'partial'):
+            with self.subTest(second=second):
+                self.image[:] = 0
+                self.paste_dialogue()
+                self.paste((309, 559), name='regular_0719_dialogue', overlay=True)
+                if second == 'selected':
+                    self.paste((305, 307), name='regular_0719_complete', overlay=True)
+                    positions = [(309, 559), (305, 307)]
+                else:
+                    self.paste((509, 559), name='regular_0719_dialogue', overlay=True)
+                    positions = [(309, 559), (509, 559)]
+                self.assertIsNone(get_selected_order_position(self.image, positions, allow_dialogue_occlusion=True))
+
+    def test_right_and_dialogue_exceptions_cannot_combine_into_one_visible_corner(self):
+        self.paste_dialogue()
+        self.paste((805, 559), name='urgent_0701', missing=(1, 2), overlay=True)
+        self.assertIsNone(get_selected_order_position(self.image, [(805, 559)], allow_right_occlusion=True,
+                                                       allow_dialogue_occlusion=True))
+
+
+class OrderCornerComponentTest(unittest.TestCase):
+    def make_corner(self):
+        patch = np.zeros((22, 22), dtype=bool)
+        patch[:6] = True
+        patch[:, :6] = True
+        return patch
+
+    def test_independent_white_map_spot_is_not_part_of_L_interior(self):
+        patch = self.make_corner()
+        patch[11:16, 11:16] = True
+        self.assertGreater(patch[9:, 9:].mean(), 0.12)
+        self.assertTrue(_corner_matches(patch, 0))
+        for index in range(4):
+            oriented = patch
+            if index >= 2:
+                oriented = oriented[::-1]
+            if index % 2:
+                oriented = oriented[:, ::-1]
+            with self.subTest(index=index):
+                self.assertTrue(_corner_matches(oriented, index))
+
+    def test_white_fill_connected_to_L_still_fails_interior_check(self):
+        patch = self.make_corner()
+        patch[5:16, 5:16] = True
+        self.assertFalse(_corner_matches(patch, 0))
+
+    def test_disconnected_white_arms_cannot_form_one_L(self):
+        patch = np.zeros((22, 22), dtype=bool)
+        patch[:6, 8:] = True
+        patch[8:, :6] = True
+        self.assertEqual(patch[:6, 8:].mean(), 1)
+        self.assertEqual(patch[8:, :6].mean(), 1)
+        self.assertFalse(_corner_matches(patch, 0))
+
+    def test_solid_white_rectangle_cannot_be_an_L_component(self):
+        self.assertFalse(_corner_matches(np.ones((22, 22), dtype=bool), 0))
 
 
 if __name__ == '__main__':
