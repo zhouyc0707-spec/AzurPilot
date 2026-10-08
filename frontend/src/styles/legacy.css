@@ -501,16 +501,16 @@ button:disabled, input:disabled, textarea:disabled, select:disabled, .select-tri
 }
 
 
-/* 侧栏任务菜单：分组展开后具体任务往下列（旧版树状格式）。 */
-.task-group-button:hover .task-group-arrow {transform: none}
-.task-group-button.expanded .task-group-arrow {color: var(--accent); transform: rotate(180deg)}
+/* 窄屏树状菜单：折叠样式只作用于分组内，不能隐藏桌面右侧浮层。 */
+.task-group .task-group-button:hover .task-group-arrow {transform: none}
+.task-group .task-group-button.expanded .task-group-arrow {color: var(--accent); transform: rotate(180deg)}
 /* 内层承载外边距，外层高度从 0 过渡到自身高度，展开折叠才有动画。 */
 :root {interpolate-size: allow-keywords}
-.task-submenu-list {height: 0; overflow: hidden; transition: height .24s cubic-bezier(.22, .61, .36, 1)}
-.task-submenu-list.expanded {height: auto}
-.task-submenu-inner {margin: 2px 0 6px 12px; padding-left: 8px; border-left: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px}
-.task-submenu-list:not(.expanded) .task-submenu-inner {visibility: hidden}
-@media (prefers-reduced-motion: reduce) {.task-submenu-list {transition: none} .rail-task-item {animation: none !important}}
+.task-group .task-submenu-list {height: 0; overflow: hidden; transition: height .24s cubic-bezier(.22, .61, .36, 1)}
+.task-group .task-submenu-list.expanded {height: auto}
+.task-group .task-submenu-inner {margin: 2px 0 6px 12px; padding-left: 8px; border-left: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px}
+.task-group .task-submenu-list:not(.expanded) .task-submenu-inner {visibility: hidden}
+@media (prefers-reduced-motion: reduce) {.task-group .task-submenu-list {transition: none} .rail-task-item {animation: none !important}}
 
 /* 顶栏的「任务配置」下拉：旧版实例页删掉了页内的分组导航，跨任务跳转放在这里。 */
 .task-picker {position: relative; flex-shrink: 0}

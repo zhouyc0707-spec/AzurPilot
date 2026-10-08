@@ -3,8 +3,6 @@
  */
 
 import { useSyncExternalStore } from 'react'
-import { useApp } from '../app/context'
-import { usesLegacyLayout } from '../app/theme'
 import { isDesktopDevice, TaskNavFlyout } from './TaskNavFlyout'
 import { TaskNavTree } from './TaskNavTree'
 
@@ -39,20 +37,16 @@ export type TaskNavProps = {
 
 /**
  * 侧栏任务菜单分流：
- * 1. 经典主题（usesLegacyLayout）在任何设备下均使用树状折叠菜单（TaskNavTree）。
- * 2. 移动端/窄屏（!isDesktop，即宽度 <= 950px 或触屏设备）下，所有主题参考经典主题
- *    使用内嵌树状折叠菜单（TaskNavTree），避免弹出悬浮菜单遮挡主内容。
- * 3. 电脑宽屏端，现代主题继续使用向右浮出的二级菜单（TaskNavFlyout）。
+ * 电脑宽屏端所有主题使用向右浮出的二级菜单（TaskNavFlyout）。
+ * 移动端/窄屏（宽度 <= 950px 或触屏设备）使用内嵌树状菜单（TaskNavTree），
+ * 避免二级面板挤占抽屉之外的内容空间。
  */
 export function TaskNav({ defaultOpenKey, isDesktop: isDesktopProp, onNavigate }: TaskNavProps = {}) {
-  const { theme } = useApp()
   const responsiveDesktop = useIsDesktop()
   const isDesktop = isDesktopProp ?? responsiveDesktop
 
-  const useTreeNav = usesLegacyLayout(theme) || !isDesktop
-
-  return useTreeNav
-    ? <TaskNavTree defaultOpenKey={defaultOpenKey} onNavigate={onNavigate} />
-    : <TaskNavFlyout defaultOpenKey={defaultOpenKey} onNavigate={onNavigate} />
+  return isDesktop
+    ? <TaskNavFlyout defaultOpenKey={defaultOpenKey} onNavigate={onNavigate} />
+    : <TaskNavTree defaultOpenKey={defaultOpenKey} onNavigate={onNavigate} />
 }
 

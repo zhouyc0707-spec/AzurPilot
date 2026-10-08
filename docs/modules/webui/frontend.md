@@ -14,6 +14,8 @@ frontend/README.md 与 frontend/API.md 已经是本前端的详细文档：前�
 
 注意：项目中的 **1280×720 是游戏截图识别的约束，不适用于 WebUI 布局**。前端按普通响应式网页开发，支持移动端折叠菜单，e2e 视口为 1440×1100。
 
+任务侧栏由 `TaskNav` 按设备布局分流，旧版和新版主题一致：宽度大于 950px 且支持悬停时，分类的二级任务使用 `TaskNavFlyout` 在主侧栏右侧展开，选中任务、点击外部或按 Escape 收起；窄屏和触屏使用 `TaskNavTree` 内嵌折叠。旧版保留自身配色、圆角与选中样式，树状高度动画仅作用于 `.task-group` 内，避免右侧浮层内容被隐藏。
+
 统计页各分类均保留历史展示与筛选，并提供导出入口：页面可导出本类数据，表格有各自的导出明细按钮，图表支持保存为图片。
 
 茗喵证券交易所的注册和登录使用 `src/stock/Captcha.tsx` 与 `recaptcha.ts` 中的 Google reCAPTCHA v2，脚本及验证 iframe 统一走 `www.recaptcha.net`，官方静态依赖使用 `www.gstatic.com/recaptcha/`。认证请求字段为 `recaptchaToken`；私密密钥由 Go 交易所环境变量 `RECAPTCHA_SECRET_KEY` 读取。站点停用域名验证，Go 不匹配 hostname 或 action。切换注册/登录时立即清空 token，提交后重置，组件卸载后忽略延迟回调；前端与 Go 服务须同步升级。

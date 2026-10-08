@@ -85,19 +85,19 @@ describe('TaskNav 导航组件', () => {
 
     expect(html).toContain('task-group-button')
     expect(html).toContain('aria-expanded="false"')
-    expect(html).toContain('aria-controls="task-group-Alas"')
+    expect(html).toContain('aria-haspopup="menu"')
     expect(html).toContain('系统')
     expect(html).toContain('出击')
 
-    // 子菜单常驻以便高度过渡；收起态不带 expanded，侧栏一上来不会是长列表
-    expect(html).toContain('task-submenu-list')
-    expect(html).not.toContain('task-submenu-list expanded')
+    // 桌面子菜单仅在展开时渲染，不把任务塞入一级分类列表。
+    expect(html).not.toContain('task-submenu-list')
+    expect(html).not.toContain('task-submenu-flyout')
     // 一级菜单不展示任务数量，避免与展开箭头争夺视觉焦点
     expect(html).not.toContain('task-group-badge')
   })
 
-  it('旧版主题展开分组后，具体任务往下列在侧栏里', () => {
-    const html = render('/i/default/overview', {defaultOpenKey: 'Alas'})
+  it.each(['legacy-light', 'legacy-dark', 'light', 'dark'] as Theme[])('%s 桌面分组在右侧浮层展示任务', theme => {
+    const html = render('/i/default/overview', {defaultOpenKey: 'Alas', isDesktop: true}, theme)
 
     expect(html).toContain('task-group-button expanded')
     expect(html).toContain('aria-expanded="true"')
@@ -111,18 +111,18 @@ describe('TaskNav 导航组件', () => {
     expect(html).toContain('href="/i/default/task/General"')
     expect(html).toContain('href="/i/default/task/Restart"')
 
-    // 旧版是树状内联列表，不再有浮出的二级面板
-    expect(html).not.toContain('task-submenu-flyout')
-    expect(html).not.toContain('aria-haspopup="menu"')
+    expect(html).toContain('task-submenu-flyout')
+    expect(html).toContain('aria-haspopup="menu"')
+    expect(html).not.toContain('aria-controls="task-group-')
   })
 
-  it('旧版主题处于某任务页时，所属分组自动展开并高亮', () => {
+  it('旧版主题处于某任务页时，所属分组高亮，浮层保持收起', () => {
     const html = render('/i/default/task/Main')
 
     // Main 任务属于 Farm 分组（出击）
-    expect(html).toContain('task-group-button expanded active')
+    expect(html).toContain('task-group-button active')
     expect(html).toContain('出击')
-    expect(html).toContain('href="/i/default/task/Main"')
+    expect(html).not.toContain('task-submenu-flyout')
   })
 
   it('其余主题继续用向右浮出的二级菜单', () => {
@@ -135,8 +135,8 @@ describe('TaskNav 导航组件', () => {
     expect(html).not.toContain('aria-controls="task-group-')
   })
 
-  it('移动端/窄屏下，非经典主题也采用树状折叠菜单（参考经典主题）', () => {
-    const html = render('/i/default/overview', {defaultOpenKey: 'Alas', isDesktop: false}, 'light')
+  it.each(['legacy-light', 'legacy-dark', 'light', 'dark'] as Theme[])('%s 移动端/窄屏保留树状折叠菜单', theme => {
+    const html = render('/i/default/overview', {defaultOpenKey: 'Alas', isDesktop: false}, theme)
 
     expect(html).toContain('task-group-button')
     expect(html).toContain('task-submenu-list')
