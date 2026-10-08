@@ -380,6 +380,8 @@ macOS 同样使用该游戏密钥方案，无需账号保险库的本机提供�
 
 `stock_exchange_identity.load_identity()` 对 UUID 对应的身份文件持有完整事务锁，涵盖读取、首次签名私钥创建、校验与旧格式迁移。多个进程同时首次进入同一实例时必须取得同一 UUID 和签名密钥；只分别锁住读和写仍会让「空文件」检查与创建产生竞态。调度数据的重定位继续使用原有流程。
 
+交易所存储只约束交易所自身：`ProgramStore.connection` 默认按尽力记账处理，保护存储不可用时回滚可选历史认证步骤，实例的调度存储、普通资源观测与实例创建/删除继续执行；交易所自身的读取路径传入 `strict_history=True`，损坏仍按 `STOCK_STORAGE_DAMAGED` 失败。交易所页面可通过 `stock.rebuild` 先预览范围，再确认备份与重建。因此 `config/stock-exchange/` 与 `cache/stock-exchange/` 的丢失或损坏只中断交易所页面与后台同步，不再阻断实例运行。
+
 ## 14. 生命周期
 
 - **创建**：`gui.py` 父监督器 spawn 服务子进程 → uvicorn 加载 `create_app` → lifespan 启动（`manage_runtime=True`）。

@@ -142,7 +142,10 @@ class PlainStatisticsCase(unittest.TestCase):
         data = np.zeros((6, len(AzurStats.meowofficer_farming_labels)))
         data[0, 0] = 17
         AzurStats._write_meowofficer_farming(data)
-        self.assertTrue(self.csv.read_text().startswith(','.join(AzurStats.meowofficer_farming_labels)))
+        header = ','.join(AzurStats.meowofficer_farming_labels)
+        # 产品 CSV 采用 UTF-8；断言也显式读取，不能依赖 Windows 的系统默认编码。
+        self.assertEqual(self.csv.read_bytes().splitlines()[0], header.encode('utf-8'))
+        self.assertTrue(self.csv.read_text(encoding='utf-8').startswith(header + '\n'))
         np.testing.assert_array_equal(AzurStats.load_meowofficer_farming(), data)
 
     def test_daily_events_and_report_are_plain(self):

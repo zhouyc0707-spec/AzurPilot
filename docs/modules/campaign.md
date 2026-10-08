@@ -195,6 +195,8 @@ opsi_shop():
 
 关闭防溢出任务的原因：普通大世界任务运行时行动力会被消耗，防溢出任务此时插入调度没有意义且可能冲突；结束后按实际状态重新排程。个别方法有专属分支：`opsi_meowfficer_farming` 行动力不足时按「距重置是否不足一天」分流到次日或 2.5 小时；`opsi_scheduling` 须在 `os_init()` 前拦截（否则会先执行一次自律寻敌）；`opsi_month_boss` 在 TW 服直接停用。
 
+原调度的石油清理复用 `CampaignRun`：临时提高 `StopCondition_OilLimit`，实际战斗照常扣减运行次数和记录心情；达到清油目标时结束本次调用并移除临时覆盖，不添加日常低油等待。此时 `handle_commission_notice()` 暂缓委托红点跳转，任务切换检查采用清油临时优先级，防止委托在出击前反复抢占。系统恢复、用户停止、次数限制及真实心情冷却继续生效。候选仅包含已启用且到期的普通模式 Main/Main2/Main3/Event/Event2/Event3，不通过 `task_call()` 提前唤醒冷却任务；没有可运行的图时由调度器转后宅购粮。
+
 ## 7. 调用关系
 
 ### 上游
@@ -418,3 +420,6 @@ CampaignRun(config=self.config, device=self.device).run(
 - [配置系统](config.md) —— `override`、`cross_set`、`task_delay`/`task_call` 的语义
 - [处理器层](handler.md) —— 快进/成就判定（`FastForwardHandler`）、自动搜索菜单处理
 - [OCR 系统](ocr.md) —— `Ocr`/`Digit` 底层与 `PtOcr` 预处理
+### 末轮资源归因
+
+战役正常结束或安全切换后，仅在正向确认的选图页连续两帧核对石油、物资及可见活动 PT，仍处于原任务的记账范围。达到次数上限的最后一轮耗油也因此归给实际刷图任务，已记录的奖励在库存差额中扣除。此核对不导航、不增加战斗、不修改停止或心情条件；游戏异常直接走原恢复机制。记录依据和无法归因的变化见 [资源管理](webui/resource-management.md)。

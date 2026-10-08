@@ -4,6 +4,7 @@
 历史认证和隔离兼容夹具。迁移保留原件和凭据，失败不覆盖统计。
 """
 from __future__ import annotations
+from module.base.runtime_params import DECODER_RETRY_INTERVAL, MIGRATION_LOCK_TIMEOUT
 import base64
 import csv
 import hashlib
@@ -63,7 +64,7 @@ MISSING_MARKER = '__opsi_secure_missing__'
 
 MIGRATION_CHUNK = 5000
 
-# 完整性链（2026-10-05“发现即清空”定稿）：库内链行与安全服务期望值两层互证。
+# 旧加密格式的完整性链，仅用于历史兼容；正常统计沿用普通存储与无损迁移。
 # 浅检查 O(1)（链值/行数锚点/结构指纹），全量摘要只在后台深检查执行。
 CHAIN_TABLE = '__opsi_integrity'
 CHAIN_LEN = 32              # 链值截断长度（128 位 MAC，无敏感内容可明文存库）

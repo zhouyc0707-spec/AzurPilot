@@ -226,7 +226,7 @@ class PrivateQuarters(PQInteract, PQShop):
             count = self._pq_get_daily_count(retry=3)
 
         # 进入商店购买每周物品
-        if self.shop_filter or self.shop_strategy_enabled():
+        if self.shop_filter:
             if server.server not in ['tw']:
                 self.pq_shop_weekly_items()
             else:

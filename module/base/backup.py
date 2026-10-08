@@ -4,6 +4,7 @@
 """
 
 import base64
+from module.base.runtime_params import BACKUP_KEEP_DAYS
 import json
 import shutil
 import sqlite3
@@ -20,7 +21,6 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 CONFIG_DIR = ROOT_DIR / 'config'
 BACKUP_ROOT = ROOT_DIR / 'AzurPilot_Data_Backup'
 
-BACKUP_KEEP_DAYS = 7
 
 DATABASE_FILES = (
     'azurstats_local.db',

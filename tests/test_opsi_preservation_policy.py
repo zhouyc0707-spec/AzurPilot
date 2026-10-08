@@ -206,10 +206,12 @@ class OpsiPreservationPolicyTests(unittest.TestCase):
         csv_path.parent.mkdir()
         expected = np.arange(6 * len(AzurStats.meowofficer_farming_labels), dtype=float).reshape(
             6, len(AzurStats.meowofficer_farming_labels))
-        np.savetxt(csv_path, expected, delimiter=',', header=','.join(AzurStats.meowofficer_farming_labels),
-                   comments='')
+        header = ','.join(AzurStats.meowofficer_farming_labels)
+        # 历史导出文件本就使用 UTF-8；夹具必须遵守相同格式，避免被系统编码写成 GBK。
+        np.savetxt(csv_path, expected, delimiter=',', header=header, comments='', encoding='utf-8')
+        self.assertEqual(csv_path.read_bytes().splitlines()[0], header.encode('utf-8'))
         self.assertTrue(self.vault.ensure_ready())
-        self.assertTrue(csv_path.read_text().startswith(opsi_secure.BLOB_PREFIX))
+        self.assertTrue(csv_path.read_text(encoding='utf-8').startswith(opsi_secure.BLOB_PREFIX))
         with patch.object(AzurStats, 'LOCAL_MEOW_CSV', str(csv_path)):
             np.testing.assert_array_equal(AzurStats.load_meowofficer_farming(), expected)
 

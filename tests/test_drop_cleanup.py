@@ -329,7 +329,7 @@ class TestCommissionScreenshotSwitch(unittest.TestCase):
         fake = self.make_commission('save', retention=0)
         self.save(fake)
 
-        fake._prune_commission_reward_screenshots.assert_called_once_with('alas')
+        fake._prune_commission_reward_screenshots.assert_called_once_with('alas', max_keep=50)
 
 
 class TestCommissionCountCapSkipsBackup(unittest.TestCase):

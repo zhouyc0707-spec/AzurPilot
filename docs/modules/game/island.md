@@ -147,6 +147,12 @@ flowchart TD
 | `island_pearl_sell.py` | 珍珠每周采购售卖 | `IslandPearlSell` | 周一 01:00 交易窗口；本岛价不达标时按排行榜拜访好友岛比价（买 1.1 折算）；每日 03:00 可选价格刷新 |
 | `island_cargo_preparation.py` | 货运委托 | `IslandCargoPreparation` | 3 栏位状态机（locked/pending/running/finished/refreshing/empty）；牛奶黑名单触发换货；默认 2 小时重跑 |
 
+### 地图目的地等待与定位保护
+
+`Island.island_map_goto()` 保留本地目的地图标保护：有任务可提交时图标可能变成问号，连续 3 秒无法匹配后，仅一次点击已标定的地点固定坐标；识别到目的地详情后才确认前往，进入成功仍需正向确认岛屿页面。静态地图的截图变化检测在此流程内临时放宽，避免正常加载被误判为卡死，离开作用域后恢复设备原阈值。
+
+地图确认等待、允许补点窗口与目的地加载上限分别读取 `RunParams.UiWait.IslandMapConfirmWait`、`IslandMapConfirmRetryWait`、`IslandMapDestinationWait`，默认 3、10、45 秒。加载上限可配置为 10–600 秒；静态画面的保护预算为 `max(180, destination_wait + 30)` 秒，同时覆盖前段 20 秒目的地选择和后段加载。确认补点仅限配置窗口内，窗口结束后只截图观察，不无限重复点击。
+
 ### 经营确认与返回
 
 `IslandBusiness._confirm_business_start()` 的前置页面是已选好角色与餐品的商店经营详情；结束条件是正向识别岗位管理的经营、生产或采集页签，调用方再切回经营页签。分批与传统模式共用此流程。
@@ -272,7 +278,7 @@ stateDiagram-v2
 | --- | --- | --- |
 | `GameStuckError` | 导航（进入管理/地图/页签）、`post_open` 反复重试、仓库筛选超时、选品连续失败超限 | 直接上抛，交给调度器按卡死流程恢复 |
 | `GameBugError` | 每轮结束检测到 `ERROR1` 弹窗（置 `island_error` 标志）、拜访卡死 | 各任务 `run()` 尾部统一抛出，调度器重启游戏客户端后重试 |
-| `GameTooManyClickError`（预防） | 同一按钮高频点击触发保护 | 代码主动规避：`select_product` 前清理 `click_record`、滑动后点安全区域且 `control_check=False`、地图确认按钮只在前 10 秒内补点 |
+| `GameTooManyClickError`（预防） | 同一按钮高频点击触发保护 | 代码主动规避：`select_product` 前清理 `click_record`、滑动后点安全区域且 `control_check=False`、地图确认按钮只在配置窗口（默认前 10 秒）内补点 |
 | 阶段级失败（返回 False/0） | 拜访超时、角色无可用、材料不足、按钮状态未知 | 记录警告后跳过该岗位/地点，不打断整轮任务；`IslandDailyInteract` 失败时延时 60 分钟重试 |
 
 错误处理的设计取向是「局部失败不拖垮全局」：单个岗位无角色、单个菜品原料不足、单个好友不可访问都只影响自身，循环继续处理其余岗位；只有 UI 导航层面无法回到已知状态才升级为异常。`GameBugError` 与 `GameStuckError` 的分工来自 `module/exception.py`：前者明确表示客户端 bug（重启可恢复），后者表示操作卡死。

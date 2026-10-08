@@ -57,8 +57,11 @@
 | `instances.delete` | instance、revision | 停止状态下将配置移至备份 |
 | `config.get` | instance | 当前值及 revision |
 | `config.patch` | instance、changes、可选 revision | 锁内合并指定字段，校验后原子保存 |
-| `shop_strategy.validate` | instance、task、script | 只读校验高级商店策略，返回可定位的诊断，不执行脚本也不写入配置 |
 | `overview.get` | instance | 资源、任务计划、连接配置与状态 |
+| `emulator.status` | instance | 只读模拟器运行时长检测快照及预计重启条件，不访问设备 |
+| `system.restart` | 无 | 保存运行实例并请求监督器重启 WebUI 服务 |
+| `island.suspend.state` | instance | 岛屿任务当前启用数量与批量暂停记录 |
+| `island.suspend.toggle` | instance | 暂停所有已启用岛屿任务，或恢复本次批量暂停记录中的任务 |
 | `scheduler.start` | instance | 启动调度器，返回当前总览 |
 | `scheduler.stop` | instance | 停止调度器并执行配置的收尾动作 |
 | `tasks.run` | instance、task | 运行允许单独执行的工具 |
@@ -70,6 +73,8 @@
 | `preview.capture` | instance | 读取最近一张缓存 JPEG；不主动截图，无缓存时 image/capturedAt 为 null |
 | `statistics.resources` | instance、days、resource | 兼容资源时间线，支持全部 12 种资源，最多 5,000 点 |
 | `statistics.report` | instance、category、month、days、period | 分类统计，含只读仓库快照，返回 metrics、series、tables 和 notes |
+| `statistics.legacy` | instance、可选 month | 旧版统计整页数据及指定月份的耄耋相接收获 |
+| `statistics.resourceFlows` | instance、可选区间、资源、任务与分页参数 | 独立资源管理页的库存、收支聚合和明细；只读取本地记录 |
 | `statistics.refreshLoot` | instance | 重新聚合本设备已有本地短猫掉落记录，不访问游戏 |
 | `settings.get` | 无 | 部署设置定义及值，密码只写不读 |
 | `settings.patch` | values | 校验并保存部署设置，重启生效 |
@@ -98,22 +103,6 @@
 
 `schema.get.language` 支持 `zh-CN`、`zh-TW`、`en-US`、`ja-JP`、`zh-MIAO`，只影响本次返回的翻译，不修改运行器或其他浏览器的语言。参数定义保留 `mode: yaml`，供前端选择多行 YAML 编辑器。
 
-## 高级商店策略校验
-
-`shop_strategy.validate` 仅解析并校验受限 Lua 风格策略的语法和白名单；它不会启动 Lua VM、不会访问商品或设备，也不会保存用户输入。`task` 必须是 `EventShop`、`ShopFrequent`、`ShopOnce`、`PrivateQuarters`、`OpsiShop` 或 `OpsiVoucher` 之一，`script` 最长 20,000 个字符。
-
-```json
-{"v":1,"type":"request","id":"check-shop-script-1","method":"shop_strategy.validate","params":{"instance":"alas","task":"ShopFrequent","script":"return shop.plan { candidates = candidates:take(0) }"}}
-```
-
-无论脚本是否通过，参数本身合法时响应都在 `result` 中返回：
-
-```json
-{"valid":false,"diagnostics":[{"code":"missing_return","message":"必须返回 shop.plan {...}","line":1,"column":1}]}
-```
-
-`diagnostics` 是按源码顺序返回的错误列表；每项包含稳定的机器可读 `code`、可直接展示的 `message`，以及从 1 开始计数的 `line`、`column`（无法定位时为 `null`）。客户端应使用这些位置标记编辑器，不应执行、转换或自行放宽脚本。空脚本代表尚未启用高级策略，校验结果可为 `valid: true`；切换到高级模式前仍必须保存非空且有效的脚本。
-
 ## 配置事务
 
 revision 是磁盘 JSON 内容的 SHA-256，仅用于读取快照和删除保护；配置保存接受旧版客户端传入 revision，但不再据此拒绝写入。`config.patch` 仅接受 `Task.Group.Argument` 形式的叶子路径，最多 200 项修改。完整校验成功后一次性原子替换；失败不保存任何字段。
@@ -128,7 +117,7 @@ API 和核心运行器共用跨进程事务锁。API 只合并请求指定的字
 
 每个字段显示保存中、已保存或错误状态。格式错误只阻止该字段写入，原文保留用于修正；其他字段照常保存。连接和临时服务错误自动重试；页面切换不停止队列。未确认的输入保存在当前标签页的 sessionStorage，刷新并重新认证后恢复所有作用域的待提交项，已确认项不再重放。浏览器禁用或耗尽存储时明确提示，并继续在内存中保留输入。关闭标签页前应确认已保存；离线期间无法使服务端立即生效。游戏任务在下一次读取或绑定配置时使用新值，部署设置仍按各项既有规则在重启服务后生效。直接绕开配置服务的外部脚本不受事务锁约束。
 
-隐藏、固定和只读字段由服务端强制拒绝修改；`storage` 允许通过 `config.patch` 将值清空为 `{}`，用于清除内部任务状态，其他状态内容仍禁止写入。另允许将 `OpsiExplore.OpsiExplore.ExploreProgress` 和 `OpsiScheduling.OpsiSmartExplore.Progress` 清空为 `""`，同一事务重置对应开荒断点；不允许写入任意进度，不清除本月行动力购买记录或另一种开荒进度。清空前应停止正在运行的任务，调度时间保持原值。布尔值必须是真正的 JSON boolean；数值范围来自参数定义；日期格式为 `YYYY-MM-DD HH:mm:ss`；多选值必须来自声明的候选项。YAML 字段使用安全解析器校验语法和顶层映射结构，并返回可定位的行列错误；保留原始文本存储。受限 Lua 字段在写入时会再次静态校验，不能通过只调用前端检查接口来绕过；同一事务合并后的 `ShopAdvanced.Mode=advanced` 必须配套非空且有效的 `ShopAdvanced.Script`。简单模式允许清空脚本。
+隐藏、固定和只读字段由服务端强制拒绝修改；`storage` 允许通过 `config.patch` 将值清空为 `{}`，用于清除内部任务状态，其他状态内容仍禁止写入。另允许将 `OpsiExplore.OpsiExplore.ExploreProgress` 和 `OpsiScheduling.OpsiSmartExplore.Progress` 清空为 `""`，同一事务重置对应开荒断点；不允许写入任意进度，不清除本月行动力购买记录或另一种开荒进度。清空前应停止正在运行的任务，调度时间保持原值。布尔值必须是真正的 JSON boolean；数值范围来自参数定义；日期格式为 `YYYY-MM-DD HH:mm:ss`；多选值必须来自声明的候选项。YAML 字段使用安全解析器校验语法和顶层映射结构，并返回可定位的行列错误；保留原始文本存储。商店沿用任务参数和过滤器配置，活动商店过滤器兼容 `物品:数量上限` 写法，前端原样提交过滤文本。
 
 ## 订阅与恢复
 
@@ -136,7 +125,7 @@ API 和核心运行器共用跨进程事务锁。API 只合并请求指定的字
 {"v":1,"type":"request","id":"subscribe-1","method":"events.subscribe","params":{"instance":"alas","topics":["instances","overview","logs"]}}
 ```
 
-支持 `instances`、`overview`、`logs`、`preview`。除 `instances` 外必须提供 instance；空 topics 表示取消订阅。订阅会立即生效，并在下一次采样时发送初始快照。默认两秒采样，内容未变化时不发送。预览在总览切换到截图时订阅，在每次已有截图完成后通过独立事件通道推送，不使用轮询计时器，不访问 ADB 或额外调用截图后端。
+支持 `instances`、`overview`、`logs`、`preview`、`emulator`、`stock`。除 `instances` 外必须提供 instance；空 topics 表示取消订阅。订阅会立即生效，并在下一次采样时发送初始快照。实例每两秒采样，总览及模拟器状态每秒采样，内容未变化时不发送。日志、预览及交易事件由独立事件通道唤醒，不使用轮询计时器。预览在总览切换到截图时订阅，不访问 ADB 或额外调用截图后端；`emulator` 只读取 worker 检测快照，页面离开实例系统设置时取消该主题。
 
 ```json
 {"v":1,"type":"event","topic":"overview","seq":2,"data":{"instance":"alas","status":"stopped","revision":"SHA256","tasks":[],"resources":[],"emulator":{}}}
@@ -180,6 +169,8 @@ INTERNAL_ERROR 不向浏览器返回堆栈；参数校验详情不回显输入�
 `module/device/screenshot.py` 的统一入口在截图后投递 RGB 图像。`module/runtime/preview.py` 在后台编码 JPEG，通过有界跨进程队列交给父进程，再通知 WebSocket。所有已注册截图后端共用这条路径；未安装通道的独立脚本不额外编码。运行批次标识隔离重启前后的任务状态与截图。没有新截图时保留原帧和采集时间，API 不会启动截图任务。
 
 ## 分类统计
+
+`statistics.resourceFlows` 提供独立资源管理页数据：`instance` 必填，`days` 默认 7；可指定本地 `start` / `end`（递增、最多 366 天）、`resource` / `task`、`offset`、`limit`（最多 1000）与 `through_id`。响应包含 `resources`、`tasks`、`flows`、`entries`、`total`、`throughId` 和 `oilControl`。聚合不受分页影响；完整导出固定时间区间与 `throughId`，库存校正单列为 `adjustment`。查询不操作游戏，控制设置使用已有 `config.get` / `config.patch`。
 
 `category` 支持 `resources`（12 种资源）、`action`（行动力、资产、海里、黄币、紫币）、`opsi`（侵蚀1与短猫运行）、`commission`（收益与结算记录）、`ships`（升级进度、经验与时长）、`loot`（累计短猫掉落）。
 

@@ -159,8 +159,6 @@ MEOWFFICER_PLAY_CONFIRM = Button(
 # 也不能照抄 collect.py 里的 threshold=30 —— 那是很宽松的相似度，几乎任何像素都算命中。
 PLAY_CONFIRM_THRESHOLD = 235
 PLAY_CONFIRM_COUNT = 1000
-# 单次导航最多尝试关几次弹窗：连点会触发 ALAS 的点击保护，到上限就报错收手
-MAX_PLAY_POPUP_TRIES = 2
 
 # 当前猫资料的像素稳定性比较区域，不用于姓名 OCR（其中还含所属舰队名）。
 CURRENT_CAT_AREA = (100, 565, 640, 618)
