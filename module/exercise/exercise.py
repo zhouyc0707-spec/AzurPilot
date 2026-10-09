@@ -12,7 +12,7 @@
 - max_exp: 选择经验最高的对手
 - easiest: 选择最容易击败的对手
 - easiest_else_exp: 优先选最简单的，无法击败时切换到最大经验
-- leftmost: 优先选择最左侧的对手
+- leftmost: 优先选择最左侧对手，尝试耗尽后先刷新，刷新用完再向右选择
 """
 import datetime
 from module.config.time_source import now as current_time
@@ -172,14 +172,20 @@ class Exercise(ExerciseCombat):
         """
         执行一次演习。
 
-        处理对手刷新和演习失败的情况。
+        最左优先模式在当前对手尝试耗尽后优先刷新整组；每日刷新额度
+        耗尽后才继续向右尝试。其他模式按排序依次尝试整组对手。
 
         Returns:
-            bool: 击败一个对手返回 True，所有对手均未击败且刷新次数耗尽返回 False。
+            bool: 自然完成一场（含败局）返回 True；所有候选都主动退出且
+                刷新次数耗尽返回 False。
         """
         self._opponent_fleet_check_all()
         while 1:
-            for opponent in self._opponent_sort():
+            opponents = self._opponent_sort()
+            if self.config.Exercise_OpponentChooseMode == 'leftmost' and self.opponent_change_count < 5:
+                # 有刷新额度时保留最左优先，避免提前消耗机会打右侧对手。
+                opponents = opponents[:1]
+            for opponent in opponents:
                 logger.hr(f'对手 {opponent}', level=2)
                 success = self._combat(opponent)
                 if success:
@@ -188,6 +194,8 @@ class Exercise(ExerciseCombat):
             if self.opponent_change_count >= 5:
                 return False
 
+            if self.config.Exercise_OpponentChooseMode == 'leftmost':
+                logger.info('[演习-对手] 最左对手尝试耗尽，优先刷新整组')
             self._new_opponent()
             self._opponent_fleet_check_all()
 

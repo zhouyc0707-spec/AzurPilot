@@ -88,7 +88,19 @@ module/
 
 ### 演习（module/exercise）
 
-`Exercise(ExerciseCombat)` 组合对手选择（`OpponentChoose`）、血量监控（`HpDaemon`）与装备编辑（`ExerciseEquipment`）。OCR 识别剩余次数与赛季倒计时（`DatedDuration` 专修 `10d 01:30:30` 格式）。消耗策略：`aggressive` 不保留次数；其余策略保留 5 次，并在剩余时间落入将军试炼区间（`ADMIRAL_TRIAL_HOUR_INTERVAL`）或不足 6 小时时清空保留。对手刷新每日最多 5 次，计数经 `Exercise_OpponentRefreshValue/Record` 跨天持久化；选择策略含 `max_exp / easiest / easiest_else_exp / leftmost`，`easiest_else_exp` 在刷新耗尽后放弃保胜率改为冲经验。
+`Exercise(ExerciseCombat)` 组合对手选择（`OpponentChoose`）、血量监控（`HpDaemon`）与装备编辑（`ExerciseEquipment`）。OCR 识别剩余次数与赛季倒计时（`DatedDuration` 专修 `10d 01:30:30` 格式）。对手刷新每日最多 5 次，计数经 `Exercise_OpponentRefreshValue/Record` 跨任务持久化，并按服务器午夜跨天重置。手动刷新未登记时，脚本记录可能与游戏剩余刷新额度不同。
+
+对手选择及刷新规则：
+
+- `leftmost`：不预检等级或战力，先挑战屏幕最左侧对手。每个对手最多尝试 `Exercise_OpponentTrial` 次；最左对手耗尽尝试且当天还有刷新额度时，立即刷新整组，再尝试新一组的最左对手，不先尝试旧组其余三人。当天刷新已用满 5 次后，才在最后一组依次尝试左二、左三、左四；全部耗尽尝试则结束本轮任务。后续一场重新从当前最左对手开始，刷新计数沿用当天记录。
+- `max_exp`：按六个船位的等级总和排序；`easiest`：按等级与每艘平均战力的综合分数排序。两者均依次尝试当前组四名对手，全部耗尽尝试后才刷新整组，原有规则保持不变。
+- `easiest_else_exp`：仅尝试当前组综合分数最简单的对手，耗尽尝试后刷新；刷新额度用尽后改选等级总和最高的对手，并临时将低血量撤退阈值设为 0，接受自然败局，原有规则保持不变。
+
+尝试次数统一继承 `Exercise_OpponentTrial`，不是固定次数。设实际每敌尝试上限为 `N`，本轮开始时还可刷新 `R` 次，则 `leftmost` 在所有战斗均主动撤退的情况下，最多尝试 `(R + 4) × N` 次：刷新前的 `R` 组各只尝试左一，最后一组尝试四人；当天尚未刷新时上限为 `9 × N`。这统计的是撤退重试次数，不是演习次数消耗量。当前战斗返回值把自然 S、D 结算都视为一场已完成，任一种结算都会结束该场选敌流程；只有主动撤退返回失败，才会重试同敌、换敌或刷新。自然败局不会触发本场重试；若剩余次数允许，下一场重新按选择规则选敌。
+
+低血量检测读取顶部己方血条，条件为 `0.01 < 己方血量 <= Exercise_LowHpThreshold`；敌方血量低于 1% 时重置确认计时。当前实现固定使用 `Timer(1.5, count=2)`，即低血量持续超过 1.5 秒且至少三次检查后才请求暂停撤退，截图和退出交互还会增加实际耗时。`Exercise_LowHpConfirmWait` 虽有配置项，当前战斗流程尚未读取该值。
+
+消耗策略中，`aggressive` 不保留次数，其余策略每次 `run()` 开始时重新设为保留 5 次，并在赛季剩余时间落入将军试炼区间（`ADMIRAL_TRIAL_HOUR_INTERVAL`）或不足 6 小时时取消保留并强制运行。区间按赛季倒计时判断，不是到达某个星期的时刻后持续清空：例如 `fri18` 当前范围为 `[56, 48]`，实际条件是 `48 <= floor(赛季剩余小时) < 56`；后续新一轮任务在剩余 6 至 48 小时期间恢复保留 5 次。同一次任务仅在开始判断区间，不在战斗循环中反复更新保留数。普通运行还受 `Exercise_DelayUntilHoursBeforeNextUpdate` 限制，只在下一次服务器补次数前指定小时数内执行；强制运行不受该延迟限制。
 
 ### 建造（module/gacha）
 
