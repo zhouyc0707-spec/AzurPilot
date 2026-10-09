@@ -15752,7 +15752,9 @@
       },
       "TechnologyStatus": {
         "type": "textarea",
-        "value": ""
+        "value": "",
+        "display": "hide",
+        "persist": true
       },
       "RescanTechnology": {
         "type": "checkbox",

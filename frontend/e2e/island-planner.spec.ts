@@ -1,7 +1,7 @@
 import {expect, test} from '@playwright/test'
 
 for (const theme of ['legacy-light', 'light']) {
-  test(`${theme} 自动生产规划显示比例文案并保存数值`, async ({page}) => {
+  test(`${theme} 自动生产规划隐藏科技明细并保存比例数值`, async ({page}) => {
     await page.addInitScript(theme => {
       localStorage.setItem('azurpilot.theme', theme)
       localStorage.setItem('azurpilot.language', 'zh-CN')
@@ -30,6 +30,9 @@ for (const theme of ['legacy-light', 'light']) {
     })
     await page.goto('/#/i/testpilot/task/IslandPlan')
     await expect(page.getByRole('switch', {name: '自动生产规划', exact: true})).toBeVisible()
+    await expect(page.locator('textarea[id="IslandPlan.IslandProductionPlanner.TechnologyStatus"]')).toHaveCount(0)
+    await expect(page.getByRole('switch', {name: '重新扫描科技', exact: true})).toBeVisible()
+    await expect(page.getByRole('textbox', {name: '规划状态', exact: true})).toBeVisible()
     const efficiency = page.getByRole('combobox', {name: '农田额外效率', exact: true})
     await expect(efficiency).toContainText('0%')
     await efficiency.click()

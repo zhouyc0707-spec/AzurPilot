@@ -1645,6 +1645,8 @@ IslandProductionPlanner:
   TechnologyStatus:
     value: ""
     type: textarea
+    display: hide
+    persist: true
   RescanTechnology: false
   FieldsEfficiency:
     value: 0.0
