@@ -17,7 +17,7 @@ import unittest
 
 from starlette.testclient import TestClient
 
-from module.api import launcher_routes
+from module.api import launcher_api, launcher_routes
 from module.api.app import create_app
 from module.runtime import launcher_trust
 from module.runtime.launcher import launcher_control
@@ -56,6 +56,7 @@ class LauncherRouteRegistrationTests(unittest.TestCase):
                      '/api/launcher/startup', '/api/launcher/stream',
                      '/api/launcher/report', '/api/launcher/trusted-login', '/launcher-login'):
             self.assertIn(path, paths, f'缺少启动器端点 {path}')
+            self.assertEqual(1, paths.count(path), f'启动器端点 {path} 重复注册')
         # 静态资源兜底（有构建产物时是 Mount('/')，否则是 /{path:path} 路由）排在最后
         spa_index = min(index for index, path in enumerate(paths) if path in ('/', '/{path:path}'))
         for path in ('/api/launcher/stream', '/api/notify_stream'):
@@ -85,6 +86,8 @@ class LauncherApiTests(unittest.TestCase):
         self.client = local_client(self.app)
         launcher_trust._reset()
         self.addCleanup(launcher_trust._reset)
+        launcher_api._secret_failures.clear()
+        self.addCleanup(launcher_api._secret_failures.clear)
         self._drain_notifications()
         self.addCleanup(self._drain_notifications)
 
@@ -104,7 +107,9 @@ class LauncherApiTests(unittest.TestCase):
         self.assertIn('autostart_supported', payload)
 
         remote = remote_client(self.app)
-        self.assertFalse(remote.get('/api/launcher/status').json()['request_local'])
+        response = remote.get('/api/launcher/status')
+        self.assertEqual(403, response.status_code)
+        self.assertFalse(response.json()['success'])
 
     def test_command_stream_and_report_reject_remote_clients(self):
         remote = remote_client(self.app)
@@ -165,7 +170,32 @@ class LauncherApiTests(unittest.TestCase):
         seed = self.client.get('/launcher-login', params={'token': token})
         self.assertEqual(200, seed.status_code)
         self.assertIn('azurpilot.access-password', seed.text)
+        self.assertIn("localStorage.setItem('password'", seed.text)
         self.assertIn('location.replace("/")', seed.text)
+
+    def test_login_seed_escapes_password_for_both_frontend_keys(self):
+        """危险密码仍只生成一个脚本块，并为新旧前端写入相同凭据。"""
+        launcher_trust.configure('launcher-secret', 'k</script><script>alert(1)</script>y')
+        token = launcher_trust.issue_token()
+        seed = self.client.get('/launcher-login', params={'token': token})
+        self.assertEqual(200, seed.status_code)
+        self.assertEqual(1, seed.text.count('<script>'))
+        self.assertEqual(1, seed.text.count('</script>'))
+        escaped = '"k\\u003c/script>\\u003cscript>alert(1)\\u003c/script>y"'
+        self.assertIn(f"localStorage.setItem('azurpilot.access-password', {escaped});", seed.text)
+        self.assertIn(f"localStorage.setItem('password', {escaped});", seed.text)
+
+    def test_legacy_secret_helpers_share_upstream_rate_limit(self):
+        """旧入口记录的失败必须被新HTTP处理器计入同一限流窗口。"""
+        launcher_trust.configure('launcher-secret', 'test-secret')
+        for _ in range(launcher_routes._LAUNCHER_SECRET_MAX_FAILURES):
+            launcher_routes._launcher_secret_failure()
+        self.assertFalse(launcher_routes._launcher_secret_try_allowed())
+        response = self.client.post('/api/launcher/trusted-login', headers={
+            'x-webui-launcher-secret': 'launcher-secret',
+        })
+        self.assertEqual(429, response.status_code)
+        self.assertIs(launcher_routes._LAUNCHER_SECRET_FAILURES, launcher_api._secret_failures)
 
     def test_launcher_login_rejects_bad_token_and_remote_client(self):
         self.assertEqual(403, self.client.get('/launcher-login', params={'token': 'bad'}).status_code)

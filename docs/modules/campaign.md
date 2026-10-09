@@ -177,6 +177,10 @@ flowchart TD
 
 `stage_name.py` 刻意做成不访问配置与文件系统的纯函数，便于离线单测；`T_CHAPTER_FOLDERS` 等「哪些活动接受 A1 作为 T1 别名」的清单以集合维护，新活动复用旧命名时在此登记。
 
+### 首发与复刻的选关布局
+
+活动地图目录可能同时用于首发和复刻。`event_20240912_cn` 在进入选关页后按实际按钮识别布局：左下角作战／剧情选择器走 `20241219` 侧边栏导航，普通／困难开关走旧导航；未知画面通过 `CampaignNameError` 回到选关循环重截图，不盲点模式按钮。布局标记仅覆盖当前战役配置副本，每次导航重新判断；普通和困难关卡在新版地图准备页切换难度，SP 不启用该难度开关。不要按服务器或单一当前活动全局替换导航逻辑。
+
 ### 大世界入口聚合（os_run.py）
 
 `OSCampaignRun` 自身不实现任何游戏操作。每个 `opsi_*` 方法都是同一模板：
@@ -313,6 +317,7 @@ stateDiagram-v2
 
 ## 13. 缓存与持久化
 
+- 地图加载缓存以活动目录与关卡文件名共同判断；两个活动都有 `a1` 时必须重新加载各自地图，只有目录和文件名都相同才复用。
 - `stage_entrance` 字典：每次 `_get_stage_name()` 整体重建，不跨截图缓存；`_stage_image` / `_stage_image_gray` 是 `cached_property`，OCR 前后用 `del_cached_property` 显式失效。
 - `_map_battle`（Boss 前战斗数）为 `cached_property`，随每次 `load_campaign` 新建的 campaign 实例自然失效。
 - 用户配置中的持久化状态：`EventDaily_LastStage`（活动日常断点续刷）、`WarArchives_DailyRunCountRemain/Record`（档案每日额度，跨天按服务器刷新时间重置）、`Emotion.Fleet1Value` 等心情记录、`Dashboard.*`（`LogRes` 写入的油/金币/PT 快照）。
@@ -321,7 +326,7 @@ stateDiagram-v2
 ## 14. 生命周期
 
 1. **创建**：`alas.py` 任务方法构造 `CampaignRun(config, device)`，全部能力经继承链就位，无单独初始化。
-2. **加载**：`load_campaign()` 若关卡名未变则直接复用；否则 `importlib.import_module` 加载地图模块（进程内缓存），深拷贝配置合并地图 `Config`，实例化 `module.Campaign`。GemsFarming/Ambush11 在此步骤动态构造覆写子类替换实例。
+2. **加载**：`load_campaign()` 若目录和关卡名均未变则直接复用；否则 `importlib.import_module` 加载地图模块（进程内缓存），深拷贝配置合并地图 `Config`，实例化 `module.Campaign`。GemsFarming/Ambush11 在此步骤动态构造覆写子类替换实例。
 3. **运行**：`run()` 的多轮循环；每轮先做 UI 状态恢复，再出击，再判停止条件。地图模块类对象进程内缓存，实例随关卡切换重建。
 4. **收尾**：`ensure_auto_search_exit()` 保证退出自动搜索菜单后任务结束；`config.update()` 把仪表盘与计数写回；实例整体丢弃，无显式销毁。
 

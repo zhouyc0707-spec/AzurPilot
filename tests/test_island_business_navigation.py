@@ -184,6 +184,7 @@ class BusinessCharacterNavigationTests(unittest.TestCase):
         business.character_priority = ['Helena', 'Eugen']
         business.character_templates = {'Helena': TEMPLATE_HELENA, 'Eugen': TEMPLATE_EUGEN}
         business.select_character_filter = Mock(return_value=True)
+        business.selected_area_relative = (86, 26, 119, 42)
         return business
 
     def test_visible_configured_character_is_selected_without_top_swipe(self):
@@ -194,9 +195,43 @@ class BusinessCharacterNavigationTests(unittest.TestCase):
         business.character_priority = ['Eugen']
         self.assertEqual(business._find_and_select_character(), 'Eugen')
         self.assertEqual(device.swipes, [])
-        self.assertEqual(device.screenshots, 1)
+        # 当前视野定位后，头像只点击一次，并用新截图复核选中态。
+        self.assertEqual(device.screenshots, 2)
         self.assertEqual(device.clicks[0][:2], (500, 260))
         business.select_character_filter.assert_not_called()
+
+    def test_current_view_selected_character_is_not_toggled_off(self):
+        device = ResourceDevice()
+        device.role_frame = character_frame(TEMPLATE_EUGEN, (500, 260))
+        # 头像坐标为 (500,260)，真实单元锚点偏移与蓝色选中区域沿用角色模块。
+        device.role_frame[241:257, 553:586] = (19, 182, 234)
+        business = self.make_business(device)
+        business.character_priority = ['Eugen']
+        self.assertEqual(business._find_and_select_character(), 'Eugen')
+        self.assertEqual(device.clicks, [])
+        self.assertEqual(device.swipes, [])
+        self.assertEqual(device.screenshots, 1)
+
+    def test_missing_selection_marker_does_not_repeat_toggle_click(self):
+        device = ResourceDevice()
+        device.role_frame = character_frame(TEMPLATE_EUGEN, (500, 260))
+        business = self.make_business(device)
+        business.character_priority = ['Eugen']
+        self.assertEqual(business._find_and_select_character(), 'Eugen')
+        self.assertEqual(len(device.clicks), 1)
+        self.assertEqual(device.clicks[0][:2], (500, 260))
+
+    def test_single_configured_character_does_not_probe_second_slot(self):
+        from module.island_business.assets import BUSINESS_PLUS_A
+        device = ResourceDevice()
+        business = self.make_business(device)
+        business.character_priority = ['Eugen']
+        business._appear_at_positions = Mock(return_value=None)
+        business._get_review_button = Mock(return_value=None)
+        business._select_business_characters()
+        self.assertTrue(business._appear_at_positions.called)
+        for call in business._appear_at_positions.call_args_list:
+            self.assertIs(call.args[0], BUSINESS_PLUS_A)
 
     def test_only_lower_candidate_visible_keeps_original_top_search(self):
         device = ResourceDevice()

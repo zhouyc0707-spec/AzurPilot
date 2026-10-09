@@ -73,7 +73,7 @@ class CampaignRun(CampaignEvent, ShopStatus):
         Raises:
             RequestHumanTakeover: 地图文件不存在时抛出。
         """
-        if hasattr(self, 'name') and name == self.name:
+        if name == getattr(self, 'name', None) and folder == getattr(self, 'folder', None):
             return False
 
         self.name = name

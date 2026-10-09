@@ -5,7 +5,6 @@
 
 import argparse
 import asyncio
-import os
 import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -15,6 +14,7 @@ from starlette.responses import FileResponse, JSONResponse, PlainTextResponse, R
 from starlette.routing import Mount, Route, WebSocketRoute
 from starlette.staticfiles import StaticFiles
 
+from module.api import launcher_api
 from module.api.background_service import LIBRARY_DIR, gallery_add_bytes, proxy_fetch
 from module.api.config_service import ConfigService, ROOT
 from module.api.launcher_routes import routes as launcher_routes
@@ -23,11 +23,6 @@ from module.api.runtime_service import RuntimeService
 from module.api.socket import Gateway
 from module.api.static import FrontendFiles, ItemTemplateFiles
 from module.logger import logger
-from module.runtime.launcher_trust import (
-    TRUST_SECRET_ENV,
-    configure as configure_launcher_trust,
-    enabled as launcher_trust_enabled,
-)
 from module.runtime.password_utils import ensure_password_for_host, is_demo_mode
 from module.runtime.setting import State
 
@@ -62,7 +57,7 @@ def create_app(*, root: Path = ROOT, password=None, manage_runtime=True, mount_m
     # 启动器（alas-launcher）会用信任密钥拉起 WebUI：登记它与当前密码，
     # 供 /api/launcher/trusted-login 签发免密令牌；手动启动时该环境变量缺省，
     # 免密通道整体关闭。与旧界面（module/webui/app.py）的行为一致。
-    configure_launcher_trust(os.environ.get(TRUST_SECRET_ENV), password)
+    launcher_api.configure_trust(password)
     gateway = Gateway(Router(configs, runtime), password)
 
     @asynccontextmanager
