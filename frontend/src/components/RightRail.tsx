@@ -29,7 +29,7 @@ export function RightRail({instance, onMobileClose}: {instance: string; onMobile
         <div><Clock3 size={15}/><span>{ui('scheduler.plan')}</span></div>
         <span>{data?.tasks.length ?? 0}</span>
       </div>
-      <TaskQueue instance={instance} data={data} onNavigate={onMobileClose}/>
+      <TaskQueue instance={instance} data={data} onData={setData} onNavigate={onMobileClose}/>
     </section>
   </aside>
 }

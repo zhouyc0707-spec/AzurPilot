@@ -3,7 +3,7 @@
  */
 
 import type { ReactNode } from 'react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { CalendarClock, CirclePlay, Loader2, Play, Square, TriangleAlert } from 'lucide-react'
 import { api } from '../api/client'
 import type { Overview } from '../api/types'
@@ -20,20 +20,28 @@ export function SchedulerWidget({instance, data, onData, action}: {instance: str
   const connection = useConnection()
   const {notify, ui} = useApp()
   const [busy, setBusy] = useState(false)
+  const requestPending = useRef(false)
+  const singleTask = data?.status === 'running' ? data.singleTask : null
+  const standalone = data?.status === 'running' && data.schedulerRunning === false
 
   async function toggleScheduler() {
-    if (!data) return
+    if (!data || requestPending.current || connection !== 'ready' || data.status === 'updating') return
+    requestPending.current = true
     setBusy(true)
     try {
       if (data.status !== 'running') await editor(`config:${instance}`).settled()
-      // 停止是「温柔停止」：后端先让当前任务在安全点退出（最长 5 分钟）。
+      // 调度器停止是「温柔停止」：后端先让当前任务在安全点退出（最长 5 分钟）。
       // 等待期间再点一次，后端会立即强制终止，所以这里用 stopping 区分两条提示。
-      const next = await api.request(data.status === 'running' ? 'scheduler.stop' : 'scheduler.start', {instance})
+      // 队列任务独立执行时，停止按钮直接结束本次运行，不走调度器的安全点等待。
+      const next = singleTask
+        ? await api.request('tasks.stop', {instance, task: singleTask.name, runId: singleTask.runId})
+        : await api.request(data.status === 'running' ? 'scheduler.stop' : 'scheduler.start', {instance})
       onData(next)
-      notify(data.status === 'running' ? (data.stopping ? ui('scheduler.stoppingForced') : ui('scheduler.stoppedNotice')) : ui('scheduler.started'))
+      notify(singleTask ? ui('task.stopped') : standalone ? (data.stopping ? ui('scheduler.stoppingForced') : ui('task.stopRequested')) : data.status === 'running' ? (data.stopping ? ui('scheduler.stoppingForced') : ui('scheduler.stoppedNotice')) : ui('scheduler.started'))
     } catch (error) {
       notify((error as Error).message, true)
     } finally {
+      requestPending.current = false
       setBusy(false)
     }
   }
@@ -47,7 +55,7 @@ export function SchedulerWidget({instance, data, onData, action}: {instance: str
       <div>{action ?? <CalendarClock size={17}/>}<span>{ui('scheduler.title')}</span></div>
       <span className={`scheduler-status ${data?.status === 'running' ? 'running' : ''}`}>
         {data?.status === 'running' ? <CirclePlay size={13}/> : data?.status === 'error' ? <TriangleAlert size={13}/> : <Square size={12}/>}
-        {data?.status === 'running' ? ui('status.running') : data?.status === 'error' ? ui('scheduler.abnormal') : ui('scheduler.stopped')}
+        {singleTask ? ui('task.runOnceStatus') : standalone ? ui('task.standaloneStatus') : data?.status === 'running' ? ui('status.running') : data?.status === 'error' ? ui('scheduler.abnormal') : ui('scheduler.stopped')}
       </span>
     </div>
     <div className="scheduler-stats">
@@ -58,10 +66,10 @@ export function SchedulerWidget({instance, data, onData, action}: {instance: str
     <button
       className={`button scheduler-toggle ${data?.status === 'running' ? 'danger' : 'primary'}${data?.stopping ? ' is-stopping' : ''}`}
       onClick={toggleScheduler}
-      disabled={!data || busy || connection !== 'ready'}
-      data-tip={data?.stopping ? ui('scheduler.stoppingHint') : undefined}
+      disabled={!data || busy || connection !== 'ready' || data.status === 'updating'}
+      data-tip={data?.stopping && !singleTask ? ui('scheduler.stoppingHint') : undefined}
     >
-      {data?.stopping ? <Loader2 size={14} className="spin"/> : data?.status === 'running' ? <Square size={14}/> : <Play size={14}/>} {busy ? ui('scheduler.processing') : data?.stopping ? ui('scheduler.stopping') : data?.status === 'running' ? ui('scheduler.stop') : ui('scheduler.start')}
+      {data?.stopping && !singleTask ? <Loader2 size={14} className="spin"/> : data?.status === 'running' ? <Square size={14}/> : <Play size={14}/>} {busy ? ui('scheduler.processing') : singleTask ? ui('task.stopStandalone') : data?.stopping ? ui('scheduler.stopping') : standalone ? ui('task.stopTool') : data?.status === 'running' ? ui('scheduler.stop') : ui('scheduler.start')}
     </button>
   </section>
 }

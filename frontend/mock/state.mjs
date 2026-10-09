@@ -406,12 +406,17 @@ export function createMockState({ empty = false } = {}) {
   }
   function overview(name) {
     const data = snapshot(name)
+    const item = get(name)
+    const singleTask = item.status === 'running' && item.mode === 'single' ? {name: item.task, runId: item.runId} : null
+    const currentTask = item.status === 'running' ? item.task ?? 'Commission' : null
     return {
-      instance: name, revision: data.revision, status: get(name).status, emulator: data.values.Alas.Emulator,
+      instance: name, revision: data.revision, status: item.status, emulator: data.values.Alas.Emulator,
+      singleTask, schedulerRunning: item.status === 'running' && item.mode !== 'single' && item.mode !== 'tool',
       tasks: Object.entries(data.values).filter(([, groups]) => groups.Scheduler?.Enable).map(([task, groups]) => ({
         name: task, nextRun: groups.Scheduler.NextRun,
-        state: get(name).status === 'running' && task === 'Commission' ? 'running' : groups.Scheduler.NextRun <= timestamp(new Date()) ? 'pending' : 'waiting',
+        state: task === currentTask ? 'running' : groups.Scheduler.NextRun <= timestamp(new Date()) ? 'pending' : 'waiting',
         pending: groups.Scheduler.NextRun <= timestamp(new Date()),
+        runOnceAllowed: template[task]?.Scheduler?.Command === task,
       })),
       resources: Object.entries(data.values.Dashboard).filter(([, resource]) => 'Value' in resource).map(([key, resource]) => ({
         name: key, label: translate(`${key}._info.name`), value: resource.Value, limit: resource.Limit, total: resource.Total, record: resource.Record,
@@ -432,7 +437,7 @@ export function createMockState({ empty = false } = {}) {
       case 'updater.cancel': return { accepted: true }
       case 'system.ping': return { pong: true }
       case 'schema.get': return { args, menu, translations: locales[params.language] }
-      case 'instances.list': return [...instances].map(([name, item]) => ({ name, status: item.status, currentTask: item.status === 'running' ? 'Commission' : null, serial: item.values.Alas.Emulator.Serial, server: item.values.Alas.Emulator.ServerName }))
+      case 'instances.list': return [...instances].map(([name, item]) => ({ name, status: item.status, currentTask: item.status === 'running' ? item.task ?? 'Commission' : null, serial: item.values.Alas.Emulator.Serial, server: item.values.Alas.Emulator.ServerName }))
       case 'instances.create': {
         if (!/^[A-Za-z0-9\u3041-\u3096\u30a1-\u30fa\u30fc\u31f0-\u31ff\uff66-\uff9f\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff][A-Za-z0-9_. \u3041-\u3096\u30a1-\u30fa\u30fc\u31f0-\u31ff\uff66-\uff9f\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\-]{0,63}$/.test(params.name) || /^(template|deploy|backup|con|prn|aux|nul|com[1-9]|lpt[1-9])(\.|$)/i.test(params.name)) fail('INVALID_PARAMS', '实例名称无效')
         if ([...instances.keys()].some(name => name.toLowerCase() === params.name.toLowerCase())) fail('ALREADY_EXISTS', '同名实例已存在')
@@ -496,7 +501,7 @@ export function createMockState({ empty = false } = {}) {
           instance: name, uptimeSeconds: null, checkedAt: null, lastAttemptAt: null, available: false,
           scheduled: Boolean(settings.ScheduledEmulatorRestart), force: Boolean(settings.ForceScheduledRestart),
           intervalHours: Number(settings.RestartIntervalHours ?? 4), nextRestartAt: null,
-          serverTime: Date.now() / 1000, schedulerRunning: get(name).status === 'running',
+          serverTime: Date.now() / 1000, schedulerRunning: overview(name).schedulerRunning,
         }
       }
       case 'stock.status': return stock.status(name)
@@ -505,8 +510,24 @@ export function createMockState({ empty = false } = {}) {
       case 'scheduler.start': case 'tasks.run':
         if (get(name).status === 'running') fail('INSTANCE_RUNNING', '实例已在运行')
         if (method === 'tasks.run' && !['FleetScan', 'StorageStatistics'].includes(params.task) && !Object.values(menu).some(group => group.page === 'tool' && group.tasks.includes(params.task))) fail('INVALID_PARAMS', '该任务不支持单独运行')
-        get(name).status = 'running'; log(name, '模拟调度器已启动。')
+        Object.assign(get(name), {status: 'running', mode: method === 'tasks.run' ? 'tool' : 'scheduler', task: params.task ?? 'Commission'})
+        log(name, method === 'tasks.run' ? '模拟独立工具已启动。' : '模拟调度器已启动。')
         return overview(name)
+      case 'tasks.runOnce': {
+        const item = get(name)
+        if (item.status === 'running') fail('INSTANCE_RUNNING', '实例已在运行')
+        if (!item.values[params.task]?.Scheduler?.Enable || template[params.task]?.Scheduler?.Command !== params.task) fail('INVALID_PARAMS', '该任务不支持单次运行')
+        Object.assign(item, {status: 'running', mode: 'single', task: params.task,
+          runId: `mock-single-${name}-${++item.cursor}`, singleTicks: 0})
+        log(name, `模拟单次任务已启动：${params.task}。`)
+        return overview(name)
+      }
+      case 'tasks.stop': {
+        const item = get(name)
+        if (item.status !== 'running' || item.mode !== 'single' || item.task !== params.task || item.runId !== params.runId) fail('STALE_RUN', '单次任务已结束或运行已变化')
+        item.status = 'stopped'; log(name, `模拟单次任务已停止：${params.task}。`)
+        return overview(name)
+      }
       case 'scheduler.stop':
         get(name).status = 'stopped'; log(name, '模拟调度器已停止。')
         return overview(name)
@@ -962,6 +983,12 @@ export function createMockState({ empty = false } = {}) {
     }
     for (const [name, item] of instances) if (item.status === 'running') {
       item.previewAt = new Date().toISOString()
+      if (item.mode === 'single' && ++item.singleTicks >= 3) {
+        item.values[item.task].Scheduler.NextRun = timestamp(new Date(Date.now() + 3600000))
+        item.status = 'stopped'
+        log(name, `模拟单次任务已完成：${item.task}。`)
+        continue
+      }
       log(name, '模拟任务正在运行，等待下一轮调度。')
     }
   }

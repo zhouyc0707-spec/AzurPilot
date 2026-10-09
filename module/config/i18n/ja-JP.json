@@ -7033,6 +7033,8 @@
     "Button": {
       "Start": "起動する",
       "Stop": "停止",
+      "RunOnce": "1回実行",
+      "SingleTaskRunning": "単独タスク実行中",
       "ScrollON": "自動スクロールオン",
       "ScrollOFF": "自動スクロールオフ",
       "DashboardON": "折り畳み",

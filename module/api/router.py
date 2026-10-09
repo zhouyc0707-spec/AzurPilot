@@ -80,6 +80,8 @@ class Router:
             'island.suspend.state': Method(p.InstanceParams, lambda x: self.island_suspend.state(x.instance)),
             'island.suspend.toggle': Method(p.InstanceParams, lambda x: self.island_suspend.toggle(x.instance), True),
             'tasks.run': Method(p.TaskParams, lambda x: runtime.start(x.instance, x.task), True),
+            'tasks.runOnce': Method(p.TaskParams, lambda x: runtime.run_once(x.instance, x.task), True),
+            'tasks.stop': Method(p.TaskStopParams, lambda x: runtime.stop_once(x.instance, x.task, x.runId), True),
             'logs.get': Method(p.LogsParams, lambda x: runtime.logs(x.instance, x.after)),
             'opsi.simulator.status': Method(p.LogsParams, lambda x: self.opsi_simulator.status(x.instance, x.after)),
             'opsi.simulator.start': Method(p.InstanceParams, lambda x: self.opsi_simulator.start(x.instance), True),

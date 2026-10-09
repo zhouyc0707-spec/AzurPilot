@@ -12,6 +12,8 @@ Aside:
 Button:
   Start:
   Stop:
+  RunOnce:
+  SingleTaskRunning:
   ScrollON:
   ScrollOFF:
   DashboardON:

@@ -49,10 +49,17 @@ export interface OpsiSimulatorStatus {
   runId: number
   result: OpsiSimulatorResult | null; figure: string | null; logs: Logs
 }
-interface ScheduledTask { name: string; nextRun: string; pending: boolean; state: 'running' | 'pending' | 'waiting' }
+export interface ScheduledTask {
+  name: string; nextRun: string; pending: boolean; state: 'running' | 'pending' | 'waiting'
+  /** 服务端确认这是可独立执行的已启用调度任务。 */
+  runOnceAllowed?: boolean
+}
 export interface Resource { name: string; label: string; value: number | null; limit?: number; total?: number | null; record?: string }
 export interface Overview {
   instance: string; revision: string; status: Status; tasks: ScheduledTask[]
+  /** 区分调度器、单次队列任务与独立工具进程。 */
+  schedulerRunning?: boolean
+  singleTask?: {name: string; runId: string} | null
   /** 已请求停止、正在等当前任务在安全点退出（温柔停止）；此时再点一次停止即强制终止。 */
   stopping?: boolean
   resources: Resource[]; emulator: Record<string, Value>
@@ -237,6 +244,8 @@ export interface Results {
   'scheduler.stop': Overview
   'system.restart': {restarting: boolean}
   'tasks.run': Overview
+  'tasks.runOnce': Overview
+  'tasks.stop': Overview
   'logs.get': Logs
   'preview.capture': Preview
   'statistics.resources': Statistics

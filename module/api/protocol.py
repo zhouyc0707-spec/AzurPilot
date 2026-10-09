@@ -118,6 +118,11 @@ class TaskParams(InstanceParams):
     task: StrictStr = Field(min_length=1, max_length=80)
 
 
+class TaskStopParams(TaskParams):
+    """停止指定轮次的单次任务，旧页面的请求不会终止新的任务。"""
+    runId: StrictStr = Field(min_length=1, max_length=64)
+
+
 class ProgramValidateParams(InstanceParams):
     """调度程序草稿的校验请求。"""
 

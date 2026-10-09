@@ -24,7 +24,7 @@ export function LegacyRail({instance, data, onData, children}: {instance: string
         <div><Clock3 size={15}/><span>{ui('scheduler.plan')}</span></div>
         <span>{data?.tasks.length ?? 0}</span>
       </div>
-      <TaskQueue instance={instance} data={data}/>
+      <TaskQueue instance={instance} data={data} onData={onData}/>
     </section>
   </div>
 }

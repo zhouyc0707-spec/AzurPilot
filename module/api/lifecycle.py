@@ -9,6 +9,7 @@ from module.runtime.process_manager import ProcessManager
 from module.runtime.remote_access import RemoteAccess
 from module.runtime.setting import State
 from module.runtime.startup_memory import record_running
+from module.runtime.single_task import is_single_task
 from module.runtime.task_handler import TaskHandler
 
 task_handler = TaskHandler()
@@ -55,7 +56,7 @@ def clearup():
         try:
             running = ProcessManager.running_instances()
             actions.extend(instance.stop for instance in running)
-            record_running(instance.config_name for instance in running)
+            record_running(instance.config_name for instance in running if not is_single_task(instance))
         except Exception:
             logger.exception('无法枚举运行进程，保留共享状态供父监督器回收')
             success = False

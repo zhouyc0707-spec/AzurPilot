@@ -31,8 +31,12 @@ class TestSchedulerSwitchRefresh(unittest.TestCase):
             patch("module.webui.app_overview.t", side_effect=lambda key: key),
             patch("module.webui.widgets.clear"),
             patch("module.webui.widgets.put_button"),
+            patch("module.webui.app_overview.clear"),
+            patch("module.webui.app_overview.put_button"),
+            patch("module.webui.app_overview.toast"),
         ]
-        self.translate, self.clear, self.put_button = [
+        (self.translate, self.clear, self.put_button, self.overview_clear,
+         self.overview_button, self.toast) = [
             patcher.start() for patcher in patchers
         ]
         for patcher in patchers:
@@ -105,6 +109,37 @@ class TestSchedulerSwitchRefresh(unittest.TestCase):
 
         self.gui.alas.start.assert_called_once_with(task)
         self.assertEqual(self._last_label(), LABEL_STOP)
+
+    def test_single_task_disables_scheduler_start(self):
+        self.gui.alas.started_func = "task:Commission"
+        self.gui.alas.run_id = "run-1"
+        switch, _, _ = self._mount()
+        switch.switch()
+        self.overview_button.assert_called_once()
+        self.assertEqual(
+            "Gui.Button.SingleTaskRunning", self.overview_button.call_args.kwargs["label"]
+        )
+        self.assertTrue(self.overview_button.call_args.kwargs["disabled"])
+        self.gui.alas.alive = False
+        switch.switch()
+        self.assertEqual(LABEL_START, self._last_label())
+
+    def test_stale_scheduler_stop_does_not_run_single_task_cleanup(self):
+        switch, (_, stop, _), _ = self._mount()
+        self.gui.alas.started_func = "task:Commission"
+        self.gui.alas.run_id = "run-1"
+        stop()
+        self.gui.alas.stop_by_user.assert_not_called()
+        self.assertTrue(self.overview_button.call_args.kwargs["disabled"])
+
+    def test_stale_scheduler_start_does_not_launch_while_single_task_running(self):
+        start = Mock()
+        switch, _, (_, click, _) = self._mount(start)
+        self.gui.alas.started_func = "task:Commission"
+        self.gui.alas.run_id = "run-1"
+        click()
+        start.assert_not_called()
+        self.assertTrue(self.overview_button.call_args.kwargs["disabled"])
 
 
 if __name__ == "__main__":

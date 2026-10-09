@@ -3,6 +3,55 @@ import { describe, expect, it } from 'vitest'
 import { createMockState } from './state.mjs'
 
 describe('前端模拟服务', () => {
+  it('队列任务独立运行且再次停止保留原计划，不启动调度器', () => {
+    const {dispatch} = createMockState()
+    const before = dispatch('overview.get', {instance: 'demo-main'})
+    const task = before.tasks.find(task => task.name === 'Commission')
+    const running = dispatch('tasks.runOnce', {instance: 'demo-main', task: task.name})
+    expect(running.schedulerRunning).toBe(false)
+    expect(running.singleTask.name).toBe(task.name)
+    expect(running.tasks.filter(task => task.state === 'running').map(task => task.name)).toEqual(['Commission'])
+    expect(() => dispatch('tasks.runOnce', {instance: 'demo-main', task: 'Research'})).toThrow(/已在运行/)
+    expect(() => dispatch('scheduler.start', {instance: 'demo-main'})).toThrow(/已在运行/)
+    const stopped = dispatch('tasks.stop', {instance: 'demo-main', task: task.name, runId: running.singleTask.runId})
+    expect(stopped.singleTask).toBeNull()
+    expect(stopped.tasks.find(next => next.name === task.name).nextRun).toBe(task.nextRun)
+    expect(stopped.tasks.find(next => next.name === task.name).state).toBe('pending')
+  })
+
+  it('已结束的旧运行不能停止后续单次任务', () => {
+    const {dispatch} = createMockState()
+    const params = {instance: 'demo-main', task: 'Commission'}
+    const first = dispatch('tasks.runOnce', params)
+    dispatch('tasks.stop', {...params, runId: first.singleTask.runId})
+    const second = dispatch('tasks.runOnce', params)
+    expect(() => dispatch('tasks.stop', {...params, runId: first.singleTask.runId})).toThrow(/运行已变化/)
+    expect(dispatch('overview.get', {instance: params.instance}).singleTask).toEqual(second.singleTask)
+  })
+
+  it('单次任务自然结束后保留其正常调度延后，未来任务也可执行', () => {
+    const {dispatch, tick} = createMockState()
+    const params = {instance: 'demo-main', task: 'Dorm'}
+    const before = dispatch('overview.get', {instance: params.instance}).tasks.find(task => task.name === params.task)
+    expect(before.state).toBe('waiting')
+    dispatch('tasks.runOnce', params)
+    tick(); tick(); tick()
+    const after = dispatch('overview.get', {instance: params.instance})
+    expect(after.status).toBe('stopped')
+    expect(after.schedulerRunning).toBe(false)
+    expect(after.singleTask).toBeNull()
+    expect(after.tasks.find(task => task.name === params.task).nextRun).not.toBe(before.nextRun)
+  })
+
+  it('独立工具不被标成调度器或队列单次任务', () => {
+    const {dispatch} = createMockState()
+    const started = dispatch('tasks.run', {instance: 'demo-main', task: 'FleetScan'})
+    expect(started.status).toBe('running')
+    expect(started.schedulerRunning).toBe(false)
+    expect(started.singleTask).toBeNull()
+    expect(() => dispatch('tasks.runOnce', {instance: 'demo-main', task: 'Commission'})).toThrow(/已在运行/)
+  })
+
   it('各统计分类使用新版紧凑点位，时间和值均可还原', () => {
     const {dispatch} = createMockState()
     for (const category of ['resources', 'action', 'commission', 'ships', 'storage']) {

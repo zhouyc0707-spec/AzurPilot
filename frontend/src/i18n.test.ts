@@ -2,6 +2,20 @@ import { describe, expect, it } from 'vitest'
 import { detectLanguage, translateUi } from './i18n'
 
 describe('WebUI i18n', () => {
+  it('单次任务操作在全部语言中有完整文案并带目标名称', () => {
+    const keys = ['task.runOnce', 'task.stopOnce', 'task.runOnceStarted', 'task.runOnceStopped',
+      'task.runOnceStatus', 'task.standaloneStatus', 'task.stopStandalone', 'task.stopped', 'task.stopTool', 'task.stopRequested'] as const
+    for (const language of ['zh-CN', 'zh-TW', 'en-US', 'ja-JP', 'zh-MIAO'] as const) {
+      for (const key of keys) {
+        const text = translateUi(language, key, {task: 'TARGET'})
+        expect(text).not.toContain('task.')
+        expect(text).not.toContain('{task}')
+      }
+      expect(translateUi(language, 'task.runOnce', {task: 'TARGET'})).toContain('TARGET')
+      expect(translateUi(language, 'task.stopOnce', {task: 'TARGET'})).toContain('TARGET')
+    }
+  })
+
   it('detects supported browser locales', () => {
     expect(detectLanguage(['zh-HK'])).toBe('zh-TW')
     expect(detectLanguage(['ja'])).toBe('ja-JP')

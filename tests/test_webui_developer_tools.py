@@ -51,6 +51,22 @@ class TestDeveloperToolsRestart(unittest.TestCase):
 
         log_error.assert_called_once()
 
+    def test_prepare_restart_does_not_resume_single_task_as_scheduler(self):
+        instances = [
+            Mock(config_name="alas", started_func=None),
+            Mock(config_name="manual", started_func="task:Commission"),
+            Mock(config_name="tool", started_func="FleetScan"),
+        ]
+        with (
+            patch(
+                "module.webui.app_developer_tools.ProcessManager.running_instances",
+                return_value=instances,
+            ),
+            patch("module.webui.app_developer_tools.atomic_write") as write_marker,
+        ):
+            self.assertTrue(prepare_webui_restart())
+        write_marker.assert_called_once_with("./config/reloadalas", "alas\ntool\n")
+
     def test_manual_restart_does_not_interrupt_active_update_transaction(self):
         entered = threading.Event()
         release = threading.Event()

@@ -405,8 +405,10 @@ class Updater(DeployConfig, GitManager):
         self.state = "start"
         instances = ProcessManager.running_instances()
         names = []
+        from module.runtime.single_task import is_single_task
         for alas in instances:
-            names.append(alas.config_name + "\n")
+            if not is_single_task(alas):
+                names.append(alas.config_name + "\n")
 
         logger.info("[WebUI-更新] 等待所有运行中的 AzurPilot 完成")
         return self._wait_update(instances, names)

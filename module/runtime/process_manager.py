@@ -1044,7 +1044,12 @@ class ProcessManager:
         try:
             # 运行 AzurPilot
             single_task = False
-            if func == "alas":
+            if isinstance(func, str) and func.startswith('task:'):
+                from module.runtime.single_task import execute_once, TASK_PREFIX
+
+                single_task = True
+                task_result = execute_once(config_name, func[len(TASK_PREFIX):], e)
+            elif func == "alas":
                 from alas import AzurLaneAutoScript
 
                 if e is not None:
@@ -1147,6 +1152,10 @@ class ProcessManager:
         from module.api.protocol import ApiError
 
         for process in _instances:
+            from module.runtime.single_task import is_single_task
+            if is_single_task(process):
+                logger.info(f'[{process.config_name}] 单次任务保持停止，不恢复为调度器')
+                continue
             logger.info(f"启动中 [{process.config_name}]")
             try:
                 process.start(func=get_config_mod(process.config_name), ev=ev)

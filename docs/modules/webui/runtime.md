@@ -155,6 +155,14 @@ flowchart TD
 
 worker 是 spawn 的全新解释器：初始化文件日志（`log/{配置名}.txt`）、把 `set_func_logger(q.put)` 接到日志队列、初始化 preview 编码线程，然后按 `func` 分发——`alas` 走完整调度循环 `AzurLaneAutoScript(config_name).loop()`；`get_available_func()` 中的任务（Daemon、MeowfficerScore 等）走单任务 `run()`；`maa`/`fpy` 走 submodule。传入的 `ev`（updater.event）同时挂到 `AzurLaneConfig.stop_event` 与 `AzurLaneAutoScript.stop_event`，调度器在任务边界与 `wait_until` 轮询中检测到置位后 `exit(0)`；`run_process` 捕获 `SystemExit`，若 `ev.is_set()` 则最终结果为 `UPDATE`，否则 `FINISHED`。任何异常路径都以 `q.put(ExitEvent(run_id, result))` 收尾，保证 WebUI 不会把「无结果的退出」误判为停止。
 
+### 排程任务执行一次
+
+`task:<任务名>` 是普通排程任务的单次 worker 模式，与工具入口及 `alas` 调度器分别识别。启动前核验模板的 `Scheduler.Command` 白名单和实例启用状态；worker 显式绑定目标任务配置，只调用一次 `run()`，不会进入 `loop()`、自动抢占到其他任务或连续重试。任务自身的生产、交付、配置修改及后续任务计划仍按原业务实现保存，后续任务不会在本次进程中自动执行。
+
+目标任务自身的 `Scheduler.NextRun` 与 `Scheduler.Enable` 在该模式下延后提交：成功结束才提交任务算出的下次时间及自身启用状态；取消或失败保留原排程，提交时逐字段核对起始值，用户已修改的字段保留用户设置。其他任务的排程和配置字段正常保存，停止不能撤销游戏中已经完成的操作。配置停止事件仍能打断任务；普通排程优先级不会把用户指定的单次任务提前切走。
+
+再次点击对应任务的「停止」时，核对任务名和 `run_id` 后直接调用 `stop()`；只停止该轮 worker，不进入温柔停止或关闭游戏／模拟器等调度器收尾。相同轮次已结束时返回最新状态，陈旧轮次不能停止后来的任务。服务的记忆运行、更新恢复和重启清单排除这种单次 worker，避免服务重启后把它作为调度器重新启动。保留的 PyWebIO 入口与 React 新旧主题共用这些运行边界。
+
 ### 状态合成（state 属性）
 
 `state` 整轮持有 lifecycle lock，避免把旧句柄的退出码用于新轮事件：先看测试覆盖（`_state_override`），再 `alive` → 1（运行中）；退出后按 `exit_result` 与 `exitcode` 合成——`MANUAL_STOP` → 2、非零退出码 → 3、`UPDATE` → 4、`FINISHED` → 2；从未启动的实例默认 2；**有 run_id 但缺失最终结果的退出一律 3（异常）**。前端看到的 `running/stopped/error/updating` 四态即此映射（`runtime_service.STATES`）。

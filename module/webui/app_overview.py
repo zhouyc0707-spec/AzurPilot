@@ -19,9 +19,11 @@ from module.webui.app_dependencies import (
     run_js,
     set_localstorage,
     t,
+    toast,
     updater,
     use_scope,
 )
+from module.runtime.single_task import single_task_state
 
 from module.webui.app_helpers import (
     DEMO_DEVICE_ID_TEXT,
@@ -50,10 +52,19 @@ class OverviewMixin(WebUIMixinBase):
         switch = None
 
         def stop_scheduler() -> None:
+            # 旧的「停止调度器」回调不能误触单次任务的关闭游戏/模拟器收尾。
+            if single_task_state(self.alas):
+                toast(t("Gui.Button.SingleTaskRunning"), color="warn")
+                self._refresh_scheduler_switch(switch)
+                return
             self.alas.stop_by_user(self.alas_config.Optimization_WhenSchedulerStopped)
             self._refresh_scheduler_switch(switch)
 
         def start_scheduler() -> None:
+            if single_task_state(self.alas):
+                toast(t("Gui.Button.SingleTaskRunning"), color="warn")
+                self._refresh_scheduler_switch(switch)
+                return
             start()
             self._refresh_scheduler_switch(switch)
 
@@ -62,12 +73,25 @@ class OverviewMixin(WebUIMixinBase):
             label_off=t("Gui.Button.Start"),
             onclick_on=stop_scheduler,
             onclick_off=start_scheduler,
-            get_state=lambda: self.alas.alive,
+            get_state=lambda: 2 if single_task_state(self.alas) else self.alas.alive,
             color_on="off",
             color_off="on",
             scope="scheduler_btn",
         )
+        switch.status[2] = {"func": self._render_single_task_scheduler_button}
         return switch
+
+    @staticmethod
+    def _render_single_task_scheduler_button() -> None:
+        """单次执行期间禁用调度器启动；停止由对应任务的按钮负责。"""
+        clear("scheduler_btn")
+        put_button(
+            label=t("Gui.Button.SingleTaskRunning"),
+            onclick=lambda: None,
+            color="off",
+            disabled=True,
+            scope="scheduler_btn",
+        )
 
     @staticmethod
     def _refresh_scheduler_switch(switch: BinarySwitchButton | None) -> None:
@@ -133,6 +157,7 @@ class OverviewMixin(WebUIMixinBase):
             )
 
         switch_scheduler = self._mount_scheduler_switch(self._alas_start)
+        self._overview_scheduler_switch = switch_scheduler
 
         # April Fools: runaway start button
         if getattr(self, "af_flag", False):
@@ -194,7 +219,7 @@ class OverviewMixin(WebUIMixinBase):
         self._render_log_toggle_button(show_log)
 
         self.task_handler.add(switch_scheduler.g(), 1, True)
-        self.task_handler.add(self.alas_update_overview_task, 10, True)
+        self.task_handler.add(self.alas_update_overview_task, 1, True)
 
     def _get_log_mode(self) -> bool:
         """返回概览页下方区域是否显示日志（会话级记忆，刷新后保持）。"""

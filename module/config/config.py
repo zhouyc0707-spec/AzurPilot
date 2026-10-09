@@ -242,6 +242,8 @@ class AzurLaneConfig(ConfigUpdater, ManualConfig, GeneratedConfig, ConfigWatcher
 
         for path, value in self.modified.items():
             deep_set(self.data, keys=path, value=value)
+        for path, value in self.__dict__.get('_single_run_schedule_changes', {}).items():
+            deep_set(self.data, keys=path, value=value)
 
     def bind(self, func, func_list=None):
         """绑定任务及其配置参数。
@@ -421,6 +423,10 @@ class AzurLaneConfig(ConfigUpdater, ManualConfig, GeneratedConfig, ConfigWatcher
                 super().__setattr__(attr, deep_get(current, keys=path))
 
     def save(self, mod_name='alas'):
+        # 单次运行正常完成才提交目标任务的排程与启用状态，取消时无需回写旧快照。
+        for path in self.__dict__.get('_single_run_schedule_paths', ()):
+            if path in self.modified:
+                self._single_run_schedule_changes[path] = self.modified.pop(path)
         if not self.modified:
             return False
         # API 和工作进程共用事务锁。重新读取最新文件，仅合并本次修改，
@@ -433,9 +439,46 @@ class AzurLaneConfig(ConfigUpdater, ManualConfig, GeneratedConfig, ConfigWatcher
             self.write_file(self.config_name, data=current)
             self.data = current
             self._loaded_data = copy.deepcopy(current)
+            for path, value in self.__dict__.get('_single_run_schedule_changes', {}).items():
+                deep_set(self.data, keys=path, value=value)
             logger.info(f"[配置] 已保存 {filepath_config(self.config_name, mod_name)}，共 {len(self.modified)} 项修改")
             # 写入成功后再清理，磁盘错误不会丢失待保存的更改。
             self.modified.clear()
+
+    def begin_single_run(self):
+        """锁定本次执行目标，并延后保存该任务的排程与启用状态。"""
+        self._single_run_task = self.task.command
+        self._single_run_schedule_paths = {
+            f'{self.task.command}.Scheduler.NextRun', f'{self.task.command}.Scheduler.Enable'
+        }
+        self._single_run_schedule_baseline = {
+            path: deep_get(self._loaded_data, keys=path)
+            for path in self._single_run_schedule_paths
+        }
+        self._single_run_schedule_changes = {}
+
+    def finish_single_run(self, success):
+        """成功时提交延后排程；期间用户手动改过同一排程时保留用户值。"""
+        if not self.__dict__.get('_single_run_schedule_paths'):
+            return
+        # 接住 multi_set 结束前等少数路径留下的目标排程，其余配置仍正常保存。
+        self.save()
+        changes = self._single_run_schedule_changes
+        if success and changes:
+            with config_transaction(filepath_config(self.config_name)):
+                current = self.read_file(self.config_name)
+                committed = False
+                for path, value in changes.items():
+                    if deep_get(current, keys=path) == self._single_run_schedule_baseline[path]:
+                        deep_set(current, keys=path, value=value)
+                        committed = True
+                    else:
+                        logger.info(f'[配置] 单次执行期间 `{path}` 已由用户修改，保留用户设置')
+                if committed:
+                    self.write_file(self.config_name, data=current)
+        self._single_run_schedule_paths = set()
+        self._single_run_schedule_changes = {}
+        self._single_run_task = None
 
     def update(self):
         """显式提交：合并最新磁盘值、检查覆盖、恢复任务绑定，再事务保存。"""
@@ -815,6 +858,9 @@ class AzurLaneConfig(ConfigUpdater, ManualConfig, GeneratedConfig, ConfigWatcher
         if self.stop_event is not None:
             if self.stop_event.is_set():
                 return True
+        # 手动单次任务不会被正常队列的另一任务抢占，但仍响应停止/更新通知。
+        if self.__dict__.get('_single_run_task'):
+            return False
         runtime = self.__dict__.get('_scheduler_runtime')
         if runtime is not None and runtime.mode != 'native':
             return runtime.should_yield(self)
@@ -839,7 +885,7 @@ class AzurLaneConfig(ConfigUpdater, ManualConfig, GeneratedConfig, ConfigWatcher
             TaskEnd: 任务已切换时抛出此异常。
         """
         # 如果设置了禁用任务切换标志，则跳过检查
-        if getattr(self, '_disable_task_switch', False):
+        if getattr(self, '_disable_task_switch', False) and not self.__dict__.get('_single_run_task'):
             logger.info('[配置] 任务切换检查已临时禁用')
             return
         

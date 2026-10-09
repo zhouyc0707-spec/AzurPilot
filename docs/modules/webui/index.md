@@ -11,11 +11,11 @@ WebUI 不是一个目录，而是一个跨四层协作的体系：
 - **浏览器层（frontend/）**：React + TypeScript + Vite 的单页应用，纯静态资源，不含游戏业务；负责渲染、表单交互、主题与连接管理。
 - **API 服务层（module/api/）**：Starlette ASGI 应用，托管静态资源、`/healthz` 与 `/mcp` 挂载，并以 `/api/v1/ws` 这一条 WebSocket 作为唯一业务通道。
 - **运行时与进程层（module/runtime/ + gui.py）**：管理 worker（实例调度进程）的生命周期、更新事务、共享状态，以及 WebUI 自身的热重载与依赖同步。
-- **调度器实例层（alas.py 子进程）**：每个配置实例一个 worker 进程，运行 `AzurLaneAutoScript.loop()`，真正控制设备。
+- **任务实例层（alas.py 子进程）**：每个配置实例最多一个 worker 进程；调度器运行 `AzurLaneAutoScript.loop()`，单次任务只绑定并执行指定任务，二者都通过运行时层控制设备。
 
 这样拆分各自解决一个问题。前端与后端解耦：前端可以脱离 Python 用 mock 服务独立开发（见 frontend/README.md），构建产物由后端静态托管。协议与业务解耦：module/api 刻意做成薄适配层，测试可以用临时配置目录并关闭真实进程生命周期完整运行，不接触设备。进程与业务解耦：gui.py 父监督进程不导入游戏模块，更新替换源码与 `.venv` 时父进程仍存活，才能完成「同步依赖 → 重建服务 → 按恢复计划拉回实例」的自我更新闭环。
 
-**历史**：2026-09 前后，旧版 PyWebIO 界面（`module/webui/` 的页面代码与 `webapp/`）整体移除，迁移到 React 前端 + WebSocket API v1；运行服务从旧 `module/webui` 迁往 `module/runtime`。`module/webui/` 现仅剩 `webui_prefs.py` 一个遗留文件（现状见第 16、17 节）。阅读 `.agent/` 下历史文档时注意这一迁移边界：旧架构的页面与协议代码已不存在。
+**本地兼容边界**：上游已迁移到 React 前端 + WebSocket API v1；本仓库另保留 `module/webui/` 和 `webapp/` 的 PyWebIO 运行入口。React 的「旧版主题」是 `legacy-light` / `legacy-dark`，顶部新旧 UI 切换只切换 React 主题，不切换后端。两种运行入口共用 `module/runtime` 的进程管理；任务列表的单次执行与停止也遵循同一实例互斥和运行批次核验。
 
 本篇是 WebUI 文档体系的导航篇：画全貌、定边界、解释跨层机制；各层细节见 [WebUI 启动器](../entry/gui.md)、[API 服务](api.md)、[运行时服务](runtime.md)、[前端](frontend.md)。独立实例密码、账号快照及 TPM 自动解锁见 [实例账号管理](accounts.md)。
 

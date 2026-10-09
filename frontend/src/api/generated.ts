@@ -29,6 +29,8 @@ export interface Parameters {
   "island.suspend.state": { instance: string }
   "island.suspend.toggle": { instance: string }
   "tasks.run": { instance: string; task: string }
+  "tasks.runOnce": { instance: string; task: string }
+  "tasks.stop": { instance: string; task: string; runId: string }
   "logs.get": { instance: string; after?: number }
   "opsi.simulator.status": { instance: string; after?: number }
   "opsi.simulator.start": { instance: string }

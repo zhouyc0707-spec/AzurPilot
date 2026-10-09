@@ -336,7 +336,7 @@ export function TaskConfig() {
               <div><Clock3 size={15}/><span>{ui('scheduler.plan')}</span></div>
               <span>{railData?.tasks.length ?? 0}</span>
             </div>
-            <TaskQueue instance={instance} data={railData}/>
+            <TaskQueue instance={instance} data={railData} onData={setRailData}/>
           </section>
         </div>
       : <div className="task-rail-directory">

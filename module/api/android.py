@@ -152,7 +152,8 @@ def routes(configs, runtime):
         """
         with _operation_lock:
             instances = ProcessManager.running_instances()
-            names = [alas.config_name for alas in instances]
+            from module.runtime.single_task import is_single_task
+            names = [alas.config_name for alas in instances if not is_single_task(alas)]
             # 工具任务也记入恢复清单
             tool_config, _ = active_tool()
             if tool_config and tool_config not in names:

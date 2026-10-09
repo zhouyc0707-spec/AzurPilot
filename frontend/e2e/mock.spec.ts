@@ -813,8 +813,8 @@ test('侧栏任务计划随界面语言切换', async ({page}) => {
   await page.locator('#ui-language').click()
   await page.getByRole('option', {name: 'English', exact: true}).click()
   await page.goto('/#/i/demo-main/overview')
-  await expect(page.locator('.rail-task-item[href$="/task/Commission"]')).toContainText('Commission')
-  await expect(page.locator('.rail-task-item[href$="/task/Research"]')).toContainText('Research Lab')
+  await expect(page.locator('.rail-task-link[href$="/task/Commission"]')).toContainText('Commission')
+  await expect(page.locator('.rail-task-link[href$="/task/Research"]')).toContainText('Research Lab')
 })
 
 test('语言偏好持久化，模拟启停、预览、统计和部署设置', async ({page}) => {
@@ -833,7 +833,8 @@ test('语言偏好持久化，模拟启停、预览、统计和部署设置', as
   await page.getByRole('option', {name: '简体中文', exact: true}).click()
   await page.goto('/#/remote')
   await page.getByLabel('监听端口').fill('23456')
-  await page.waitForTimeout(500)
+  await page.getByLabel('监听端口').press('Enter')
+  await expect(page.locator('#deploy-WebuiPort-status')).toHaveAccessibleName('已保存')
   await page.reload()
   await expect(page.getByLabel('监听端口')).toHaveValue('23456')
   await page.goto('/#/i/demo-main/overview')

@@ -7033,6 +7033,8 @@
     "Button": {
       "Start": "启动",
       "Stop": "停止",
+      "RunOnce": "执行一次",
+      "SingleTaskRunning": "单次任务运行中",
       "ScrollON": "自动滚动 开",
       "ScrollOFF": "自动滚动 关",
       "DashboardON": "折叠",

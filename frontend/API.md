@@ -57,7 +57,7 @@
 | `instances.delete` | instance、revision | 停止状态下将配置移至备份 |
 | `config.get` | instance | 当前值及 revision |
 | `config.patch` | instance、changes、可选 revision | 锁内合并指定字段，校验后原子保存 |
-| `overview.get` | instance | 资源、任务计划、连接配置与状态 |
+| `overview.get` | instance | 资源、任务计划、连接配置与状态；`singleTask` 标识单次任务及运行编号，`schedulerRunning` 区分调度器，任务的 `runOnceAllowed` 标识可单次执行 |
 | `emulator.status` | instance | 只读模拟器运行时长检测快照及预计重启条件，不访问设备 |
 | `system.restart` | 无 | 保存运行实例并请求监督器重启 WebUI 服务 |
 | `island.suspend.state` | instance | 岛屿任务当前启用数量与批量暂停记录 |
@@ -65,6 +65,8 @@
 | `scheduler.start` | instance | 启动调度器，返回当前总览 |
 | `scheduler.stop` | instance | 停止调度器并执行配置的收尾动作 |
 | `tasks.run` | instance、task | 运行允许单独执行的工具 |
+| `tasks.runOnce` | instance、task | 单次执行实例已启用的排程任务，不启动调度器；同实例已有 worker 时拒绝启动 |
+| `tasks.stop` | instance、task、runId | 核对任务和运行编号后立即停止对应单次任务，不执行调度器停止收尾 |
 | `logs.get` | instance、可选 after | 游标之后的日志，有界保留 |
 | `opsi.simulator.status` | instance、可选 after | 离线模拟状态、进度、结果、图表标识及独立日志增量 |
 | `opsi.simulator.start` | instance | 按当前实例配置快照启动后台模拟，返回模拟状态 |

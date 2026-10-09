@@ -7033,6 +7033,8 @@
     "Button": {
       "Start": "出发喵！",
       "Stop": "停下喵~",
+      "RunOnce": "执行一次喵",
+      "SingleTaskRunning": "单次任务运行中喵",
       "ScrollON": "自动滚动 开喵",
       "ScrollOFF": "自动滚动 关喵",
       "DashboardON": "折叠喵",

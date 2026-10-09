@@ -827,8 +827,9 @@ pre.rich-traceback-code {
 [id^="pywebio-scope-overview-task_"] {
     display: grid;
     grid-auto-flow: column;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     margin: .125rem .625rem .125rem .375rem;
+    align-items: center;
 }
 
 #pywebio-scope-daemon-overview {

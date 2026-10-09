@@ -221,7 +221,8 @@ class AndroidUpdateService:
         try:
             from module.runtime.process_manager import ProcessManager
             instances = ProcessManager.running_instances()
-            names = [alas.config_name + '\n' for alas in instances]
+            from module.runtime.single_task import is_single_task
+            names = [alas.config_name + '\n' for alas in instances if not is_single_task(alas)]
             # 恢复计划先落盘：一旦开始动源码，实例只能由父监督器在重启后恢复
             mark_dependency_sync_pending()
             atomic_write('./config/reloadalas', ''.join(names))

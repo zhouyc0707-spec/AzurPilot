@@ -1692,6 +1692,67 @@
         "type": "object"
       }
     },
+    "tasks.runOnce": {
+      "mutates": true,
+      "params": {
+        "additionalProperties": false,
+        "description": "单任务控制请求参数模型。",
+        "properties": {
+          "instance": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Instance",
+            "type": "string"
+          },
+          "task": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Task",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instance",
+          "task"
+        ],
+        "title": "TaskParams",
+        "type": "object"
+      }
+    },
+    "tasks.stop": {
+      "mutates": true,
+      "params": {
+        "additionalProperties": false,
+        "description": "停止指定轮次的单次任务，旧页面的请求不会终止新的任务。",
+        "properties": {
+          "instance": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Instance",
+            "type": "string"
+          },
+          "task": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Task",
+            "type": "string"
+          },
+          "runId": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Runid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instance",
+          "task",
+          "runId"
+        ],
+        "title": "TaskStopParams",
+        "type": "object"
+      }
+    },
     "logs.get": {
       "mutates": false,
       "params": {

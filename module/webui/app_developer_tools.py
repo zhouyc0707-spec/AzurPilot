@@ -2,6 +2,7 @@
 
 from deploy.atomic import atomic_write
 from module.logger import logger
+from module.runtime.single_task import is_single_task
 
 from module.webui.app_dependencies import (
     DEFAULT_CONFIG_NAME,
@@ -39,6 +40,7 @@ def prepare_webui_restart() -> bool:
     try:
         names = [
             f"{alas.config_name}\n" for alas in ProcessManager.running_instances()
+            if not is_single_task(alas)
         ]
         atomic_write("./config/reloadalas", "".join(names))
     except Exception as exc:

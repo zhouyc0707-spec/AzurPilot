@@ -556,7 +556,7 @@ html.home-active .topbar,
 .rail-queue-group.pending .rail-queue-heading svg {color: color-mix(in srgb, var(--text) 58%, var(--muted))}
 .rail-queue-group.waiting .rail-queue-heading svg {color: var(--muted)}
 .rail-queue-body {padding: 5px}
-.rail-task-item {grid-template-columns: minmax(0, 1fr) auto 13px; min-height: 58px; margin: 2px 0; padding: 10px 10px 10px 12px; border-radius: 13px}
+.rail-task-item {grid-template-columns: minmax(0, 1fr) auto; min-height: 58px; margin: 2px 0; padding: 10px 10px 10px 12px; border-radius: 13px}
 .rail-task-item:hover {background: color-mix(in srgb, var(--surface) 86%, transparent)}
 .rail-task-item strong {font-size: 13px; line-height: 1.35}
 .rail-task-item small {margin-top: 3px; font-size: 11px; line-height: 1.35}

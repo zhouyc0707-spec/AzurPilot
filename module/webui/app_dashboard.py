@@ -18,7 +18,16 @@ from module.webui.app_dependencies import (
     re,
     t,
     time_delta,
+    toast,
     use_scope,
+)
+from module.api.protocol import ApiError
+from module.config.utils import filepath_config, read_file
+from module.runtime.single_task import (
+    is_run_once_allowed,
+    run_once,
+    single_task_state,
+    stop_once,
 )
 
 from module.webui.app_helpers import (
@@ -32,33 +41,69 @@ from module.webui.app_types import WebUIMixinBase
 class DashboardMixin(WebUIMixinBase):
     """WebUI仪表盘刷新逻辑"""
 
+    def _overview_run_task(
+        self, task: str, instance: str, run_id: str | None = None
+    ) -> None:
+        """只运行选中任务；停止时校验本轮 worker，不执行调度器收尾动作。"""
+        try:
+            if run_id is None:
+                run_once(instance, task)
+            else:
+                stop_once(instance, task, run_id)
+        except ApiError as exc:
+            toast(exc.message, color="warn")
+        finally:
+            if self.alas_name == instance and self.page == "Overview":
+                self.alas_update_overview_task()
+                self._refresh_scheduler_switch(
+                    getattr(self, "_overview_scheduler_switch", None)
+                )
+
     def alas_update_overview_task(self) -> None:
         if not self.visible:
             return
         self.alas_config.load()
         self.alas_config.get_next_task()
 
-        if len(self.alas_config.pending_task) >= 1:
-            if self.alas.alive:
-                running = self.alas_config.pending_task[:1]
-                pending = self.alas_config.pending_task[1:]
-            else:
-                running = []
-                pending = self.alas_config.pending_task[:]
-        else:
-            running = []
-            pending = []
-        waiting = self.alas_config.waiting_task
+        alive = self.alas.alive
+        single_task = single_task_state(self.alas)
+        current = (
+            single_task["name"] if single_task else self.alas.current_task
+        ) if alive else None
+        pending = [
+            task for task in self.alas_config.pending_task if task.command != current
+        ]
+        waiting = [
+            task for task in self.alas_config.waiting_task if task.command != current
+        ]
+        running = []
+        if current:
+            candidates = (
+                self.alas_config.pending_task + self.alas_config.waiting_task
+            )
+            running = [task for task in candidates if task.command == current]
+            if not running and current in self.alas_config.data:
+                # 执行中的任务可能已更新 NextRun 或自行关闭，仍显示实际任务。
+                running = [Function(self.alas_config.data[current])]
+
+        template = read_file(filepath_config("template"))
+        allowed = {
+            task.command for task in pending + waiting
+            if is_run_once_allowed(self.alas_config.data, template, task.command)
+        }
 
         snapshot = {
             "running": tuple((task.command, task.next_run) for task in running),
             "pending": tuple((task.command, task.next_run) for task in pending),
             "waiting": tuple((task.command, task.next_run) for task in waiting),
-            "alive": self.alas.alive,
+            "alive": alive,
+            "single_task": single_task,
+            "allowed": frozenset(allowed),
         }
         if self._overview_snapshot == snapshot:
             return
         self._overview_snapshot = snapshot
+        instance = self.alas_name
 
         def put_task(func: Function):
             with use_scope(f"overview-task_{func.command}"):
@@ -69,10 +114,34 @@ class DashboardMixin(WebUIMixinBase):
                     ],
                     size="auto auto",
                 )
-                put_button(
+                buttons = []
+                if single_task and single_task["name"] == func.command:
+                    buttons.append(put_button(
+                        label=t("Gui.Button.Stop"),
+                        onclick=lambda: self._overview_run_task(
+                            func.command, instance, single_task["runId"]
+                        ),
+                        color="off",
+                        small=True,
+                    ))
+                elif func.command in allowed:
+                    buttons.append(put_button(
+                        label=t("Gui.Button.RunOnce"),
+                        onclick=lambda: self._overview_run_task(
+                            func.command, instance
+                        ),
+                        color="on",
+                        small=True,
+                        disabled=alive,
+                    ))
+                buttons.append(put_button(
                     label=t("Gui.Button.Setting"),
                     onclick=lambda: self.alas_set_group(func.command),
                     color="off",
+                    small=True,
+                ))
+                put_row(buttons, size=" ".join("auto" for _ in buttons)).style(
+                    "gap: .25rem; align-items: center;"
                 )
 
         clear("running_tasks")

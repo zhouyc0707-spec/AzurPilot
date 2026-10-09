@@ -2,11 +2,13 @@
  * @fileoverview 任务队列与拖拽排序列表组件。
  */
 
-import { useLayoutEffect, useRef } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronRight, CirclePlay, Hourglass, ListTodo } from 'lucide-react'
-import type { Overview } from '../api/types'
-import { useApp } from '../app/context'
+import { ChevronRight, CirclePlay, Hourglass, ListTodo, Loader2, Play, Square } from 'lucide-react'
+import { api } from '../api/client'
+import type { Overview, ScheduledTask } from '../api/types'
+import { useApp, useConnection } from '../app/context'
+import { editor } from '../config/editors'
 import type { UiKey } from '../i18n'
 
 const taskStateLabel = {
@@ -51,6 +53,12 @@ export function movedBy(before: Box | undefined, after: Box) {
   return {dx, dy}
 }
 
+/** 独立运行按钮只接受服务端授权；停止目标同时携带本轮运行标识。 */
+export function taskRunAction(data: Overview, task: ScheduledTask): 'run' | 'stop' | null {
+  if (data.status === 'running' && data.singleTask?.name === task.name) return 'stop'
+  return task.runOnceAllowed && task.state !== 'running' ? 'run' : null
+}
+
 /**
  * 任务计划：正在运行 / 待运行 / 等待中三组。
  *
@@ -61,8 +69,13 @@ export function movedBy(before: Box | undefined, after: Box) {
  * 三组同处一个容器，条目在组间移动时能被测到位置变化并连续平移过去。
  * 组的高度用补间兑现，离开的条目在原地收缩塌陷，插入的条目自中心放大。
  */
-export function TaskQueue({instance, data, onNavigate}: {instance: string; data?: Overview; onNavigate?: () => void}) {
-  const {t, ui} = useApp()
+export function TaskQueue({instance, data, onData, onNavigate}: {instance: string; data?: Overview; onData: (data: Overview) => void; onNavigate?: () => void}) {
+  const {t, ui, notify} = useApp()
+  const connection = useConnection()
+  const [busyTask, setBusyTask] = useState<string | null>(null)
+  const requestPending = useRef(false)
+  const activeInstance = useRef(instance)
+  activeInstance.current = instance
   const positions = useRef(new Map<string, Placement>())
   const known = useRef(new Set<string>())
   const list = useRef<HTMLDivElement>(null)
@@ -70,6 +83,31 @@ export function TaskQueue({instance, data, onNavigate}: {instance: string; data?
   const snapshots = useRef(new Map<string, HTMLElement>())
   const synced = useRef(false)
   const host = useRef<HTMLDivElement | null>(null)
+
+  async function toggleTask(task: ScheduledTask) {
+    if (!data || requestPending.current || connection !== 'ready') return
+    const action = taskRunAction(data, task)
+    if (!action || (action === 'run' && (data.status === 'running' || data.status === 'updating'))) return
+    requestPending.current = true
+    setBusyTask(task.name)
+    try {
+      let next: Overview
+      if (action === 'stop' && data.singleTask) {
+        next = await api.request('tasks.stop', {instance, task: task.name, runId: data.singleTask.runId})
+      } else {
+        await editor(`config:${instance}`).settled()
+        next = await api.request('tasks.runOnce', {instance, task: task.name})
+      }
+      // 切换实例后，旧实例的请求不能覆盖当前栏的数据。
+      if (activeInstance.current === instance) onData(next)
+      notify(ui(action === 'stop' ? 'task.runOnceStopped' : 'task.runOnceStarted', {task: t(`Task.${task.name}.name`)}))
+    } catch (error) {
+      notify((error as Error).message, true)
+    } finally {
+      requestPending.current = false
+      setBusyTask(null)
+    }
+  }
 
   useLayoutEffect(() => {
     const container = list.current
@@ -180,15 +218,24 @@ export function TaskQueue({instance, data, onNavigate}: {instance: string; data?
         <div className="rail-queue-body">
           {tasks.length ? tasks.map(task => {
             const nextRun = task.nextRun?.replace('T', ' ').trim()
-            return <Link key={task.name} data-task={task.name} className="rail-task-item"
-                         to={`/i/${instance}/task/${task.name}`} onClick={onNavigate}>
-              <div>
-                <strong>{t(`Task.${task.name}.name`)}</strong>
-                {nextRun && <small>{nextRun}</small>}
-              </div>
-              <span className={`task-state ${task.state}`}><GroupIcon size={12}/>{ui(taskStateLabel[task.state])}</span>
-              <ChevronRight size={13}/>
-            </Link>
+            const action = taskRunAction(data, task)
+            const label = ui(action === 'stop' ? 'task.stopOnce' : 'task.runOnce', {task: t(`Task.${task.name}.name`)})
+            return <div key={task.name} data-task={task.name} className="rail-task-item">
+              <Link className="rail-task-link" to={`/i/${instance}/task/${task.name}`} onClick={onNavigate}>
+                <div>
+                  <strong>{t(`Task.${task.name}.name`)}</strong>
+                  {nextRun && <small>{nextRun}</small>}
+                </div>
+                <span className={`task-state ${task.state}`}><GroupIcon size={12}/>{ui(taskStateLabel[task.state])}</span>
+                <ChevronRight size={13}/>
+              </Link>
+              {action && <button type="button" className={`icon-button rail-task-run${action === 'stop' ? ' is-running' : ''}`}
+                aria-label={label} title={label} aria-pressed={action === 'stop'}
+                disabled={!!busyTask || connection !== 'ready' || (action === 'run' && (data.status === 'running' || data.status === 'updating'))}
+                onClick={() => void toggleTask(task)}>
+                {busyTask === task.name ? <Loader2 size={15} className="spin"/> : action === 'stop' ? <Square size={15}/> : <Play size={15}/>}
+              </button>}
+            </div>
           }) : <div className="rail-queue-empty">{ui(group.empty as UiKey)}</div>}
         </div>
       </section>

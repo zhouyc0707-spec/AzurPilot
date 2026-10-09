@@ -7033,6 +7033,8 @@
     "Button": {
       "Start": "Start",
       "Stop": "Stop",
+      "RunOnce": "Run once",
+      "SingleTaskRunning": "Single task running",
       "ScrollON": "Auto Scroll ON",
       "ScrollOFF": "Auto Scroll OFF",
       "DashboardON": "Collapse",

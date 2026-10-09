@@ -10,6 +10,7 @@ from rich.console import Console
 from module.api.protocol import ApiError
 from module.logger import logger
 from module.runtime.process_manager import ProcessManager
+from module.runtime.single_task import is_run_once_allowed, is_single_task, single_task_state
 
 STATES = {1: 'running', 2: 'stopped', 3: 'error', 4: 'updating'}
 
@@ -106,7 +107,7 @@ class RuntimeService:
             return
         try:
             from module.runtime.startup_memory import record_running
-            record_running(instance.config_name for instance in running)
+            record_running(instance.config_name for instance in running if not is_single_task(instance))
         except Exception:
             logger.exception('记录运行状态失败，记忆运行可能不准确')
     def manager(self, instance: str) -> ProcessManager:
@@ -152,8 +153,17 @@ class RuntimeService:
         manager = ProcessManager._processes.get(instance)
         tasks = []
         from module.config.time_source import now as current_time
+        from module.submodule.utils import get_available_mod
         now = current_time().isoformat(sep=' ')
-        running = getattr(manager, 'current_task', None) if manager and manager.state == 1 else None
+        # 一次快照供状态和按钮共同使用，避免自然退出或重新启动期间字段互相矛盾。
+        with ProcessManager._get_lifecycle_lock(instance):
+            state = manager.state if manager else 2
+            running = getattr(manager, 'current_task', None) if state == 1 else None
+            single_task = single_task_state(manager, alive=state == 1) if manager else None
+            stopping = bool(getattr(manager, 'stopping', False)) if manager else False
+            started_func = getattr(manager, 'started_func', None)
+        if single_task:
+            running = single_task['name']
         for task, groups in data.items():
             # 根节点也包含实例身份等内部元数据，只有参数组字典才属于任务。
             if not isinstance(groups, dict):
@@ -162,6 +172,7 @@ class RuntimeService:
             if scheduler.get('Enable') or task == running:
                 next_run = str(scheduler.get('NextRun', ''))
                 tasks.append({'name': task, 'nextRun': next_run, 'pending': next_run.replace('T', ' ') <= now,
+                              'runOnceAllowed': is_run_once_allowed(data, getattr(self.configs, 'template', {}), task),
                               'state': 'running' if task == running else 'pending' if next_run.replace('T', ' ') <= now else 'waiting'})
         from module.config.task_priority import parse_task_priority
         priority = parse_task_priority(data.get('General', {}).get('YukikazeTaskManager', {}).get('TaskPriorityAdjustment'))
@@ -176,8 +187,10 @@ class RuntimeService:
         # stopping：用户点了停止、正在等当前任务在安全点退出（温柔停止）。
         # 前端据此把启停按钮显示成「停止中…」，再点一次即强制停止。
         return {'instance': instance, 'revision': revision,
-                'status': STATES.get(manager.state, 'stopped') if manager else 'stopped',
-                'stopping': bool(getattr(manager, 'stopping', False)) if manager else False,
+                'status': STATES.get(state, 'stopped'),
+                'stopping': stopping,
+                'singleTask': single_task,
+                'schedulerRunning': state == 1 and started_func in {'alas', *get_available_mod()},
                 'tasks': tasks, 'resources': resources,
                 'emulator': data.get('Alas', {}).get('Emulator', {})}
 
@@ -207,6 +220,20 @@ class RuntimeService:
             manager.start(task or 'alas', ev=updater.event)
             if not manager.alive:
                 raise ApiError('START_FAILED', '任务未启动，请检查服务是否正在重启')
+        self._record_running_now()
+        return self.overview(instance)
+
+    def run_once(self, instance: str, task: str) -> dict:
+        """单次执行启用的普通任务，不启动主调度器。"""
+        from module.runtime.single_task import run_once
+        run_once(instance, task, configs=self.configs)
+        self._record_running_now()
+        return self.overview(instance)
+
+    def stop_once(self, instance: str, task: str, run_id: str) -> dict:
+        """立即停止指定轮次的单次任务，不运行停止后的收尾动作。"""
+        from module.runtime.single_task import stop_once
+        stop_once(instance, task, run_id, configs=self.configs)
         self._record_running_now()
         return self.overview(instance)
 
@@ -261,7 +288,9 @@ class RuntimeService:
             ApiError: 进程未能全部正常终止时抛出 STOP_FAILED。
         """
         with ProcessManager._get_lifecycle_lock(instance):
-            if not self.manager(instance).stop_by_user(soft=soft):
+            manager = self.manager(instance)
+            stopped = manager.stop() if is_single_task(manager) else manager.stop_by_user(soft=soft)
+            if not stopped:
                 raise ApiError('STOP_FAILED', '尚未确认全部工作进程停止，请检查日志后重试')
         self._record_running_now()
         return self.overview(instance)

@@ -60,6 +60,8 @@ module/api/
 
 配套生成产物与契约：`dev_tools/export_api_schema.py` 从 `protocol.py` + `router.py` 生成 `frontend/src/api/generated.ts`（参数类型）与 `frontend/src/api/contract.json`（机器可审契约）。
 
+排程任务的单次执行使用 `tasks.runOnce(instance, task)`；任务必须属于模板定义的排程白名单且在实例中启用，不通过方法名反射任意属性。`tasks.stop(instance, task, runId)` 只立即终止匹配的单次 worker，旧运行编号不会停止新任务。总览返回 `singleTask`（任务名和运行编号，空闲为 `null`）、`schedulerRunning` 及每个任务的 `runOnceAllowed`，让新旧主题的队列正确显示执行／停止按钮；原 `tasks.run` 工具入口和调度器停止的收尾语义继续保留。具体配置提交与重启边界见 [运行时服务](runtime.md)。
+
 仓库报告使用 `statistics.report(category='storage', days=7)` 只读查询最近完整快照及时间窗口内成功扫描的历史序列。序列的可选 `icon` 在逐点与共用时间轴两种格式中保留，物品图标由 `/storage-items/` 静态挂载提供。主动扫描沿用 `tasks.run(task='StorageStatistics')` 与实例运行互斥；页面刷新不启动扫描。
 
 其他分类报表在同一请求内共用统计协调锁，避免每个指标扫描全部历史。普通统计不调用加密校验或 OS 凭据，旧密文须先完成无损迁移。`CategorySection` 仅按 `statistics` 事件更新，同一分类最多保留一个正在执行的请求；期间收到的多次通知合并为一次后续刷新。运行概览事件不触发统计查询，SQLite WAL 的修改也纳入更新指纹；切换实例或参数后忽略旧响应。
