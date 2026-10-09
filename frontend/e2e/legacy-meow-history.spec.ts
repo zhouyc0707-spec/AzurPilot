@@ -21,7 +21,7 @@ const MEOW_COLUMNS: LegacyColumn[] = [
 ]
 
 /** 只替换旧版统计响应，其他请求由临时测试后端处理，不读取真实历史或执行游戏。 */
-async function isolatedStatistics(page: Page, availableMonths = [HISTORY_MONTH, '2026-08'], extraMeowRows: (number | string)[][] = []) {
+async function isolatedStatistics(page: Page, availableMonths = [HISTORY_MONTH, '2026-08'], extraMeowRows: (number | string)[][] = [], mergeUnknownLoot = false) {
   const requests: LegacyRequest[] = []
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))
@@ -37,6 +37,7 @@ async function isolatedStatistics(page: Page, availableMonths = [HISTORY_MONTH, 
       requests.push(request)
       const month = request.params.month ?? CURRENT_MONTH
       const isCurrentMonth = !request.params.month
+      const unknownLoot = mergeUnknownLoot ? 1 : 0
       const report: LegacyStatisticsReport = {
         instance: request.params.instance ?? 'testpilot', month, dashboardKeys: [],
         apChart: {series: []}, opsi: {summary: [], columns: [], rows: []},
@@ -44,7 +45,7 @@ async function isolatedStatistics(page: Page, availableMonths = [HISTORY_MONTH, 
           month, isCurrentMonth, availableMonths, lastRecord: '2026-10-06 09:00:00', columns: MEOW_COLUMNS,
           rows: [
             [month, 3, isCurrentMonth ? 31 : 13, 11, 12, 13, 14, 15, 16, ...CUMULATIVE_ROWS[0].slice(1)],
-            [month, 5, isCurrentMonth ? 51 : 15, 21, 22, 23, 24, 25, 26, ...CUMULATIVE_ROWS[1].slice(1)],
+            [month, 5, isCurrentMonth ? 51 : 15, 21 + unknownLoot, 22 + unknownLoot, 23, 24 + unknownLoot, 25, 26, ...CUMULATIVE_ROWS[1].slice(1)],
             ...extraMeowRows.map(row => [month, ...row]),
           ],
         },
@@ -168,41 +169,43 @@ test('旧版深色窄屏累计表在弹窗内横向滚动，不撑宽页面', as
   expect(fixture.errors).toEqual([])
 })
 
-test('旧版月度收获保留侵蚀 6 和未识别海域掉落，未知轮次与累计不借用其他等级', async ({page}, testInfo) => {
-  const unknownMonthlyCells = ['未识别', '-', '1', '1', '0', '1', '0', '0']
+test('旧版未识别掉落归入侵蚀 5，保留侵蚀 6 且不改变轮次和历史累计', async ({page}, testInfo) => {
+  const mergedLootCells = ['22', '23', '23', '25', '25', '26']
   const extraRows: (number | string)[][] = [
     [6, 6, 0, 2, 0, 0, 0, 0, '-', '-', '-', '-', '-'],
-    ['未识别', '-', 1, 1, 0, 1, 0, 0, '-', '-', '-', '-', '-'],
   ]
-  const fixture = await isolatedStatistics(page, [HISTORY_MONTH], extraRows)
+  const fixture = await isolatedStatistics(page, [HISTORY_MONTH], extraRows, true)
   const section = await openStatistics(page)
   await expect(section.locator('thead th')).toHaveCount(9)
-  await expect(section.locator('tbody tr')).toHaveCount(4)
+  await expect(section.locator('tbody tr')).toHaveCount(3)
+  await expect(section.locator('tbody tr').nth(1).locator('td')).toHaveText([
+    CURRENT_MONTH, '5', '51', ...mergedLootCells,
+  ])
   await expect(section.locator('tbody tr').nth(2).locator('td')).toHaveText([
     CURRENT_MONTH, '6', '6', '0', '2', '0', '0', '0', '0',
   ])
-  await expect(section.locator('tbody tr').last().locator('td')).toHaveText([
-    CURRENT_MONTH, ...unknownMonthlyCells,
-  ])
-  await section.screenshot({path: testInfo.outputPath('旧版月度收获未识别海域.png')})
+  await expect(section.getByText('未识别', {exact: true})).toHaveCount(0)
+  await section.screenshot({path: testInfo.outputPath('旧版月度收获未识别归入侵蚀5.png')})
 
   await section.getByRole('button', {name: '查看历史月份', exact: true}).click()
   const dialog = page.getByRole('dialog')
   const cumulativeRows = [
     ...CUMULATIVE_ROWS,
     ['6', '-', '-', '-', '-', '-'],
-    ['未识别', '-', '-', '-', '-', '-'],
   ]
   await expectCumulativeRows(dialog, cumulativeRows)
-  await dialog.screenshot({path: testInfo.outputPath('旧版历史累计未识别海域.png')})
+  await expect(dialog.getByText('未识别', {exact: true})).toHaveCount(0)
+  await dialog.screenshot({path: testInfo.outputPath('旧版历史累计未识别归入侵蚀5.png')})
   await dialog.getByRole('button', {name: HISTORY_MONTH, exact: true}).click()
   await expect(dialog).toHaveCount(0)
   await expect(section.getByRole('heading', {name: `历史耄耋相接收获（${HISTORY_MONTH}）`, exact: true})).toBeVisible()
-  await expect(section.locator('tbody tr').last().locator('td')).toHaveText([
-    HISTORY_MONTH, ...unknownMonthlyCells,
+  await expect(section.locator('tbody tr').nth(1).locator('td')).toHaveText([
+    HISTORY_MONTH, '5', '15', ...mergedLootCells,
   ])
+  await expect(section.getByText('未识别', {exact: true})).toHaveCount(0)
   await section.getByRole('button', {name: '查看历史月份', exact: true}).click()
   await expectCumulativeRows(dialog, cumulativeRows)
+  await expect(dialog.getByText('未识别', {exact: true})).toHaveCount(0)
   expect(fixture.requests.some(request => request.params.month === HISTORY_MONTH)).toBe(true)
   expect(fixture.errors).toEqual([])
 })

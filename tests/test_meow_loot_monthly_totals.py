@@ -1,7 +1,9 @@
-"""使用真实临时明细库验证未知海域掉落不漏计，且不猜测侵蚀等级。"""
+"""使用真实临时明细库验证未识别收获默认归入侵蚀 5，且原始记录不变。"""
 
+import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
@@ -32,15 +34,23 @@ class MeowLootMonthlyTotalsTests(unittest.TestCase):
     def totals(self, **kwargs):
         return AzurStats.get_meow_loot_monthly_totals(year=2026, month=10, **kwargs)
 
-    def test_unknown_zone_keeps_confirmed_paper_plate_and_coordinate_in_separate_bucket(self):
+    def test_unknown_zone_adds_confirmed_loot_to_hazard_five_without_changing_records(self):
         for item in ('GearDesignPlanTorpedoT5', 'PlateAntiAirT4', 'CoordinateObscure'):
             self.assertEqual(self.insert(0, item), 1)
+        self.insert(5, 'GearDesignPlanGunT5', 2)
+        self.insert(5, 'PlateGeneralT4', 2)
         totals = self.totals()
-        self.assertEqual(totals[0]['GearDesignPlanT5'], 1)
-        self.assertEqual(totals[0]['Plate'], 1)
-        self.assertEqual(totals[0]['CoordinateObscure'], 1)
-        self.assertTrue(all(not any(totals[h].values()) for h in range(1, 7)))
-        self.assertEqual(AzurStats.meow_loot_display_levels(totals), [3, 5, 0])
+        self.assertEqual(totals[5]['GearDesignPlanT5'], 3)
+        self.assertEqual(totals[5]['Plate'], 3)
+        self.assertEqual(totals[5]['CoordinateObscure'], 1)
+        self.assertEqual(set(totals), set(range(1, 7)))
+        self.assertTrue(all(not any(totals[h].values()) for h in (1, 2, 3, 4, 6)))
+        self.assertEqual(AzurStats.meow_loot_display_levels(totals), [3, 5])
+        with closing(sqlite3.connect(AzurStats.LOCAL_DB)) as conn:
+            self.assertEqual(conn.execute(
+                'SELECT item, amount FROM opsi_items WHERE hazard_level = 0 ORDER BY item').fetchall(), [
+                    ('CoordinateObscure', 1), ('GearDesignPlanTorpedoT5', 1), ('PlateAntiAirT4', 1),
+                ])
 
     def test_other_levels_show_up_without_changing_month_device_genre_and_instance_scope(self):
         self.insert(6, 'GearDesignPlanGunT5', 2)
@@ -52,22 +62,22 @@ class MeowLootMonthlyTotalsTests(unittest.TestCase):
         self.insert(0, 'GearDesignPlanTorpedoT5', 9, moment=datetime(2026, 9, 30, 12))
         totals = self.totals()
         self.assertEqual(totals[6]['GearDesignPlanT5'], 2)
-        self.assertEqual(totals[0]['GearDesignPlanT5'], 1)
+        self.assertEqual(totals[5]['GearDesignPlanT5'], 1)
         self.assertEqual(totals[3]['Plate'], 4)
         self.assertEqual(totals[5]['Plate'], 3)
-        self.assertEqual(AzurStats.meow_loot_display_levels(totals), [3, 5, 6, 0])
-        self.assertEqual(self.totals(instance='fixture')[0]['GearDesignPlanT5'], 0)
+        self.assertEqual(AzurStats.meow_loot_display_levels(totals), [3, 5, 6])
+        self.assertEqual(self.totals(instance='fixture')[5]['GearDesignPlanT5'], 0)
 
-    def test_missing_or_invalid_level_remains_unknown_and_lower_rarity_does_not_count(self):
+    def test_missing_or_invalid_level_defaults_to_five_and_lower_rarity_does_not_count(self):
         self.insert(None, 'GearDesignPlanPlaneT5', 2)
         self.insert(9, 'GearDesignPlanAntiAirT5', 1)
         self.insert(0, 'GearDesignPlanGunT4', 10)
-        self.assertEqual(self.totals()[0]['GearDesignPlanT5'], 3)
+        self.assertEqual(self.totals()[5]['GearDesignPlanT5'], 3)
 
     def test_month_picker_and_totals_use_the_same_local_month_at_month_start(self):
         self.insert(0, 'GearDesignPlanTorpedoT5', moment=datetime(2026, 10, 1, 0, 30))
         self.assertEqual(AzurStats.get_meow_loot_available_months(), [(2026, 10)])
-        self.assertEqual(self.totals()[0]['GearDesignPlanT5'], 1)
+        self.assertEqual(self.totals()[5]['GearDesignPlanT5'], 1)
 
 
 if __name__ == '__main__':

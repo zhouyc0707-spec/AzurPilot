@@ -138,21 +138,17 @@ class OpsiExportMixin(WebUIMixinBase):
             # 原来只在「本来就接近整数」时才转 int，于是 360.8 会带着小数显示出来。
             # 同一张表右侧的累计轮数（_meow_extra_columns）早就是 int(round(...))，
             # 这里对齐成同一口径。
-            if hazard_level == 0:
-                # 海域未确认时不查询全等级汇总，也不借用累计轮次和平均收益。
-                rounds = "-"
-            else:
-                try:
-                    meow_data = cl1_db.get_meow_stats(
-                        instance_name, year, month, hazard_level=hazard_level
-                    )
-                    rounds = int(round(float(meow_data.get("effective_rounds", 0) or 0)))
-                except Exception:
-                    rounds = 0
+            try:
+                meow_data = cl1_db.get_meow_stats(
+                    instance_name, year, month, hazard_level=hazard_level
+                )
+                rounds = int(round(float(meow_data.get("effective_rounds", 0) or 0)))
+            except Exception:
+                rounds = 0
             rows.append(
                 [
                     month_str,
-                    hazard_level if hazard_level else "未识别",
+                    hazard_level,
                     rounds,
                     int(loot.get("Plate", 0) or 0),
                     int(loot.get("GearDesignPlanT5", 0) or 0),
@@ -169,7 +165,7 @@ class OpsiExportMixin(WebUIMixinBase):
         extra = self._meow_extra_columns(AzurStats)
         empty_extra = ["-"] * 5
         for hazard_level, row in zip(levels, rows):
-            row.extend(extra.get(hazard_level, empty_extra) if hazard_level else empty_extra)
+            row.extend(extra.get(hazard_level, empty_extra))
 
         # 月份切换按钮紧跟在标题右侧（标题列自适应内容宽度，按钮列吃掉剩余空间，
         # 因此按钮不会被推到最右边）；按钮统一用 color="off"，

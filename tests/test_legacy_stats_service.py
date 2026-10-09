@@ -269,32 +269,32 @@ class MeowLootPanelTests(unittest.TestCase):
         # 有效轮数为 0 的累计行被丢弃，因此侵蚀等级 7 不会出现在表里
         self.assertEqual(len(panel['rows']), 2)
 
-    def test_unknown_and_nonstandard_levels_keep_loot_without_borrowing_rounds(self):
+    def test_unknown_loot_folded_into_five_keeps_original_rounds_and_other_levels(self):
         from module.statistics.azurstats import AzurStats
 
-        totals = {3: {}, 5: {}, 6: {'CatT3': 2}, 0: {'GearDesignPlanT5': 1}}
+        # 汇总层已将未知收获归入侵蚀 5；展示继续使用原有 5 级轮次及累计均值。
+        totals = {3: {}, 5: {'Plate': 1, 'GearDesignPlanT5': 1, 'CoordinateObscure': 1}, 6: {'CatT3': 2}}
         cumulative = [
+            [5, datetime(2026, 10, 8, 11).timestamp(), 3329, .117741, .003, .005, .007],
             [6, datetime(2026, 10, 8, 12).timestamp(), 4, 10, .5, .25, .125],
-            # 即使缓存提供了等级 0 的聚合，也不能给未知海域借用轮次或收益。
-            [0, datetime(2026, 10, 8, 13).timestamp(), 999, 999, 999, 999, 999],
         ]
         cl1_db = MagicMock()
         cl1_db.get_meow_stats.side_effect = lambda instance, year, month, hazard_level=None: {
-            'effective_rounds': 2.4 if hazard_level == 6 else 0}
+            'effective_rounds': {3: 0, 5: 30.6, 6: 2.4}[hazard_level]}
         with patch.object(AzurStats, 'get_meow_loot_monthly_totals', return_value=totals) as monthly, \
                 patch.object(AzurStats, 'get_meow_loot_available_months', return_value=[]), \
                 patch.object(AzurStats, 'load_meowofficer_farming', return_value=cumulative), \
                 patch('module.statistics.cl1_database.db', cl1_db):
             panel = _meow_loot_panel('alas', 2026, 10)
 
-        self.assertEqual([row[1] for row in panel['rows']], [3, 5, 6, '未识别'])
-        known, unknown = panel['rows'][-2:]
-        self.assertEqual(known[2], 2)
-        self.assertEqual(known[8], 2)
-        self.assertEqual(known[9:], [4, '10.000000', '0.500000', '0.250000', '0.125000'])
-        self.assertEqual(unknown[4], 1)
-        self.assertEqual(unknown[2], DASH)
-        self.assertEqual(unknown[9:], [DASH] * 5)
+        self.assertEqual([row[1] for row in panel['rows']], [3, 5, 6])
+        fifth, sixth = panel['rows'][-2:]
+        self.assertEqual(fifth[3:9], [1, 1, 0, 1, 0, 0])
+        self.assertEqual(fifth[2], 31)
+        self.assertEqual(fifth[9:], [3329, '0.117741', '0.003000', '0.005000', '0.007000'])
+        self.assertEqual(sixth[2], 2)
+        self.assertEqual(sixth[8], 2)
+        self.assertEqual(sixth[9:], [4, '10.000000', '0.500000', '0.250000', '0.125000'])
         self.assertEqual([call.kwargs['hazard_level'] for call in cl1_db.get_meow_stats.call_args_list], [3, 5, 6])
         self.assertEqual(len(panel['columns']), 14)
         self.assertTrue(all(len(row) == 14 for row in panel['rows']))
@@ -302,13 +302,14 @@ class MeowLootPanelTests(unittest.TestCase):
 
 
 class LegacyMeowLootViewTests(unittest.TestCase):
-    def test_pywebio_preserves_standard_rows_and_shows_unknown_and_other_levels(self):
+    def test_pywebio_preserves_standard_rows_and_displays_unknown_loot_in_five(self):
         from module.statistics.azurstats import AzurStats
         from module.webui.app_stat_opsi_export import OpsiExportMixin
 
         for totals, expected_levels in (
             ({3: {'Plate': 1}, 5: {}}, [3, 5]),
-            ({3: {}, 5: {}, 6: {'CatT3': 2}, 0: {'GearDesignPlanT5': 1}}, [3, 5, 6, '未识别']),
+            ({3: {}, 5: {'Plate': 1, 'GearDesignPlanT5': 1, 'CoordinateObscure': 1},
+              6: {'CatT3': 2}}, [3, 5, 6]),
         ):
             with self.subTest(levels=expected_levels), ExitStack() as stack:
                 view = object.__new__(OpsiExportMixin)
@@ -316,14 +317,15 @@ class LegacyMeowLootViewTests(unittest.TestCase):
                 view._meow_loot_month = (2026, 10)
                 view._render_meow_loot_last_record = MagicMock()
                 cumulative = [
+                    [5, datetime(2026, 10, 8, 11).timestamp(), 3329, .117741, .003, .005, .007],
                     [6, datetime(2026, 10, 8, 12).timestamp(), 4, 10, .5, .25, .125],
-                    [0, datetime(2026, 10, 8, 13).timestamp(), 999, 999, 999, 999, 999],
                 ]
                 monthly = stack.enter_context(patch.object(
                     AzurStats, 'get_meow_loot_monthly_totals', return_value=totals))
                 stack.enter_context(patch.object(AzurStats, 'load_meowofficer_farming', return_value=cumulative))
                 cl1_db = MagicMock()
-                cl1_db.get_meow_stats.return_value = {'effective_rounds': 2.4}
+                cl1_db.get_meow_stats.side_effect = lambda instance, year, month, hazard_level=None: {
+                    'effective_rounds': {3: 0, 5: 30.6, 6: 2.4}[hazard_level]}
                 stack.enter_context(patch('module.statistics.cl1_database.db', cl1_db))
                 for name in ('put_row', 'put_html', 'put_scope', 'put_buttons', 'build_title_block'):
                     stack.enter_context(patch(f'module.webui.app_stat_opsi_export.{name}'))
@@ -336,13 +338,16 @@ class LegacyMeowLootViewTests(unittest.TestCase):
                 self.assertEqual(len(columns), 14)
                 self.assertTrue(all(len(row) == 14 for row in rows))
                 self.assertEqual([call.kwargs['hazard_level'] for call in cl1_db.get_meow_stats.call_args_list],
-                                 [level for level in expected_levels if isinstance(level, int)])
+                                 expected_levels)
                 monthly.assert_called_once_with(year=2026, month=10)
-                if expected_levels[-1] == '未识别':
-                    self.assertEqual(rows[-1][4], 1)
-                    self.assertEqual(rows[-1][2], DASH)
-                    self.assertEqual(rows[-1][9:], [DASH] * 5)
-                    self.assertEqual(rows[-2][8], 2)
+                fifth = next(row for row in rows if row[1] == 5)
+                self.assertEqual(fifth[2], 31)
+                self.assertEqual(fifth[9:], [3329, '0.117741', '0.003000', '0.005000', '0.007000'])
+                if 6 in expected_levels:
+                    self.assertEqual(fifth[3:9], [1, 1, 0, 1, 0, 0])
+                    self.assertEqual(rows[-1][8], 2)
+                    self.assertEqual(rows[-1][2], 2)
+                    self.assertEqual(rows[-1][9:], [4, '10.000000', '0.500000', '0.250000', '0.125000'])
                 else:
                     self.assertEqual(rows[0][3], 1)
 

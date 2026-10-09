@@ -514,7 +514,7 @@ class AzurStats:
             instance: 实例名；省略时保留旧版全局汇总。
 
         Returns:
-            dict[int, dict[str, int]]: 侵蚀等级(1-6) → 分类计数字典，0 保存未识别等级，
+            dict[int, dict[str, int]]: 侵蚀等级(1-6) → 分类计数字典，未识别等级默认计入 5，
                 键为 Plate / GearDesignPlanT5 / OrdnanceTestingReportT4 /
                 CoordinateObscure / CoordinateAbyssal / CatT3。
         """
@@ -542,8 +542,8 @@ class AzurStats:
             "CoordinateAbyssal",
             "CatT3",
         )
-        # 海域识别失败不能丢掉已经确认的物品；单独保留未知等级，不猜侵蚀 3 或 5。
-        totals = {h: {k: 0 for k in keys} for h in range(7)}
+        # 按用户约定，月度收获中未识别海域的物品默认计入侵蚀 5，原始明细不变。
+        totals = {h: {k: 0 for k in keys} for h in range(1, 7)}
         scope = ' AND instance = ?' if instance is not None else ''
         params = (month_start, month_end, device_id) + ((instance,) if instance is not None else ())
         try:
@@ -560,9 +560,9 @@ class AzurStats:
                 try:
                     h = int(row.get('hazard_level'))
                 except (TypeError, ValueError):
-                    h = 0
+                    h = 5
                 if h not in totals:
-                    h = 0
+                    h = 5
                 key = AzurStats.classify_meow_loot(str(row.get('item') or ""))
                 if key is None:
                     continue
@@ -576,11 +576,8 @@ class AzurStats:
 
     @staticmethod
     def meow_loot_display_levels(totals):
-        """保留常用侵蚀 3/5，补充有收获的其他等级，未知等级单独放在最后。"""
-        levels = [h for h in range(1, 7) if h in (3, 5) or any(totals.get(h, {}).values())]
-        if any(totals.get(0, {}).values()):
-            levels.append(0)
-        return levels
+        """保留常用侵蚀 3/5，补充有收获的其他等级；未识别收获已默认归入 5。"""
+        return [h for h in range(1, 7) if h in (3, 5) or any(totals.get(h, {}).values())]
 
     @staticmethod
     @opsi_secure.checked_read
