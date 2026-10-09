@@ -9,12 +9,16 @@
 - 超时（任务一直不退出）→ 强制终止并告警；
 - 等待期间再次点击 → 立即强制终止；
 - 没有事件（如 MCP 启动的 worker）或显式 `soft=False` → 保持立即终止。
+- 用户停止在安全点自然退出后仍记为手动停止，真正更新的通用停止保留更新状态。
 """
+import queue
+import threading
 import unittest
 from unittest.mock import Mock, patch
 
 from module.runtime.process_manager import ProcessManager
 from module.runtime.setting import State
+from module.runtime.worker_events import ExitEvent, WorkerResult
 
 
 class FakeEvent:
@@ -51,7 +55,7 @@ class SoftStopTest(unittest.TestCase):
     def setUp(self):
         self.original_manager = State.manager
         State.manager = Mock()
-        State.manager.Queue.return_value = Mock()
+        State.manager.Queue.side_effect = queue.Queue
         self.manager = ProcessManager('test-soft-stop')
         self.event = FakeEvent()
         self.manager._notify_event = self.event
@@ -125,18 +129,103 @@ class SoftStopTest(unittest.TestCase):
 
     def test_new_run_during_wait_is_not_killed(self):
         """等待期间用户重新启动：不能把新 worker 停掉、也不跑收尾动作。"""
-        calls = []
         self.manager.run_id = 'old-run'
 
-        with patch.object(ProcessManager, 'alive', alive_sequence([True, False])), \
-                patch.object(self.manager, '_stop_immediately',
-                             side_effect=lambda action=None: calls.append(action) or True):
-            self.manager.stop_by_user('goto_main')
-            # 任务退出、等待线程尚未收尾时，用户点了启动（run_id 变化）
-            self.manager.run_id = 'new-run'
-            self.manager._soft_stop_thread.join(timeout=5)
+        def restart_after_exit(manager):
+            manager.run_id = 'new-run'
+            manager.exit_result = None
+            manager.current_task = 'Commission'
+            return False
 
-        self.assertEqual(calls, [], '新一轮运行不应被上一轮的停止收尾误杀')
+        with patch.object(ProcessManager, 'alive', property(restart_after_exit)), \
+                patch.object(self.manager, '_stop_immediately') as immediate:
+            self.manager._soft_stop_worker('goto_main', 'old-run')
+
+        immediate.assert_not_called()
+        self.assertIsNone(self.manager.exit_result)
+        self.assertEqual(self.manager.current_task, 'Commission')
+
+    def test_safe_exit_update_result_becomes_manual_stop(self):
+        """安全点退出后登记已消失，也必须解除前端的更新中禁用状态。"""
+        self.manager.run_id = 'soft-run'
+        self.manager.exit_result = WorkerResult.UPDATE
+        self.manager.current_task = 'Island'
+
+        with patch.object(self.manager, '_registered_worker', return_value=(None, None, True)), \
+                patch.object(self.manager, '_registered_pid', return_value=(None, True)), \
+                patch.object(self.manager, '_unregister_process', return_value=True), \
+                patch.object(self.manager, '_run_manual_stop_action_locked') as cleanup:
+            self.assertEqual(self.manager.state, 4)
+            self.manager._soft_stop_worker('stay_there', 'soft-run')
+            # 迟到的退出事件同样不能把已确认的用户停止改回更新中。
+            self.manager._renderable_queue.put(ExitEvent('soft-run', WorkerResult.UPDATE))
+            self.assertEqual(self.manager.state, 2)
+
+        self.assertEqual(self.manager.exit_result, WorkerResult.MANUAL_STOP)
+        self.assertIsNone(self.manager.current_task)
+        cleanup.assert_not_called()
+
+    def test_failed_stop_does_not_confirm_manual_stop(self):
+        """停止未通过身份验证时，不把未确认结束的 worker 显示为已停止。"""
+        self.manager.run_id = 'soft-run'
+        self.manager.exit_result = WorkerResult.UPDATE
+        with patch.object(self.manager, '_registered_worker', return_value=(12345, None, False)), \
+                patch.object(self.manager, '_registered_pid', return_value=(12345, False)), \
+                patch.object(self.manager, '_unregister_process') as unregister:
+            self.manager._soft_stop_worker('stay_there', 'soft-run')
+            self.assertEqual(self.manager.state, 4)
+
+        self.assertEqual(self.manager.exit_result, WorkerResult.UPDATE)
+        unregister.assert_not_called()
+
+    def test_update_stop_keeps_update_result(self):
+        """更新清理使用通用 stop，已自然退出的更新 worker 仍为更新状态。"""
+        self.manager.run_id = 'update-run'
+        self.manager.exit_result = WorkerResult.UPDATE
+        with patch.object(self.manager, '_registered_worker', return_value=(None, None, True)), \
+                patch.object(self.manager, '_registered_pid', return_value=(None, True)), \
+                patch.object(self.manager, '_unregister_process', return_value=True):
+            self.assertTrue(self.manager.stop())
+            self.assertEqual(self.manager.state, 4)
+
+        self.assertEqual(self.manager.exit_result, WorkerResult.UPDATE)
+
+    def test_result_confirmation_blocks_new_run_until_manual_stop_recorded(self):
+        """校验轮次到确认停止期间不能插入新启动，新轮结果不得被覆盖。"""
+        self.manager.run_id = 'soft-run'
+        self.manager.exit_result = WorkerResult.UPDATE
+        lock = ProcessManager._get_lifecycle_lock(self.manager.config_name)
+        attempting = threading.Event()
+        acquired = threading.Event()
+        observed = []
+
+        def start_next_run():
+            attempting.set()
+            with lock:
+                observed.append(self.manager.exit_result)
+                self.manager.run_id = 'next-run'
+                self.manager.exit_result = None
+                self.manager.current_task = 'Commission'
+                acquired.set()
+
+        starter = threading.Thread(target=start_next_run)
+
+        def stopped(_action):
+            starter.start()
+            self.assertTrue(attempting.wait(timeout=1))
+            self.assertFalse(acquired.wait(timeout=0.05), '停止结果确认前不能释放生命周期锁')
+            return True
+
+        with patch.object(ProcessManager, 'alive', alive_sequence([False])), \
+                patch.object(self.manager, '_stop_immediately', side_effect=stopped):
+            self.manager._soft_stop_worker('stay_there', 'soft-run')
+        starter.join(timeout=1)
+
+        self.assertFalse(starter.is_alive())
+        self.assertEqual(observed, [WorkerResult.MANUAL_STOP])
+        self.assertEqual(self.manager.run_id, 'next-run')
+        self.assertIsNone(self.manager.exit_result)
+        self.assertEqual(self.manager.current_task, 'Commission')
 
     def test_timeout_is_five_minutes(self):
         """等待上限固定为 5 分钟（用户要求；等待期间可再点一次强制停止）。"""

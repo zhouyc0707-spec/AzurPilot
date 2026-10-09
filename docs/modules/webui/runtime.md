@@ -104,6 +104,8 @@ module/runtime/
 | `_registered_worker()` | 读取并验证登记身份（PID + 创建时间 + owner 归属），返回 `(pid, record, verified)` |
 | `set_state_override()` | 临时覆盖 `state` 返回值，仅供界面图标测试 |
 
+用户点击停止时，`stop_by_user()` 先通知 worker 在安全点退出，后台最多等待 5 分钟；等待期间再点停止会立即强制终止。安全点退出复用更新事件，worker 可能上报 `UPDATE`，因此后台在确认该轮已停止后必须明确写入 `MANUAL_STOP` 并清空当前任务，避免界面误显示「更新中」并禁用启停按钮。运行标识校验、停止与结果确认共用生命周期锁；停止失败不确认，新轮启动后也不覆盖其状态，迟到的旧退出事件不能改写已确认结果。真正更新调用的通用 `stop()` 保留更新状态。
+
 ### State（setting.py）
 
 类属性形式的共享状态容器。`init()` 创建 `multiprocessing.Manager()`（SyncManager 子进程，承载跨进程 Queue/dict/Event）、把 `process_registry` 指向 `manager.dict()`，然后 `claim_owner(os.getpid())` 原子认领登记所有权——认领失败（旧 owner 或其 worker 仍存活）则关闭 Manager 并中止启动。`clearup()` 在确认无存活 worker 登记后关闭 Manager 并清除 owner。

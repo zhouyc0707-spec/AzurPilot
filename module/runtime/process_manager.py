@@ -379,11 +379,18 @@ class ProcessManager:
                 f"[{self.config_name}] 等待 {self.SOFT_STOP_TIMEOUT} 秒后当前任务仍未退出，强制停止"
             )
         try:
-            if run_id is not None and self.run_id != run_id:
-                # 等待期间用户已经重新启动：要停的那一轮早已退出，别去动新进程。
-                logger.info(f"[{self.config_name}] 停止等待期间已启动新的运行，跳过终止与收尾")
-                return
-            self._stop_immediately(action)
+            with self._get_lifecycle_lock(self.config_name):
+                if run_id is not None and self.run_id != run_id:
+                    # 等待期间用户已经重新启动：要停的那一轮早已退出，别去动新进程。
+                    logger.info(f"[{self.config_name}] 停止等待期间已启动新的运行，跳过终止与收尾")
+                    return
+                if self._stop_immediately(action):
+                    # 安全点退出沿用更新事件，worker 因而可能上报 UPDATE；此时登记
+                    # 已清除，通用停止路径不会再写手动停止，必须按本次用户意图确认。
+                    # 轮次校验、停止和结果确认共用生命周期锁，避免覆盖新 worker。
+                    with self._runtime_lock:
+                        self.exit_result = WorkerResult.MANUAL_STOP
+                        self.current_task = None
         finally:
             self._soft_stop_thread = None
 
