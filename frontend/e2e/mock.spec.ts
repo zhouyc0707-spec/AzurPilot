@@ -246,7 +246,7 @@ test('仓库趋势复用时间窗口、物品选择和原始记录', async ({pag
   await page.emulateMedia({reducedMotion: 'reduce'})
   await page.addInitScript(() => {
     localStorage.setItem('azurpilot.theme', 'light')
-    localStorage.setItem('azurpilot.statistics', JSON.stringify({category: 'storage', days: 7}))
+    localStorage.setItem('azurpilot.statistics', JSON.stringify({category: 'storage', days: 7, period: 'day'}))
   })
   await page.goto('/#/i/demo-main/statistics')
   const chart = page.locator('.statistics-chart')
@@ -272,6 +272,60 @@ test('仓库趋势复用时间窗口、物品选择和原始记录', async ({pag
   await page.screenshot({path: test.info().outputPath('storage-trends.png'), fullPage: true})
   expect(requests.some(request => request.method === 'tasks.run')).toBe(false)
 })
+
+for (const theme of ['light', 'dark', 'minimal', 'extreme']) {
+  for (const category of ['resources', 'storage']) {
+    test(`${theme} ${category} 趋势日周月控件发送一致查询参数`, async ({page}, testInfo) => {
+      const requests: Array<{method: string, params: Record<string, unknown>}> = []
+      const errors: string[] = []
+      page.on('pageerror', error => errors.push(error.message))
+      page.on('websocket', socket => socket.on('framesent', event => {
+        const payload = JSON.parse(String(event.payload))
+        if (payload.method) requests.push(payload)
+      }))
+      await page.emulateMedia({reducedMotion: 'reduce'})
+      await page.addInitScript(({theme, category}) => {
+        localStorage.setItem('azurpilot.theme', theme)
+        localStorage.setItem('azurpilot.language', 'zh-CN')
+        localStorage.setItem('azurpilot.background', JSON.stringify({source: 'off'}))
+        localStorage.setItem('azurpilot.statistics', JSON.stringify({category, days: 7, period: 'day'}))
+      }, {theme, category})
+      await page.goto('/#/i/demo-main/statistics')
+      const days = page.getByRole('combobox', {name: '统计天数', exact: true}).first()
+      const period = page.getByRole('combobox', {name: '汇总周期', exact: true}).first()
+      const month = page.getByLabel('统计月份', {exact: true}).first()
+      // 模拟服务用于核对控件和请求参数；数据库窗口边界由 Python 测试覆盖。
+      const latestParams = () => requests.filter(request => request.method === 'statistics.report' && request.params.category === category).at(-1)?.params
+      await expect(days).toBeVisible()
+      await expect(month).toBeDisabled()
+      await expect.poll(latestParams).toMatchObject({instance: 'demo-main', category, period: 'day', days: 7})
+      await days.click()
+      await page.getByRole('option', {name: '最近 30 天', exact: true}).click()
+      await expect.poll(latestParams).toMatchObject({period: 'day', days: 30})
+
+      await period.click()
+      await page.getByRole('option', {name: '本周', exact: true}).click()
+      await expect(days).toHaveCount(0)
+      await expect(month).toBeDisabled()
+      await expect.poll(latestParams).toMatchObject({period: 'week', days: 30})
+
+      await period.click()
+      await page.getByRole('option', {name: '选定月份', exact: true}).click()
+      await expect(month).toBeEnabled()
+      await month.fill('2026-09')
+      await expect.poll(latestParams).toMatchObject({period: 'month', days: 30, month: '2026-09'})
+      await page.screenshot({path: testInfo.outputPath(`${theme}-${category}-月窗口.png`), fullPage: true, animations: 'disabled'})
+
+      await period.click()
+      await page.getByRole('option', {name: '最近 30 天', exact: true}).click()
+      await expect(days).toBeVisible()
+      await expect(month).toBeDisabled()
+      await expect.poll(latestParams).toMatchObject({period: 'day', days: 30, month: '2026-09'})
+      expect(requests.some(request => request.method === 'tasks.run')).toBe(false)
+      expect(errors).toEqual([])
+    })
+  }
+}
 
 test('任务分组目录重复点击保持在同一栏目', async ({page}) => {
   await page.emulateMedia({reducedMotion: 'reduce'})

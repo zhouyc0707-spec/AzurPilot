@@ -1,0 +1,12 @@
+M	docs/modules/game/commission.md
+M	frontend/src/pages/Statistics.tsx
+M	module/api/statistics_service.py
+M	module/commission/commission.py
+M	module/logger.py
+M	module/statistics/resource_stats.py
+M	module/statistics/storage_snapshot.py
+M	tests/test_commission_settlement.py
+M	tests/test_drop_cleanup.py
+M	tests/test_instance_log_paths.py
+M	tests/test_resource_timeline_window.py
+M	tests/test_storage_statistics.py

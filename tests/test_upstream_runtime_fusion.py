@@ -77,7 +77,7 @@ class TestCommissionScreenshotLimitFusion(unittest.TestCase):
                                         UiWait_CommissionRewardScreenshotKeep=keep)
         runner._prune_commission_reward_screenshots = lambda instance, max_keep: (
             RewardCommission._prune_commission_reward_screenshots(
-                instance, max_keep=max_keep, base=str(self.base)))
+                runner, instance, max_keep=max_keep, base=str(self.base)))
         return runner
 
     def save_frame(self, image, path):
@@ -87,9 +87,17 @@ class TestCommissionScreenshotLimitFusion(unittest.TestCase):
         self.assertEqual(len(list(self.base.glob('*.png'))), expected)
         self.assertEqual(self.backup.read_bytes(), b'backup')
 
-    def test_static_default_prunes_without_instance_and_keeps_backups(self):
-        RewardCommission._prune_commission_reward_screenshots('probe', base=str(self.base))
+    def test_missing_count_setting_uses_default_and_keeps_backups(self):
+        runner = RewardCommission.__new__(RewardCommission)
+        runner.config = SimpleNamespace()
+        runner._prune_commission_reward_screenshots('probe', base=str(self.base))
         self.assert_kept(50)
+
+    def test_bound_cleanup_reads_configured_limit_and_keeps_backups(self):
+        runner = RewardCommission.__new__(RewardCommission)
+        runner.config = SimpleNamespace(UiWait_CommissionRewardScreenshotKeep=8)
+        runner._prune_commission_reward_screenshots('probe', base=str(self.base))
+        self.assert_kept(8)
 
     def test_local_single_harvest_save_reads_configured_limit(self):
         with patch('os.makedirs'), patch('module.commission.commission.save_image',
