@@ -75,12 +75,20 @@ class AutoSearchCombat(MapOperation, Combat, CampaignStatus):
         Args:
             skip_first_screenshot (bool, optional): 是否跳过首次截图。默认为 True。
 
+        Raises:
+            CampaignEnd: 等待恢复自律时已出现奖励菜单，或确认直接返回关卡页面。
+
         Pages:
             in: in_map, MAP_OFFENSIVE
-            out: is_combat_loading
+            out: is_combat_loading，或由 CampaignEnd 返回战役结束流程
         """
         self.interval_reset(AUTO_SEARCH_MAP_OPTION_ON)
         for _ in self.loop():
+
+            # 提示处理也会进入恢复自律流程，此时关卡可能已经结束。
+            if self.is_in_auto_search_menu() or self._handle_auto_search_menu_missing():
+                logger.info('[自动搜索] 等待恢复自律时确认关卡已结束')
+                raise CampaignEnd
 
             if self.handle_auto_search_map_option():
                 self.interval_reset(AUTO_SEARCH_MAP_OPTION_ON)

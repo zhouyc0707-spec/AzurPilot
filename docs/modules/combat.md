@@ -192,6 +192,7 @@ flowchart TD
 游戏自己移动舰队、自己开战，脚本退居「监工」：
 
 - `auto_search_moving()`：等待期间监视石油/物资 OCR（触发 `auto_search_oil/coin_limit_triggered`）与舰队等级，处理退役、低情绪弹窗；自动搜索菜单出现则抛 `CampaignEnd`。
+- `map_offensive_auto_search()`：处理提示或退役后恢复自律，等待战斗加载。每轮先确认奖励菜单或已直接返回关卡；关卡已结束时抛 `CampaignEnd`，交回原有结算、掉落记录和继续／停止流程。`handle_retirement()` 返回已操作也可能只是关闭游戏提示，不能据此假定一定会进入下一场战斗。
 - `auto_search_combat_execute()`：加载期处理弹窗；进入战斗后先扣基础情绪，然后与手动模式类似的循环（潜艇/自动切换/弹窗），但**不点战斗评价**——自律寻敌会自动过渡结算，脚本只识别评价等级用于情绪记账（非 S 评价记沉船），`OPTS_INFO_D` 弹窗是沉船的确认性标志。
 - `auto_search_combat_status()`：处理结算页与战败善后。战败策略由 `Campaign_DefeatWithdraw` 决定：`withdraw_continue`（撤退继续）、`switch_fleet`（切另一队继续，超时退化为撤退）、`withdraw_stop`（连续 3 次战败后终止任务，抛 `ScriptEnd`）。
 

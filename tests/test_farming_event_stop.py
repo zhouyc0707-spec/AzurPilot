@@ -70,6 +70,8 @@ class FarmingEventStopTests(unittest.TestCase):
         runner = GemsFarming(config=campaign.config, device=campaign.device)
         runner.campaign = campaign
         runner.stage = 'c2'
+        # 本例只验证 PT 达限停止，不依赖模板活动目录或历史关卡解析规则。
+        runner.handle_stage_name = Mock(return_value=('c2', 'event_20241219_cn'))
         runner.load_campaign = Mock()
         runner.ui_page_appear = Mock(return_value=False)
         runner.disable_raid_on_event = Mock()
@@ -81,6 +83,7 @@ class FarmingEventStopTests(unittest.TestCase):
             runner.run('C2', folder='event_20241219_cn')
         campaign.run.assert_not_called()
         campaign.ensure_auto_search_exit.assert_called_once_with()
+        runner.handle_stage_name.assert_called_once_with('C2', 'event_20241219_cn', mode='normal')
         runner.load_campaign.assert_called_once_with('c2', folder='event_20241219_cn')
         self.assertIs(campaign.config.modified.get('ThreeOilLowCost.Scheduler.Enable'), False)
 
