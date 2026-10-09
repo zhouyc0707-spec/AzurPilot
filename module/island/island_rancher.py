@@ -794,6 +794,12 @@ class IslandRancher(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
             if not self.post_open(self.posts_ranch[pid]):
                 raise GameStuckError(f'{pid} 计划巡检未能打开岗位')
             for _ in self.loop(timeout=Timer(20), skip_first=False):
+                if self.appear(ISLAND_GET, offset=1):
+                    self.device.click(ISLAND_POST_SAFE_AREA)
+                    continue
+                if self.appear_then_click(POST_GET, offset=(50, 0), interval=2):
+                    # 可收取阶段产物时队列仍可能工作；收取后用新截图复检实际剩余时间。
+                    continue
                 if self.appear(ISLAND_WORKING):
                     finish = self.ranch_ocr_finish_time(pid)
                     if finish is not None:

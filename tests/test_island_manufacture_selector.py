@@ -27,6 +27,7 @@ from module.island_manufacture.assets import (
 
 SELECTED_CHEESE_FIXTURE = Path(__file__).parent / 'fixtures/island_manufacture/selected_cheese.png'
 SELECTED_CORN_CUP_FIXTURE = SELECTED_CHEESE_FIXTURE.parent / 'selected_corn_cup.png'
+FARM_WHEAT_FIXTURE = SELECTED_CHEESE_FIXTURE.parent / 'farm_selected_wheat.png'
 
 
 class ManufactureCatalogTest(unittest.TestCase):
@@ -54,6 +55,30 @@ class ManufactureCatalogTest(unittest.TestCase):
         self.assertIsNone(match_recipe_name('Pape', ids, 'en'))
         self.assertIsNone(match_recipe_name('', ids, 'en'))
         self.assertIsNone(match_recipe_name('Utensils', ids, 'en'))
+
+    def test_verified_cn_full_name_misread_matches_only_its_recipe(self):
+        for name, recipe_id in (('草莓奶缘', 901006), ('白莱', 101006)):
+            with self.subTest(name=name):
+                ids = _recipe_ids_in_same_category(recipe_id)
+                self.assertEqual(match_recipe_name(name, ids, 'cn'), recipe_id)
+                self.assertIsNone(match_recipe_name(name, [701014], 'cn'))
+                for language in ('en', 'jp', 'tw'):
+                    with self.subTest(language=language):
+                        self.assertIsNone(match_recipe_name(name, ids, language))
+
+    def test_full_name_correction_does_not_guess_other_strawberry_products(self):
+        ids = _recipe_ids_in_same_category(901006)
+        for name in ('草莓奶', '草莓', '草莓奶茶', '草莓奶绿茶', '草莓奶缘茶', '', '奶缘'):
+            with self.subTest(name=name):
+                self.assertIsNone(match_recipe_name(name, ids, 'cn'))
+
+    def test_standard_names_take_priority_and_ambiguous_corrections_are_rejected(self):
+        ids = [901003, 901006]
+        with patch.dict(DIC_ISLAND_ITEM[3006]['name'], {'cn': '草莓奶缘'}):
+            self.assertEqual(match_recipe_name('草莓奶缘', ids, 'cn'), 901003)
+        with patch.dict(DIC_ISLAND_ITEM[3006]['name'], {'cn': '草莓奶绿'}):
+            self.assertIsNone(match_recipe_name('草莓奶缘', ids, 'cn'))
+            self.assertIsNone(match_recipe_name('草莓奶绿', ids, 'cn'))
 
     def test_raw_recipe_search_is_scoped_to_its_verified_place(self):
         slot = next(slot for slot in DIC_ISLAND_SLOT.values() if slot['place'] not in (703, 704, 705, 706)
@@ -118,6 +143,22 @@ class ManufactureSelectorTest(unittest.TestCase):
             self.assertEqual([recipe_id for recipe_id, _ in rows], [701014] * 3)
         finally:
             server.server = original_server
+
+    def test_reliable_anchor_phase_recovers_missing_rows_and_rejects_ambiguity(self):
+        cases = [([114], [114, 263, 412]), ([412], [114, 263, 412]),
+                 ([114, 412], [114, 263, 412]), ([80], [80, 229, 378, 527]),
+                 ([114, 280], []), ([], [])]
+        self.main.device.image[:] = 255
+        ocr = Mock()
+        for observed, expected in cases:
+            with self.subTest(observed=observed):
+                anchors = [SimpleNamespace(area=(0, top - 55, 14, top - 55 + 18)) for top in observed]
+                ocr.ocr.return_value = ['纸张'] * len(expected)
+                with patch.object(server, 'server', 'cn'):
+                    with patch.object(TEMPLATE_ALAS_RECIPE_ANCHOR, 'match_multi', return_value=anchors):
+                        with patch('module.island.manufacture_selector.Ocr', return_value=ocr):
+                            rows = _read_recipe_rows(self.main, [701014])
+                self.assertEqual([button.area[1] for _, button in rows], expected)
 
     def test_selector_does_not_accept_a_card_without_selected_border(self):
         self.main.loop = lambda **_kwargs: iter(range(2))
@@ -257,6 +298,115 @@ class ManufactureSelectorTest(unittest.TestCase):
                         self.assertTrue(set_manufacture_quantity(self.main, limit))
                 with self.assertRaises(ValueError):
                     set_manufacture_quantity(self.main, limit + 1)
+
+
+class RecipeNameRecheckTest(unittest.TestCase):
+    """重放日志中的整词 OCR 结果，保留真实行定位、蓝框及数量确认链。"""
+
+    def setUp(self):
+        self.enterContext(patch.object(server, 'server', 'cn'))
+        self.enterContext(patch.object(TEMPLATE_ALAS_RECIPE_ANCHOR, 'match_multi', return_value=[]))
+        frame = np.full((720, 1280, 3), 255, dtype=np.uint8)
+        # 合成完整选中框；本次错误转储未保留草莓奶绿的选品画面。
+        cv2.rectangle(frame, (181, 114), (460, 247), (57, 189, 255), thickness=2)
+        self.main = SimpleNamespace(
+            device=SimpleNamespace(image=frame, click=Mock(), swipe_vector=Mock(), click_record_remove=Mock()),
+            appear=Mock(return_value=True), appear_then_click=Mock(return_value=True),
+            loop=lambda **_kwargs: iter(range(2)), _manufacture_selected_recipe_id=901006,
+        )
+        self.names = Mock()
+        self.quantity = Mock()
+
+        def ocr_for_area(*_args, **kwargs):
+            if kwargs['name'] == 'MANUFACTURE_RECIPE_NAME':
+                return self.names
+            self.assertEqual(kwargs['name'], 'MANUFACTURE_RECIPE_AMOUNT')
+            return self.quantity
+
+        self.enterContext(patch('module.island.manufacture_selector.Ocr', side_effect=ocr_for_area))
+
+    def test_name_change_to_verified_misread_still_confirms_actual_twelve_twice(self):
+        self.names.ocr.side_effect = [['草莓奶绿', '', ''], ['草莓奶缘', '', '']]
+        self.quantity.ocr.return_value = '12'
+        self.assertTrue(set_manufacture_quantity(self.main, 12))
+        self.assertEqual(self.quantity.ocr.call_count, 2)
+        self.main.appear_then_click.assert_not_called()
+        self.main.device.click.assert_not_called()
+
+    def test_verified_name_still_reads_and_adjusts_real_amount(self):
+        self.main.loop = lambda **_kwargs: iter(range(3))
+        self.names.ocr.return_value = ['草莓奶缘', '', '']
+        self.quantity.ocr.side_effect = ['11', '12', '12']
+        self.assertTrue(set_manufacture_quantity(self.main, 12))
+        self.assertEqual(self.quantity.ocr.call_count, 3)
+        self.assertEqual([call.args[0].name for call in self.main.appear_then_click.call_args_list],
+                         ['ALAS_RECIPE_AMOUNT_PLUS'])
+
+    def test_correction_requires_current_name_border_and_quantity_page(self):
+        self.names.ocr.return_value = ['草莓奶缘', '', '']
+        self.quantity.ocr.return_value = '12'
+        self.assertIsNone(read_selected_recipe_quantity(self.main, 901003))
+        self.names.ocr.return_value = ['草莓奶缘茶', '', '']
+        self.assertIsNone(read_selected_recipe_quantity(self.main, 901006))
+        self.names.ocr.return_value = ['草莓奶缘', '', '']
+        self.main.appear.return_value = False
+        self.assertIsNone(read_selected_recipe_quantity(self.main, 901006))
+        self.main.appear.return_value = True
+        self.main.device.image[:] = 255
+        self.assertIsNone(read_selected_recipe_quantity(self.main, 901006))
+        self.quantity.ocr.assert_not_called()
+        self.main.appear_then_click.assert_not_called()
+
+    def test_lost_identity_resets_quantity_confirmation(self):
+        for frame_count, expected in ((3, False), (4, True)):
+            with self.subTest(frame_count=frame_count):
+                self.main.loop = lambda **_kwargs: iter(range(frame_count))
+                self.names.ocr.side_effect = [['草莓奶绿', '', ''], ['草莓奶', '', ''],
+                                             ['草莓奶缘', '', ''], ['草莓奶缘', '', '']]
+                self.quantity.ocr.return_value = '12'
+                self.assertEqual(set_manufacture_quantity(self.main, 12), expected)
+        self.main.appear_then_click.assert_not_called()
+
+
+class FarmRecipeRowsScreenshotTest(unittest.TestCase):
+    """真实农场截图验证多位产出锚点漏行及同帧完整名称定位。"""
+
+    @classmethod
+    def setUpClass(cls):
+        from module.ocr.al_ocr import AlOcr, OcrSettings
+
+        settings = OcrSettings(backend='onnx', device='cpu',
+                               allow_vendor_execution_providers=False, model_version='alocr_cn_v3')
+        cls.ocr_model = AlOcr(name='cn', settings=settings)
+
+    def setUp(self):
+        self.enterContext(patch.object(server, 'server', 'cn'))
+        self.enterContext(patch('module.ocr.ocr.OCR_MODEL', SimpleNamespace(cnocr=self.ocr_model)))
+        self.main = SimpleNamespace(
+            device=SimpleNamespace(image=load_image(str(FARM_WHEAT_FIXTURE)),
+                                   click=Mock(), swipe_vector=Mock(), click_record_remove=Mock()),
+            loop=lambda **_kwargs: iter(range(2)),
+        )
+        self.main.appear = lambda button, offset=0: button.match(self.main.device.image, offset=offset)
+        self.recipe_ids = _recipe_ids_in_same_category(101002)
+
+    def test_same_frame_recovers_complete_corn_and_grass_but_not_partial_coffee(self):
+        rows = _read_recipe_rows(self.main, self.recipe_ids)
+        self.assertEqual([(recipe_id, button.area[1]) for recipe_id, button in rows],
+                         [(101001, 114), (101002, 263), (101003, 412)])
+
+    def test_visible_unselected_corn_is_clicked_without_search_swipe(self):
+        # 假设备不改变画面；只能点选玉米，不能把仍选中小麦的下一帧误当成功。
+        self.assertFalse(select_manufacture_recipe(self.main, 101002))
+        self.main.device.click.assert_called_once()
+        self.assertEqual(self.main.device.click.call_args.args[0].area, (181, 263, 461, 397))
+        self.main.device.swipe_vector.assert_not_called()
+        self.assertFalse(hasattr(self.main, '_manufacture_selected_recipe_id'))
+
+    def test_filling_rows_does_not_change_selected_identity(self):
+        self.assertIsNone(_selected_recipe_row(self.main, 101002, self.recipe_ids))
+        self.assertIsNotNone(_selected_recipe_row(self.main, 101001, self.recipe_ids))
+        self.assertEqual(read_selected_recipe_quantity(self.main, 101001), 1)
 
 
 class SelectedCornCupScreenshotTest(unittest.TestCase):

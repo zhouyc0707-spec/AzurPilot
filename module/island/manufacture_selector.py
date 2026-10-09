@@ -23,6 +23,7 @@ from module.ocr.ocr import Ocr
 
 
 RECIPE_SIZE = (280, 134)
+RECIPE_ROW_DISTANCE = 149
 RECIPE_DETECT_AREA = (181, 55, 460, 668)
 RECIPE_ANCHOR_AREA = (58, 97, 102, 115)
 RECIPE_PRODUCT_NAME_AREA = (123, 23, 269, 46)
@@ -31,6 +32,10 @@ RECIPE_PRODUCT_STOCK_AREA = (212, 92, 275, 110)
 RECIPE_AMOUNT_MAX_OFFSET = (3, 20)
 MAX_RECIPE_SWIPES = 16
 SWIPE_NAME = 'MANUFACTURE_RECIPE_SEARCH'
+# 仅纠正运行日志已核实的完整词误读，不能按单字或编辑距离猜测配方。
+RECIPE_NAME_OCR_ALIASES = {
+    'cn': {'草莓奶缘': '草莓奶绿', '白莱': '白菜'},
+}
 
 
 def _normalize_name(value):
@@ -56,16 +61,23 @@ def _recipe_ids_in_same_category(recipe_id):
 
 
 def match_recipe_name(name, recipe_ids, language):
-    """只接受标准化后的唯一全名；未知或同名不选择最近的商品。"""
+    """接受唯一标准全名及已核实的整词别名；未知或同名不猜测。"""
     normalized = _normalize_name(name)
     if not normalized:
         return None
-    matches = []
+    candidates = []
     for recipe_id in recipe_ids:
         product_id = next(iter(DIC_ISLAND_RECIPE[recipe_id]['commission_product']))
         expected = DIC_ISLAND_ITEM[product_id]['name'][language]
-        if normalized == _normalize_name(expected):
-            matches.append(recipe_id)
+        candidates.append((recipe_id, _normalize_name(expected)))
+    matches = [recipe_id for recipe_id, expected in candidates if normalized == expected]
+    if matches:
+        return matches[0] if len(matches) == 1 else None
+    corrected = RECIPE_NAME_OCR_ALIASES.get(language, {}).get(normalized)
+    if corrected is None:
+        return None
+    normalized = _normalize_name(corrected)
+    matches = [recipe_id for recipe_id, expected in candidates if normalized == expected]
     return matches[0] if len(matches) == 1 else None
 
 
@@ -86,7 +98,7 @@ def _selected_recipe_tops(main):
 
 
 def _read_recipe_rows(main, recipe_ids):
-    """合并官方乘号锚点和完整选中蓝框；仍用同帧完整商品名确认身份。"""
+    """用真实锚点确认排列并补足完整行；仍用同帧完整商品名确认身份。"""
     anchor_area = (RECIPE_DETECT_AREA[0] + RECIPE_ANCHOR_AREA[0],
                    RECIPE_DETECT_AREA[1] + RECIPE_ANCHOR_AREA[1],
                    RECIPE_DETECT_AREA[2] - RECIPE_SIZE[0] + RECIPE_ANCHOR_AREA[2],
@@ -101,8 +113,13 @@ def _read_recipe_rows(main, recipe_ids):
             tops.append(top)
     if not 1 <= len(tops) <= 4:
         return []
-    if any(abs(second - first - 149) > 8 for first, second in zip(tops, tops[1:])):
+    if any(abs(top - tops[0] - round((top - tops[0]) / RECIPE_ROW_DISTANCE) * RECIPE_ROW_DISTANCE) > 8
+           for top in tops[1:]):
         return []
+    # 农场多位产出时乘号可能失真；仅按本帧可靠锚点的排列补行，不假设固定顶部。
+    first = int(tops[0])
+    first -= (first - RECIPE_DETECT_AREA[1]) // RECIPE_ROW_DISTANCE * RECIPE_ROW_DISTANCE
+    tops = list(range(first, RECIPE_DETECT_AREA[3] - RECIPE_SIZE[1] + 1, RECIPE_ROW_DISTANCE))
     buttons = [Button(area=(181, top, 461, top + 134), color=(),
                       button=(181, top, 461, top + 134), name=f'MANUFACTURE_RECIPE_ROW_{index}')
                for index, top in enumerate(tops)]
