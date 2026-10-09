@@ -20,10 +20,13 @@ from module.island.manufacture_selector import (
     read_selected_recipe_quantity,
     select_manufacture_recipe, set_manufacture_quantity,
 )
-from module.island_manufacture.assets import TEMPLATE_ALAS_RECIPE_ANCHOR
+from module.island_manufacture.assets import (
+    ALAS_RECIPE_AMOUNT_MAX, TEMPLATE_ALAS_RECIPE_ANCHOR,
+)
 
 
 SELECTED_CHEESE_FIXTURE = Path(__file__).parent / 'fixtures/island_manufacture/selected_cheese.png'
+SELECTED_CORN_CUP_FIXTURE = SELECTED_CHEESE_FIXTURE.parent / 'selected_corn_cup.png'
 
 
 class ManufactureCatalogTest(unittest.TestCase):
@@ -194,6 +197,19 @@ class ManufactureSelectorTest(unittest.TestCase):
             self.assertIs(ocr.ocr.call_args.args[0], self.main.device.image)
             self.assertNotIn('direct_ocr', ocr.ocr.call_args.kwargs)
 
+    def test_product_stock_requires_complete_number_and_preserves_recognized_zero(self):
+        cases = [('0', 0), ('有:0', 0), ('J:O', 0), (':13', 13), ('持有：13', 13), ('可：7', 7),
+                 ('', None), ('O', None), ('1O', None), ('有:1O', None), ('2/5', None), ('有:?', None),
+                 ('1:13', None), ('J:O5', None), ('J:5O', None), ('J:OO', None), ('J::0', None)]
+        with patch('module.island.manufacture_selector._selected_recipe_row', return_value=self.button):
+            for text, expected in cases:
+                with self.subTest(text=text):
+                    ocr = Mock()
+                    ocr.ocr.return_value = text
+                    with patch('module.island.manufacture_selector.Ocr', return_value=ocr) as constructor:
+                        self.assertEqual(read_selected_recipe_stock(self.main, 603001), expected)
+                    self.assertNotIn('alphabet', constructor.call_args.kwargs)
+
     def test_quantity_reads_existing_amount_and_uses_minus_then_confirms_two_frames(self):
         self.main._manufacture_selected_recipe_id = 701014
         self.main.loop = lambda **_kwargs: iter(range(4))
@@ -241,6 +257,66 @@ class ManufactureSelectorTest(unittest.TestCase):
                         self.assertTrue(set_manufacture_quantity(self.main, limit))
                 with self.assertRaises(ValueError):
                     set_manufacture_quantity(self.main, limit + 1)
+
+
+class SelectedCornCupScreenshotTest(unittest.TestCase):
+    """实际玉米杯错误帧验证模板容差、同帧身份与已选目标不重复点击。"""
+
+    @classmethod
+    def setUpClass(cls):
+        from module.ocr.al_ocr import AlOcr, OcrSettings
+
+        settings = OcrSettings(backend='onnx', device='cpu',
+                               allow_vendor_execution_providers=False, model_version='alocr_cn_v3')
+        cls.ocr_model = AlOcr(name='cn', settings=settings)
+
+    def setUp(self):
+        self.enterContext(patch.object(server, 'server', 'cn'))
+        self.enterContext(patch('module.ocr.ocr.OCR_MODEL', SimpleNamespace(cnocr=self.ocr_model)))
+        self.main = SimpleNamespace(
+            device=SimpleNamespace(image=load_image(str(SELECTED_CORN_CUP_FIXTURE)),
+                                   click=Mock(), swipe_vector=Mock(), click_record_remove=Mock()),
+            loop=lambda **_kwargs: iter(range(2)),
+        )
+        # 页面和数量控件使用真实模板，避免全局 Mock(True) 掩盖像素偏移。
+        self.main.appear = lambda button, offset=0: button.match(self.main.device.image, offset=offset)
+        self.recipe_ids = _recipe_ids_in_same_category(603001)
+
+    def test_real_max_button_requires_horizontal_tolerance(self):
+        self.assertFalse(ALAS_RECIPE_AMOUNT_MAX.match(self.main.device.image, offset=(0, 20)))
+        self.assertTrue(ALAS_RECIPE_AMOUNT_MAX.match(self.main.device.image, offset=(3, 20)))
+
+    def test_selected_corn_cup_confirms_without_reclick_or_swipe(self):
+        self.assertTrue(select_manufacture_recipe(self.main, 603001))
+        self.assertEqual(self.main._manufacture_selected_recipe_id, 603001)
+        self.main.device.click.assert_not_called()
+        self.main.device.swipe_vector.assert_not_called()
+
+    def test_selected_corn_cup_reads_real_quantity_and_full_inventory(self):
+        self.assertEqual(read_selected_recipe_quantity(self.main, 603001), 1)
+        self.assertEqual(read_selected_recipe_inventory(self.main, 603001), {
+            2001: {'stock': 3005, 'cost': 3, 'display_required': 3},
+            2603: {'stock': 1557, 'cost': 1, 'display_required': 1},
+            3023: {'stock': 0, 'cost': 0, 'display_required': 0},
+        })
+
+    def test_selected_target_waits_without_reclick_when_quantity_page_is_not_ready(self):
+        appear = self.main.appear
+        self.main.appear = lambda button, offset=0: (
+            False if button is ALAS_RECIPE_AMOUNT_MAX else appear(button, offset))
+        self.assertFalse(select_manufacture_recipe(self.main, 603001))
+        self.assertFalse(hasattr(self.main, '_manufacture_selected_recipe_id'))
+        self.main.device.click.assert_not_called()
+        self.main.device.swipe_vector.assert_not_called()
+
+    def test_pixel_tolerance_does_not_confirm_other_or_ambiguous_selected_recipes(self):
+        self.assertIsNone(_selected_recipe_row(self.main, 603002, self.recipe_ids))
+        rows = _read_recipe_rows(self.main, self.recipe_ids)
+        self.assertGreaterEqual(len(rows), 2)
+        with patch('module.island.manufacture_selector._is_selected', return_value=True):
+            self.assertFalse(select_manufacture_recipe(self.main, 603001))
+            self.assertIsNone(_selected_recipe_row(self.main, 603001, self.recipe_ids))
+        self.main.device.click.assert_not_called()
 
 
 class SelectedFoodCardScreenshotTest(unittest.TestCase):

@@ -27,6 +27,8 @@ RECIPE_DETECT_AREA = (181, 55, 460, 668)
 RECIPE_ANCHOR_AREA = (58, 97, 102, 115)
 RECIPE_PRODUCT_NAME_AREA = (123, 23, 269, 46)
 RECIPE_PRODUCT_STOCK_AREA = (212, 92, 275, 110)
+# 实际数量页的 MAX 可能相对模板横移 1px；小范围容差保留原相似度要求。
+RECIPE_AMOUNT_MAX_OFFSET = (3, 20)
 MAX_RECIPE_SWIPES = 16
 SWIPE_NAME = 'MANUFACTURE_RECIPE_SEARCH'
 
@@ -124,7 +126,7 @@ def _is_selected(main, button):
 def _selected_recipe_row(main, recipe_id, recipe_ids):
     if not main.appear(ALAS_RECIPE_CHECK, offset=(20, 20)):
         return None
-    if not main.appear(ALAS_RECIPE_AMOUNT_MAX, offset=(0, 20)):
+    if not main.appear(ALAS_RECIPE_AMOUNT_MAX, offset=RECIPE_AMOUNT_MAX_OFFSET):
         return None
     selected = [(detected, button) for detected, button in _read_recipe_rows(main, recipe_ids)
                 if _is_selected(main, button)]
@@ -154,10 +156,13 @@ def select_manufacture_recipe(main, recipe_id, skip_first_screenshot=True):
         if len(candidates) == 1:
             button = candidates[0]
             selected = [(detected, row) for detected, row in rows if _is_selected(main, row)]
-            if (main.appear(ALAS_RECIPE_AMOUNT_MAX, offset=(0, 20))
-                    and len(selected) == 1 and selected[0][0] == recipe_id):
-                main._manufacture_selected_recipe_id = recipe_id
-                return True
+            if any(detected == recipe_id for detected, _ in selected):
+                if (len(selected) == 1
+                        and main.appear(ALAS_RECIPE_AMOUNT_MAX, offset=RECIPE_AMOUNT_MAX_OFFSET)):
+                    main._manufacture_selected_recipe_id = recipe_id
+                    return True
+                # 目标已选中，继续截图等数量页稳定；重复点击不能修复就绪识别。
+                continue
             if click_timer.reached():
                 main.device.click(button)
                 click_timer.reset()
@@ -299,8 +304,17 @@ def read_selected_recipe_inventory(main, recipe_id):
 def _read_product_stock(main, button):
     area = area_offset(RECIPE_PRODUCT_STOCK_AREA, button.area[:2])
     text = Ocr(area, lang='cnocr', letter=(80, 80, 80), threshold=160,
-               alphabet='0123456789', name='RECIPE_PRODUCT_STOCK').ocr(main.device.image)
-    return int(str(text).strip()) if re.fullmatch(r'\d+', str(text).strip()) else None
+               name='RECIPE_PRODUCT_STOCK').ocr(main.device.image)
+    # 数字区域可能保留「有:」的尾部；先核对完整读数，避免字符过滤吞掉数位。
+    text = unicodedata.normalize('NFKC', str(text)).strip()
+    match = re.fullmatch(r'(?:([^\d:]*):\s*)?([0-9]+|O)', text)
+    if match is None:
+        return None
+    # 仅带库存标签分隔符的单个 O 对应零字形；裸 O、空值和混合数位仍是未知。
+    value = match[2]
+    if value == 'O' and match[1] is None:
+        return None
+    return 0 if value == 'O' else int(value)
 
 
 def read_selected_recipe_stock(main, recipe_id):
