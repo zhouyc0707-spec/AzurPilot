@@ -393,7 +393,7 @@ class IslandRestaurant(IslandShopBase):
         if not self.seasonal_dish_slot:
             return {}
         name = self.seasonal_dish_slot['name']
-        return {name: self.POST_PRODUCE_LIMIT + self.to_post_products.get(name, 0)}
+        return {name: self.get_product_production_limit(name) + self.to_post_products.get(name, 0)}
 
     def test(self):
         """测试餐厅厨师配置读取。"""

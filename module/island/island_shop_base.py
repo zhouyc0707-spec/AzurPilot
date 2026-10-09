@@ -55,7 +55,7 @@ class IslandShopBase(Island, WarehouseOCR):
     """
     _MAX_FILL_LOOP = 10  # while 循环填岗最大迭代次数
     PRODUCT_SELECT_RETRY_LIMIT = 3  # 餐品选择识别失败后，退出重进的最大次数
-    POST_PRODUCE_LIMIT = 7  # 餐馆每个岗位单次最多生产数量
+    UNKNOWN_PRODUCT_PRODUCE_LIMIT = 7  # 未映射的定制商品沿用原上限，避免擅自扩大下单
     FILL_SPECIAL_FOOD = True  # 子类可关闭余岗的特殊餐品回退
 
     def __init__(self, config, device=None, task=None):
@@ -204,6 +204,18 @@ class IslandShopBase(Island, WarehouseOCR):
             self.posts[post_id] = {'status': 'none', 'button': button}
 
     # ============ 通用方法 ============
+    def get_product_production_limit(self, product):
+        """按实际商品查询配方单次上限，供规划、手工和余岗生产共用。"""
+        from module.island.data import DIC_ISLAND_RECIPE
+        from module.island.planned_dispatch import recipe_for_local_name
+
+        try:
+            recipe_id = recipe_for_local_name(product)
+        except ValueError:
+            logger.warning(f'[岛屿] {self._item_cn(product)}未能唯一对应配方，沿用原单次上限')
+            return self.UNKNOWN_PRODUCT_PRODUCE_LIMIT
+        return DIC_ISLAND_RECIPE[recipe_id]['production_limit']
+
     def post_check(self, post_id, time_var_name):
         """检查指定岗位的生产状态，并记录剩余完成时间或重置为空闲。
 
@@ -360,7 +372,8 @@ class IslandShopBase(Island, WarehouseOCR):
             matched = re.fullmatch(r'(\d{1,2}):([0-5]\d):([0-5]\d)', str(duration_text).strip())
             # 加号逐次点击后，低于计划的两帧也可能只是界面尚未更新；少产情况
             # 用派遣后的岗位实读确认，不能把暂时的旧数量记为最终数量。
-            expected_number = min(requested_number, self.POST_PRODUCE_LIMIT)
+            # 下单入口已经按实际配方、需求和材料限制数量；共用确认也供原料派遣使用。
+            expected_number = requested_number
             if not matched or number != expected_number or number <= 0:
                 return None
             hours, minutes, seconds = (int(value) for value in matched.groups())
@@ -456,7 +469,7 @@ class IslandShopBase(Island, WarehouseOCR):
                     continue
                 actual_number = number_ocr.ocr(image)
                 duration = time_ocr.ocr(image)
-                if (0 < actual_number <= min(requested_number, self.POST_PRODUCE_LIMIT)
+                if (0 < actual_number <= requested_number
                         and duration.total_seconds() > 0):
                     finish_time = current_time() + duration
                     break
@@ -491,6 +504,7 @@ class IslandShopBase(Island, WarehouseOCR):
         """
         if self.name_to_config[product].get('generic_recipe'):
             return self._post_produce_generic_food(post_id, product, number, time_var_name)
+        requested_number = number
         post_button = self.posts[post_id]['button']
         self.post_close()
         self.post_open(post_button)
@@ -545,6 +559,7 @@ class IslandShopBase(Island, WarehouseOCR):
                                     self.device.sleep(0.5)
                                     return 0  # 返回0表示原料不足
                                 else:
+                                    number = min(requested_number, self.get_product_production_limit(product2))
                                     self.post_add_one(number - 1)
                                     produced_product = product2
                                     break
@@ -560,6 +575,7 @@ class IslandShopBase(Island, WarehouseOCR):
                             self.device.sleep(0.5)
                             return 0  # 返回0表示原料不足
                     else:
+                        number = min(requested_number, self.get_product_production_limit(product))
                         self.post_add_one(number - 1)
                         break
                 else:
@@ -595,12 +611,21 @@ class IslandShopBase(Island, WarehouseOCR):
         if number <= 0:
             self.back_to_postmanage_from_dispatch()
             return 0
+        from module.island.production_planner import planner_active
+        if not planner_active(self.config):
+            from module.island.manufacture_selector import select_manufacture_recipe, set_manufacture_quantity
+            from module.island.planned_dispatch import recipe_for_local_name
+            if not select_manufacture_recipe(self, recipe_for_local_name(product)):
+                raise GameStuckError(f'{self._item_cn(product)}下单前完整配方无法确认')
+            if not set_manufacture_quantity(self, number):
+                raise GameStuckError(f'{self._item_cn(product)}下单前实际生产次数无法确认')
         preview, confirmed_at = self.confirm_food_dispatch(number, f'{self._item_cn(product)}计划生产')
         return self.finish_food_dispatch(post_id, product, time_var_name, number, preview, confirmed_at)
 
     def _limit_planned_food_batch(self, product, number):
-        """下单前同帧读取所有真实耗材，保留显式保底、菜单与定制套餐原料线。"""
+        """统一限制配方批次；规划开启时再实读耗材，保留库存和定制套餐原料线。"""
         from module.island.production_planner import load_planner_targets, planner_active
+        number = min(number, self.get_product_production_limit(product))
         if not planner_active(self.config):
             return number
         from module.island.planned_dispatch import recipe_for_local_name
@@ -613,7 +638,6 @@ class IslandShopBase(Island, WarehouseOCR):
         inventory = read_selected_recipe_inventory(self, recipe_id)
         if inventory is None:
             raise GameStuckError(f'{self._item_cn(product)}下单前耗材库存无法可靠读取')
-        number = min(number, self.POST_PRODUCE_LIMIT, DIC_ISLAND_RECIPE[recipe_id]['production_limit'])
         if not getattr(self, '_planned_food_filler', False):
             from module.island.item_ids import LOCAL_TO_ITEM_ID
             item = LOCAL_TO_ITEM_ID[product]
@@ -794,7 +818,7 @@ class IslandShopBase(Island, WarehouseOCR):
                 deficit = target - current
                 # check_materials=True 时严格检查零库存，用于跳过无法生产的缺口
                 if self.get_max_producible(
-                        name, min(self.POST_PRODUCE_LIMIT, deficit),
+                        name, deficit,
                         skip_zero_materials=not check_materials) <= 0:
                     logger.info(f"[岛屿] 槽位{idx + 1} {self._item_cn(name)} 材料完全不足，本轮跳过")
                     continue
@@ -979,7 +1003,7 @@ class IslandShopBase(Island, WarehouseOCR):
                     for name, amount in self._planned_food_dispatched.items():
                         current[name] = current.get(name, 0) + amount + self.post_check_meal.get(name, 0)
                     for product in planner_idle_products(self.config, self.name_to_config, current):
-                        batch = self.get_max_producible(product, self.POST_PRODUCE_LIMIT)
+                        batch = self.get_max_producible(product, self.get_product_production_limit(product))
                         if batch <= 0:
                             continue
                         if self.post_produce(post_id, product, batch,
@@ -1018,7 +1042,8 @@ class IslandShopBase(Island, WarehouseOCR):
                         result = self.post_produce(
                             post_id,
                             product=special_food,
-                            number=self.POST_PRODUCE_LIMIT,
+                            number=max(self.get_product_production_limit(special_food),
+                                       self.get_product_production_limit(away_cook)),
                             time_var_name=time_var_name,
                             product2=away_cook
                         )
@@ -1037,7 +1062,7 @@ class IslandShopBase(Island, WarehouseOCR):
                         result = self.post_produce(
                             post_id,
                             product=special_food,
-                            number=self.POST_PRODUCE_LIMIT,
+                            number=self.get_product_production_limit(special_food),
                             time_var_name=time_var_name
                         )
 
@@ -1053,7 +1078,7 @@ class IslandShopBase(Island, WarehouseOCR):
                         logger.info(f"[岛屿] 只有常驻餐品 {self._item_cn(away_cook)}，没有特殊餐品")
 
                         # 检查材料限制
-                        batch_size = self.POST_PRODUCE_LIMIT
+                        batch_size = self.get_product_production_limit(away_cook)
                         batch_size = self.get_max_producible(away_cook, batch_size)
 
                         if batch_size > 0:
@@ -1268,9 +1293,10 @@ class IslandShopBase(Island, WarehouseOCR):
                 max_producible = min(max_producible, max_by_material)
                 logger.info(f"[岛屿]   {self._item_cn(product)} 原材料 {self._item_cn(material)}: 库存 {material_stock}，可用 {usable_stock}，每个需要 {quantity_per}，最大生产 {max_by_material}")
 
-        # 2. 检查岗位数量限制
-        max_producible = min(max_producible, self.POST_PRODUCE_LIMIT)
-        logger.info(f"[岛屿] 岗位限制: 最多生产{self.POST_PRODUCE_LIMIT}个，当前限制后: {max_producible}")
+        # 2. 使用各配方自己的单次上限，不能把普通食品的 12 次套给季节品或佛跳墙。
+        production_limit = self.get_product_production_limit(product)
+        max_producible = min(max_producible, production_limit)
+        logger.info(f"[岛屿] 配方限制: 最多生产{production_limit}次，当前限制后: {max_producible}")
 
         # 3. 检查特殊材料（被子类覆盖）
         max_producible = self.check_special_materials(product, max_producible)
@@ -1330,7 +1356,7 @@ class IslandShopBase(Island, WarehouseOCR):
             # 为每个空闲岗位安排生产
             for post_id in idle_posts:
                 # 检查材料限制
-                batch_size = self.POST_PRODUCE_LIMIT
+                batch_size = self.get_product_production_limit(away_cook_product)
                 batch_size = self.get_max_producible(away_cook_product, batch_size)
 
                 if batch_size <= 0:
@@ -1405,7 +1431,7 @@ class IslandShopBase(Island, WarehouseOCR):
 
                 # 计算最大可生产数量
                 max_producible = self.get_max_producible(
-                    product, min(self.POST_PRODUCE_LIMIT, remaining_need))
+                    product, remaining_need)
 
                 if max_producible <= 0:
                     logger.info(f"[岛屿] 生产 {self._item_cn(product)} 的材料暂时不足，保留在计划中等待下一轮")

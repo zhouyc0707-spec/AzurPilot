@@ -54,7 +54,7 @@ class ShopUI:
         self.working = dict(working or {})
         self.orders = []
         self.rejected = set()
-        self.actual_limit = shop.POST_PRODUCE_LIMIT
+        self.actual_limit = None
         for name in ('goto_postmanage', 'post_manage_mode', 'post_close', 'post_manage_swipe'):
             setattr(shop, name, Mock())
         shop.get_warehouse_counts = self.read_stock
@@ -80,7 +80,9 @@ class ShopUI:
     def produce(self, post_id, product, number, time_var_name, product2=None):
         if product in self.rejected:
             return 0
-        number = min(number, self.actual_limit)
+        number = min(number, self.shop.get_product_production_limit(product))
+        if self.actual_limit is not None:
+            number = min(number, self.actual_limit)
         self.orders.append((product, number, product2))
         self.shop.posts[post_id]['status'] = 'working'
         self.shop.deduct_materials(product, number)
@@ -128,19 +130,19 @@ class IslandShopProductionTests(unittest.TestCase):
             with self.subTest(shop=cls.__name__, season=season):
                 ui = ShopUI(cls, [(basic, 3)], seasonal=True, season=season)
                 ui.run()
-                self.assertEqual(ui.orders, [(priority, 7, None), (basic, 3, None)])
+                self.assertEqual(ui.orders, [(priority, 5, None), (basic, 3, None)])
 
     def test_restaurant_seasonal_extra_batch_preserves_quantity_rule(self):
         ui = ShopUI(IslandRestaurant, [('double_bamboo_shoots', 3)], seasonal=True)
         ui.run()
-        self.assertEqual(ui.orders, [('double_bamboo_shoots', 7, None),
+        self.assertEqual(ui.orders, [('double_bamboo_shoots', 5, None),
                                      ('double_bamboo_shoots', 3, None)])
 
     def test_teahouse_seasonal_batch_counts_toward_base_target(self):
-        ui = ShopUI(IslandTeahouse, [('spring_flower_tea', 7), ('apple_juice', 3)],
+        ui = ShopUI(IslandTeahouse, [('spring_flower_tea', 5), ('apple_juice', 3)],
                     seasonal=True)
         ui.run()
-        self.assertEqual(ui.orders, [('spring_flower_tea', 7, None), ('apple_juice', 3, None)])
+        self.assertEqual(ui.orders, [('spring_flower_tea', 5, None), ('apple_juice', 3, None)])
 
     def test_partial_seasonal_order_tracks_actual_quantity(self):
         ui = ShopUI(IslandTeahouse, [('spring_flower_tea', 10)], seasonal=True,
@@ -165,7 +167,7 @@ class IslandShopProductionTests(unittest.TestCase):
                 ui = ShopUI(cls, seasonal=True, away=away)
                 ui.run()
                 self.assertEqual(len(ui.orders), 2)
-                self.assertEqual(ui.orders[-1], (away, 7, None))
+                self.assertEqual(ui.orders[-1], (away, 12, None))
 
     def test_run_resets_unavailable_characters_and_products(self):
         for cls, product in ((IslandRestaurant, 'tofu'), (IslandTeahouse, 'apple_juice')):
@@ -221,7 +223,7 @@ class IslandShopProductionTests(unittest.TestCase):
             with self.subTest(shop=cls.__name__):
                 ui = ShopUI(cls, [(product, 3)], away=product)
                 ui.run()
-                self.assertEqual(ui.orders, [(product, 3, None), (product, 7, None)])
+                self.assertEqual(ui.orders, [(product, 3, None), (product, 12, None)])
                 self.assertEqual(ui.shop.config.task_delay.call_args.kwargs['target'],
                                  [NOW + timedelta(hours=1), NOW + timedelta(hours=1),
                                   NOW + timedelta(hours=6)])
@@ -237,6 +239,77 @@ class IslandShopProductionTests(unittest.TestCase):
         self.assertEqual(ui.shop.config.task_delay.call_args.kwargs['target'],
                          [NOW + timedelta(hours=2), NOW + timedelta(hours=2),
                           NOW + timedelta(hours=6)])
+
+    def test_manual_demand_above_seven_uses_twelve_then_the_remaining_need(self):
+        for cls, product in ((IslandRestaurant, 'tofu'), (IslandTeahouse, 'apple_juice'),
+                             (IslandGrill, 'roasted_skewer'), (IslandJuuCoffee, 'iced_coffee'),
+                             (IslandJuuEatery, 'apple_pie')):
+            with self.subTest(shop=cls.__name__):
+                ui = ShopUI(cls, [(product, 20)])
+                ui.run()
+                self.assertEqual(ui.orders, [(product, 12, None), (product, 8, None)])
+                self.assertEqual(ui.shop.to_post_products, {})
+
+    def test_recipe_limits_include_ordinary_buddhas_temptation_and_seasonal_food(self):
+        ui = ShopUI(IslandRestaurant)
+        for product, limit in (('tofu', 12), ('fo_tiao', 8), ('double_bamboo_shoots', 5)):
+            with self.subTest(product=product):
+                self.assertEqual(ui.shop.get_product_production_limit(product), limit)
+                self.assertEqual(ui.shop.get_max_producible(product, 99), limit)
+
+    def test_same_product_slots_and_existing_work_do_not_duplicate_large_dispatch(self):
+        ui = ShopUI(IslandRestaurant, [('tofu', 17), ('tofu', 17)], {'tofu': 5},
+                    working={'ISLAND_RESTAURANT_POST1': ('tofu', 2)})
+        ui.run()
+        self.assertEqual(ui.orders, [('tofu', 10, None)])
+        self.assertEqual(ui.shop.post_check_meal, {'tofu': 2})
+        self.assertEqual(ui.shop.to_post_products, {})
+
+    def test_partial_large_dispatch_uses_actual_quantity_without_inflating_progress(self):
+        ui = ShopUI(IslandRestaurant, [('tofu', 20)])
+        ui.actual_limit = 9
+        ui.run()
+        self.assertEqual(ui.orders, [('tofu', 9, None), ('tofu', 9, None)])
+        self.assertEqual(ui.shop.to_post_products, {'tofu': 2})
+
+    def test_large_meal_dispatch_replenishes_the_material_actually_consumed(self):
+        ui = ShopUI(IslandRestaurant, [('hearty_meal', 12), ('tofu', 20)],
+                    {'tofu': 20, 'omurice': 20})
+        ui.run()
+        self.assertEqual(ui.orders, [('hearty_meal', 12, None), ('tofu', 12, None)])
+        self.assertEqual(ui.shop.warehouse_counts['tofu'], 8)
+        self.assertEqual(ui.shop.warehouse_counts['omurice'], 8)
+
+    def test_away_cook_schedule_fills_each_idle_post_at_its_recipe_limit(self):
+        for cls, product, limit in ((IslandRestaurant, 'tofu', 12),
+                                    (IslandTeahouse, 'spring_flower_tea', 5)):
+            with self.subTest(shop=cls.__name__):
+                ui = ShopUI(cls, away=product, seasonal=(limit == 5))
+                for post in ui.shop.posts.values():
+                    post['status'] = 'idle'
+                ui.shop.process_away_cook()
+                ui.shop.schedule_production()
+                self.assertEqual(ui.orders, [(product, limit, None), (product, limit, None)])
+
+    def test_seasonal_priority_counts_against_target_across_both_posts(self):
+        ui = ShopUI(IslandTeahouse, [('spring_flower_tea', 8)], seasonal=True)
+        ui.run()
+        self.assertEqual(ui.orders, [('spring_flower_tea', 5, None),
+                                     ('spring_flower_tea', 3, None)])
+        self.assertEqual(ui.shop.to_post_products, {})
+
+    def test_large_batches_preserve_milk_and_honey_constraints_and_deduction(self):
+        cases = ((IslandJuuCoffee, 'cheese', 'milk', 80),
+                 (IslandTeahouse, 'honey_lemon', 'fresh_honey', 10))
+        for cls, product, material, stock in cases:
+            with self.subTest(shop=cls.__name__):
+                ui = ShopUI(cls, [(product, 20)], {material: stock})
+                if isinstance(ui.shop, IslandJuuCoffee):
+                    ui.shop.milk_stock = stock
+                    ui.shop.special_materials['milk'] = stock
+                ui.run()
+                self.assertEqual(ui.orders, [(product, 10, None)])
+                self.assertEqual(ui.shop.warehouse_counts[material], 0)
 
     def test_island_error_still_raises_after_setting_delay(self):
         ui = ShopUI(IslandTeahouse)

@@ -131,7 +131,11 @@ flowchart TD
     K[排产零产出时:<br>严格模式 check_materials → force_skip] -.-> F
 ```
 
-手工排产仍使用 `POST_PRODUCE_LIMIT` 和 `_MAX_FILL_LOOP` 的原有上限；规划派遣另外受官方配方 `production_limit` 限定，不把食品的次数上限套给工坊、种植或季节品。套餐（`meal_compositions`）下单时实时 `deduct_materials` 扣减原料账目；「保留线」记录已处理槽位的最高目标，防止套餐把尚未达标产品的保底库存当原料吃掉。排产多次失败时先切严格模式（真零库存才跳过），仍失败则把缺口产品加入 `force_skip` 本轮不再停留。
+餐饮的手工、自动规划、季节优先和常驻生产统一通过 `get_product_production_limit()` 查询 ALAS 配方 `production_limit`，取消原来的统一 7 次限制。普通食品通常最多 12 次，佛跳墙 8 次，季节食品 5 次；这些是一个岗位一次下单的上限，实际批次仍受库存缺口、套餐原料保留线、特殊材料和游戏界面实读限制。未能唯一映射的定制商品保守沿用 `UNKNOWN_PRODUCT_PRODUCE_LIMIT = 7` 并记录日志，现有五家餐饮商品都能对应配方。`_MAX_FILL_LOOP` 继续限制填岗迭代次数。
+
+切换备选餐品后重新按实际品种计算上限，不沿用首选品种的截断数量。派遣预览与岗位复检只验证本次已经限制过的请求数量，实读少产时按实际数量扣料、记录在制品和减少需求；这些共用确认方法继续支持原料与工坊派遣。无旧模板的通用食品在关闭规划时也确认完整配方和实际次数后下单。套餐（`meal_compositions`）下单时实时 `deduct_materials` 扣减原料账目；「保留线」记录已处理槽位的最高目标，防止套餐把尚未达标产品的保底库存当原料吃掉。排产多次失败时先切严格模式（真零库存才跳过），仍失败则把缺口产品加入 `force_skip` 本轮不再停留。
+
+数量行为的回归入口为 `tests/test_island_food_recipe_limits.py`、`tests/test_island_shop_production.py`、`tests/test_island_food_dispatch.py` 和 `tests/test_island_planned_food_materials.py`，覆盖各店配方、12／8／5 分批、少产记账、在制去重、套餐扣料、季节优先与备选下单。
 
 ### 子玩法速览
 

@@ -97,7 +97,8 @@ class FoodUI(IslandShopBase):
         self.chef_unavailable_products = set()
         self.name_to_config = {
             name: {'selection': POST_ADD_ORDER, 'selection_check': POST_ADD_ORDER}
-            for name in ('tea', 'fallback')
+            for name in ('tea', 'fallback', 'tofu', 'fo_tiao', 'pineapple_juice',
+                         'chrysanthemum_tea', 'apple_juice', 'latte')
         }
         self.post_close = Mock(return_value=True)
         self.post_open = Mock(side_effect=self.open_post)
@@ -109,9 +110,14 @@ class FoodUI(IslandShopBase):
         self.handle_popup_confirm = Mock(return_value=False)
 
     def open_post(self, button):
-        if self.post_open.call_count > 1:
+        if self.device.clicked_at is not None:
             self.device.phase = 'working'
         return True
+
+    def get_product_production_limit(self, product):
+        # 旧虚拟状态测试的别名均对应普通配方；真实餐品沿用生产代码查表。
+        product = {'tea': 'apple_juice', 'fallback': 'tofu'}.get(product, product)
+        return super().get_product_production_limit(product)
 
 
 class SeasonalFoodUI(FoodUI):
@@ -390,14 +396,119 @@ class FoodDispatchTests(unittest.TestCase):
         shop.deduct_materials.assert_not_called()
         self.assertFalse(hasattr(shop, 'finish_time'))
 
+    def test_specialized_food_dispatch_clamps_to_the_actual_recipe_limit(self):
+        for product, limit in (('tofu', 12), ('fo_tiao', 8), ('pineapple_juice', 5)):
+            with self.subTest(product=product):
+                device = FakeDevice(self.clock)
+                device.amount = limit
+                self.mock_ocr(device)
+                shop = FoodUI(device)
+                self.assertEqual(shop.post_produce('POST1', product, 99, 'finish_time'), limit)
+                shop.post_add_one.assert_called_once_with(limit - 1)
+                shop.deduct_materials.assert_called_once_with(product, limit)
+                self.assertEqual(shop.post_open.call_count, 1)
+                self.assertEqual(sum(name == 'POST_ADD_ORDER' for name, _ in device.clicks), 1)
+
+    def test_partial_twelve_batch_dispatch_records_nine_from_the_working_post(self):
+        device = FakeDevice(self.clock)
+        device.amount = device.post_amount = 9
+        self.mock_ocr(device)
+        shop = FoodUI(device)
+        self.assertEqual(shop.post_produce('POST1', 'tofu', 12, 'finish_time'), 9)
+        self.assertEqual(shop.post_open.call_count, 2)
+        shop.deduct_materials.assert_called_once_with('tofu', 9)
+        self.assertEqual(sum(name == 'POST_ADD_ORDER' for name, _ in device.clicks), 1)
+
+    def test_generic_food_dispatch_uses_full_twelve_batch_confirmation(self):
+        device = FakeDevice(self.clock)
+        device.amount = 12
+        self.mock_ocr(device)
+        shop = FoodUI(device)
+        shop.name_to_config['latte']['generic_recipe'] = True
+        with patch('module.island.planned_dispatch.PlannedProductionMixin._planned_open_product_page',
+                   return_value=True) as open_product, \
+                patch('module.island.manufacture_selector.select_manufacture_recipe',
+                      return_value=True) as select_recipe, \
+                patch('module.island.manufacture_selector.set_manufacture_quantity',
+                      return_value=True) as set_quantity:
+            self.assertEqual(shop.post_produce('POST1', 'latte', 99, 'finish_time'), 12)
+        open_product.assert_called_once_with(shop, 'POST1', 'WorkerJuu', 'latte')
+        select_recipe.assert_called_once_with(shop, 901004)
+        set_quantity.assert_called_once_with(shop, 12)
+        shop.deduct_materials.assert_called_once_with('latte', 12)
+        shop.post_open.assert_not_called()
+        self.assertEqual(sum(name == 'POST_ADD_ORDER' for name, _ in device.clicks), 1)
+
+    def test_generic_food_never_dispatches_without_recipe_and_quantity_confirmation(self):
+        for selected, quantity in ((False, True), (True, False)):
+            with self.subTest(selected=selected, quantity=quantity):
+                device = FakeDevice(self.clock)
+                self.mock_ocr(device)
+                shop = FoodUI(device)
+                shop.name_to_config['latte']['generic_recipe'] = True
+                with patch('module.island.planned_dispatch.PlannedProductionMixin._planned_open_product_page',
+                           return_value=True), \
+                        patch('module.island.manufacture_selector.select_manufacture_recipe',
+                              return_value=selected), \
+                        patch('module.island.manufacture_selector.set_manufacture_quantity',
+                              return_value=quantity):
+                    with self.assertRaises(GameStuckError):
+                        shop.post_produce('POST1', 'latte', 12, 'finish_time')
+                shop.deduct_materials.assert_not_called()
+                self.assertEqual(device.clicks, [])
+                self.assertEqual(shop.posts['POST1']['status'], 'idle')
+
+    def test_fixed_position_seasonal_dispatch_keeps_the_five_batch_limit(self):
+        device = FakeDevice(self.clock)
+        device.amount = 5
+        self.mock_ocr(device)
+        shop = SeasonalFoodUI(device)
+        shop.seasonal_high_priority_drink['name'] = 'chrysanthemum_tea'
+        self.assertEqual(shop.post_produce('POST1', 'chrysanthemum_tea', 12, 'finish_time'), 5)
+        shop.post_add_one.assert_called_once_with(4)
+        shop.select_product.assert_not_called()
+        shop.deduct_materials.assert_called_once_with('chrysanthemum_tea', 5)
+        self.assertEqual(shop.post_open.call_count, 1)
+
+    def test_fallback_food_recalculates_the_final_limit_and_deducts_actual_food(self):
+        for primary, fallback, actual in (('tofu', 'fo_tiao', 8),
+                                          ('pineapple_juice', 'tofu', 12)):
+            with self.subTest(primary=primary, fallback=fallback):
+                device = FakeDevice(self.clock)
+                device.amount = actual
+                self.mock_ocr(device)
+                shop = FoodUI(device)
+                shop.special_food = primary
+                shop.produce_check.side_effect = (True, False)
+                self.assertEqual(shop.post_produce('POST1', primary, 12, 'finish_time',
+                                                   product2=fallback), actual)
+                shop.post_add_one.assert_called_once_with(actual - 1)
+                shop.deduct_materials.assert_called_once_with(fallback, actual)
+
+    def test_twelve_batch_preview_accepts_exactly_twelve_and_rejects_thirteen(self):
+        device = FakeDevice(self.clock)
+        self.mock_ocr(device)
+        shop = FoodUI(device)
+        device.amount = 12
+        self.assertEqual(shop.read_food_dispatch_preview(12), (12, timedelta(hours=2)))
+        device.amount = 13
+        self.assertIsNone(shop.read_food_dispatch_preview(12))
+
 
 class DispatchScreenshotOCRTests(unittest.TestCase):
     def test_real_quantity_and_full_button_time_can_be_read_without_post_details(self):
         """夹具来自已有菊花茶选品页，仅保存页头、次数及确认按钮三个区域。"""
-        number = Digit(DISPATCH_PRODUCT_NUMBER, lang='cnocr', letter=(80, 80, 80),
-                       threshold=160, alphabet='0123456789').ocr(PRODUCT)
-        duration = Ocr(DISPATCH_PRODUCT_DURATION, lang='cnocr', letter=(255, 255, 255),
-                       threshold=128, alphabet='0123456789:').ocr(PRODUCT)
+        from module.ocr.al_ocr import AlOcr, OcrSettings
+
+        settings = OcrSettings(backend='onnx', device='cpu',
+                               allow_vendor_execution_providers=False, model_version='alocr_cn_v3')
+        model = AlOcr(name='cn', settings=settings)
+        # 使用本地固定模型，不读取私人配置或连接 OCR 服务。
+        with patch('module.ocr.ocr.OCR_MODEL', SimpleNamespace(cnocr=model)):
+            number = Digit(DISPATCH_PRODUCT_NUMBER, lang='cnocr', letter=(80, 80, 80),
+                           threshold=160, alphabet='0123456789').ocr(PRODUCT)
+            duration = Ocr(DISPATCH_PRODUCT_DURATION, lang='cnocr', letter=(255, 255, 255),
+                           threshold=128, alphabet='0123456789:').ocr(PRODUCT)
         self.assertEqual(number, 4)
         self.assertEqual(duration, '02:00:00')
 

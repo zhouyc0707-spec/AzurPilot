@@ -60,6 +60,55 @@ class FoodMaterialTests(unittest.TestCase):
             self.assertEqual(self.ui._limit_planned_food_batch('pineapple_juice', 7), 5)
         self.quantity_setter.assert_called_once_with(self.ui, 5)
 
+    def test_recipe_capacity_replaces_the_old_seven_round_cap(self):
+        for product, expected in (('latte', 12), ('fo_tiao', 8), ('pineapple_juice', 5)):
+            with self.subTest(product=product):
+                stocks = self.inventory(product)
+                self.quantity_setter.reset_mock()
+                with patch('module.island.manufacture_selector.read_selected_recipe_inventory', return_value=stocks):
+                    actual = self.ui._limit_planned_food_batch(product, 30)
+                self.assertEqual(actual, expected)
+                self.quantity_setter.assert_called_once_with(self.ui, expected)
+
+    def test_target_stock_and_pending_jobs_still_limit_a_batch_above_seven(self):
+        stocks = self.inventory('latte', product=4)
+        self.ui.config.values[f'{CONFIG_PREFIX}.PlannerTargets'] = '{"3007":17}'
+        self.ui.post_check_meal = {'latte': 1}
+        self.ui._planned_food_dispatched = {'latte': 2}
+        with patch('module.island.manufacture_selector.read_selected_recipe_inventory', return_value=stocks):
+            self.assertEqual(self.ui._limit_planned_food_batch('latte', 30), 10)
+        self.quantity_setter.assert_called_once_with(self.ui, 10)
+
+    def test_explicit_material_protection_limits_the_new_twelve_round_batch(self):
+        stocks = self.inventory('latte')
+        stocks[2603]['stock'] = 25
+        self.ui._planner_protection = {'milk': 5}
+        with patch('module.island.manufacture_selector.read_selected_recipe_inventory', return_value=stocks):
+            self.assertEqual(self.ui._limit_planned_food_batch('latte', 30), 10)
+        self.quantity_setter.assert_called_once_with(self.ui, 10)
+        self.assertEqual(self.ui.warehouse_counts['milk'], 25)
+
+    def test_custom_meal_reserve_remains_effective_above_seven(self):
+        stocks = self.inventory('wake_up_call')
+        stocks[3006]['stock'] = 20
+        self.ui._planner_protection = {'cheese': 3}
+        self.ui._reserved_targets = {'cheese': 11}
+        self.ui.meal_compositions = {'wake_up_call': {'required': ['iced_coffee', 'cheese'], 'numbers': [1, 1]}}
+        with patch('module.island.manufacture_selector.read_selected_recipe_inventory', return_value=stocks):
+            self.assertEqual(self.ui._limit_planned_food_batch('wake_up_call', 30), 9)
+        self.quantity_setter.assert_called_once_with(self.ui, 9)
+        self.ui._sync_planned_food_materials('wake_up_call', 9)
+        self.assertEqual(self.ui.warehouse_counts['cheese'], 11)
+        self.assertEqual(self.ui._planned_food_dispatched['wake_up_call'], 9)
+
+    def test_filled_target_does_not_set_a_zero_quantity_or_start_more_food(self):
+        stocks = self.inventory('latte', product=8)
+        self.ui.config.values[f'{CONFIG_PREFIX}.PlannerTargets'] = '{"3007":12}'
+        self.ui.post_check_meal = {'latte': 4}
+        with patch('module.island.manufacture_selector.read_selected_recipe_inventory', return_value=stocks):
+            self.assertEqual(self.ui._limit_planned_food_batch('latte', 30), 0)
+        self.quantity_setter.assert_not_called()
+
     def test_custom_meal_material_reserve_is_preserved_and_actual_deduction_syncs_once(self):
         stocks = self.inventory('wake_up_call')
         stocks[3006]['stock'] = 10

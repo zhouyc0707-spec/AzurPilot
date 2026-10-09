@@ -338,6 +338,7 @@ class IslandTeahouse(IslandShopBase):
         """
         seasonal_drink_name = self.seasonal_high_priority_drink['name'] if self.seasonal_high_priority_drink else ''
         if product == seasonal_drink_name:
+            number = min(number, self.get_product_production_limit(product))
             post_button = self.posts[post_id]['button']
             self.post_close()
             self.post_open(post_button)
@@ -391,7 +392,8 @@ class IslandTeahouse(IslandShopBase):
         """
         if not self.seasonal_high_priority_drink:
             return {}
-        return {self.seasonal_high_priority_drink['name']: self.POST_PRODUCE_LIMIT}
+        name = self.seasonal_high_priority_drink['name']
+        return {name: self.get_product_production_limit(name)}
 
     def deduct_materials(self, product, number):
         """扣除制作饮品消耗的原材料（包括蜂蜜和套餐原材料）。
