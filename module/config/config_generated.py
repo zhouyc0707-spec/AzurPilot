@@ -857,6 +857,7 @@ class GeneratedConfig:
     IslandProductionPlanner_IdleAccumulatingItems = '{}'
     IslandProductionPlanner_PlannerTargets = '{}'
     IslandProductionPlanner_PlannerStatus = None
+    IslandProductionPlanner_PlannerReport = '{}'
     IslandProductionPlanner_PlanFingerprint = None
     IslandProductionPlanner_OrderManufactureTargets = '{}'
     IslandProductionPlanner_OrderManufactureFinalTargets = '{}'

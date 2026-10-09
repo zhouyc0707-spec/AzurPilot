@@ -4346,6 +4346,10 @@
       "name": "Planning status",
       "help": "Latest planning result. Existing plans are preserved on failure."
     },
+    "PlannerReport": {
+      "name": "Read-only plan detail data",
+      "help": "Only displays plan targets and the latest reliable observations. It does not participate in production decisions."
+    },
     "PlanFingerprint": {
       "name": "Plan validity marker",
       "help": "Used to detect changed inputs, technology or season and refresh the plan."
@@ -7068,6 +7072,42 @@
       "SearchPlaceholder": "Search settings",
       "SearchNoResult": "No matching settings",
       "SearchResultCount": "{count} results"
+    },
+    "IslandPlannerReport": {
+      "Title": "View plan details",
+      "GeneratedAt": "Plan generated at",
+      "DailyRevenue": "Theoretical daily revenue",
+      "DailyProfit": "Theoretical daily net profit",
+      "Disabled": "Automatic planning is disabled. The latest plan is retained for reference.",
+      "LegacyNotice": "Only targets and menus can be restored from this older plan. Recipe details will be added after the next planning run.",
+      "ObservationNotice": "Stock is the latest actual reading at the stated time. Shortfall uses that reading only; the latest order is expected output and does not reduce the stock shortfall. Menus show the most recently saved plan. Actual business tasks may change dishes for seasons or bonuses; their current results take precedence.",
+      "Items": "Item targets",
+      "Item": "Item",
+      "Target": "Stock target",
+      "Floor": "Stock reserve floor",
+      "Buffer": "Material working stock",
+      "Reserve": "Reserve",
+      "Demand": "Additional and order demand",
+      "IdlePerDay": "Spare-slot accumulation/day",
+      "Observations": "Latest checks and orders",
+      "Stock": "Latest actual stock reading",
+      "ObservedAt": "Observed at",
+      "Source": "Source",
+      "Shortfall": "Stock shortfall at that reading",
+      "DispatchAmount": "Latest order expected output",
+      "DispatchAt": "Ordered at",
+      "PendingInspect": "Awaiting inspection",
+      "PendingReview": "Needs rechecking",
+      "NoDispatch": "No order recorded",
+      "Production": "Daily production plan",
+      "Recipe": "Recipe",
+      "Place": "Production location",
+      "BatchesPerDay": "Daily batches",
+      "Menus": "Business menus",
+      "Menu": "Shop",
+      "Capacity": "Quantity per shelf",
+      "PerDay": "Theoretical daily sales",
+      "Empty": "No plan details yet."
     },
     "FleetManagement": {
       "StartScan": "Start scan",

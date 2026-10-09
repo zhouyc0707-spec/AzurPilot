@@ -12,6 +12,7 @@ from module.island_manufacture.assets import ALAS_RECIPE_CHECK
 from module.island.manufacture_selector import (
     read_selected_recipe_inventory, read_selected_recipe_quantity, select_manufacture_recipe, set_manufacture_quantity,
 )
+from module.island.planner_report import invalidate_planner_stocks, record_planner_dispatch
 from module.island.production_planner import (
     IslandPlanningError, load_planner_targets, load_production_protection, planner_idle_products, read_config,
 )
@@ -166,6 +167,10 @@ class PlannedProductionMixin:
         units = actual * yield_amount
         for output, quantity in outputs.items():
             self._planner_dispatched[output] = self._planner_dispatched.get(output, 0) + actual * quantity
+        if actual > 0:
+            record_planner_dispatch(self.config, {output: actual * quantity for output, quantity in outputs.items()},
+                                    '原料派遣确认')
+            invalidate_planner_stocks(self.config, costs, '原料派遣用料后')
         self.posts[post_id]['crop'] = name
         self.posts[post_id]['state'] = 'working'
         self.posts[post_id]['runs'] = actual

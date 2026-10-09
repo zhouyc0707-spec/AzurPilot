@@ -4346,6 +4346,10 @@
       "name": "规划状态",
       "help": "显示最近一次规划的结果；失败会保留已有计划。"
     },
+    "PlannerReport": {
+      "name": "只读规划详情数据",
+      "help": "仅用于展示规划目标与最近可信观测，不参与生产决策。"
+    },
     "PlanFingerprint": {
       "name": "计划有效标记",
       "help": "用于判断输入、科技或季节变化后是否需要重新规划。"
@@ -7068,6 +7072,42 @@
       "SearchPlaceholder": "搜索配置",
       "SearchNoResult": "未找到匹配的配置",
       "SearchResultCount": "共 {count} 项结果"
+    },
+    "IslandPlannerReport": {
+      "Title": "查看规划详情",
+      "GeneratedAt": "规划生成时间",
+      "DailyRevenue": "理论日均收入",
+      "DailyProfit": "理论日均净收益",
+      "Disabled": "自动规划已关闭，以下保留最近规划供查阅。",
+      "LegacyNotice": "旧计划仅能恢复目标和菜单；生产配方详情等待下一轮规划补齐。",
+      "ObservationNotice": "现货是所列时间的最近实读结果。缺口仅按该次观测计算；最近下单仅表示预计产出，不抵扣现货缺口。菜单为最近保存的规划安排；实际经营可能按季节或加成换菜，以经营任务当前结果为准。",
+      "Items": "物品目标",
+      "Item": "物品",
+      "Target": "目标现货",
+      "Floor": "库存保留线",
+      "Buffer": "原料周转量",
+      "Reserve": "预留量",
+      "Demand": "额外及订单需求",
+      "IdlePerDay": "余岗积累／日",
+      "Observations": "最近巡检与下单",
+      "Stock": "最近实读现货",
+      "ObservedAt": "观测时间",
+      "Source": "来源",
+      "Shortfall": "按该次观测的现货缺口",
+      "DispatchAmount": "最近下单预计产出",
+      "DispatchAt": "下单时间",
+      "PendingInspect": "待巡检",
+      "PendingReview": "待复核",
+      "NoDispatch": "暂无下单记录",
+      "Production": "日均生产安排",
+      "Recipe": "配方",
+      "Place": "生产地点",
+      "BatchesPerDay": "日均批次",
+      "Menus": "经营菜单",
+      "Menu": "店铺",
+      "Capacity": "一货架数量",
+      "PerDay": "理论日销量",
+      "Empty": "暂无规划详情。"
     },
     "FleetManagement": {
       "StartScan": "开始扫描",

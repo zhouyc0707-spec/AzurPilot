@@ -4346,6 +4346,10 @@
       "name": "規劃狀態",
       "help": "顯示最近一次規劃結果；失敗時保留既有計畫。"
     },
+    "PlannerReport": {
+      "name": "唯讀規劃詳情資料",
+      "help": "僅用於顯示規劃目標與最近可信觀測，不參與生產決策。"
+    },
     "PlanFingerprint": {
       "name": "計畫有效標記",
       "help": "用於判斷輸入、科技或季節變更後是否需要重新規劃。"
@@ -7068,6 +7072,42 @@
       "SearchPlaceholder": "搜尋設定",
       "SearchNoResult": "找不到相符的設定",
       "SearchResultCount": "共 {count} 項結果"
+    },
+    "IslandPlannerReport": {
+      "Title": "查看規劃詳情",
+      "GeneratedAt": "規劃產生時間",
+      "DailyRevenue": "理論平均每日收入",
+      "DailyProfit": "理論平均每日淨收益",
+      "Disabled": "自動規劃已關閉，以下保留最近規劃供查閱。",
+      "LegacyNotice": "舊計畫僅能還原目標和菜單；生產配方詳情等待下一輪規劃補齊。",
+      "ObservationNotice": "庫存是所列時間最近實際讀取的結果。缺口僅按該次觀測計算；最近下單僅代表預期產量，不抵扣庫存缺口。菜單為最近儲存的規劃安排；實際經營可能依季節或加成更換菜色，以經營任務目前結果為準。",
+      "Items": "物品目標",
+      "Item": "物品",
+      "Target": "目標庫存",
+      "Floor": "庫存保留線",
+      "Buffer": "原料周轉量",
+      "Reserve": "預留量",
+      "Demand": "額外及訂單需求",
+      "IdlePerDay": "剩餘崗位累積／日",
+      "Observations": "最近盤點與下單",
+      "Stock": "最近實際讀取庫存",
+      "ObservedAt": "觀測時間",
+      "Source": "來源",
+      "Shortfall": "按該次觀測的庫存缺口",
+      "DispatchAmount": "最近下單預期產量",
+      "DispatchAt": "下單時間",
+      "PendingInspect": "待盤點",
+      "PendingReview": "待複核",
+      "NoDispatch": "暫無下單紀錄",
+      "Production": "平均每日生產安排",
+      "Recipe": "配方",
+      "Place": "生產地點",
+      "BatchesPerDay": "平均每日批次",
+      "Menus": "經營菜單",
+      "Menu": "店鋪",
+      "Capacity": "單一貨架數量",
+      "PerDay": "理論每日銷量",
+      "Empty": "暫無規劃詳情。"
     },
     "FleetManagement": {
       "StartScan": "開始掃描",

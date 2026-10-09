@@ -1684,6 +1684,11 @@ IslandProductionPlanner:
     value: ""
     type: state
     persist: true
+  PlannerReport:
+    value: "{}"
+    type: textarea
+    display: hide
+    persist: true
   PlanFingerprint:
     value: ""
     display: hide

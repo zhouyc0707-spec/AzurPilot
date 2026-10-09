@@ -48,6 +48,42 @@ TaskConfig:
   SearchNoResult:
   SearchResultCount:
 
+IslandPlannerReport:
+  Title:
+  GeneratedAt:
+  DailyRevenue:
+  DailyProfit:
+  Disabled:
+  LegacyNotice:
+  ObservationNotice:
+  Items:
+  Item:
+  Target:
+  Floor:
+  Buffer:
+  Reserve:
+  Demand:
+  IdlePerDay:
+  Observations:
+  Stock:
+  ObservedAt:
+  Source:
+  Shortfall:
+  DispatchAmount:
+  DispatchAt:
+  PendingInspect:
+  PendingReview:
+  NoDispatch:
+  Production:
+  Recipe:
+  Place:
+  BatchesPerDay:
+  Menus:
+  Menu:
+  Capacity:
+  PerDay:
+  Empty:
+
 FleetManagement:
   StartScan:
   Scanning:

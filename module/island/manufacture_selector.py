@@ -12,6 +12,7 @@ from module.base.timer import Timer
 from module.base.utils import area_offset, color_mask, color_similarity_2d, crop, extract_letters
 from module.island.data import DIC_ISLAND_ITEM, DIC_ISLAND_RECIPE, DIC_ISLAND_SLOT
 from module.island.manufacture_catalog import get_catalog
+from module.island.planner_report import record_planner_stocks
 from module.island.recipe_groups import GROUP_TO_PLACE, SEASONAL_RECIPE_GROUPS
 from module.island_manufacture.assets import (
     ALAS_RECIPE_AMOUNT, ALAS_RECIPE_AMOUNT_MAX, ALAS_RECIPE_AMOUNT_MINUS, ALAS_RECIPE_AMOUNT_PLUS,
@@ -248,6 +249,7 @@ def read_selected_recipe_inventory(main, recipe_id):
         if stock is None:
             return None
         product_id = next(iter(recipe['commission_product']))
+        record_planner_stocks(getattr(main, 'config', None), {product_id: stock}, '配方选品页')
         return {product_id: {'stock': stock, 'cost': 0, 'display_required': 0}}
     layouts = {1: (750, 0), 2: (663, 175), 3: (634, 116)}
     if count not in layouts:
@@ -272,6 +274,8 @@ def read_selected_recipe_inventory(main, recipe_id):
         return None
     product_id = next(iter(recipe['commission_product']))
     observations[product_id] = {'stock': product_stock, 'cost': 0, 'display_required': 0}
+    record_planner_stocks(getattr(main, 'config', None),
+                          {item: data['stock'] for item, data in observations.items()}, '配方选品页')
     return observations
 
 

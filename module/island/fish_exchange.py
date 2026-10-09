@@ -17,6 +17,7 @@ from module.island.planner_utils import (
     normalize_item_keys, normalize_item_needs, resolve_stuck_season_order_id,
 )
 from module.island.production_planner import load_planner_targets, read_config
+from module.island.planner_report import invalidate_planner_stocks, record_planner_stocks
 from module.island.assets import GET_ITEMS_ISLAND
 from module.island_exchange.assets import ALAS_EXCHANGE_CONFIRM
 from module.logger import logger
@@ -323,6 +324,9 @@ class FishExchangeSession:
                 logger.attr('FishExchange', {'item': meat_id, 'stock': current, 'target': target,
                                             'fish': selection, 'output': produced})
                 after = self._exchange_batch(meat_id, current, cards, selection, produced)
+                config = getattr(self.main, 'config', None)
+                invalidate_planner_stocks(config, [meat_id, *selection], '鱼肉兑换后')
+                record_planner_stocks(config, {meat_id: after}, '鱼肉兑换到账页')
                 changed = True
                 if after >= target:
                     break

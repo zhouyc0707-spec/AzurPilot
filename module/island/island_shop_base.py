@@ -14,6 +14,7 @@ from module.handler.login import LoginHandler
 from module.island.warehouse import *
 from module.logger import logger
 from module.island.island_season import get_global_season_config
+from module.island.planner_report import invalidate_planner_stocks, record_planner_dispatch
 
 
 # 选品页的数量与岗位详情 OCR_POST_NUMBER 不在同一位置。当前仅验证 CN
@@ -631,6 +632,7 @@ class IslandShopBase(Island, WarehouseOCR):
         if number > 0 and not set_manufacture_quantity(self, number):
             raise GameStuckError(f'{self._item_cn(product)}下单前实际生产次数无法确认')
         self._planned_food_materials = inventory
+        self._planned_food_outputs = DIC_ISLAND_RECIPE[recipe_id]['commission_product']
         return number
 
     def _sync_planned_food_materials(self, product, actual_number):
@@ -649,7 +651,15 @@ class IslandShopBase(Island, WarehouseOCR):
                     self.special_materials[local] = self.warehouse_counts[local]
         if observations:
             self._planned_food_dispatched[product] = self._planned_food_dispatched.get(product, 0) + actual_number
+            if actual_number > 0:
+                record_planner_dispatch(
+                    self.config, {item: actual_number * quantity for item, quantity in
+                                  getattr(self, '_planned_food_outputs', {}).items()}, '食品派遣确认')
+                invalidate_planner_stocks(self.config,
+                                          [item for item, data in observations.items() if data['cost'] > 0],
+                                          '食品派遣用料后')
         self._planned_food_materials = {}
+        self._planned_food_outputs = {}
 
     def _extend_planned_food_catalog(self):
         """生成计划时补齐本场所全部已解锁配方，旧商品配置原件仍用于关闭规划。"""
@@ -841,6 +851,7 @@ class IslandShopBase(Island, WarehouseOCR):
         self._planner_protection = load_production_protection(self.config)
         self._planned_food_dispatched = {}
         self._planned_food_materials = {}
+        self._planned_food_outputs = {}
         self._planned_food_filler = False
         self.chef_unavailable_products.clear()
         self.unavailable_characters.clear()

@@ -1,0 +1,22 @@
+.island-planner-report {margin-top: 14px; border-top: 1px solid var(--theme-input-border); padding: 16px 0 0; color: var(--theme-text); min-width: 0; font-size: 13px}
+.island-planner-report-heading {display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap}
+.island-planner-report h3, .island-planner-report h4 {font-size: 14px; margin: 0}
+.island-planner-report-heading button {display: inline-flex; align-items: center; gap: 6px}
+.island-planner-note {color: var(--theme-muted); font-size: 12px; line-height: 1.7; margin: 10px 0; overflow-wrap: anywhere}
+.island-planner-warning, .island-planner-short {color: var(--theme-warning, #a5630a); line-height: 1.6; overflow-wrap: anywhere}
+.island-planner-totals {display: flex; flex-wrap: wrap; gap: 8px 20px; padding: 10px 0; line-height: 1.7}
+.island-planner-totals strong {font-variant-numeric: tabular-nums}
+.island-planner-report details {border-top: 1px solid var(--theme-input-border); margin-top: 8px; min-width: 0}
+.island-planner-report summary {cursor: pointer; padding: 12px 0; font-weight: 600; line-height: 1.6}
+.island-planner-report summary:focus-visible, .island-planner-table-wrap:focus-visible {outline: 2px solid var(--theme-focus); outline-offset: 2px}
+.island-planner-table-wrap {max-width: 100%; overflow-x: auto; margin-bottom: 12px}
+.island-planner-report table {width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; white-space: nowrap}
+.island-planner-report th, .island-planner-report td {padding: 10px 12px; border-bottom: 1px solid var(--theme-input-border); vertical-align: top; font-weight: 400}
+.island-planner-report thead th {font-weight: 600; color: var(--theme-muted)}
+.island-planner-report tbody th {font-weight: 600}
+.island-planner-report small {display: block; margin-top: 5px; font-size: 11px; font-weight: 400; color: var(--theme-muted)}
+.island-planner-stale, .island-planner-unknown {color: var(--theme-muted)}
+.island-planner-shop {padding: 12px 0; border-top: 1px solid var(--theme-input-border)}
+.island-planner-shop ul {padding-left: 20px; line-height: 1.9; margin: 8px 0}
+.island-planner-shop li span {color: var(--theme-muted); margin-left: 8px}
+@media (max-width: 600px) {.island-planner-totals {display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px}}

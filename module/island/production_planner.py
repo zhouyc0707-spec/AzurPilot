@@ -338,6 +338,15 @@ class IslandProductionPlanner:
             final_targets = {str(item): count + calculator.hard_floor_items.get(item, 0)
                              for item, count in manufacture_final.items()}
             if export:
+                from module.island.planner_report import build_planner_report
+                try:
+                    report = build_planner_report(calculator, targets, menus, reserve, now(),
+                                                  manufacture_needs if temporary_manufacture else None)
+                    report_json = json.dumps(report, ensure_ascii=False, sort_keys=True)
+                except Exception as error:
+                    # 展示副本失败不阻断已验证的生产方案；空副本会由读取端回显新目标。
+                    logger.warning(f'[岛屿-规划详情] 无法生成详细副本，保留目标回显: {error}')
+                    report_json = '{}'
                 with self.config.multi_set():
                     save_planned_menus(self.config, menus)
                     self.config.cross_set(f'{CONFIG_PREFIX}.CompletedManufactureOrderId', 0)
@@ -358,6 +367,7 @@ class IslandProductionPlanner:
                         'DailyBufferItems': calculator.daily_buffer_items_to_yaml(),
                         'IdleAccumulatingItems': calculator.idle_accumulating_items_to_yaml(),
                         'PlannerTargets': json.dumps(targets, sort_keys=True),
+                        'PlannerReport': report_json,
                         'PlanFingerprint': fingerprint,
                         'PlannerStatus': f'已生成：每日预计收入 {calculator.daily_coin_revenue:.0f}，净收益 {calculator.daily_profit:.0f}',
                     }.items():

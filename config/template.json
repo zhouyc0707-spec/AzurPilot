@@ -3090,6 +3090,7 @@
       "IdleAccumulatingItems": "{}",
       "PlannerTargets": "{}",
       "PlannerStatus": null,
+      "PlannerReport": "{}",
       "PlanFingerprint": null,
       "OrderManufactureTargets": "{}",
       "OrderManufactureFinalTargets": "{}",

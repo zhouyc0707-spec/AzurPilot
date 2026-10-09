@@ -4346,6 +4346,10 @@
       "name": "計画の状態",
       "help": "直近の計画結果。失敗時は既存の計画を保持します。"
     },
+    "PlannerReport": {
+      "name": "読み取り専用の計画詳細データ",
+      "help": "計画の目標と直近の信頼できる観測を表示するためだけのデータです。生産判断には使用しません。"
+    },
     "PlanFingerprint": {
       "name": "計画の有効性マーカー",
       "help": "設定、開発状況、季節の変化による再計画判定に使用します。"
@@ -7068,6 +7072,42 @@
       "SearchPlaceholder": "設定を検索",
       "SearchNoResult": "一致する設定がありません",
       "SearchResultCount": "{count} 件の結果"
+    },
+    "IslandPlannerReport": {
+      "Title": "計画の詳細を見る",
+      "GeneratedAt": "計画の生成日時",
+      "DailyRevenue": "理論上の一日平均収入",
+      "DailyProfit": "理論上の一日平均純利益",
+      "Disabled": "自動計画は無効です。直近の計画を参照用に表示しています。",
+      "LegacyNotice": "旧計画から復元できるのは目標とメニューのみです。生産レシピの詳細は次回の計画作成後に追加されます。",
+      "ObservationNotice": "在庫は表示日時に実際に読み取った直近の値です。不足数はその観測だけで計算します。直近の発注は予想生産量であり、在庫不足数から差し引きません。メニューは直近に保存した計画です。実際の経営では季節やボーナスに応じて料理が変わる場合があり、経営タスクの現在の結果を優先してください。",
+      "Items": "アイテムの目標",
+      "Item": "アイテム",
+      "Target": "目標在庫",
+      "Floor": "在庫確保ライン",
+      "Buffer": "原材料の回転在庫",
+      "Reserve": "確保量",
+      "Demand": "追加・注文需要",
+      "IdlePerDay": "余剰枠の蓄積／日",
+      "Observations": "直近の巡回と発注",
+      "Stock": "直近の実読取在庫",
+      "ObservedAt": "観測日時",
+      "Source": "取得元",
+      "Shortfall": "観測時点の在庫不足数",
+      "DispatchAmount": "直近の発注による予想生産量",
+      "DispatchAt": "発注日時",
+      "PendingInspect": "巡回待ち",
+      "PendingReview": "再確認待ち",
+      "NoDispatch": "発注記録なし",
+      "Production": "一日平均生産計画",
+      "Recipe": "レシピ",
+      "Place": "生産場所",
+      "BatchesPerDay": "一日平均生産回数",
+      "Menus": "経営メニュー",
+      "Menu": "店舗",
+      "Capacity": "棚一つ分の数量",
+      "PerDay": "理論上の一日販売数",
+      "Empty": "計画の詳細はまだありません。"
     },
     "FleetManagement": {
       "StartScan": "スキャン開始",

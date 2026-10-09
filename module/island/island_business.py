@@ -19,6 +19,8 @@ from module.island.island_season import SEASONAL_ITEMS
 from module.island.order_stock import (
     SHOP_TO_RESTAURANT, get_planned_menu, planner_enabled, sync_active_menu,
 )
+from module.island.item_ids import LOCAL_TO_ITEM_ID
+from module.island.planner_report import invalidate_planner_stocks
 from datetime import timedelta
 
 from module.config.time_source import now as current_time
@@ -1065,7 +1067,8 @@ class IslandBusiness(Island):
                     self.device.click(ISLAND_BACK)
                     self.device.sleep(1)
                     continue
-                self._confirm_business_start()
+                if self._confirm_business_start():
+                    self._invalidate_business_stocks(shop_name)
                 self.post_manage_mode(POST_MANAGE_BUSINESS)
                 self.device.sleep(0.5)
             elif status == 'yellow':
@@ -1347,7 +1350,8 @@ class IslandBusiness(Island):
         self._select_business_product(shop_name)
 
         # 确认经营并返回
-        self._confirm_business_start()
+        if self._confirm_business_start():
+            self._invalidate_business_stocks(shop_name)
         self.post_manage_mode(POST_MANAGE_BUSINESS)
         self.device.sleep(0.5)
 
@@ -2101,6 +2105,14 @@ class IslandBusiness(Island):
                 logger.info(f"[岛屿-经营] 选择餐品: {p['name']} (相似度: {sim:.2f})")
                 self.device.click(offset_btn)
                 self.device.sleep(0.5)
+
+    def _invalidate_business_stocks(self, shop_name):
+        """经营可能已上架消耗成品，只将旧观测标待复核，不猜实际售卖数量。"""
+        products = getattr(self, 'active_products', {}).get(
+            shop_name, getattr(self, 'shop_products', {}).get(shop_name, []))
+        items = [LOCAL_TO_ITEM_ID[product['name']] for product in products
+                 if product.get('name') in LOCAL_TO_ITEM_ID]
+        invalidate_planner_stocks(self.config, items, '经营操作后')
 
     def _confirm_business_start(self):
         """确认开始经营，处理奖励弹窗并确认返回岗位管理。

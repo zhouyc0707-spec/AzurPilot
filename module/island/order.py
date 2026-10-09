@@ -19,6 +19,7 @@ from module.island.order_detail import get_order_detail_signature, order_detail_
 from module.island.order_ocr import OrderDigitCounter, validate_requirements
 from module.island.order_selection import get_selected_order_position
 from module.island.order_stock import get_menu_reserve_items, get_order_effective_stock, menu_reservations_known
+from module.island.planner_report import invalidate_planner_stocks, record_planner_stocks
 from module.island.utils import get_active_island_activity_ids, load_hard_floor_items, normalize_item_keys
 from module.island_daily_order.assets import (
     ALAS_ORDER_ACCEPT, ALAS_ORDER_BACKGROUND, ALAS_ORDER_COOLDOWN_SPEED_UP,
@@ -331,6 +332,7 @@ class IslandOrder(IslandDailyOrder):
             logger.warning('[岛屿-订单] 需求未完整识别，保留订单，五分钟后复查')
             self._record_deadline(timedelta(minutes=5))
             return False
+        record_planner_stocks(self.config, {item: counter[0] for item, counter in requirements.items()}, '订单需求页')
         if kind == 'regular' and self._filter_rejects(requirements):
             return self._reject_order()
         force = kind == 'regular' and (
@@ -346,6 +348,7 @@ class IslandOrder(IslandDailyOrder):
                 self._reenter()
                 return True
             if result:
+                invalidate_planner_stocks(self.config, requirements, '订单交付后')
                 return True
         if kind == 'regular':
             return self._reject_order()

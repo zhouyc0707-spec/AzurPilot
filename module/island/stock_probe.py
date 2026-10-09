@@ -10,6 +10,7 @@ from module.exception import GameStuckError
 from module.island.assets import ISLAND_CLICK_SAFE_AREA
 from module.island.data import DIC_ISLAND_ITEM
 from module.island.item_ids import resolve_item_id
+from module.island.planner_report import record_planner_stocks
 from module.island.warehouse import WarehouseOCR
 from module.logger import logger
 from module.ocr.ocr import Ocr
@@ -209,4 +210,6 @@ def read_item_stocks(main, item_ids):
     normalized = tuple(dict.fromkeys(resolve_item_id(item) for item in item_ids))
     if not normalized:
         return {}
-    return StockProbeSession(main).run(normalized)
+    observed = StockProbeSession(main).run(normalized)
+    record_planner_stocks(getattr(main, 'config', None), observed, '仓库详情页')
+    return observed

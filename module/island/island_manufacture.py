@@ -7,6 +7,7 @@
 from module.island.island import *
 from module.island_manufacture.assets import *
 from module.island.island_shop_base import IslandShopBase
+from module.island.planner_report import invalidate_planner_stocks, record_planner_dispatch
 from module.island.assets import *
 from module.ui.page import *
 from datetime import timedelta
@@ -292,6 +293,9 @@ class IslandManufacture(IslandShopBase):
             post_id, name, self._post_time_vars[post_id], batches, preview, confirmed_at)
         quantity = actual_batches * item['yield']
         self._manufacture_scheduled[name] = self._manufacture_scheduled.get(name, 0) + quantity
+        if actual_batches > 0:
+            record_planner_dispatch(self.config, {item['item_id']: quantity}, '工坊派遣确认')
+            invalidate_planner_stocks(self.config, item['ingredients'], '工坊派遣用料后')
         for material_id, cost in item['ingredients'].items():
             material = ITEM_ID_TO_LOCAL.get(material_id)
             if material in self.warehouse_counts:

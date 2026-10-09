@@ -27,6 +27,7 @@ import { EditStatus } from '../components/EditStatus'
 import { AccountPanel } from '../components/AccountPanel'
 import { IslandSuspendControl } from '../components/IslandSuspendControl'
 import { EmulatorRuntimeStatus } from '../components/EmulatorRuntimeStatus'
+import { IslandPlannerReport } from '../components/IslandPlannerReport'
 import { isFieldVisible } from './configVisibility'
 
 export function TaskConfig() {
@@ -59,6 +60,16 @@ export function TaskConfig() {
       setError((error as Error).message)
     }
   }, [instance, queue])
+  const updatePlannerStatus = useCallback((reportInstance: string, status: string) => {
+    // 明细独立刷新，只同步状态摘要，不覆盖用户正在编辑的其他参数。
+    setConfig(previous => {
+      if (!previous || previous.instance !== reportInstance) return previous
+      const plan = previous.values.IslandPlan ?? {}
+      const planner = plan.IslandProductionPlanner ?? {}
+      if (planner.PlannerStatus === status) return previous
+      return {...previous, values: {...previous.values, IslandPlan: {...plan, IslandProductionPlanner: {...planner, PlannerStatus: status}}}}
+    })
+  }, [])
 
   // 字段保存成功后用服务端回传的整份配置替换本地副本。
   useEffect(() => {
@@ -256,6 +267,9 @@ export function TaskConfig() {
           </div>
         )
       })}
+      {task === 'IslandPlan' && group === 'IslandProductionPlanner' && !search && <IslandPlannerReport key={instance} instance={instance}
+        initialReport={config.values.IslandPlan?.IslandProductionPlanner?.PlannerReport}
+        initialStatus={config.values.IslandPlan?.IslandProductionPlanner?.PlannerStatus} onStatusChange={updatePlannerStatus}/>}
       {/* 本地定制：岛屿计划「全局配置」组（当前只有季节一项）下面再加一栏，
           一键关闭/恢复该组下全部岛屿任务。搜索时只显示匹配项，这里不参与搜索。 */}
       {task === 'IslandPlan' && group === 'IslandPlan' && !search && <IslandSuspendControl instance={instance} onChanged={reload}/>}

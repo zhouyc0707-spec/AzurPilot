@@ -21,7 +21,7 @@ from module.island.production_planner import (
 
 
 RUNTIME_PATHS = tuple(f'{CONFIG_PREFIX}.{name}' for name in (
-    'TechnologyStatus', 'DailyBufferItems', 'IdleAccumulatingItems', 'PlannerTargets', 'PlannerStatus',
+    'TechnologyStatus', 'DailyBufferItems', 'IdleAccumulatingItems', 'PlannerTargets', 'PlannerStatus', 'PlannerReport',
     'PlanFingerprint', 'OrderManufactureTargets', 'OrderManufactureFinalTargets',
     'AutoManufactureActive', 'AutoManufactureNextRun', 'CompletedManufactureOrderId',
 )) + tuple(f'IslandBusiness.IslandBusinessShop{shop}.PlannedMenu' for shop in range(1, 6)) + (

@@ -15826,6 +15826,12 @@
         "value": "",
         "persist": true
       },
+      "PlannerReport": {
+        "type": "textarea",
+        "value": "{}",
+        "display": "hide",
+        "persist": true
+      },
       "PlanFingerprint": {
         "type": "input",
         "value": "",

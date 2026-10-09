@@ -322,6 +322,13 @@ class ConfigService:
         data, revision = self.read(name)
         # 内部身份不属于参数契约，编辑界面只接收参数组。
         data.pop('_stockInstance', None)
+        planner = data.get('IslandPlan', {}).get('IslandProductionPlanner')
+        if isinstance(planner, dict) and planner.get('PlanFingerprint'):
+            # 旧版本只保存了目标与菜单，读取时派生详情，不写用户配置或触发游戏扫描。
+            from module.island.planner_report import get_planner_report
+            report = get_planner_report(data)
+            if report is not None:
+                planner['PlannerReport'] = json.dumps(report, ensure_ascii=False, sort_keys=True)
         return {'instance': name, 'revision': revision, 'values': data}
 
     def export(self, name):

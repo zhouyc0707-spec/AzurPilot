@@ -195,6 +195,12 @@ flowchart TD
 
 `TechnologyStatus` 的长篇科技明细在新旧界面默认隐藏，并通过 `persist: true` 保留缓存；隐藏不会触发重新扫描或清空已检测科技。「重新扫描科技」开关和「规划状态」继续显示。
 
+「规划状态」下方的只读详情展示目标库存及组成（保留线、原料周转、经营预留、额外需求）、理论每日生产配方、各店经营菜单，以及最近实读现货、按该次现货计算的缺口和最近确认下单的预计产出。目标是要维持或攒到的库存，不是当天必须新生产的件数；每日配方批次、销量和收益都是理论方案。菜单为最近保存的规划安排，实际经营可能按季节或加成换菜，以经营任务当前结果为准。详细表及菜单默认折叠，不把长篇内容铺满全局配置页。React 详情在页面可见且已连接时每十五秒刷新，也可手动刷新；只更新报告和只读摘要，不覆盖参数编辑草稿。原 PyWebIO 也提供只读折叠详情。
+
+`PlannerReport` 是隐藏且 `persist: true` 的展示副本，生成新计划时清空前一计划的观测；规划失败仍保留旧有效详情和失败摘要。旧版本仅保存目标与菜单时，WebUI 读取时派生可显示的旧计划，不写用户配置、不重新求解或操作游戏；旧方案未保存的生成时间、配方和库存不作推测，待下一次正常规划及生产巡检补充。
+
+展示观测只复用已确认配方页的产物／材料计数、仓库物品详情及完整订单需求页，不采用旧仓库批量识别中可能表示「未找到图标」的零。真实读到 0 与未读到严格区分；每条记录附观测时间和来源。派遣确认只保存最近一次预计产出，不视为现货、累计已生产量或当前仍在产，也不从现货缺口扣除。订单交付、确认派遣扣料、经营开业和兑换后，受影响的操作前现货标为待复核，之后的真实读取替换它。所有报告辅助写入都与游戏动作及异常恢复分离；报告不作为任何生产决策的库存缓存。
+
 规划同时考虑已启用任务、岗位、科技、活动期、额外目标和菜单。五家店铺 `Grade` 必须对应游戏内真实等级；新增配置的默认铜牌不能当作已检测等级。货架预留来自等级基础容量与两个实名经营角色的加成，同一菜品跨店相加，不按每日销量相乘。未生成的 `PlannedMenu` 为空字符串，已生成的空字典表示本店仅收取已有收益，不再次开业；不能误回退旧菜单。
 
 有效规划接管运行时生产目标与菜单，原 `Meal1..8`、各生产阈值、`Product1..5` 和角色配置保留原件；关闭 `Enabled` 后继续原手工生产。角色优先级、岗位数、套餐拆解及保护、派遣确认、预读时间复检、经营返回和分批定位保护仍由本地实现执行。规划验证全部输出后才原子保存；无可行解不写半份计划，`PlannerStatus` 标明原因，已有有效计划保留。
@@ -311,6 +317,7 @@ stateDiagram-v2
 | `IslandPlan.Season` | select | spring | 全局季节，驱动所有限定物品过滤（选项仅四季，冬季限定为空表） |
 | `IslandPlan.IslandProductionPlanner.Enabled` / `TechnologyStatus` / `RescanTechnology` | checkbox/textarea | true / 空 / false | 自动生产规划、实读科技缓存、主动重新扫描 |
 | `IslandPlan.IslandProductionPlanner.TaskTarget` / `HardFloorItems` | textarea | `{}` / `{}` | 额外积累需求与显式现货保留线；使用官方物品名或编号 |
+| `IslandPlan.IslandProductionPlanner.PlannerStatus` / `PlannerReport` | state/隐藏文本 | 空 / `{}` | 只读摘要与持久化展示报告；目标、菜单、最近可信现货及确认下单记录，不参与生产决策 |
 | `IslandPlan.IslandProductionPlanner.FieldsEfficiency` / `OrchardEfficiency` / `NurseryEfficiency` | select | 0 | 额外效率比例：0.04 表示 4%，0.12 表示 12% |
 | `IslandFarm.Positions` / `MinFarm` / `PlantPotatoes` / `WorkerFilter` | 数值/文本 | 3 / 660 / 4 / WorkerJuu | 农田岗位数、补种阈值、默认作物岗位数、工人优先级 |
 | `IslandOrchard.AmagiChanRubber` | checkbox | false | 小天城优先种橡胶 |
