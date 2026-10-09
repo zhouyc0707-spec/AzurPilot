@@ -42,4 +42,6 @@
 `0d8e215984ab15810b9be2ca6bc73e2ac36d88ee` 的
 `CN/mod/island/view/page/order/islandorderpage.lua`：
 `ClickOrder` 关闭上一订单的 `sel` 并开启目标订单的 `sel`；圆环颜色、
-`finish` 绿勾及右侧货物详情均不能代替这一选中节点。
+`finish` 绿勾及静态显示的右侧货物详情均不能证明本次目标点击已生效。
+本文件的角标识别器仍只验证该节点；订单任务另由 `order_detail.py` 比较点击前后右侧委托人／货物
+是否确实切换并稳定，作为 CN 遮挡时的独立操作证据。旧详情未变化时不能通过此路径。

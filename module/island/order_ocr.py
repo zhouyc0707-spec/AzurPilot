@@ -13,6 +13,12 @@ from module.base.utils import color_similarity_2d, extract_letters
 from module.ocr.ocr import Ocr
 
 
+# 仅兼容已用订单截图核实的整词误读，不扩大距离阈值或替换任意字符。
+ORDER_ITEM_NAME_ALIASES = {
+    'cn': {'离肉': '禽肉', '白莱': '白菜'},
+}
+
+
 class OrderDigitCounter(Ocr):
     """读取游戏的「现货/需求」，保留不足时的红色数字。"""
 
@@ -42,7 +48,7 @@ class OrderDigitCounter(Ocr):
 
 
 def match_item_name(name, items, language):
-    """只接受精确匹配或唯一、距离受限的 OCR 修正。"""
+    """接受精确名称、已核实的整词别名或唯一、距离受限的 OCR 修正。"""
     name = str(name).strip()
     if not name:
         return None
@@ -58,6 +64,12 @@ def match_item_name(name, items, language):
         candidates.append((levenshtein_distance(name, item_name), item_id, item_name))
     if not candidates:
         return None
+    # 禽肉误读为离肉时，与鲜肉的距离也为 1；明确别名避免在二者间猜测。
+    # 精确商品名优先于别名，且别名目标缺失或重名时不能回退猜成其他商品。
+    corrected = ORDER_ITEM_NAME_ALIASES.get(language, {}).get(name)
+    if corrected is not None:
+        matches = [item_id for _, item_id, item_name in candidates if item_name == corrected]
+        return matches[0] if len(matches) == 1 else None
     # 一个字的残缺结果不能猜成多字货物；合法单字完整名已在上方精确返回。
     if len(name) < 2:
         return None

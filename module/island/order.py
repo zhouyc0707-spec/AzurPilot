@@ -15,8 +15,9 @@ from module.config.utils import get_nearest_weekday_date, get_server_next_update
 from module.exception import GameStuckError
 from module.island.data import DIC_ISLAND_ITEM, DIC_ISLAND_SEASON_ORDER
 from module.island.island_daily_order import IslandDailyOrder
+from module.island.order_detail import get_order_detail_signature, order_detail_changed, same_order_detail
 from module.island.order_ocr import OrderDigitCounter, validate_requirements
-from module.island.order_selection import is_order_selected
+from module.island.order_selection import get_selected_order_position
 from module.island.order_stock import get_menu_reserve_items, get_order_effective_stock, menu_reservations_known
 from module.island.utils import get_active_island_activity_ids, load_hard_floor_items, normalize_item_keys
 from module.island_daily_order.assets import (
@@ -183,7 +184,7 @@ class IslandOrder(IslandDailyOrder):
     def _order_button(self, position):
         x, y = position
         return Button(area=(x - 52, y - 52, x + 52, y + 52), color=(),
-                      button=(x - 44, y - 44, x + 44, y + 44), name=f'ORDER_AT_{x}_{y}')
+                      button=(x - 16, y - 16, x + 16, y + 16), name=f'ORDER_AT_{x}_{y}')
 
     def detect_all_orders(self):
         orders = {kind: detect_order_circles(self.device.image, color, self.LEFT_PANEL_AREA)
@@ -198,28 +199,63 @@ class IslandOrder(IslandDailyOrder):
     def _click_order(self, button, kind):
         if not hasattr(self, '_order_positions'):
             self.detect_all_orders()
+        # 先记录点击前的静态文字；右侧仍显示上一单时不能仅凭需求页出现放行。
+        before_ready = self.appear(DAILY_ORDER_CHECK)
+        before = get_order_detail_signature(self.device.image) if server.server == 'cn' and before_ready and (
+            self.appear(ALAS_ORDER_REQUIREMENTS_CHECK, offset=20)) else None
+        empty_before = before_ready and (
+            self.appear(ALAS_ORDER_BACKGROUND, offset=20)
+            or self.appear(ALAS_ORDER_COOLDOWN_SPEED_UP, offset=20))
         self.device.click(button)
         target = ((button.area[0] + button.area[2]) // 2, (button.area[1] + button.area[3]) // 2)
         positions = self._order_positions
         stable = Timer(0.5, count=1)
+        retry = Timer(2).start()
+        candidate = None
+        popup_seen = False
         for _ in self.loop(skip_first=False, timeout=Timer(8)):
             if self._handle_popups():
                 stable.clear()
+                candidate = None
+                popup_seen = True
                 continue
             cooldown = self.appear(ALAS_ORDER_COOLDOWN_SPEED_UP, offset=20)
             accept = ALAS_ORDER_URGENT_ACCEPT if kind == 'urgent' else ALAS_ORDER_ACCEPT
             detail = self.appear(ALAS_ORDER_REQUIREMENTS_CHECK, offset=20) and self.appear(accept, offset=20)
             page_ready = self.appear(DAILY_ORDER_CHECK)
-            # 已确认详情布局后才允许已知叠层；对白还须识别实际边界并核验框外下角白臂。
-            selected = is_order_selected(self.device.image, target, positions,
-                                         allow_right_occlusion=page_ready and detail,
-                                         allow_dialogue_occlusion=page_ready and detail)
-            if selected and page_ready and (cooldown or detail):
+            after = get_order_detail_signature(self.device.image) if server.server == 'cn' and detail else None
+            if popup_seen:
+                # 弹窗处理可能改变上一单，重新建立点击前基准后再点目标。
+                if page_ready and (detail or cooldown or self.appear(ALAS_ORDER_BACKGROUND, offset=20)):
+                    before = after
+                    empty_before = cooldown or self.appear(ALAS_ORDER_BACKGROUND, offset=20)
+                    popup_seen = False
+                    self.device.click(button)
+                    retry.reset()
+                continue
+            selected_position = get_selected_order_position(
+                self.device.image, positions, allow_right_occlusion=page_ready and detail,
+                allow_dialogue_occlusion=page_ready and detail)
+            selected = selected_position is not None and np.linalg.norm(np.subtract(selected_position, target)) <= 12
+            other_selected = selected_position is not None and not selected
+            changed = after is not None and (empty_before or order_detail_changed(before, after))
+            # 详情实际切换可独立确认遮挡订单；明确选中其他订单时仍拒绝旧详情。
+            confirmed = selected or (changed and not other_selected)
+            if confirmed and page_ready and (cooldown or detail):
+                if after is not None and not same_order_detail(candidate, after):
+                    stable.clear()
+                candidate = after
                 stable.start()
                 if stable.reached():
+                    if not selected:
+                        logger.info('[岛屿-订单] 右侧委托人/货物已切换并稳定，确认目标订单')
                     return 'cooldown' if cooldown else 'detail'
             else:
                 stable.clear()
+                candidate = None
+                if page_ready and retry.reached():
+                    self.device.click(button)
+                    retry.reset()
         if self.appear(DAILY_ORDER_CHECK):
             self.device.save_screenshot(genre='island_order_unknown', interval=0)
             logger.warning('[岛屿-订单] 未完整确认目标选中及详情状态，保留订单，五分钟后复查')

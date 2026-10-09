@@ -430,7 +430,7 @@ class OrderClickConfirmationTests(unittest.TestCase):
             self.assertEqual(len(images), 1)
             np.testing.assert_array_equal(load_image(str(images[0])), device.image)
         self.assertEqual(order.next_runtime, [now + timedelta(minutes=5)])
-        self.assertEqual(len(device.clicks), 1)
+        self.assertEqual(device.clicks, ['ORDER_AT_700_400'] * 4)
         order.scan_current_order_requirements.assert_not_called()
         order._submit_order.assert_not_called()
         order._reject_order.assert_not_called()
