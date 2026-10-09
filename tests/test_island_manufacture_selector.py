@@ -1,23 +1,29 @@
 """工坊完整配方、同帧库存证据和选品数量闭环的离线回归。"""
 
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+import cv2
 import numpy as np
 
 import module.config.server as server
 from module.base.button import Button
+from module.base.utils import color_mask, crop, load_image
 from module.island.data import DIC_ISLAND_ITEM, DIC_ISLAND_SLOT
 from module.island.manufacture_catalog import get_catalog
 from module.island.recipe_groups import GROUP_TO_PLACE, SEASONAL_RECIPE_GROUPS
 from module.island.manufacture_selector import (
-    ManufactureIngredientCounter, _read_recipe_rows, _recipe_ids_in_same_category,
+    ManufactureIngredientCounter, _read_recipe_rows, _recipe_ids_in_same_category, _selected_recipe_row,
     match_recipe_name, read_selected_recipe_inventory, read_selected_recipe_stock,
     read_selected_recipe_quantity,
     select_manufacture_recipe, set_manufacture_quantity,
 )
 from module.island_manufacture.assets import TEMPLATE_ALAS_RECIPE_ANCHOR
+
+
+SELECTED_CHEESE_FIXTURE = Path(__file__).parent / 'fixtures/island_manufacture/selected_cheese.png'
 
 
 class ManufactureCatalogTest(unittest.TestCase):
@@ -178,6 +184,16 @@ class ManufactureSelectorTest(unittest.TestCase):
                 with patch('module.island.manufacture_selector.Ocr', return_value=ocr):
                     self.assertEqual(read_selected_recipe_stock(self.main, 701014), expected)
 
+    def test_product_stock_uses_the_single_crop_ocr_contract(self):
+        with patch('module.island.manufacture_selector._selected_recipe_row', return_value=self.button):
+            ocr = Mock()
+            ocr.ocr.return_value = '13'
+            with patch('module.island.manufacture_selector.Ocr', return_value=ocr) as constructor:
+                self.assertEqual(read_selected_recipe_stock(self.main, 701014), 13)
+            self.assertEqual(constructor.call_args.args[0], (393, 206, 456, 224))
+            self.assertIs(ocr.ocr.call_args.args[0], self.main.device.image)
+            self.assertNotIn('direct_ocr', ocr.ocr.call_args.kwargs)
+
     def test_quantity_reads_existing_amount_and_uses_minus_then_confirms_two_frames(self):
         self.main._manufacture_selected_recipe_id = 701014
         self.main.loop = lambda **_kwargs: iter(range(4))
@@ -225,6 +241,108 @@ class ManufactureSelectorTest(unittest.TestCase):
                         self.assertTrue(set_manufacture_quantity(self.main, limit))
                 with self.assertRaises(ValueError):
                     set_manufacture_quantity(self.main, limit + 1)
+
+
+class SelectedFoodCardScreenshotTest(unittest.TestCase):
+    """保留真实选中卡片，验证图标放大后仍用完整名称和唯一蓝框确认。"""
+
+    @classmethod
+    def setUpClass(cls):
+        from module.ocr.al_ocr import AlOcr, OcrSettings
+
+        settings = OcrSettings(backend='onnx', device='cpu',
+                               allow_vendor_execution_providers=False, model_version='alocr_cn_v3')
+        cls.ocr_model = AlOcr(name='cn', settings=settings)
+
+    def setUp(self):
+        self.enterContext(patch.object(server, 'server', 'cn'))
+        # 固定本地模型，运行目录验收也不读取私人配置或连接 OCR 服务。
+        self.enterContext(patch('module.ocr.ocr.OCR_MODEL', SimpleNamespace(cnocr=self.ocr_model)))
+        frame = np.full((720, 1280, 3), 255, dtype=np.uint8)
+        frame[55:668, 181:461] = load_image(str(SELECTED_CHEESE_FIXTURE))
+        counter = SELECTED_CHEESE_FIXTURE.parent / 'cheese_milk_counter.png'
+        frame[540:558, 740:842] = load_image(str(counter))
+        self.main = SimpleNamespace(
+            device=SimpleNamespace(image=frame, click=Mock(), swipe_vector=Mock(),
+                                   click_record_remove=Mock()),
+            appear=Mock(return_value=True),
+            loop=lambda **_kwargs: iter(range(2)),
+        )
+        self.recipe_ids = _recipe_ids_in_same_category(901003)
+
+    def test_selected_cheese_anchor_is_below_the_original_matching_threshold(self):
+        """未选中卡片可匹配乘号；已选卡片的乘号因图标放大而发生位移。"""
+        template = TEMPLATE_ALAS_RECIPE_ANCHOR.image
+        similarities = []
+        for top in (114, 263, 412):
+            area = crop(self.main.device.image, (239, top + 97, 283, top + 115))
+            result = cv2.matchTemplate(area, template, cv2.TM_CCOEFF_NORMED)
+            similarities.append(cv2.minMaxLoc(result)[1])
+        self.assertGreater(similarities[0], 0.75)
+        self.assertGreater(similarities[1], 0.75)
+        self.assertLess(similarities[2], 0.75)
+
+    def test_full_blue_border_recovers_selected_row_before_real_name_ocr(self):
+        rows = _read_recipe_rows(self.main, self.recipe_ids)
+        self.assertEqual([(recipe_id, button.area[1]) for recipe_id, button in rows],
+                         [(901001, 114), (901002, 263), (901003, 412)])
+        selected = _selected_recipe_row(self.main, 901003, self.recipe_ids)
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected.area, (181, 412, 461, 546))
+
+    def test_confirmed_cheese_needs_no_click_or_search_swipe(self):
+        self.assertTrue(select_manufacture_recipe(self.main, 901003))
+        self.assertEqual(self.main._manufacture_selected_recipe_id, 901003)
+        self.main.device.click.assert_not_called()
+        self.main.device.swipe_vector.assert_not_called()
+
+    def test_real_inventory_reads_selected_product_and_the_full_material_counter(self):
+        self.assertEqual(read_selected_recipe_inventory(self.main, 901003), {
+            2603: {'stock': 1557, 'cost': 8, 'display_required': 40},
+            3006: {'stock': 13, 'cost': 0, 'display_required': 0},
+        })
+        self.main.device.click.assert_not_called()
+        self.main.device.swipe_vector.assert_not_called()
+
+    def test_cheese_border_does_not_confirm_another_recipe_or_unknown_name(self):
+        self.assertIsNone(_selected_recipe_row(self.main, 901004, self.recipe_ids))
+        self.assertFalse(select_manufacture_recipe(self.main, 901004))
+        self.assertFalse(hasattr(self.main, '_manufacture_selected_recipe_id'))
+        self.main.device.click.assert_not_called()
+        ocr = Mock()
+        ocr.ocr.return_value = ['欧姆蛋', '冰咖啡', '芝']
+        with patch('module.island.manufacture_selector.Ocr', return_value=ocr):
+            self.assertIsNone(_selected_recipe_row(self.main, 901003, self.recipe_ids))
+
+    def test_blue_geometry_does_not_accept_off_color_icons_or_partial_cards(self):
+        original = self.main.device.image
+        variants = {}
+        off_color = original.copy()
+        mask = color_mask(off_color, (57, 189, 255), threshold=30)
+        off_color[mask != 0] = (160, 85, 190)
+        variants['偏色外框'] = off_color
+
+        icon_only = np.full_like(original, 255)
+        cv2.rectangle(icon_only, (203, 434), (294, 525), (57, 189, 255), thickness=5)
+        variants['卡片内部图标'] = icon_only
+
+        for direction in ('顶部', '底部'):
+            partial = np.full_like(original, 255)
+            selected_card = original[412:546, 181:461]
+            if direction == '顶部':
+                partial[55:144, 181:461] = selected_card[45:]
+            else:
+                partial[579:668, 181:461] = selected_card[:89]
+            variants[f'{direction}截断卡片'] = partial
+
+        for name, frame in variants.items():
+            with self.subTest(case=name):
+                self.main.device.image = frame
+                # 独立验证蓝框新增的行定位，避免旧乘号锚点混入本负例。
+                with patch.object(TEMPLATE_ALAS_RECIPE_ANCHOR, 'match_multi', return_value=[]):
+                    with patch('module.island.manufacture_selector.Ocr') as ocr:
+                        self.assertEqual(_read_recipe_rows(self.main, self.recipe_ids), [])
+                ocr.assert_not_called()
 
 
 if __name__ == '__main__':

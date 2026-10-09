@@ -67,8 +67,24 @@ def match_recipe_name(name, recipe_ids, language):
     return matches[0] if len(matches) == 1 else None
 
 
+def _selected_recipe_tops(main):
+    """用完整卡片蓝框补足选中后失真的乘号锚点，排除内部图标和截断行。"""
+    left, top, _, bottom = RECIPE_DETECT_AREA
+    width, height = RECIPE_SIZE
+    mask = color_mask(crop(main.device.image, (left, top, left + width, bottom)),
+                      (57, 189, 255), threshold=30)
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    tops = []
+    for contour in contours:
+        x, y, detected_width, detected_height = cv2.boundingRect(contour)
+        if (x <= 2 and abs(detected_width - width) <= 2 and abs(detected_height - height) <= 2
+                and y + height <= bottom - top):
+            tops.append(top + y)
+    return tops
+
+
 def _read_recipe_rows(main, recipe_ids):
-    """用官方卡片锚点确认实际行位置；不假定列表处于顶部。"""
+    """合并官方乘号锚点和完整选中蓝框；仍用同帧完整商品名确认身份。"""
     anchor_area = (RECIPE_DETECT_AREA[0] + RECIPE_ANCHOR_AREA[0],
                    RECIPE_DETECT_AREA[1] + RECIPE_ANCHOR_AREA[1],
                    RECIPE_DETECT_AREA[2] - RECIPE_SIZE[0] + RECIPE_ANCHOR_AREA[2],
@@ -76,8 +92,9 @@ def _read_recipe_rows(main, recipe_ids):
     image = crop(main.device.image, anchor_area)
     anchors = TEMPLATE_ALAS_RECIPE_ANCHOR.match_multi(image, similarity=0.75, threshold=5)
     tops = []
-    for anchor in sorted(anchors, key=lambda item: item.area[1]):
-        top = anchor.area[1] + RECIPE_DETECT_AREA[1]
+    candidates = [anchor.area[1] + RECIPE_DETECT_AREA[1] for anchor in anchors]
+    candidates.extend(_selected_recipe_tops(main))
+    for top in sorted(candidates):
         if not tops or top - tops[-1] > 5:
             tops.append(top)
     if not 1 <= len(tops) <= 4:
@@ -280,9 +297,9 @@ def read_selected_recipe_inventory(main, recipe_id):
 
 
 def _read_product_stock(main, button):
-    image = crop(main.device.image, area_offset(RECIPE_PRODUCT_STOCK_AREA, button.area[:2]))
-    text = Ocr([], lang='cnocr', letter=(80, 80, 80), threshold=160,
-               alphabet='0123456789', name='RECIPE_PRODUCT_STOCK').ocr(image, direct_ocr=True)
+    area = area_offset(RECIPE_PRODUCT_STOCK_AREA, button.area[:2])
+    text = Ocr(area, lang='cnocr', letter=(80, 80, 80), threshold=160,
+               alphabet='0123456789', name='RECIPE_PRODUCT_STOCK').ocr(main.device.image)
     return int(str(text).strip()) if re.fullmatch(r'\d+', str(text).strip()) else None
 
 
