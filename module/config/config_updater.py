@@ -753,8 +753,11 @@ class ConfigUpdater:
             typ = data['type']
             display = data.get('display')
             value_empty = value == '' and not data.get('preserve_empty')
+            # 隐藏控件与只读状态也可保存运行结果；显式标记不能改变强制覆盖和模板默认值。
+            reset_runtime_value = (typ == 'state' or (display == 'hide' and typ != 'stored')) \
+                and data.get('persist') is not True
             if is_template or value is None or value_empty \
-                    or typ in ['lock', 'state'] or (display == 'hide' and typ != 'stored'):
+                    or typ == 'lock' or reset_runtime_value:
                 value = data['value']
             value = parse_value(value, data=data)
             deep_set(new, keys=keys, value=value)

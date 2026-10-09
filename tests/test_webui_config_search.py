@@ -171,6 +171,48 @@ class TestWebUIConfigSearch(unittest.TestCase):
             )
         )
 
+    def test_persistent_planner_metadata_stays_out_of_legacy_widget_arguments(self):
+        task_config = object.__new__(TaskConfigMixin)
+        status_schema = {
+            "PlannerStatus": {"type": "state", "value": "", "persist": True}
+        }
+        menu_schema = {
+            "PlannedMenu": {
+                "type": "textarea", "value": "", "display": "hide", "persist": True
+            }
+        }
+        task_config.ALAS_ARGS = {
+            "IslandPlan": {"IslandProductionPlanner": status_schema},
+            "IslandBusiness": {"IslandBusinessShop1": menu_schema},
+        }
+        task_config._translated_text = Mock(side_effect=lambda key, fallback: fallback)
+        config = {
+            "IslandPlan": {
+                "IslandProductionPlanner": {"PlannerStatus": "已生成：每日预计收入 100"}
+            },
+            "IslandBusiness": {
+                "IslandBusinessShop1": {"PlannedMenu": '{"double_bamboo_shoots": 7}'}
+            },
+        }
+
+        with patch("module.webui.app_task_config.t", return_value=""):
+            statuses = list(task_config._iter_group_arguments(
+                "IslandPlan", "IslandProductionPlanner", status_schema, config
+            ))
+            menus = list(task_config._iter_group_arguments(
+                "IslandBusiness", "IslandBusinessShop1", menu_schema, config
+            ))
+
+        self.assertEqual(len(statuses), 1)
+        name, display, widget_type, output_kwargs = statuses[0]
+        self.assertEqual((name, display, widget_type), ("PlannerStatus", None, "state"))
+        self.assertEqual(output_kwargs["widget_type"], "state")
+        self.assertEqual(output_kwargs["value"], "已生成：每日预计收入 100")
+        self.assertNotIn("persist", output_kwargs)
+        self.assertEqual(menus, [])
+        self.assertTrue(status_schema["PlannerStatus"]["persist"])
+        self.assertTrue(menu_schema["PlannedMenu"]["persist"])
+
     def test_focus_script_targets_stable_field_scope_and_focuses_editable_control(self):
         scope = config_search_field_scope("Alas", "Emulator", "PackageName")
         script = build_config_search_focus_script(scope)

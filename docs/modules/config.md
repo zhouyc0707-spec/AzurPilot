@@ -119,7 +119,7 @@ module/config/
 
 ### 生成器与数据结构
 
-`ConfigGenerator.args` 产出的 `args.json` 中，每个参数是带属性的对象：`type`（checkbox/select/textarea/input/datetime/storage/state/lock/task_priority 等）、`value`、可选 `option` / `validate` / `display` / `preserve_empty` / `mode`。前端与 `ConfigService.validate` 都依赖这套属性做控件渲染与白名单校验。
+`ConfigGenerator.args` 产出的 `args.json` 中，每个参数是带属性的对象：`type`（checkbox/select/textarea/input/datetime/storage/state/lock/task_priority 等）、`value`、可选 `option` / `validate` / `display` / `preserve_empty` / `persist` / `mode`。前端与 `ConfigService.validate` 都依赖这套属性做控件渲染与白名单校验。`persist: true` 仅决定运行时加载是否保留隐藏字段或只读状态的已保存值，不改变控件可见性与 API 编辑权限；`lock` 仍强制使用默认值，模板生成也始终使用默认值。
 
 ### 事务锁（transaction.py）
 
@@ -169,7 +169,7 @@ flowchart LR
 ```mermaid
 flowchart TD
     U[config/实例名.json] --> R[read_file]
-    R --> CU[config_update<br>按 args.json 补齐结构/类型规整<br>lock,state,hide 参数强制默认值<br>刷新活动选项与优先级合并]
+    R --> CU[config_update<br>按 args.json 补齐结构/类型规整<br>lock 与未标记持久化的 state,hide 使用默认值<br>刷新活动选项与优先级合并]
     CU --> CR[config_redirect<br>redirection 表做版本迁移]
     CR --> OV[_override<br>云手机环境强制 Serial/截图方式等]
     OV --> LD{调用来源?}
@@ -182,6 +182,7 @@ flowchart TD
 
 要点：
 
+- **运行结果需显式持久化**。隐藏配置和 `state` 默认在加载时重置；岛屿规划输出、经营菜单及季节工坊状态使用 `persist: true`，避免保存调度时间或切换任务时清空结果。空值仍按默认值补齐，不把实例运行结果带入模板。
 - **读不上锁**。JSON 经 `deploy.atomic` 临时文件 + `os.replace` 写入，读侧要么拿到旧整体要么新整体，不会读到半截；锁只保护「读—改—写」复合操作。
 - **save 不用旧快照覆盖**。事务内重读磁盘最新值，只把 `modified` 里的字段合并上去；用户在 WebUI 改的其他字段原样保留。
 - **过期修改被主动丢弃**（`_discard_stale_changes`）：若某字段在基线之后已被外部修改（磁盘值 ≠ 基线），运行器对该字段的待写修改直接作废，并同步回绑属性，防止旧任务回写覆盖用户输入。

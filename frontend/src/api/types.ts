@@ -18,7 +18,7 @@ export interface UpdateStatus {
 }
 interface Commit { sha: string; author: string; date: string; message: string }
 export interface CommitHistory { entries: Commit[]; total: number; hasMore: boolean; localHead: string | null; upstreamHead: string | null }
-export interface Field { type: string; value: Value; mode?: string; display?: string; option?: Value[]; validate?: string | number[]; preserve_empty?: boolean }
+export interface Field { type: string; value: Value; mode?: string; display?: string; option?: Value[]; validate?: string | number[]; preserve_empty?: boolean; persist?: boolean }
 /** 侧栏内容检索的一条命中：要么是任务名，要么是某个配置项。 */
 export interface SearchContentHit {
   task: string

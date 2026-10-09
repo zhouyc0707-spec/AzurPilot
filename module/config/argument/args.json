@@ -15804,51 +15804,61 @@
       "DailyBufferItems": {
         "type": "textarea",
         "value": "{}",
-        "display": "hide"
+        "display": "hide",
+        "persist": true
       },
       "IdleAccumulatingItems": {
         "type": "textarea",
         "value": "{}",
-        "display": "hide"
+        "display": "hide",
+        "persist": true
       },
       "PlannerTargets": {
         "type": "textarea",
         "value": "{}",
-        "display": "hide"
+        "display": "hide",
+        "persist": true
       },
       "PlannerStatus": {
         "type": "state",
-        "value": ""
+        "value": "",
+        "persist": true
       },
       "PlanFingerprint": {
         "type": "input",
         "value": "",
-        "display": "hide"
+        "display": "hide",
+        "persist": true
       },
       "OrderManufactureTargets": {
         "type": "input",
         "value": "{}",
-        "display": "hide"
+        "display": "hide",
+        "persist": true
       },
       "OrderManufactureFinalTargets": {
         "type": "input",
         "value": "{}",
-        "display": "hide"
+        "display": "hide",
+        "persist": true
       },
       "AutoManufactureActive": {
         "type": "checkbox",
         "value": false,
-        "display": "hide"
+        "display": "hide",
+        "persist": true
       },
       "AutoManufactureNextRun": {
         "type": "input",
         "value": "",
-        "display": "hide"
+        "display": "hide",
+        "persist": true
       },
       "CompletedManufactureOrderId": {
         "type": "input",
         "value": 0,
-        "display": "hide"
+        "display": "hide",
+        "persist": true
       }
     },
     "Storage": {
@@ -15977,7 +15987,8 @@
       "PlannedMenu": {
         "type": "textarea",
         "value": "",
-        "display": "hide"
+        "display": "hide",
+        "persist": true
       },
       "Char1": {
         "type": "select",
@@ -16172,7 +16183,8 @@
       "PlannedMenu": {
         "type": "textarea",
         "value": "",
-        "display": "hide"
+        "display": "hide",
+        "persist": true
       },
       "Char1": {
         "type": "select",
@@ -16379,7 +16391,8 @@
       "PlannedMenu": {
         "type": "textarea",
         "value": "",
-        "display": "hide"
+        "display": "hide",
+        "persist": true
       },
       "Char1": {
         "type": "select",
@@ -16544,7 +16557,8 @@
       "PlannedMenu": {
         "type": "textarea",
         "value": "",
-        "display": "hide"
+        "display": "hide",
+        "persist": true
       },
       "Char1": {
         "type": "select",
@@ -16714,7 +16728,8 @@
       "PlannedMenu": {
         "type": "textarea",
         "value": "",
-        "display": "hide"
+        "display": "hide",
+        "persist": true
       },
       "Char1": {
         "type": "select",
@@ -19069,7 +19084,8 @@
       "StuckSeasonOrderId": {
         "type": "input",
         "value": 0,
-        "display": "hide"
+        "display": "hide",
+        "persist": true
       }
     },
     "Storage": {

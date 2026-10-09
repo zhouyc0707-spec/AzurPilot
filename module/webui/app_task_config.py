@@ -324,6 +324,8 @@ class TaskConfigMixin(WebUIMixinBase):
 
             arg_name = arg[0]
             output_kwargs: T_Output_Kwargs = arg_definition.copy()
+            # 持久化标记仅供配置加载器使用，不传给旧界面控件。
+            output_kwargs.pop("persist", None)
             display: Optional[str] = output_kwargs.pop("display", None)
             widget_type = output_kwargs.pop("type")
             output_kwargs["widget_type"] = widget_type

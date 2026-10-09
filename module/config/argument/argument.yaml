@@ -1667,35 +1667,45 @@ IslandProductionPlanner:
     value: "{}"
     type: textarea
     display: hide
+    persist: true
   IdleAccumulatingItems:
     value: "{}"
     type: textarea
     display: hide
+    persist: true
   PlannerTargets:
     value: "{}"
     type: textarea
     display: hide
+    persist: true
   PlannerStatus:
     value: ""
     type: state
+    persist: true
   PlanFingerprint:
     value: ""
     display: hide
+    persist: true
   OrderManufactureTargets:
     value: "{}"
     display: hide
+    persist: true
   OrderManufactureFinalTargets:
     value: "{}"
     display: hide
+    persist: true
   AutoManufactureActive:
     value: false
     display: hide
+    persist: true
   AutoManufactureNextRun:
     value: ""
     display: hide
+    persist: true
   CompletedManufactureOrderId:
     value: 0
     display: hide
+    persist: true
 IslandFarm:
   Positions:
     value: 3
@@ -2080,6 +2090,7 @@ IslandDailyOrder:
   StuckSeasonOrderId:
     value: 0
     display: hide
+    persist: true
 
 IslandDailyInteract:
   WeeklyPhoto:
@@ -2239,6 +2250,7 @@ IslandBusinessShop1:
     value: ""
     type: textarea
     display: hide
+    persist: true
   Char1:
     <<: *IslandBusinessChar
   Char2:
