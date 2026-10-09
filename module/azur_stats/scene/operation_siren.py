@@ -108,18 +108,24 @@ class SceneOperationSiren(SceneBase, OpsiReward, GetItems, OpsiZone):
         cleared = -1
         for index, image in enumerate(self.images):
             if self.is_opsi_zone(image):
+                # 首个地图帧仍是领奖前后的分界；后续帧只补识别海域，
+                # 不能因首帧 OCR 失败把已清图奖励改成清图前奖励。
+                if cleared < 0:
+                    cleared = index
                 try:
                     zone = self.parse_opsi_zone(image)
                 except Exception as e:
-                    # 海域名读不出或不在 ZoneManager 里（新海域、活动图）时不再
-                    # 整条丢弃：按未知区域记下奖励，侵蚀等级留空。按任务维度的
-                    # 掉落统计照常工作，按侵蚀等级的短猫收益会自动跳过这些行。
-                    logger.warning(f'[统计-大世界] 海域识别失败，按未知区域解析: {e}')
-                cleared = index
-                break
+                    # 海域名读不出或不在 ZoneManager 里时，尝试同包后续地图帧；
+                    # 全部失败仍按未知区域记下奖励，不丢物品或猜侵蚀等级。
+                    logger.warning(f'[统计-大世界] 海域识别失败，尝试后续地图帧: {e}')
+                if zone is not None:
+                    break
         if zone is None:
             # 整包都没有海域页（例如只在战斗结算里抓到的掉落）也照样解析奖励帧。
-            logger.info('[统计-大世界] 掉落记录里没有海域页，按未知区域解析')
+            if cleared < 0:
+                logger.info('[统计-大世界] 掉落记录里没有海域页，按未知区域解析')
+            else:
+                logger.info('[统计-大世界] 所有海域帧均无法确认区域，按未知区域解析')
             zone = DataOpsiZone(zone='', zone_type='UNKNOWN', zone_id=0, hazard_level=0)
             cleared = -1
 

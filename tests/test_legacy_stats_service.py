@@ -228,7 +228,10 @@ class ShipPanelTests(unittest.TestCase):
 
 class MeowLootPanelTests(unittest.TestCase):
     def test_rows_use_monthly_drops_and_cumulative_columns(self):
+        from module.statistics.azurstats import AzurStats
+
         azurstats = MagicMock()
+        azurstats.meow_loot_display_levels.side_effect = AzurStats.meow_loot_display_levels
         azurstats.get_meow_loot_monthly_totals.return_value = {
             3: {'Plate': 4, 'GearDesignPlanT5': 1, 'OrdnanceTestingReportT4': 2,
                 'CoordinateObscure': 3, 'CoordinateAbyssal': 0, 'CatT3': 1},
@@ -265,6 +268,83 @@ class MeowLootPanelTests(unittest.TestCase):
         self.assertEqual(second[3:9], [0] * 6)
         # 有效轮数为 0 的累计行被丢弃，因此侵蚀等级 7 不会出现在表里
         self.assertEqual(len(panel['rows']), 2)
+
+    def test_unknown_and_nonstandard_levels_keep_loot_without_borrowing_rounds(self):
+        from module.statistics.azurstats import AzurStats
+
+        totals = {3: {}, 5: {}, 6: {'CatT3': 2}, 0: {'GearDesignPlanT5': 1}}
+        cumulative = [
+            [6, datetime(2026, 10, 8, 12).timestamp(), 4, 10, .5, .25, .125],
+            # 即使缓存提供了等级 0 的聚合，也不能给未知海域借用轮次或收益。
+            [0, datetime(2026, 10, 8, 13).timestamp(), 999, 999, 999, 999, 999],
+        ]
+        cl1_db = MagicMock()
+        cl1_db.get_meow_stats.side_effect = lambda instance, year, month, hazard_level=None: {
+            'effective_rounds': 2.4 if hazard_level == 6 else 0}
+        with patch.object(AzurStats, 'get_meow_loot_monthly_totals', return_value=totals) as monthly, \
+                patch.object(AzurStats, 'get_meow_loot_available_months', return_value=[]), \
+                patch.object(AzurStats, 'load_meowofficer_farming', return_value=cumulative), \
+                patch('module.statistics.cl1_database.db', cl1_db):
+            panel = _meow_loot_panel('alas', 2026, 10)
+
+        self.assertEqual([row[1] for row in panel['rows']], [3, 5, 6, '未识别'])
+        known, unknown = panel['rows'][-2:]
+        self.assertEqual(known[2], 2)
+        self.assertEqual(known[8], 2)
+        self.assertEqual(known[9:], [4, '10.000000', '0.500000', '0.250000', '0.125000'])
+        self.assertEqual(unknown[4], 1)
+        self.assertEqual(unknown[2], DASH)
+        self.assertEqual(unknown[9:], [DASH] * 5)
+        self.assertEqual([call.kwargs['hazard_level'] for call in cl1_db.get_meow_stats.call_args_list], [3, 5, 6])
+        self.assertEqual(len(panel['columns']), 14)
+        self.assertTrue(all(len(row) == 14 for row in panel['rows']))
+        monthly.assert_called_once_with(year=2026, month=10)
+
+
+class LegacyMeowLootViewTests(unittest.TestCase):
+    def test_pywebio_preserves_standard_rows_and_shows_unknown_and_other_levels(self):
+        from module.statistics.azurstats import AzurStats
+        from module.webui.app_stat_opsi_export import OpsiExportMixin
+
+        for totals, expected_levels in (
+            ({3: {'Plate': 1}, 5: {}}, [3, 5]),
+            ({3: {}, 5: {}, 6: {'CatT3': 2}, 0: {'GearDesignPlanT5': 1}}, [3, 5, 6, '未识别']),
+        ):
+            with self.subTest(levels=expected_levels), ExitStack() as stack:
+                view = object.__new__(OpsiExportMixin)
+                view.alas_name = 'alas'
+                view._meow_loot_month = (2026, 10)
+                view._render_meow_loot_last_record = MagicMock()
+                cumulative = [
+                    [6, datetime(2026, 10, 8, 12).timestamp(), 4, 10, .5, .25, .125],
+                    [0, datetime(2026, 10, 8, 13).timestamp(), 999, 999, 999, 999, 999],
+                ]
+                monthly = stack.enter_context(patch.object(
+                    AzurStats, 'get_meow_loot_monthly_totals', return_value=totals))
+                stack.enter_context(patch.object(AzurStats, 'load_meowofficer_farming', return_value=cumulative))
+                cl1_db = MagicMock()
+                cl1_db.get_meow_stats.return_value = {'effective_rounds': 2.4}
+                stack.enter_context(patch('module.statistics.cl1_database.db', cl1_db))
+                for name in ('put_row', 'put_html', 'put_scope', 'put_buttons', 'build_title_block'):
+                    stack.enter_context(patch(f'module.webui.app_stat_opsi_export.{name}'))
+                stack.enter_context(patch('module.webui.app_stat_opsi_export.t', side_effect=lambda key: key))
+                table = stack.enter_context(patch('module.webui.app_stat_opsi_export.build_simple_table'))
+                view._render_monthly_meow_loot(AzurStats)
+
+                columns, rows = table.call_args.args
+                self.assertEqual([row[1] for row in rows], expected_levels)
+                self.assertEqual(len(columns), 14)
+                self.assertTrue(all(len(row) == 14 for row in rows))
+                self.assertEqual([call.kwargs['hazard_level'] for call in cl1_db.get_meow_stats.call_args_list],
+                                 [level for level in expected_levels if isinstance(level, int)])
+                monthly.assert_called_once_with(year=2026, month=10)
+                if expected_levels[-1] == '未识别':
+                    self.assertEqual(rows[-1][4], 1)
+                    self.assertEqual(rows[-1][2], DASH)
+                    self.assertEqual(rows[-1][9:], [DASH] * 5)
+                    self.assertEqual(rows[-2][8], 2)
+                else:
+                    self.assertEqual(rows[0][3], 1)
 
 
 class CommissionRecentTests(unittest.TestCase):

@@ -270,7 +270,7 @@ def _opsi_panel(instance):
 
 
 def _meow_loot_panel(instance, year, month):
-    """「本月 / 历史耄耋相接收获」：月度掉落 + 累计平均值，按侵蚀等级两行。"""
+    """「本月 / 历史耄耋相接收获」：按等级展示掉落，未识别海域保留独立行。"""
     from module.statistics.azurstats import AzurStats
     from module.statistics.cl1_database import db as cl1_db
 
@@ -301,22 +301,26 @@ def _meow_loot_panel(instance, year, month):
     }
 
     rows = []
-    for hazard_level in (3, 5):
+    for hazard_level in AzurStats.meow_loot_display_levels(loot_totals):
         loot = loot_totals.get(hazard_level, {}) or {}
-        try:
-            meow_data = cl1_db.get_meow_stats(instance, year, month, hazard_level=hazard_level)
-            rounds = int(round(float(meow_data.get('effective_rounds', 0) or 0)))
-        except Exception:
-            rounds = 0
+        if hazard_level == 0:
+            # 未识别海域只能确认掉落量；等级 0 的查询会被当作全等级，不能借用轮次。
+            rounds = DASH
+        else:
+            try:
+                meow_data = cl1_db.get_meow_stats(instance, year, month, hazard_level=hazard_level)
+                rounds = int(round(float(meow_data.get('effective_rounds', 0) or 0)))
+            except Exception:
+                rounds = 0
         row = [
-            month_str, hazard_level, rounds,
+            month_str, hazard_level if hazard_level else '未识别', rounds,
             int(loot.get('Plate', 0) or 0),
             int(loot.get('GearDesignPlanT5', 0) or 0),
             int(loot.get('OrdnanceTestingReportT4', 0) or 0),
             int(loot.get('CoordinateObscure', 0) or 0),
             int(loot.get('CoordinateAbyssal', 0) or 0),
             int(loot.get('CatT3', 0) or 0),
-            *extra.get(hazard_level, [DASH] * 5),
+            *(extra.get(hazard_level, [DASH] * 5) if hazard_level else [DASH] * 5),
         ]
         rows.append(row)
 
