@@ -93,6 +93,17 @@ class IslandOrder(IslandDailyOrder):
         area = (238, 44, 326, 70) if server.server == 'en' else (238, 44, 327, 65)
         return OrderDigitCounter(self.requirement_grid.crop(area).buttons)
 
+    @cached_property
+    def daily_remaining_ocr(self):
+        from module.island.order_quota import DailyOrderQuotaOcr
+        return DailyOrderQuotaOcr()
+
+    def _ocr_daily_remaining(self):
+        """读取今日普通订单次数，未校准服务器或未知文字不当作零。"""
+        if server.server != 'cn':
+            return None
+        return self.daily_remaining_ocr.ocr(self.device.image)
+
     def scan_current_order_requirements(self):
         names = self.requirement_name_ocr.ocr(self.device.image)
         counters = self.requirement_counter_ocr.ocr(self.device.image)
@@ -400,13 +411,21 @@ class IslandOrder(IslandDailyOrder):
         self.reserve = get_menu_reserve_items(self.config)
         self.reserve_known = menu_reservations_known(self.config)
         self._enter_daily_order()
+        empty_quota_attempts = 0
+        empty_zero_readings = 0
+        empty_quota_update = None
         for _ in range(100):
             self.device.screenshot()
             if not self.appear(DAILY_ORDER_CHECK):
                 if self._handle_popups():
+                    empty_zero_readings = 0
                     continue
                 self._unknown('扫描订单时页面未确认')
             orders = self.detect_all_orders()
+            if any(orders.values()):
+                empty_quota_attempts = 0
+                empty_zero_readings = 0
+                empty_quota_update = None
             handled = False
             refresh = self._get_urgent_refresh_time()
             for kind in ('urgent', 'regular', 'season'):
@@ -434,7 +453,34 @@ class IslandOrder(IslandDailyOrder):
                         continue
                 self._record_deadline(remaining)
             if not any(orders.values()):
-                # 圆环完全未检出不等价于全图无订单，短延后避免直接漏到次日。
+                # 普通额度为零不代表紧急/季节也已结束；先核验已知下次检查时间和空白页。
+                can_check_completion = (
+                    server.server == 'cn' and refresh and refresh > current_time() and not self.stuck_season_order_id
+                    and self.appear(ALAS_ORDER_BACKGROUND, offset=20))
+                if can_check_completion:
+                    update = get_server_next_update(self.config.Scheduler_ServerUpdate)
+                    if empty_quota_update is not None and update != empty_quota_update:
+                        logger.warning('[岛屿-订单] 次数确认跨过每日刷新，短期复查新订单')
+                    else:
+                        empty_quota_update = update
+                        remaining = self._ocr_daily_remaining()
+                        empty_quota_attempts += 1
+                        if current_time() >= update:
+                            # OCR 自身也可能跨过零点，不能把旧页面的零延续到新一天。
+                            logger.warning('[岛屿-订单] 次数读取跨过每日刷新，短期复查新订单')
+                            self._record_deadline(timedelta(minutes=5))
+                            break
+                        empty_zero_readings = empty_zero_readings + 1 if remaining == 0 else 0
+                        if empty_zero_readings >= 2:
+                            # 保留确认时的刷新点，返回/规划期间跨零点也不会延期整天。
+                            self.next_runtime.append(update)
+                            logger.info('[岛屿-订单] 连续确认今日次数 0/15，等待每日刷新或已知紧急检查时间')
+                            break
+                        if remaining in (None, 0) and empty_quota_attempts < 3:
+                            # 返回父循环获取新截图，不用固定休眠或嵌套识别循环。
+                            continue
+                        logger.info('[岛屿-订单] 今日次数未确认用尽，保留短期复查')
+                # 圆环完全未检出仍可能是漏识别，只有完整正向确认才能省略复查。
                 self._record_deadline(timedelta(minutes=5))
             break
         else:

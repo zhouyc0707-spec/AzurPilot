@@ -45,7 +45,7 @@ module/island/                  # 全部逻辑所在的主包
 ├── island_juu_coffee.py / island_juu_eatery.py / island_manufacture.py
 ├── island_business.py          # 商区经营（最大的单文件，含按钮状态机与批次逻辑）
 ├── island_daily_gather.py / island_daily_interact.py / island_daily_order.py
-├── order.py / order_detail.py / order_ocr.py / order_selection.py / order_stock.py
+├── order.py / order_detail.py / order_quota.py / order_ocr.py / order_selection.py / order_stock.py
 ├── data.py / item_ids.py / production_plan_calculator.py / production_planner.py
 ├── technology_scanner.py / manufacture_catalog.py / manufacture_selector.py
 ├── recipe_groups.py            # 统一历季配方场所，不把场所映射当作科技解锁
@@ -187,9 +187,13 @@ flowchart TD
 
 原白色 L 角确认作为另一条正向依据保留，EN／JP／TW 仍沿用角标路径。角标须唯一关联目标，兼容横纵 103／104 像素间距，白臂属于同一 L 连通块，排除角内独立地图白点；已有右侧叠层及实际对白边界的可见角校验保持。若明确识别到另一张订单选中，右侧变化也不能放行。内容未变化且角标无法确认时，每隔至少两秒仅补点目标中心；八秒仍无法确认则保存现场、五分钟后复查，不读取、交付或驳回上一单。复查继续遵循全局对齐；圆环全部未识别时保留原季节需求，不当作订单已消失。
 
+CN 空订单页新增今日次数确认：订单页与右侧地图背景均正向匹配、所有订单圆环为空、紧急委托已有未来检查时间且无已知季节阻塞时，才读取顶部「今日剩余订单」。`order_quota.DailyOrderQuotaOcr` 完整解析 `0～15 / 15`，计数区包含双位数首位，避免把 `10/15` 裁成 `0/15`；缺分母、错误总数、越界、负号或杂字均为未知。父状态循环最多读取三帧，连续两帧 `0/15` 后省略五分钟复查，保留确认时的下次日刷新点与已有紧急检查时间，按最早候选调度，不关闭任务。若确认后返回或规划期间跨过刷新点，该明确候选仍保留，避免延期到再下一天。
+
+冷却或其他订单出现时继续原流程；已有季节阻塞、紧急状态未知、空页未确认、次数非零或不能连续确认为零时，保留短期复查。弹窗及新订单打断先前零读数；两帧之间或 OCR 本身跨过日刷新时不采用旧日零值。零读数不跨任务持久缓存，下一次运行重新观察。EN／JP／TW 尚无顶部计数实图校准，保留原有复查方式。
+
 尚未生成有效规划且手工经营餐品全空时，旧经营流程会选择全部可见菜品，无法从配置推断真实预留；保留普通订单并短延后，不按零预留误交付或误驳回。显式过滤和临近服务器刷新时的 ALAS 优先规则仍执行，紧急／季节不受此未知普通菜单分支阻断。
 
-离线回归入口：[ALAS 订单策略与识别](../../../tests/test_island_alas_order.py)、[右侧详情切换确认](../../../tests/test_island_order_detail.py)、[订单名称错字与截图识别](../../../tests/test_island_order_ocr_regression.py)、[选中标记与脱敏截图](../../../tests/test_island_order_selection.py)、[原交付确认原语](../../../tests/test_island_order_submit.py)、[菜单预留](../../../tests/test_island_order_stock.py)。
+离线回归入口：[ALAS 订单策略与识别](../../../tests/test_island_alas_order.py)、[今日次数严格识别](../../../tests/test_island_order_quota.py)、[次数用尽后的调度](../../../tests/test_island_order_quota_schedule.py)、[右侧详情切换确认](../../../tests/test_island_order_detail.py)、[订单名称错字与截图识别](../../../tests/test_island_order_ocr_regression.py)、[选中标记与脱敏截图](../../../tests/test_island_order_selection.py)、[原交付确认原语](../../../tests/test_island_order_submit.py)、[菜单预留](../../../tests/test_island_order_stock.py)。
 
 ### 自动生产规划与手工配置原件
 
