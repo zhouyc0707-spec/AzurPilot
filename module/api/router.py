@@ -91,6 +91,8 @@ class Router:
             'statistics.refreshLoot': Method(p.InstanceParams, self.refresh_loot, True),
             'statistics.report': Method(p.StatisticsReportParams, self.statistics_report),
             'statistics.legacy': Method(p.LegacyStatisticsParams, self.statistics_legacy),
+            'statistics.meowScreenshotFolder.open': Method(p.MeowScreenshotFolderParams,
+                                                          self.meow_screenshot_folder_open, True),
             'statistics.resourceFlows': Method(p.ResourceFlowsParams, self.resource_flows),
             'meowfficer.scoreReport': Method(p.MeowfficerScoreReportParams, self.meowfficer_score_report),
             'meowfficer.clearReport': Method(p.MeowfficerClearReportParams,
@@ -238,6 +240,11 @@ class Router:
         """
         from module.api.legacy_stats_service import report
         return report(self.configs, params.instance, params.month)
+
+    def meow_screenshot_folder_open(self, params: p.MeowScreenshotFolderParams):
+        """在脚本服务所在机器打开指定物品和月份的截图归档。"""
+        from module.api.meow_screenshot_service import open_folder
+        return open_folder(self.configs, params.instance, params.item, params.month)
 
     def system_restart(self, _params):
         """重启 WebUI 服务：保存运行中的实例并通知父监督进程重新拉起。

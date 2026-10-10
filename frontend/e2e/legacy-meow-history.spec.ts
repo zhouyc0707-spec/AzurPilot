@@ -1,7 +1,16 @@
 import {expect, test, type Locator, type Page} from '@playwright/test'
 import type {LegacyColumn, LegacyStatisticsReport} from '../src/api/types'
 
-type LegacyRequest = {id: string; method: string; params: {instance?: string; month?: string | null}}
+type LegacyRequest = {id: string; method: string; params: {instance?: string; month?: string | null; item?: string}}
+type ScreenshotFolderResult = {
+  opened: boolean
+  path: string | null
+  requestedPath: string
+  scope: 'month' | 'category' | 'missing'
+  item: string
+  month: string
+}
+type ScreenshotFolderReply = {result?: ScreenshotFolderResult; error?: string}
 type StatisticsFixtureOptions = {
   hazardsByMonth?: Record<string, number[]>
   cumulativeRows?: (number | string)[][]
@@ -14,6 +23,10 @@ const CUMULATIVE_ROWS = [
   ['3', '1234', '612.345678', '0.012345', '0.001234', '0.002345'],
   ['5', '2345', '987.654321', '0.023456', '0.003456', '0.004567'],
 ]
+const SCREENSHOT_ITEMS = [
+  ['金菜', 'Plate'], ['彩图纸', 'GearDesignPlanT5'], ['金机密', 'OrdnanceTestingReportT4'],
+  ['隐秘', 'CoordinateObscure'], ['深渊', 'CoordinateAbyssal'], ['金猫箱', 'CatT3'],
+] as const
 const MEOW_COLUMNS: LegacyColumn[] = [
   {key: 'Gui.Stat.Month', format: 'text'},
   {key: 'Gui.Stat.HazardLevel', format: 'int'},
@@ -24,9 +37,12 @@ const MEOW_COLUMNS: LegacyColumn[] = [
     .map(key => ({key: `Gui.Stat.${key}`, format: 'text'})),
 ]
 
-/** 只替换旧版统计响应，其他请求由临时测试后端处理，不读取真实历史或执行游戏。 */
+/** 替换旧版统计及目录打开响应，不读取真实历史、执行游戏或打开资源管理器。 */
 async function isolatedStatistics(page: Page, availableMonths = [HISTORY_MONTH, '2026-08'], extraMeowRows: (number | string)[][] = [], mergeUnknownLoot = false, options: StatisticsFixtureOptions = {}) {
   const requests: LegacyRequest[] = []
+  const folderRequests: LegacyRequest[] = []
+  const pendingFolders: ((reply?: ScreenshotFolderReply) => void)[] = []
+  let holdFolders = false
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))
   await page.route('https://**', route => route.abort())
@@ -34,6 +50,20 @@ async function isolatedStatistics(page: Page, availableMonths = [HISTORY_MONTH, 
     const server = socket.connectToServer()
     socket.onMessage(raw => {
       const request = JSON.parse(String(raw)) as LegacyRequest
+      if (request.method === 'statistics.meowScreenshotFolder.open') {
+        folderRequests.push(request)
+        const month = request.params.month ?? CURRENT_MONTH
+        const item = request.params.item ?? ''
+        const requestedPath = `screenshots/${item}/${month}`
+        const respond = (reply: ScreenshotFolderReply = {}) => socket.send(JSON.stringify(reply.error
+          ? {v: 1, type: 'response', id: request.id, ok: false, error: {code: 'INTERNAL_ERROR', message: reply.error}}
+          : {v: 1, type: 'response', id: request.id, ok: true, result: reply.result ?? {
+            opened: true, path: requestedPath, requestedPath, scope: 'month', item, month,
+          }}))
+        if (holdFolders) pendingFolders.push(respond)
+        else respond()
+        return
+      }
       if (request.method !== 'statistics.legacy') {
         server.send(raw)
         return
@@ -77,7 +107,14 @@ async function isolatedStatistics(page: Page, availableMonths = [HISTORY_MONTH, 
     })
     server.onMessage(raw => socket.send(raw))
   })
-  return {requests, errors, setMonthHazards: (month: string, hazards: number[]) => {
+  return {requests, folderRequests, errors,
+    holdFolderResponses: () => {holdFolders = true},
+    replyToFolder: (reply?: ScreenshotFolderReply) => {
+      const respond = pendingFolders.shift()
+      if (!respond) throw new Error('没有等待中的目录请求')
+      respond(reply)
+    },
+    setMonthHazards: (month: string, hazards: number[]) => {
     options.hazardsByMonth ??= {}
     options.hazardsByMonth[month] = hazards
   }}
@@ -300,5 +337,149 @@ test('旧版本月无记录时两张月度表不补零行，历史弹窗仍显�
   await expect(opsi.locator('tbody tr')).toHaveCount(0)
   await section.getByRole('button', {name: '查看历史月份', exact: true}).click()
   await expectCumulativeRows(dialog)
+  expect(fixture.errors).toEqual([])
+})
+
+test('旧版六类高价值物品文字后提供截图目录按钮，当前和历史月份均传所选月份', async ({page}, testInfo) => {
+  const fixture = await isolatedStatistics(page)
+  const section = await openStatistics(page)
+  const statisticsRequests = fixture.requests.length
+  for (const [label, item] of SCREENSHOT_ITEMS) {
+    const button = section.getByRole('button', {name: `打开${label}截图文件夹`, exact: true})
+    await expect(button).toBeVisible()
+    await expect(button.locator('svg')).toHaveCount(1)
+    await expect(button).toHaveAttribute('title', new RegExp(CURRENT_MONTH))
+    await expect(button).toHaveAttribute('title', /脚本所在电脑/)
+    expect(await button.evaluate((element, text) => {
+      const header = element.closest('th')
+      if (!header) return false
+      const walker = document.createTreeWalker(header, NodeFilter.SHOW_TEXT)
+      let node: Node | null
+      while ((node = walker.nextNode())) {
+        if (node.textContent?.trim() === text) {
+          return Boolean(node.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING)
+        }
+      }
+      return false
+    }, label)).toBe(true)
+    await button.click()
+    await expect.poll(() => fixture.folderRequests.at(-1)?.params).toEqual({instance: 'testpilot', item, month: CURRENT_MONTH})
+    await expect(button).toBeEnabled()
+  }
+  expect(fixture.folderRequests).toHaveLength(SCREENSHOT_ITEMS.length)
+  expect(fixture.requests).toHaveLength(statisticsRequests)
+  await section.screenshot({path: testInfo.outputPath('旧版收获表截图文件夹按钮.png')})
+
+  await section.getByRole('button', {name: '查看历史月份', exact: true}).click()
+  const dialog = page.getByRole('dialog')
+  await expectCumulativeRows(dialog)
+  await dialog.getByRole('button', {name: HISTORY_MONTH, exact: true}).click()
+  await expect(section.getByRole('heading', {name: `历史耄耋相接收获（${HISTORY_MONTH}）`, exact: true})).toBeVisible()
+  for (const [label, item] of SCREENSHOT_ITEMS) {
+    const button = section.getByRole('button', {name: `打开${label}截图文件夹`, exact: true})
+    await expect(button).toHaveAttribute('title', new RegExp(HISTORY_MONTH))
+    await expect(button).toHaveAttribute('title', /脚本所在电脑/)
+    await button.click()
+    await expect.poll(() => fixture.folderRequests.at(-1)?.params).toEqual({instance: 'testpilot', item, month: HISTORY_MONTH})
+    await expect(button).toBeEnabled()
+  }
+  expect(fixture.folderRequests).toHaveLength(SCREENSHOT_ITEMS.length * 2)
+  await expect(section.locator('tbody tr').first().locator('td')).toHaveText([
+    HISTORY_MONTH, '3', '13', '11', '12', '13', '14', '15', '16',
+  ])
+  expect(fixture.errors).toEqual([])
+})
+
+test('截图目录请求等待时禁用六个打开按钮，不重复打开或阻塞统计操作', async ({page}) => {
+  const fixture = await isolatedStatistics(page)
+  const section = await openStatistics(page)
+  fixture.holdFolderResponses()
+  const button = section.getByRole('button', {name: '打开金菜截图文件夹', exact: true})
+  await button.click()
+  await expect(button).toBeDisabled()
+  await expect.poll(() => fixture.folderRequests.length).toBe(1)
+  // 浏览器对禁用按钮的再次点击应被忽略，不发送第二次资源管理器请求。
+  await button.evaluate(element => {(element as HTMLButtonElement).click(); (element as HTMLButtonElement).click()})
+  expect(fixture.folderRequests).toHaveLength(1)
+  for (const [label] of SCREENSHOT_ITEMS) {
+    await expect(section.getByRole('button', {name: `打开${label}截图文件夹`, exact: true})).toBeDisabled()
+  }
+  await expect(section.getByRole('button', {name: '查看历史月份', exact: true})).toBeEnabled()
+  await expect(section.getByRole('button', {name: '刷新统计', exact: true})).toBeEnabled()
+  await expect(section.locator('tbody tr')).toHaveCount(2)
+  fixture.replyToFolder()
+  await expect(button).toBeEnabled()
+  await button.click()
+  await expect(button).toBeDisabled()
+  await expect.poll(() => fixture.folderRequests.length).toBe(2)
+  fixture.replyToFolder()
+  await expect(button).toBeEnabled()
+  expect(fixture.errors).toEqual([])
+})
+
+test('截图目录缺失给出提示，打开失败可以重试且不影响月度统计和历史累计', async ({page}) => {
+  const fixture = await isolatedStatistics(page)
+  const section = await openStatistics(page)
+  fixture.holdFolderResponses()
+  const missingButton = section.getByRole('button', {name: '打开金菜截图文件夹', exact: true})
+  await missingButton.click()
+  await expect(missingButton).toBeDisabled()
+  await expect.poll(() => fixture.folderRequests.length).toBe(1)
+  fixture.replyToFolder({result: {
+    opened: false, path: null, requestedPath: `screenshots/Plate/${CURRENT_MONTH}`,
+    scope: 'missing', item: 'Plate', month: CURRENT_MONTH,
+  }})
+  await expect(missingButton).toBeEnabled()
+  await expect(page.getByRole('status').filter({hasText: '暂无金菜截图文件夹'})).toBeVisible()
+  await expect(section.locator('tbody tr').first().locator('td')).toHaveText([
+    CURRENT_MONTH, '3', '31', '11', '12', '13', '14', '15', '16',
+  ])
+  await expect(section.getByRole('button', {name: '打开深渊截图文件夹', exact: true})).toBeEnabled()
+
+  // 所选月份尚未归档、分类目录已存在时，打开分类目录并说明回退范围。
+  await missingButton.click()
+  await expect.poll(() => fixture.folderRequests.length).toBe(2)
+  fixture.replyToFolder({result: {
+    opened: true, path: 'screenshots/Plate', requestedPath: `screenshots/Plate/${CURRENT_MONTH}`,
+    scope: 'category', item: 'Plate', month: CURRENT_MONTH,
+  }})
+  await expect(page.getByRole('status').filter({hasText: `${CURRENT_MONTH} 暂无金菜截图，已打开分类文件夹`})).toBeVisible()
+  await expect(missingButton).toBeEnabled()
+
+  const failedButton = section.getByRole('button', {name: '打开彩图纸截图文件夹', exact: true})
+  await failedButton.click()
+  await expect(failedButton).toBeDisabled()
+  await expect.poll(() => fixture.folderRequests.length).toBe(3)
+  fixture.replyToFolder({error: '测试目录打开失败'})
+  await expect(page.getByRole('alert')).toContainText('测试目录打开失败')
+  await expect(failedButton).toBeEnabled()
+  await failedButton.click()
+  await expect(failedButton).toBeDisabled()
+  await expect.poll(() => fixture.folderRequests.map(request => request.params.item)).toEqual(['Plate', 'Plate', 'GearDesignPlanT5', 'GearDesignPlanT5'])
+  fixture.replyToFolder()
+  await expect(failedButton).toBeEnabled()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await section.getByRole('button', {name: '查看历史月份', exact: true}).click()
+  await expectCumulativeRows(page.getByRole('dialog'))
+  expect(fixture.errors).toEqual([])
+})
+
+test('旧版深色窄屏截图目录按钮留在收获表内，表格横向滚动不撑宽页面', async ({page}, testInfo) => {
+  const fixture = await isolatedStatistics(page)
+  await page.setViewportSize({width: 390, height: 844})
+  const section = await openStatistics(page, 'legacy-dark')
+  const width = await page.evaluate(() => ({viewport: innerWidth, page: document.documentElement.scrollWidth}))
+  expect(width.page).toBeLessThanOrEqual(width.viewport + 1)
+  const wrapper = section.locator('.legacy-table-wrap')
+  expect(await wrapper.evaluate(element => element.scrollWidth > element.clientWidth)).toBe(true)
+  const lastButton = section.getByRole('button', {name: '打开金猫箱截图文件夹', exact: true})
+  await lastButton.scrollIntoViewIfNeeded()
+  await expect(lastButton).toBeInViewport()
+  await lastButton.click()
+  await expect.poll(() => fixture.folderRequests.at(-1)?.params).toEqual({instance: 'testpilot', item: 'CatT3', month: CURRENT_MONTH})
+  await expect(lastButton).toBeEnabled()
+  const afterClick = await page.evaluate(() => ({viewport: innerWidth, page: document.documentElement.scrollWidth}))
+  expect(afterClick.page).toBeLessThanOrEqual(afterClick.viewport + 1)
+  await section.screenshot({path: testInfo.outputPath('旧版深色窄屏截图文件夹按钮.png')})
   expect(fixture.errors).toEqual([])
 })

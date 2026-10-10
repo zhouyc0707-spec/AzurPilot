@@ -254,6 +254,14 @@ export interface Results {
   'statistics.resources': Statistics
   'statistics.report': StatisticsReportWire
   'statistics.legacy': LegacyStatisticsReport
+  'statistics.meowScreenshotFolder.open': {
+    opened: boolean
+    path: string | null
+    requestedPath: string
+    scope: 'month' | 'category' | 'missing'
+    item: string
+    month: string
+  }
   'statistics.refreshLoot': {refreshed: boolean}
   'meowfficer.scoreReport': MeowfficerScoreReport
   'meowfficer.clearReport': {cleared: boolean; removed: string[]}

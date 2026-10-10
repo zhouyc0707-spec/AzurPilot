@@ -40,6 +40,7 @@ export interface Parameters {
   "statistics.refreshLoot": { instance: string }
   "statistics.report": { instance: string; category?: "resources" | "action" | "opsi" | "commission" | "ships" | "loot" | "research" | "storage"; month?: string | null; days?: number; period?: "day" | "week" | "month"; series?: number; scope?: "series" | "consumable"; task?: string | null }
   "statistics.legacy": { instance: string; month?: string | null }
+  "statistics.meowScreenshotFolder.open": { instance: string; item: "GearDesignPlanT5" | "OrdnanceTestingReportT4" | "Plate" | "CoordinateObscure" | "CoordinateAbyssal" | "CatT3"; month: string }
   "statistics.resourceFlows": { instance: string; days?: number; start?: string | null; end?: string | null; resource?: string | null; task?: string | null; offset?: number; limit?: number; through_id?: number | null }
   "meowfficer.scoreReport": { instance: string; limit?: number }
   "meowfficer.clearReport": { instance: string }

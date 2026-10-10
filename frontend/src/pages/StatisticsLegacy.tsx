@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { RefreshCw } from 'lucide-react'
+import { FolderOpen, RefreshCw } from 'lucide-react'
 import { api } from '../api/client'
 import type { LegacyColumn, LegacyStatisticsReport, Overview } from '../api/types'
 import { useApp, useConnection } from '../app/context'
@@ -21,6 +21,16 @@ const MEOW_CUMULATIVE_KEYS = new Set([
   'Gui.Stat.MeowAvgAbyssal',
   'Gui.Stat.MeowAvgObscure',
 ])
+/** 传分类键而非路径，后端与截图归档共用分类规则。 */
+const MEOW_SCREENSHOT_ITEMS = {
+  '金菜': 'Plate',
+  '彩图纸': 'GearDesignPlanT5',
+  '金机密': 'OrdnanceTestingReportT4',
+  '隐秘': 'CoordinateObscure',
+  '深渊': 'CoordinateAbyssal',
+  '金猫箱': 'CatT3',
+} as const
+type MeowScreenshotItem = typeof MEOW_SCREENSHOT_ITEMS[keyof typeof MEOW_SCREENSHOT_ITEMS]
 /* 委托收益五张卡片的图标沿用**旧界面**那一套（assets/gui/icon/icon_N.png，
    由后端挂在 /gui-icons 下，与旧界面用的是同一份文件）：
    钻石 icon_1 / 心智魔方 icon_2 / **心智 icon_3（浅蓝）** / 石油 icon_4 / 物资 icon_5。
@@ -58,14 +68,19 @@ function formatCell(value: Cell | null | undefined, format: string, text: (key: 
 }
 
 /** 统计页的简洁表格，结构对应旧界面的 `webapp/simple_table.html`（表头左对齐、内容居中）。 */
-function LegacyTable({columns, rows, text}: {
+function LegacyTable({columns, rows, text, renderColumnAction}: {
   columns: LegacyColumn[]
   rows: Cell[][]
   text: (key: string, params?: Record<string, string | number>) => string
+  renderColumnAction?: (column: LegacyColumn) => React.ReactNode
 }) {
   return <div className="legacy-table-wrap">
     <table className="legacy-table">
-      <thead><tr>{columns.map((column, index) => <th key={`${column.key}-${index}`}>{text(column.key)}</th>)}</tr></thead>
+      <thead><tr>{columns.map((column, index) => <th key={`${column.key}-${index}`}>
+        {renderColumnAction
+          ? <span className="legacy-table-heading">{text(column.key)}{renderColumnAction(column)}</span>
+          : text(column.key)}
+      </th>)}</tr></thead>
       <tbody>{rows.map((row, rowIndex) => <tr key={rowIndex}>
         {row.map((value, cellIndex) => <td key={cellIndex}>{formatCell(value, columns[cellIndex]?.format ?? 'text', text)}</td>)}
       </tr>)}</tbody>
@@ -119,7 +134,7 @@ function LegacySectionTitle({title, onRefresh, busy, children}: {
  */
 export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) {
   const {instance = ''} = useParams()
-  const {ui} = useApp()
+  const {ui, notify} = useApp()
   const text = useLegacyText()
   const connection = useConnection()
   const loadedInstance = useRef(instance)
@@ -132,6 +147,8 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
   // 耄耋相接收获查看的月份，undefined 表示本月
   const [meowMonth, setMeowMonth] = useState<string>()
   const [monthPickerOpen, setMonthPickerOpen] = useState(false)
+  const [openingFolder, setOpeningFolder] = useState(false)
+  const openingFolderRef = useRef(false)
   const [commissionPeriod, setCommissionPeriod] = useState<'day' | 'week' | 'month'>('month')
   const [recentPage, setRecentPage] = useState(0)
 
@@ -217,6 +234,29 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
     setMeowMonth(month)
   }
 
+  async function openMeowScreenshotFolder(item: MeowScreenshotItem, label: string) {
+    if (!data || pending || busy || connection !== 'ready' || openingFolderRef.current) return
+    // 使用已显示报表的月份；切换月份时旧表尚未替换，按钮暂时禁用。
+    const month = data.meowLoot.month
+    openingFolderRef.current = true
+    setOpeningFolder(true)
+    try {
+      const result = await api.request('statistics.meowScreenshotFolder.open', {instance, item, month})
+      if (result.opened) {
+        notify(result.scope === 'month'
+          ? ui('legacyStats.screenshotFolderOpened', {path: result.path ?? result.requestedPath})
+          : ui('legacyStats.screenshotMonthMissing', {month, item: label, path: result.path ?? result.requestedPath}))
+      } else {
+        notify(ui('legacyStats.screenshotFolderMissing', {item: label, path: result.requestedPath}))
+      }
+    } catch (error) {
+      notify((error as Error).message, true)
+    } finally {
+      openingFolderRef.current = false
+      setOpeningFolder(false)
+    }
+  }
+
   if (error) return <div className="statistics-legacy"><ErrorBox message={error} retry={() => void load(false)}/></div>
   if (!data) return <div className="statistics-legacy"><Loading/></div>
 
@@ -263,7 +303,18 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
           <span className="legacy-summary-item">{text('Gui.Stat.MeowLastRecord', {value: data.meowLoot.lastRecord})}</span>
         </div>
         <LegacyTable columns={monthlyIndexes.map(index => data.meowLoot.columns[index])}
-          rows={data.meowLoot.rows.map(row => monthlyIndexes.map(index => row[index]))} text={text}/>
+          rows={data.meowLoot.rows.map(row => monthlyIndexes.map(index => row[index]))} text={text}
+          renderColumnAction={column => {
+            const item = MEOW_SCREENSHOT_ITEMS[column.key as keyof typeof MEOW_SCREENSHOT_ITEMS]
+            if (!item) return null
+            return <button type="button" className="legacy-stat-folder"
+              disabled={openingFolder || pending || busy || connection !== 'ready'}
+              aria-label={ui('legacyStats.openScreenshotFolder', {item: text(column.key)})}
+              title={ui('legacyStats.openScreenshotFolderHint', {month: data.meowLoot.month, item: text(column.key)})}
+              onClick={() => void openMeowScreenshotFolder(item, text(column.key))}>
+              <FolderOpen size={14} aria-hidden="true"/>
+            </button>
+          }}/>
       </section>
 
       {/* 每日经验检测 / 舰船升级进度 */}

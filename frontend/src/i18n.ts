@@ -4,6 +4,7 @@
 
 import { developerEnUS, developerJaJP, developerZhCN, developerZhTW } from './i18n.dev'
 import {resourceZhCN, resourceZhTW, resourceEnUS, resourceJaJP, resourceZhMiao} from './i18n.resources'
+import {legacyStatsZhCN, legacyStatsZhTW, legacyStatsEnUS, legacyStatsJaJP, legacyStatsZhMiao} from './i18n.legacyStats'
 
 export type Language = 'zh-CN' | 'zh-TW' | 'en-US' | 'ja-JP' | 'zh-MIAO'
 type TranslationParams = Record<string, string | number>
@@ -18,6 +19,7 @@ export const languages: Record<Language, string> = {
 
 const zhCN = {
   ...resourceZhCN,
+  ...legacyStatsZhCN,
   'task.runOnce': '执行一次：{task}',
   'task.stopOnce': '立即停止：{task}',
   'task.runOnceStarted': '正在单独执行：{task}',
@@ -633,6 +635,7 @@ export type UiTranslator = (key: UiKey, params?: TranslationParams) => string
 
 const enUS: Record<UiKey, string> = {
   ...resourceEnUS,
+  ...legacyStatsEnUS,
   'task.runOnce': 'Run once: {task}',
   'task.stopOnce': 'Stop immediately: {task}',
   'task.runOnceStarted': 'Running once: {task}',
@@ -823,6 +826,7 @@ const enUS: Record<UiKey, string> = {
 
 const jaJP: Record<UiKey, string> = {
   ...resourceJaJP,
+  ...legacyStatsJaJP,
   'task.runOnce': '1回実行：{task}',
   'task.stopOnce': '即座に停止：{task}',
   'task.runOnceStarted': '単独実行中：{task}',
@@ -1074,6 +1078,7 @@ const jaJP: Record<UiKey, string> = {
 
 const zhTW: Record<UiKey, string> = {
   ...resourceZhTW,
+  ...legacyStatsZhTW,
   'task.runOnce': '執行一次：{task}',
   'task.stopOnce': '立即停止：{task}',
   'task.runOnceStarted': '正在單獨執行：{task}',
@@ -1374,6 +1379,7 @@ const zhTW: Record<UiKey, string> = {
 const zhMiao: Record<UiKey, string> = {
   ...zhCN,
   ...resourceZhMiao,
+  ...legacyStatsZhMiao,
   'task.runOnce': '执行一次：{task} 喵',
   'task.stopOnce': '立即停止：{task} 喵',
   'task.runOnceStarted': '正在单独执行：{task} 喵',

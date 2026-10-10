@@ -66,6 +66,8 @@ module/api/
 
 其他分类报表在同一请求内共用统计协调锁，避免每个指标扫描全部历史。普通统计不调用加密校验或 OS 凭据，旧密文须先完成无损迁移。`CategorySection` 仅按 `statistics` 事件更新，同一分类最多保留一个正在执行的请求；期间收到的多次通知合并为一次后续刷新。运行概览事件不触发统计查询，SQLite WAL 的修改也纳入更新指纹；切换实例或参数后忽略旧响应。
 
+旧版收获表的 `statistics.meowScreenshotFolder.open(instance, item, month)` 是本机目录打开操作，按有副作用接口登记，演示模式禁用。`item` 仅接受六种高价值分类键，`month` 为 `YYYY-MM`；保存根目录只读自实例配置，不接受请求中的路径。返回 `opened/path/requestedPath/scope/item/month`，`scope` 区分打开月份、回退分类及目录缺失；打开失败抛出 `FOLDER_OPEN_FAILED`。前端用提示反馈，不重载统计。目录与归档对应关系见 [统计模块](../infra/statistics.md)。
+
 ## 4. 核心入口
 
 | 入口 | 用途 |

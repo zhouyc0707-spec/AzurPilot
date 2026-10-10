@@ -208,6 +208,14 @@ class LegacyStatisticsParams(InstanceParams):
     month: StrictStr | None = Field(default=None, pattern=r'^\d{4}-(0[1-9]|1[0-2])$')
 
 
+class MeowScreenshotFolderParams(InstanceParams):
+    """打开月份耄耋收获截图；请求不接受任意文件或目录路径。"""
+
+    item: Literal['GearDesignPlanT5', 'OrdnanceTestingReportT4', 'Plate',
+                  'CoordinateObscure', 'CoordinateAbyssal', 'CatT3']
+    month: StrictStr = Field(pattern=r'^[0-9]{4}-(0[1-9]|1[0-2])$')
+
+
 class ResourceFlowsParams(InstanceParams):
     """资源管理只读区间与明细分页，不触发设备操作。"""
     days: StrictInt = Field(default=7, ge=1, le=365)

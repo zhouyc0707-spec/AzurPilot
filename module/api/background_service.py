@@ -379,6 +379,19 @@ def gallery_remove(identifier: str) -> bool:
     return True
 
 
+def open_local_directory(path: Path) -> None:
+    """复用系统文件管理器打开方式；路径必须由服务端构造，不接受 API 路径参数。"""
+    try:
+        if os.name == 'nt':
+            os.startfile(str(path))  # noqa: S606 - 服务端固定路径，非请求路径输入
+        elif sys.platform == 'darwin':
+            subprocess.Popen(['open', str(path)])
+        else:
+            subprocess.Popen(['xdg-open', str(path)])
+    except OSError as error:
+        raise BackgroundError(f'打开文件夹失败：{type(error).__name__}') from error
+
+
 def gallery_open() -> Dict[str, str]:
     """在系统文件管理器里打开图库目录。
 
@@ -392,15 +405,7 @@ def gallery_open() -> Dict[str, str]:
         BackgroundError: 调用系统命令打开目录失败。
     """
     LIBRARY_DIR.mkdir(parents=True, exist_ok=True)
-    try:
-        if os.name == 'nt':
-            os.startfile(str(LIBRARY_DIR))  # noqa: S606 - 固定路径，非用户输入
-        elif sys.platform == 'darwin':
-            subprocess.Popen(['open', str(LIBRARY_DIR)])
-        else:
-            subprocess.Popen(['xdg-open', str(LIBRARY_DIR)])
-    except OSError as error:
-        raise BackgroundError(f'打开文件夹失败：{type(error).__name__}') from error
+    open_local_directory(LIBRARY_DIR)
     return {'path': str(LIBRARY_DIR)}
 
 

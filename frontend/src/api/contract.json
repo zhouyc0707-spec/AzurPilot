@@ -2032,6 +2032,45 @@
         "type": "object"
       }
     },
+    "statistics.meowScreenshotFolder.open": {
+      "mutates": true,
+      "params": {
+        "additionalProperties": false,
+        "description": "打开月份耄耋收获截图；请求不接受任意文件或目录路径。",
+        "properties": {
+          "instance": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Instance",
+            "type": "string"
+          },
+          "item": {
+            "enum": [
+              "GearDesignPlanT5",
+              "OrdnanceTestingReportT4",
+              "Plate",
+              "CoordinateObscure",
+              "CoordinateAbyssal",
+              "CatT3"
+            ],
+            "title": "Item",
+            "type": "string"
+          },
+          "month": {
+            "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])$",
+            "title": "Month",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instance",
+          "item",
+          "month"
+        ],
+        "title": "MeowScreenshotFolderParams",
+        "type": "object"
+      }
+    },
     "statistics.resourceFlows": {
       "mutates": false,
       "params": {

@@ -141,6 +141,24 @@
    方式就会分家（表头贴左、数值居中，看起来像数值跑到右边），因此两边统一居中，
    数值正好落在自己表头正下方。 */
 .legacy-table-wrap {overflow-x: auto}
+.legacy-table-heading {display: inline-flex; align-items: center; gap: 4px}
+.legacy-stat-folder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--border, var(--theme-border));
+  border-radius: 6px;
+  background: var(--surface, var(--theme-surface));
+  color: var(--muted, var(--theme-muted));
+  cursor: pointer;
+}
+.legacy-stat-folder:hover:not(:disabled) {border-color: var(--accent, var(--theme-accent)); color: var(--accent, var(--theme-accent))}
+.legacy-stat-folder:focus-visible {outline: 2px solid var(--accent, var(--theme-accent)); outline-offset: 2px}
+.legacy-stat-folder:disabled {opacity: .5; cursor: default}
 .legacy-table {border-collapse: collapse; width: max-content; min-width: 100%; font-size: 13px}
 .legacy-table th {
   text-align: center;
