@@ -26,6 +26,7 @@ from module.statistics.opsi_state import canonical
 from module.statistics import cl1_database, opsi_secure
 
 NOW = 1_800_000_000.0
+FIXTURE = Path(__file__).resolve().parent / "fixtures" / "opsi_encrypted_env"
 
 
 def make_cl1_db(path):
@@ -500,9 +501,11 @@ class OpsiSecureTestCase(unittest.TestCase):
         self.vault.verify_on_page_open()
         self.assert_blocked_state()
 
-    def test_external_table_rebuild_is_repaired_and_rebaselined(self):
-        """外部工具把 cl1_data 改成三列主键：重启构造自愈重建，vault 按结构变化
-        重记基线（不冻结），随后写入与行数锚点恢复正常。"""
+    def test_external_legacy_table_rebuild_migrates_without_rewriting_original(self):
+        """三列旧主键进入原生总库后可继续写入，旧结构与凭据原件不变。"""
+        self.csv.write_text('hazard,timestamp,rounds,coin,plate,abyssal,obscure\n'
+                                      + '\n'.join(f'{i},1800000000,1,20,2,0,0' for i in range(1, 7)) + '\n',
+                                      encoding='utf-8')
         self.assertTrue(self.vault.ensure_ready())
         self.update_count(41)
         with db(self.vault.cl1_db) as conn:
@@ -512,18 +515,20 @@ class OpsiSecureTestCase(unittest.TestCase):
                          " SELECT instance, month, encrypted_blob, data_json, secure_json FROM cl1_data")
             conn.execute("DROP TABLE cl1_data")
             conn.execute("ALTER TABLE cl1_data_new RENAME TO cl1_data")
-        with patch.object(cl1_database.Cl1Database, "_get_legacy_decryption_keys", return_value=[]):
-            cl1_database.Cl1Database(self.vault.cl1_db)
-        with db(self.vault.cl1_db) as conn:
-            self.assertEqual(cl1_database.Cl1Database._primary_key(conn.cursor()), ["instance", "month"])
-        self.update_count(42)
-        self.assertEqual(self.read_cl1()["battle_count"], 42)
+        original = self.vault.cl1_db.read_bytes()
+        from types import SimpleNamespace
+        reader = opsi_secure.StatsStore(self.root)
+        reader.vault_keys = lambda: SimpleNamespace(decrypt_record=self.vault.open_)
+        with patch.object(opsi_secure, '_STORE', reader):
+            database = cl1_database.Cl1Database(self.vault.cl1_db)
+            self.assertEqual(database.get_stats('inst', '2026-09')['battle_count'], 41)
+            data = database.get_stats('inst', '2026-09')
+            data['battle_count'] = 42
+            database.save_stats('inst', '2026-09', data)
+        self.assertEqual(database.get_stats('inst', '2026-09')['battle_count'], 42)
+        self.assertEqual(self.vault.cl1_db.read_bytes(), original)
         self.assertFalse(self.vault.wipe_path.exists())
         self.assert_no_global_detection()
-        with db(self.vault.cl1_db) as conn:
-            anchors = conn.execute("SELECT count(*) FROM sqlite_master"
-                                   " WHERE name LIKE '__opsi_count_cl1_data%'").fetchone()[0]
-        self.assertEqual(anchors, 2)
 
     def test_expectation_persists_across_restart(self):
         """文件类路径同样记基线；重启后基线从安全服务恢复，常规状态下无误报。"""
@@ -810,3 +815,32 @@ def seal_v2(key, kind, obj, context, installation_id):
     cipher.update(opsi_secure.canonical(aad))
     raw, tag = cipher.encrypt_and_digest(opsi_secure.canonical(obj))
     return opsi_secure.BLOB_PREFIX + base64.b64encode(cipher.nonce + raw + tag).decode()
+
+
+def complete_file_fixture(root):
+    """运行目录下生成旧格式文件夹具，避免把 log/ 运行数据加入仓库。"""
+    state = json.loads((root / 'config' / 'opsi_secure' / 'state.json').read_bytes())['state']
+    key = base64.b64decode(state['key'])
+    installation = state['installation_id']
+    records = {
+        'log/cl1/alpha/ship_exp_data.json': ('ships', {'battle_times': [22.1, 24.5]}),
+        'log/cl1/alpha/cl1_monthly.json': ('archives', {'2026-08': 96, '2026-08-akashi': 2}),
+        'log/azurstat_meowofficer_farming.csv': ('loot', {'rows': [[level, 1800000000, 1, 20, 2, 0, 0] for level in range(1, 7)], 'header': ['hazard', 'timestamp', 'rounds', 'coin', 'plate', 'abyssal', 'obscure']}),
+    }
+    for name, (kind, data) in records.items():
+        path = root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        blob = seal_v2(key, kind, data, opsi_secure.file_context(root, kind, path), installation)
+        value = blob if kind == 'loot' else json.dumps({opsi_secure.WRAPPER_KEY: True, 'payload': blob})
+        path.write_text(value, encoding='utf-8')
+        if kind != 'loot':
+            path.with_name(path.name + '.bak').write_text(value, encoding='utf-8')
+
+
+def copy_fixture(case):
+    directory = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+    case.addCleanup(directory.cleanup)
+    root = Path(directory.name) / 'env'
+    shutil.copytree(FIXTURE, root)
+    complete_file_fixture(root)
+    return root

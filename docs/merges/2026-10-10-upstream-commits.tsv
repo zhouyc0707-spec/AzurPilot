@@ -1,0 +1,64 @@
+提交	提交时间	说明
+9d74e7388cce96ec102768b53b49de5a527d97d8	2026-10-09T12:34:08+08:00	fix(combat): 保存完整恢复相位以限制长期心情误差
+405462bc1a32b2d6b0cd3c068eeabb99120d1dd7	2026-10-09T13:02:33+08:00	feat(combat): 复用舰队扫描被动校准心情恢复相位
+8d4f3df7d9a8dac3247ad00bcc702a15bbafd32b	2026-10-09T14:26:32+08:00	chore: 同步 dev 分支最新提交
+d6593214ae878352eb2e88e0e90d4377f8134345	2026-10-09T14:29:12+08:00	chore: 同步 dev 委托收益回归提交
+ed2c0c18b37a24ba89156c5a3169683cbe75f922	2026-10-09T15:41:13+08:00	fix(combat): 红脸归零后自动恢复心情并重试出击
+594a5cee316b4ea9cd03dc770366b46898459094	2026-10-09T16:51:05+08:00	refactor(combat): 移除遗留心情阈值重启逻辑
+d868dbc89c9f8f19adafabb7c5103dff43cc584a	2026-10-09T17:35:18+08:00	feat(stats): 「纵轴从零开始」改为「纵轴固定」
+df7de7b699c7bea6f93796ffb79e2ed09e9bdd8a	2026-10-09T17:35:18+08:00	perf(stats): 隐藏图表与原始记录时不再请求序列数据
+60d05780fc7a5870d085369590134f1b408d4caf	2026-10-09T17:35:18+08:00	perf(stats): 墙上时钟编码改走日期序数，报表提速三成
+ba09571ee8c03de0308b580699629b958b2a989f	2026-10-09T18:44:48+08:00	修复 Windows 验证夹具与 TUI 弹窗时钟刷新
+b30f6939dac3e0da1bd28d28223b0c8dfe8377c4	2026-10-09T18:46:15+08:00	统一普通业务存储并落地 SQLite v1 原生表结构
+3c87766ae1d7d00c0ef818d3e9ef9160b347ded9	2026-10-09T18:57:29+08:00	Merge branch 'dev' of https://gitcode.com/ddl2/AzurLaneAutoScript into dev
+9fc474d41a5fa3b452742d5e97807a7a06a3f1f4	2026-10-09T18:57:44+08:00	del
+987bc94c51476510822be5dac3b83e2123ec1fa7	2026-10-09T19:07:19+08:00	fix(storage): 兼容跨账号仓库数量采样和虹彩滚动标定
+711cc482a317f0be460ec80b587f577380a27613	2026-10-09T19:14:05+08:00	fix(storage): 修复跨账号仓库数量识别和滚动标定 (#1189)
+13e0c63b0581495d4a4607629f6c9025c04a5488	2026-10-09T19:19:47+08:00	重构心情恢复机制 (#1190)
+6f824064734b78833eaff9fae138dae3e4d31363	2026-10-09T19:34:45+08:00	fix(stats): 纵轴固定改由 ECharts 取值，并修正开关文案方向
+53f579efa3fd954032df7be56fc82ac2c8646838	2026-10-09T19:34:45+08:00	fix(stats): 纵轴固定保留 0 下界，上界仍由 ECharts 按全量算
+b04ff14d705bbb12727362bbfad4aa057cba37a9	2026-10-09T19:47:50+08:00	fix(lint): 清掉 statistics_service 里未使用的 os 导入
+a363ecd050b6d13f5a5747fc3790af5e21e3dec3	2026-10-09T20:07:40+08:00	删除 webui_bg.css 文件，更新 gui.md 和 persistence.md 文档，增强迁移过程中的进程识别逻辑，添加迁移测试用例以验证新逻辑
+568cc3616a416caf19edcc0a159bade63ffa4d14	2026-10-09T20:07:45+08:00	Merge branch 'dev' of https://github.com/wess09/AzurPilot into dev
+026ee1eb71b3fcc5497589201f1e8cba96cce666	2026-10-09T20:17:15+08:00	feat(migration): 增强旧密文处理逻辑，记录无法解码的记录并保留原件与备份
+5c905b94ee0ddc2512f5baff7551fbe4393f8ef0	2026-10-09T20:26:09+08:00	补充旧密文跳过迁移与设备 ID 只读处理回归测试
+5915eac277d0ce4ce6f8aa630f558a18b13cb3d3	2026-10-09T20:27:54+08:00	feat(combat): 旧版心情配置自动并入粗模型，不再要求人工校准
+687c712642249efb22854ee2052fba48910e4bbe	2026-10-09T20:29:52+08:00	Merge branch 'dev' of https://github.com/wess09/AzurPilot into dev
+d862ef3dcfb73d1d7034a34148f5298674f44177	2026-10-09T20:44:47+08:00	feat(logging): 增强日志记录，添加迁移与启动阶段的详细信息
+45e72a1f7aaf4af0e1693f386251c70d7b69bcca	2026-10-09T20:49:29+08:00	fix(startup): 兼容空旧库迁移并记录初始化失败原因
+59c358c467ebeeaf237a4f07195c9f39ab3ca5eb	2026-10-09T20:51:52+08:00	merge: 同步 dev 启动日志增强并解决冲突
+b6b7dc71fd7136485d0d98c4ff0a1c3f21169b11	2026-10-09T20:52:25+08:00	fix(startup): 兼容空旧库迁移并记录初始化失败原因 (#1191)
+ef4d6cf0759d9ed762db186929e1e262c006cd20	2026-10-09T21:03:31+08:00	feat(migration): 容错跳过空快照或损坏文件并保留原件与备份清单
+65b863d42d0c6f8630a7a30168782d2b831ec5e5	2026-10-09T21:05:00+08:00	Merge branch 'dev' of https://github.com/wess09/AzurPilot into dev
+0bd7634a2956075927c15509bf78d638c918886f	2026-10-09T21:24:51+08:00	fix(persistence): 从备份恢复损坏的旧统计快照
+2fcb2ae84ac08b3625e9cb4d1c172ff95bc2fb88	2026-10-09T21:31:05+08:00	fix(persistence): 从备份恢复损坏的旧统计快照 (#1192)
+07e86b96df66331b7b88af2a42775f20f16e08cf	2026-10-09T21:58:05+08:00	ci(workflow): 添加 master 和 dev 分支自动同步 CNB 仓库工作流
+e60a845fafc174a1a14e024d78e561c5500979bd	2026-10-09T22:26:04+08:00	feat(deploy): 内置 CNB 国内镜像并与 GitCode 同级分流容灾
+4501dbbfd51d3ac2a32faee927ad69df3696a206	2026-10-09T23:17:32+08:00	fix(webui): 文本框全部清空时自动还原为默认设置
+cc0bb515836f026a9aac9a5879319856a1d9ed01	2026-10-10T00:02:23+08:00	feat(island): 岛屿走位规则改为可配置规则串并新增「全局配置」走位校验 (#1194)
+ce75d4dd939c54545fa37fa5819a7b593943af8f	2026-10-10T02:09:18+08:00	fix(config): 修复活动每日关卡名无法保存
+b83670abbc74f328b3c8cafdac36c44543f602f7	2026-10-10T02:14:21+08:00	fix(config): 修复活动每日关卡名无法保存 (#1195)
+b5af8500b3f2db996aeacb9ae98511c82fd3bc7e	2026-10-10T02:37:31+08:00	fix(ui): 修复登录后自选轻量复刻页卡死
+5d912a49168233a8510846327a3452ba7d64ff99	2026-10-10T02:43:10+08:00	fix(ui): 修复自选轻量复刻页导致的登录卡死 (#1196)
+eeea831f9008c493f51c433a49733b55a37afb9e	2026-10-10T09:20:59+08:00	fix(deploy): 补齐模板源的国内镜像说明，修复 button-config-check 生成物差异
+3664a169ac7b0617f123f5326888757515785786	2026-10-10T09:31:03+08:00	fix(combat): 心情三件套不一致时按当前值重建，修复任务被拦
+87408b40673a4f3354ec97e6b74dad49bc41e59d	2026-10-10T10:29:14+08:00	fix(device): 启动模拟器时脱离启动器 Job 并隔离清理标记
+fa519cacdabc0048a51417026c5585315cd4c767	2026-10-10T12:00:22+08:00	fix&refactor(frontend): 修复关闭背景后地址丢失与把手常驻，把手独立成组件
+afe5cc9bc3f4ab37816ea0477ca82961536f3ac2	2026-10-10T12:15:22+08:00	fix(frontend): 关闭背景后切回填写 URL 不再需要手动应用
+db737d355f8e5aea08eb92d5e94f67ed9bb8004b	2026-10-10T12:26:54+08:00	fix(frontend): 关闭背景后切回上传文件档自动铺上原图
+b741655309733424925d24463bbdf3f86426b8b0	2026-10-10T14:17:35+08:00	内置心智单元计算器与船坞自动扫描
+bd874cd131da05d7bc238847a51c3f8b48dc41db	2026-10-10T14:30:27+08:00	Merge branch 'dev' of https://github.com/wess09/AzurPilot into dev
+8328bda912bbb82e16d87784b46da891e757bb41	2026-10-10T15:29:36+08:00	fix(frontend): 补上心智单元计算器导航的 Calculator 图标导入
+d7d9f63f3c196a953fba91bf80849b8bbb9c1a67	2026-10-10T16:52:53+08:00	fix(device): 修复启动器退出时连带关闭模拟器 (#1198)
+ef0bbfa9edd21c3c32ce823922e0481d13992632	2026-10-10T17:55:16+08:00	Fix
+7b90357e617fac1ab68fed358d5ad275dfcfe749	2026-10-10T18:17:41+08:00	修复船坞扫描三排精准定位与识别失败恢复
+e4ff94d42f4e5534161b639a573b447e8afb5928	2026-10-10T18:26:41+08:00	修复船坞整屏等级漏检导致第三排丢失
+b2b2dde310b2f173c7f0c21f76aae343368923b0	2026-10-10T19:02:13+08:00	Fix
+dc90eaf4b2869d589ba820269f4e5a45a8480205	2026-10-10T19:09:31+08:00	修复心智单元扫描中的快拖重叠丢失问题，增加行内位置校准以修正取整误差
+f53fcc894a9666c29ae13b66bfc81f8b6eebe2f8	2026-10-10T19:24:25+08:00	增强平滑拖动功能，添加 glide 方法以支持连续像素移动，优化心智单元扫描中的触控逻辑
+4da5d00690f4e7c76953d818e80ab6188b14bc8f	2026-10-10T19:30:17+08:00	拖拽
+bac278abb7faa317c79fd20c564d8ef7807f093d	2026-10-10T21:08:13+08:00	fix: resolve PR #1200 review findings and isolate mind E2E
+534f63fed8f8337a99efc59aa2fc0e41a6bc5561	2026-10-10T21:12:05+08:00	test: split oversized mind recognition tests and run focused CI regressions
+e803ed2f2aae4ab4ddccf54c8826f38752e4bbb7	2026-10-10T21:53:41+08:00	fix: make profile renames recoverable and document persistence interfaces
+5c13d03cbfc1f4f5204bd66ddf5985aad97df3f1	2026-10-10T21:57:21+08:00	fix: compare logical SQLite snapshots during profile relocation
+86096c4f245f4590afb748a961e21afc3a7e0ef1	2026-10-10T22:02:22+08:00	test: close SQLite fixture connections for Windows relocation tests

@@ -496,7 +496,19 @@ class GameDataProtector:
             return
         self._safe(source)
         self._safe(target)
+        from module.scheduler.store import ProgramStore
+        store = ProgramStore(self.root / 'config')
+        # 先迁移普通状态；同事务同步重映射文档和值集合内部 ID。
+        # 安全文件随后移动，登记最后更新，崩溃重试保持幂等。
+        store.database.ensure_ready()
         with config_transaction(source), config_transaction(target):
+            if source.exists() and target.exists():
+                raise damaged('实例重命名后资源数据库冲突，请保留原文件并恢复对应备份')
+            from module.scheduler.store import ConflictError
+            try:
+                store.relocate(old, instance)
+            except ConflictError:
+                raise damaged('实例重命名后调度数据冲突，请保留原数据并恢复对应备份') from None
             if source.exists():
                 if target.exists():
                     raise damaged('实例重命名后资源数据库冲突，请保留原文件并恢复对应备份')

@@ -1,0 +1,7318 @@
+{
+  "source": "碧蓝航线心智单元计算器 v0.32.43 公共 WIKI 缓存",
+  "updated_at": "2026-10-10T02:42:46.6439818+08:00",
+  "ships": {
+    "Z1": {
+      "name": "Z1",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "Z1",
+      "group": "",
+      "type": "驱逐"
+    },
+    "Z11": {
+      "name": "Z11",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "Z11",
+      "group": "",
+      "type": "驱逐"
+    },
+    "Z13": {
+      "name": "Z13",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "Z13",
+      "group": "",
+      "type": "驱逐"
+    },
+    "Z14": {
+      "name": "Z14",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "Z14",
+      "group": "",
+      "type": "驱逐"
+    },
+    "Z15": {
+      "name": "Z15",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "Z15",
+      "group": "",
+      "type": "驱逐"
+    },
+    "Z16": {
+      "name": "Z16",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "Z16",
+      "group": "",
+      "type": "驱逐"
+    },
+    "Z18": {
+      "name": "Z18",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "Z18",
+      "group": "",
+      "type": "驱逐"
+    },
+    "Z19": {
+      "name": "Z19",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "Z19",
+      "group": "",
+      "type": "驱逐"
+    },
+    "Z2": {
+      "name": "Z2",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "Z2",
+      "group": "",
+      "type": "驱逐"
+    },
+    "Z20": {
+      "name": "Z20",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "Z20",
+      "group": "",
+      "type": "驱逐"
+    },
+    "Z21": {
+      "name": "Z21",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "Z21",
+      "group": "",
+      "type": "驱逐"
+    },
+    "Z9": {
+      "name": "Z9",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "Z9",
+      "group": "",
+      "type": "驱逐"
+    },
+    "樫野": {
+      "name": "樫野",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "樫野",
+      "group": "",
+      "type": "运输"
+    },
+    "由良": {
+      "name": "由良",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "由良",
+      "group": "",
+      "type": "轻巡"
+    },
+    "土佐": {
+      "name": "土佐",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "土佐",
+      "group": "",
+      "type": "战列"
+    },
+    "白凤": {
+      "name": "白凤",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "白凤",
+      "group": "",
+      "type": "航母"
+    },
+    "七省": {
+      "name": "七省",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "七省",
+      "group": "",
+      "type": "轻巡"
+    },
+    "不屈": {
+      "name": "不屈",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "不屈",
+      "group": "",
+      "type": "驱逐"
+    },
+    "不挠": {
+      "name": "不挠",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "不挠",
+      "group": "",
+      "type": "航母"
+    },
+    "丘比特": {
+      "name": "丘比特",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "丘比特",
+      "group": "",
+      "type": "驱逐"
+    },
+    "丹佛": {
+      "name": "丹佛",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "丹佛",
+      "group": "",
+      "type": "轻巡"
+    },
+    "乌尔里希·冯·胡滕": {
+      "name": "乌尔里希·冯·胡滕",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "乌尔里希·冯·胡滕",
+      "group": "",
+      "type": "战列"
+    },
+    "乌戈里诺·维瓦尔迪": {
+      "name": "乌戈里诺·维瓦尔迪",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "乌戈里诺·维瓦尔迪",
+      "group": "",
+      "type": "驱逐"
+    },
+    "五十铃": {
+      "name": "五十铃",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "五十铃",
+      "group": "",
+      "type": "轻巡"
+    },
+    "亚利桑那": {
+      "name": "亚利桑那",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "亚利桑那",
+      "group": "",
+      "type": "战列"
+    },
+    "德意志": {
+      "name": "德意志",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "德意志",
+      "group": "",
+      "type": "重巡"
+    },
+    "亚尔薇特": {
+      "name": "亚尔薇特",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "亚尔薇特",
+      "group": "",
+      "type": "战巡"
+    },
+    "亚特兰大": {
+      "name": "亚特兰大",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "亚特兰大",
+      "group": "",
+      "type": "轻巡"
+    },
+    "什罗普郡": {
+      "name": "什罗普郡",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "什罗普郡",
+      "group": "",
+      "type": "重巡"
+    },
+    "企业": {
+      "name": "企业",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "企业",
+      "group": "",
+      "type": "航母"
+    },
+    "伊丽莎白女王": {
+      "name": "伊丽莎白女王",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "伊丽莎白女王",
+      "group": "",
+      "type": "战列"
+    },
+    "伊卡洛斯": {
+      "name": "伊卡洛斯",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "伊卡洛斯",
+      "group": "",
+      "type": "驱逐"
+    },
+    "伊168": {
+      "name": "伊168",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "伊168",
+      "group": "",
+      "type": "潜艇"
+    },
+    "伏尔加": {
+      "name": "伏尔加",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "伏尔加",
+      "group": "",
+      "type": "航母"
+    },
+    "伏波": {
+      "name": "伏波",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "伏波",
+      "group": "",
+      "type": "驱逐"
+    },
+    "伏罗希洛夫": {
+      "name": "伏罗希洛夫",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "伏罗希洛夫",
+      "group": "",
+      "type": "轻巡"
+    },
+    "休斯敦": {
+      "name": "休斯敦",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "休斯敦",
+      "group": "",
+      "type": "重巡"
+    },
+    "休斯敦II": {
+      "name": "休斯敦II",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "休斯敦II",
+      "group": "",
+      "type": "轻巡"
+    },
+    "斯佩伯爵海军上将": {
+      "name": "斯佩伯爵海军上将",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "斯佩伯爵海军上将",
+      "group": "",
+      "type": "重巡"
+    },
+    "U-110": {
+      "name": "U-110",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "U-110",
+      "group": "",
+      "type": "潜艇"
+    },
+    "U-1206": {
+      "name": "U-1206",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "U-1206",
+      "group": "",
+      "type": "潜艇"
+    },
+    "U-101": {
+      "name": "U-101",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "U-101",
+      "group": "",
+      "type": "潜艇"
+    },
+    "U-552": {
+      "name": "U-552",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "U-552",
+      "group": "",
+      "type": "潜艇"
+    },
+    "U-557": {
+      "name": "U-557",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "U-557",
+      "group": "",
+      "type": "潜艇"
+    },
+    "U-556": {
+      "name": "U-556",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "U-556",
+      "group": "",
+      "type": "潜艇"
+    },
+    "U-31": {
+      "name": "U-31",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "U-31",
+      "group": "",
+      "type": "潜艇"
+    },
+    "U-81": {
+      "name": "U-81",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "U-81",
+      "group": "",
+      "type": "潜艇"
+    },
+    "U-2501": {
+      "name": "U-2501",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "U-2501",
+      "group": "",
+      "type": "潜艇"
+    },
+    "U-73": {
+      "name": "U-73",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "U-73",
+      "group": "",
+      "type": "潜艇"
+    },
+    "U-47": {
+      "name": "U-47",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "U-47",
+      "group": "",
+      "type": "潜艇"
+    },
+    "U-410": {
+      "name": "U-410",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "U-410",
+      "group": "",
+      "type": "潜艇"
+    },
+    "U-522": {
+      "name": "U-522",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "U-522",
+      "group": "",
+      "type": "潜艇"
+    },
+    "U-96": {
+      "name": "U-96",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "U-96",
+      "group": "",
+      "type": "潜艇"
+    },
+    "U-37": {
+      "name": "U-37",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "U-37",
+      "group": "",
+      "type": "潜艇"
+    },
+    "伦敦": {
+      "name": "伦敦",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "伦敦",
+      "group": "",
+      "type": "重巡"
+    },
+    "伯明翰": {
+      "name": "伯明翰",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "伯明翰",
+      "group": "",
+      "type": "轻巡"
+    },
+    "伴尔维": {
+      "name": "伴尔维",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "伴尔维",
+      "group": "",
+      "type": "航母"
+    },
+    "佩内洛珀": {
+      "name": "佩内洛珀",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "佩内洛珀",
+      "group": "",
+      "type": "轻巡"
+    },
+    "彼得·史特拉塞": {
+      "name": "彼得·史特拉塞",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "彼得·史特拉塞",
+      "group": "",
+      "type": "航母"
+    },
+    "俄克拉荷马": {
+      "name": "俄克拉荷马",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "俄克拉荷马",
+      "group": "",
+      "type": "战列"
+    },
+    "倔强": {
+      "name": "倔强",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "倔强",
+      "group": "",
+      "type": "驱逐"
+    },
+    "光荣": {
+      "name": "光荣",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "光荣",
+      "group": "",
+      "type": "航母"
+    },
+    "光辉": {
+      "name": "光辉",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "光辉",
+      "group": "",
+      "type": "航母"
+    },
+    "光辉(μ兵装)": {
+      "name": "光辉(μ兵装)",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "光辉(μ兵装)",
+      "group": "",
+      "type": "航母"
+    },
+    "克利夫兰": {
+      "name": "克利夫兰",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "克利夫兰",
+      "group": "",
+      "type": "轻巡"
+    },
+    "克利夫兰(μ兵装)": {
+      "name": "克利夫兰(μ兵装)",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "克利夫兰(μ兵装)",
+      "group": "",
+      "type": "轻巡"
+    },
+    "克利奥佩特拉": {
+      "name": "克利奥佩特拉",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "克利奥佩特拉",
+      "group": "",
+      "type": "轻巡"
+    },
+    "科隆": {
+      "name": "科隆",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "科隆",
+      "group": "",
+      "type": "轻巡"
+    },
+    "克拉伦斯·K·布朗森": {
+      "name": "克拉伦斯·K·布朗森",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "克拉伦斯·K·布朗森",
+      "group": "",
+      "type": "驱逐"
+    },
+    "克莱蒙梭": {
+      "name": "克莱蒙梭",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "克莱蒙梭",
+      "group": "",
+      "type": "战列"
+    },
+    "克雷文": {
+      "name": "克雷文",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "克雷文",
+      "group": "",
+      "type": "驱逐"
+    },
+    "兰利": {
+      "name": "兰利",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "兰利",
+      "group": "",
+      "type": "轻航"
+    },
+    "兰利II": {
+      "name": "兰利II",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "兰利II",
+      "group": "",
+      "type": "轻航"
+    },
+    "关岛": {
+      "name": "关岛",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "关岛",
+      "group": "",
+      "type": "超巡"
+    },
+    "内华达": {
+      "name": "内华达",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "内华达",
+      "group": "",
+      "type": "战列"
+    },
+    "冈依沙瓦号": {
+      "name": "冈依沙瓦号",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "冈依沙瓦号",
+      "group": "",
+      "type": "风帆M"
+    },
+    "冒险号": {
+      "name": "冒险号",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "冒险号",
+      "group": "",
+      "type": "风帆S"
+    },
+    "伊56": {
+      "name": "伊56",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "伊56",
+      "group": "",
+      "type": "潜艇"
+    },
+    "伊58": {
+      "name": "伊58",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "伊58",
+      "group": "",
+      "type": "潜艇"
+    },
+    "凉波": {
+      "name": "凉波",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "凉波",
+      "group": "",
+      "type": "驱逐"
+    },
+    "凤翔": {
+      "name": "凤翔",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "凤翔",
+      "group": "",
+      "type": "轻航"
+    },
+    "凯尔圣": {
+      "name": "凯尔圣",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "凯尔圣",
+      "group": "",
+      "type": "驱逐"
+    },
+    "凯旋": {
+      "name": "凯旋",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "凯旋",
+      "group": "",
+      "type": "驱逐"
+    },
+    "赤城": {
+      "name": "赤城",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "赤城",
+      "group": "",
+      "type": "航母"
+    },
+    "赤城(μ兵装)": {
+      "name": "赤城(μ兵装)",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "赤城(μ兵装)",
+      "group": "",
+      "type": "航母"
+    },
+    "凶猛": {
+      "name": "凶猛",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "凶猛",
+      "group": "",
+      "type": "驱逐"
+    },
+    "列克星敦": {
+      "name": "列克星敦",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "列克星敦",
+      "group": "",
+      "type": "航母"
+    },
+    "列克星敦II": {
+      "name": "列克星敦II",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "列克星敦II",
+      "group": "",
+      "type": "航母"
+    },
+    "利安得": {
+      "name": "利安得",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "利安得",
+      "group": "",
+      "type": "轻巡"
+    },
+    "利托里奥": {
+      "name": "利托里奥",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "利托里奥",
+      "group": "",
+      "type": "战列"
+    },
+    "利物浦": {
+      "name": "利物浦",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "利物浦",
+      "group": "",
+      "type": "轻巡"
+    },
+    "前卫": {
+      "name": "前卫",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "前卫",
+      "group": "",
+      "type": "战列"
+    },
+    "加利福尼亚": {
+      "name": "加利福尼亚",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "加利福尼亚",
+      "group": "",
+      "type": "战列"
+    },
+    "加富尔伯爵": {
+      "name": "加富尔伯爵",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "加富尔伯爵",
+      "group": "",
+      "type": "战列"
+    },
+    "加拉蒂亚": {
+      "name": "加拉蒂亚",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "加拉蒂亚",
+      "group": "",
+      "type": "轻巡"
+    },
+    "加斯科涅(μ兵装)": {
+      "name": "加斯科涅(μ兵装)",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "加斯科涅(μ兵装)",
+      "group": "",
+      "type": "战列"
+    },
+    "加贺BB": {
+      "name": "加贺BB",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "加贺BB",
+      "group": "",
+      "type": "战列"
+    },
+    "加贺": {
+      "name": "加贺",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "加贺",
+      "group": "",
+      "type": "航母"
+    },
+    "加里冒险号": {
+      "name": "加里冒险号",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "加里冒险号",
+      "group": "",
+      "type": "风帆V"
+    },
+    "努比亚人": {
+      "name": "努比亚人",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "努比亚人",
+      "group": "",
+      "type": "驱逐"
+    },
+    "勇敢": {
+      "name": "勇敢",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "勇敢",
+      "group": "",
+      "type": "驱逐"
+    },
+    "勇气": {
+      "name": "勇气",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "勇气",
+      "group": "",
+      "type": "驱逐"
+    },
+    "勒马尔": {
+      "name": "勒马尔",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "勒马尔",
+      "group": "",
+      "type": "驱逐"
+    },
+    "匆忙": {
+      "name": "匆忙",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "匆忙",
+      "group": "",
+      "type": "驱逐"
+    },
+    "北卡罗来纳": {
+      "name": "北卡罗来纳",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "北卡罗来纳",
+      "group": "",
+      "type": "战列"
+    },
+    "北安普敦": {
+      "name": "北安普敦",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "北安普敦",
+      "group": "",
+      "type": "重巡"
+    },
+    "北安普敦II": {
+      "name": "北安普敦II",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "北安普敦II",
+      "group": "",
+      "type": "重巡"
+    },
+    "匹兹堡": {
+      "name": "匹兹堡",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "匹兹堡",
+      "group": "",
+      "type": "重巡"
+    },
+    "伊13": {
+      "name": "伊13",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "伊13",
+      "group": "",
+      "type": "潜母"
+    },
+    "伊14": {
+      "name": "伊14",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "伊14",
+      "group": "",
+      "type": "潜母"
+    },
+    "半人马": {
+      "name": "半人马",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "半人马",
+      "group": "",
+      "type": "轻航"
+    },
+    "华丽": {
+      "name": "华丽",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "华丽",
+      "group": "",
+      "type": "轻巡"
+    },
+    "华甲": {
+      "name": "华甲",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "华甲",
+      "group": "",
+      "type": "轻航"
+    },
+    "华盛顿": {
+      "name": "华盛顿",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "华盛顿",
+      "group": "",
+      "type": "战列"
+    },
+    "南安普顿": {
+      "name": "南安普顿",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "南安普顿",
+      "group": "",
+      "type": "轻巡"
+    },
+    "南达科他": {
+      "name": "南达科他",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "南达科他",
+      "group": "",
+      "type": "战列"
+    },
+    "博加特里": {
+      "name": "博加特里",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "博加特里",
+      "group": "",
+      "type": "轻巡"
+    },
+    "博尔扎诺": {
+      "name": "博尔扎诺",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "博尔扎诺",
+      "group": "",
+      "type": "重巡"
+    },
+    "博格": {
+      "name": "博格",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "博格",
+      "group": "",
+      "type": "轻航"
+    },
+    "卡律布狄斯": {
+      "name": "卡律布狄斯",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "卡律布狄斯",
+      "group": "",
+      "type": "轻巡"
+    },
+    "提康德罗加": {
+      "name": "提康德罗加",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "提康德罗加",
+      "group": "",
+      "type": "航母"
+    },
+    "卡萨布兰卡": {
+      "name": "卡萨布兰卡",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "卡萨布兰卡",
+      "group": "",
+      "type": "轻航"
+    },
+    "卡辛": {
+      "name": "卡辛",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "卡辛",
+      "group": "",
+      "type": "驱逐"
+    },
+    "印第安纳": {
+      "name": "印第安纳",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "印第安纳",
+      "group": "",
+      "type": "战列"
+    },
+    "印第安纳波利斯": {
+      "name": "印第安纳波利斯",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "印第安纳波利斯",
+      "group": "",
+      "type": "重巡"
+    },
+    "厌战": {
+      "name": "厌战",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "厌战",
+      "group": "",
+      "type": "战列"
+    },
+    "伊26": {
+      "name": "伊26",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "伊26",
+      "group": "",
+      "type": "潜艇"
+    },
+    "伊25": {
+      "name": "伊25",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "伊25",
+      "group": "",
+      "type": "潜艇"
+    },
+    "反击": {
+      "name": "反击",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "反击",
+      "group": "",
+      "type": "战巡"
+    },
+    "古比雪夫": {
+      "name": "古比雪夫",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "古比雪夫",
+      "group": "",
+      "type": "轻巡"
+    },
+    "可怖": {
+      "name": "可怖",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "可怖",
+      "group": "",
+      "type": "驱逐"
+    },
+    "可畏": {
+      "name": "可畏",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "可畏",
+      "group": "",
+      "type": "航母"
+    },
+    "可畏(μ兵装)": {
+      "name": "可畏(μ兵装)",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "可畏(μ兵装)",
+      "group": "",
+      "type": "航母"
+    },
+    "史蒂芬·波特": {
+      "name": "史蒂芬·波特",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "史蒂芬·波特",
+      "group": "",
+      "type": "驱逐"
+    },
+    "司战女神": {
+      "name": "司战女神",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "司战女神",
+      "group": "",
+      "type": "轻巡"
+    },
+    "吉尚": {
+      "name": "吉尚",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "吉尚",
+      "group": "",
+      "type": "轻巡"
+    },
+    "吸血鬼": {
+      "name": "吸血鬼",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "吸血鬼",
+      "group": "",
+      "type": "驱逐"
+    },
+    "命运女神": {
+      "name": "命运女神",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "命运女神",
+      "group": "",
+      "type": "驱逐"
+    },
+    "和睦号": {
+      "name": "和睦号",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "和睦号",
+      "group": "",
+      "type": "风帆S"
+    },
+    "Z35": {
+      "name": "Z35",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "Z35",
+      "group": "",
+      "type": "驱逐"
+    },
+    "Z36": {
+      "name": "Z36",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "Z36",
+      "group": "",
+      "type": "驱逐"
+    },
+    "哈尔西·鲍威尔": {
+      "name": "哈尔西·鲍威尔",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "哈尔西·鲍威尔",
+      "group": "",
+      "type": "驱逐"
+    },
+    "哈曼": {
+      "name": "哈曼",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "哈曼",
+      "group": "",
+      "type": "驱逐"
+    },
+    "哈曼II": {
+      "name": "哈曼II",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "哈曼II",
+      "group": "",
+      "type": "驱逐"
+    },
+    "哈里森": {
+      "name": "哈里森",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "哈里森",
+      "group": "",
+      "type": "驱逐"
+    },
+    "哥伦比亚": {
+      "name": "哥伦比亚",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "哥伦比亚",
+      "group": "",
+      "type": "轻巡"
+    },
+    "唐斯": {
+      "name": "唐斯",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "唐斯",
+      "group": "",
+      "type": "驱逐"
+    },
+    "喀山": {
+      "name": "喀山",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "喀山",
+      "group": "",
+      "type": "战列"
+    },
+    "喀琅施塔得": {
+      "name": "喀琅施塔得",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "喀琅施塔得",
+      "group": "",
+      "type": "超巡"
+    },
+    "射水鱼": {
+      "name": "射水鱼",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "射水鱼",
+      "group": "",
+      "type": "潜艇"
+    },
+    "回声": {
+      "name": "回声",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "回声",
+      "group": "",
+      "type": "驱逐"
+    },
+    "圣哈辛托": {
+      "name": "圣哈辛托",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "圣哈辛托",
+      "group": "",
+      "type": "轻航"
+    },
+    "圣塔菲": {
+      "name": "圣塔菲",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "圣塔菲",
+      "group": "",
+      "type": "轻巡"
+    },
+    "圣女贞德": {
+      "name": "圣女贞德",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "圣女贞德",
+      "group": "",
+      "type": "轻巡"
+    },
+    "圣地亚哥": {
+      "name": "圣地亚哥",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "圣地亚哥",
+      "group": "",
+      "type": "轻巡"
+    },
+    "圣胡安": {
+      "name": "圣胡安",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "圣胡安",
+      "group": "",
+      "type": "轻巡"
+    },
+    "圣路易斯": {
+      "name": "圣路易斯",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "圣路易斯",
+      "group": "",
+      "type": "轻巡"
+    },
+    "圣马丁号": {
+      "name": "圣马丁号",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "圣马丁号",
+      "group": "",
+      "type": "风帆M"
+    },
+    "埃佛森": {
+      "name": "埃佛森",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "埃佛森",
+      "group": "",
+      "type": "驱逐"
+    },
+    "埃克塞特": {
+      "name": "埃克塞特",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "埃克塞特",
+      "group": "",
+      "type": "重巡"
+    },
+    "埃塞克斯": {
+      "name": "埃塞克斯",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "埃塞克斯",
+      "group": "",
+      "type": "航母"
+    },
+    "埃尔德里奇": {
+      "name": "埃尔德里奇",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "埃尔德里奇",
+      "group": "",
+      "type": "驱逐"
+    },
+    "易北": {
+      "name": "易北",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "易北",
+      "group": "",
+      "type": "轻航"
+    },
+    "埃尔宾": {
+      "name": "埃尔宾",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "埃尔宾",
+      "group": "",
+      "type": "轻巡"
+    },
+    "埃曼努埃尔·佩萨格诺": {
+      "name": "埃曼努埃尔·佩萨格诺",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "埃曼努埃尔·佩萨格诺",
+      "group": "",
+      "type": "驱逐"
+    },
+    "埃姆登": {
+      "name": "埃姆登",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "埃姆登",
+      "group": "",
+      "type": "轻巡"
+    },
+    "埃米尔·贝尔汀": {
+      "name": "埃米尔·贝尔汀",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "埃米尔·贝尔汀",
+      "group": "",
+      "type": "轻巡"
+    },
+    "基洛夫": {
+      "name": "基洛夫",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "基洛夫",
+      "group": "",
+      "type": "轻巡"
+    },
+    "基辅": {
+      "name": "基辅",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "基辅",
+      "group": "",
+      "type": "驱逐"
+    },
+    "塔什干": {
+      "name": "塔什干",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "塔什干",
+      "group": "",
+      "type": "驱逐"
+    },
+    "塔什干(μ兵装)": {
+      "name": "塔什干(μ兵装)",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "塔什干(μ兵装)",
+      "group": "",
+      "type": "驱逐"
+    },
+    "塔尔图": {
+      "name": "塔尔图",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "塔尔图",
+      "group": "",
+      "type": "驱逐"
+    },
+    "塔林": {
+      "name": "塔林",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "塔林",
+      "group": "",
+      "type": "重巡"
+    },
+    "莫里森": {
+      "name": "莫里森",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "莫里森",
+      "group": "",
+      "type": "驱逐"
+    },
+    "塞瓦斯托波尔": {
+      "name": "塞瓦斯托波尔",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "塞瓦斯托波尔",
+      "group": "",
+      "type": "战列"
+    },
+    "声望": {
+      "name": "声望",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "声望",
+      "group": "",
+      "type": "战巡"
+    },
+    "复仇": {
+      "name": "复仇",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "复仇",
+      "group": "",
+      "type": "战列"
+    },
+    "卡尔斯鲁厄": {
+      "name": "卡尔斯鲁厄",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "卡尔斯鲁厄",
+      "group": "",
+      "type": "轻巡"
+    },
+    "多塞特郡": {
+      "name": "多塞特郡",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "多塞特郡",
+      "group": "",
+      "type": "重巡"
+    },
+    "杜伊斯堡": {
+      "name": "杜伊斯堡",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "杜伊斯堡",
+      "group": "",
+      "type": "轻巡"
+    },
+    "大斗犬": {
+      "name": "大斗犬",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "大斗犬",
+      "group": "",
+      "type": "驱逐"
+    },
+    "大胆": {
+      "name": "大胆",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "大胆",
+      "group": "",
+      "type": "驱逐"
+    },
+    "大青花鱼": {
+      "name": "大青花鱼",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "大青花鱼",
+      "group": "",
+      "type": "潜艇"
+    },
+    "大青花鱼(μ兵装)": {
+      "name": "大青花鱼(μ兵装)",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "大青花鱼(μ兵装)",
+      "group": "",
+      "type": "潜艇"
+    },
+    "大黄蜂": {
+      "name": "大黄蜂",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "大黄蜂",
+      "group": "",
+      "type": "航母"
+    },
+    "大黄蜂II": {
+      "name": "大黄蜂II",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "大黄蜂II",
+      "group": "",
+      "type": "航母"
+    },
+    "天后": {
+      "name": "天后",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "天后",
+      "group": "",
+      "type": "驱逐"
+    },
+    "天城": {
+      "name": "天城",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "天城",
+      "group": "",
+      "type": "战巡"
+    },
+    "天城CV": {
+      "name": "天城CV",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "天城CV",
+      "group": "",
+      "type": "航母"
+    },
+    "天狼星": {
+      "name": "天狼星",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "天狼星",
+      "group": "",
+      "type": "轻巡"
+    },
+    "天鹰": {
+      "name": "天鹰",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "天鹰",
+      "group": "",
+      "type": "航母"
+    },
+    "太原": {
+      "name": "太原",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "太原",
+      "group": "",
+      "type": "驱逐"
+    },
+    "奥列格": {
+      "name": "奥列格",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "奥列格",
+      "group": "",
+      "type": "轻巡"
+    },
+    "奥利克": {
+      "name": "奥利克",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "奥利克",
+      "group": "",
+      "type": "驱逐"
+    },
+    "格奈森瑙": {
+      "name": "格奈森瑙",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "格奈森瑙",
+      "group": "",
+      "type": "战巡"
+    },
+    "俾斯麦": {
+      "name": "俾斯麦",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "俾斯麦",
+      "group": "",
+      "type": "战列"
+    },
+    "俾斯麦Zwei": {
+      "name": "俾斯麦Zwei",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "俾斯麦Zwei",
+      "group": "",
+      "type": "战列"
+    },
+    "奥托·冯·阿尔文斯莱本": {
+      "name": "奥托·冯·阿尔文斯莱本",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "奥托·冯·阿尔文斯莱本",
+      "group": "",
+      "type": "驱逐"
+    },
+    "奥马哈": {
+      "name": "奥马哈",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "奥马哈",
+      "group": "",
+      "type": "轻巡"
+    },
+    "女将": {
+      "name": "女将",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "女将",
+      "group": "",
+      "type": "驱逐"
+    },
+    "女灶神": {
+      "name": "女灶神",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "女灶神",
+      "group": "",
+      "type": "维修"
+    },
+    "Z24": {
+      "name": "Z24",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "Z24",
+      "group": "",
+      "type": "驱逐"
+    },
+    "Z25": {
+      "name": "Z25",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "Z25",
+      "group": "",
+      "type": "驱逐"
+    },
+    "Z28": {
+      "name": "Z28",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "Z28",
+      "group": "",
+      "type": "驱逐"
+    },
+    "Z23": {
+      "name": "Z23",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "Z23",
+      "group": "",
+      "type": "驱逐"
+    },
+    "Z26": {
+      "name": "Z26",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "Z26",
+      "group": "",
+      "type": "驱逐"
+    },
+    "威严": {
+      "name": "威严",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "威严",
+      "group": "",
+      "type": "驱逐"
+    },
+    "威奇塔": {
+      "name": "威奇塔",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "威奇塔",
+      "group": "",
+      "type": "重巡"
+    },
+    "威尔士亲王": {
+      "name": "威尔士亲王",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "威尔士亲王",
+      "group": "",
+      "type": "战列"
+    },
+    "威悉": {
+      "name": "威悉",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "威悉",
+      "group": "",
+      "type": "轻航"
+    },
+    "威廉·D·波特": {
+      "name": "威廉·D·波特",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "威廉·D·波特",
+      "group": "",
+      "type": "驱逐"
+    },
+    "孟菲斯": {
+      "name": "孟菲斯",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "孟菲斯",
+      "group": "",
+      "type": "轻巡"
+    },
+    "宁海": {
+      "name": "宁海",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "宁海",
+      "group": "",
+      "type": "轻巡"
+    },
+    "安妮女王复仇号": {
+      "name": "安妮女王复仇号",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "安妮女王复仇号",
+      "group": "",
+      "type": "风帆M"
+    },
+    "安德烈亚·多利亚": {
+      "name": "安德烈亚·多利亚",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "安德烈亚·多利亚",
+      "group": "",
+      "type": "战列"
+    },
+    "定安": {
+      "name": "定安",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "定安",
+      "group": "",
+      "type": "运输"
+    },
+    "宾夕法尼亚": {
+      "name": "宾夕法尼亚",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "宾夕法尼亚",
+      "group": "",
+      "type": "战列"
+    },
+    "富兰克林": {
+      "name": "富兰克林",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "富兰克林",
+      "group": "",
+      "type": "航母"
+    },
+    "富特": {
+      "name": "富特",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "富特",
+      "group": "",
+      "type": "驱逐"
+    },
+    "寰昌": {
+      "name": "寰昌",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "寰昌",
+      "group": "",
+      "type": "战巡"
+    },
+    "小企业": {
+      "name": "小企业",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "小企业",
+      "group": "幼体",
+      "type": "航母"
+    },
+    "小斯佩": {
+      "name": "小斯佩",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "小斯佩",
+      "group": "幼体",
+      "type": "重巡"
+    },
+    "小光辉": {
+      "name": "小光辉",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "小光辉",
+      "group": "幼体",
+      "type": "航母"
+    },
+    "小克利夫兰": {
+      "name": "小克利夫兰",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "小克利夫兰",
+      "group": "幼体",
+      "type": "轻巡"
+    },
+    "小赤城": {
+      "name": "小赤城",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "小赤城",
+      "group": "幼体",
+      "type": "航母"
+    },
+    "小可畏": {
+      "name": "小可畏",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "小可畏",
+      "group": "幼体",
+      "type": "航母"
+    },
+    "小圣地亚哥": {
+      "name": "小圣地亚哥",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "小圣地亚哥",
+      "group": "幼体",
+      "type": "轻巡"
+    },
+    "小埃吉尔": {
+      "name": "小埃吉尔",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "小埃吉尔",
+      "group": "幼体",
+      "type": "超巡"
+    },
+    "小声望": {
+      "name": "小声望",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "小声望",
+      "group": "幼体",
+      "type": "战巡"
+    },
+    "小天鹅": {
+      "name": "小天鹅",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "小天鹅",
+      "group": "",
+      "type": "驱逐"
+    },
+    "小安克雷奇": {
+      "name": "小安克雷奇",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "小安克雷奇",
+      "group": "幼体",
+      "type": "重巡"
+    },
+    "小柴郡": {
+      "name": "小柴郡",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "小柴郡",
+      "group": "幼体",
+      "type": "重巡"
+    },
+    "小海伦娜": {
+      "name": "小海伦娜",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "小海伦娜",
+      "group": "幼体",
+      "type": "轻巡"
+    },
+    "小齐柏林": {
+      "name": "小齐柏林",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "小齐柏林",
+      "group": "幼体",
+      "type": "航母"
+    },
+    "小云仙": {
+      "name": "小云仙",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "小云仙",
+      "group": "幼体",
+      "type": "重巡"
+    },
+    "小猎兔犬": {
+      "name": "小猎兔犬",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "小猎兔犬",
+      "group": "",
+      "type": "驱逐"
+    },
+    "小腓特烈": {
+      "name": "小腓特烈",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "小腓特烈",
+      "group": "幼体",
+      "type": "战列"
+    },
+    "小欧根": {
+      "name": "小欧根",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "小欧根",
+      "group": "幼体",
+      "type": "重巡"
+    },
+    "小贝法": {
+      "name": "小贝法",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "小贝法",
+      "group": "幼体",
+      "type": "轻巡"
+    },
+    "小比叡": {
+      "name": "小比叡",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "小比叡",
+      "group": "幼体",
+      "type": "战巡"
+    },
+    "小武藏": {
+      "name": "小武藏",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "小武藏",
+      "group": "幼体",
+      "type": "战列"
+    },
+    "小天城": {
+      "name": "小天城",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "小天城",
+      "group": "幼体",
+      "type": "战巡"
+    },
+    "小信浓": {
+      "name": "小信浓",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "小信浓",
+      "group": "幼体",
+      "type": "航母"
+    },
+    "小大凤": {
+      "name": "小大凤",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "小大凤",
+      "group": "幼体",
+      "type": "航母"
+    },
+    "尼古拉斯": {
+      "name": "尼古拉斯",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "尼古拉斯",
+      "group": "",
+      "type": "驱逐"
+    },
+    "尼科洛索·达雷科": {
+      "name": "尼科洛索·达雷科",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "尼科洛索·达雷科",
+      "group": "",
+      "type": "驱逐"
+    },
+    "巴丹": {
+      "name": "巴丹",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "巴丹",
+      "group": "",
+      "type": "轻航"
+    },
+    "巴尔的摩": {
+      "name": "巴尔的摩",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "巴尔的摩",
+      "group": "",
+      "type": "重巡"
+    },
+    "巴尔的摩(μ兵装)": {
+      "name": "巴尔的摩(μ兵装)",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "巴尔的摩(μ兵装)",
+      "group": "",
+      "type": "重巡"
+    },
+    "巴托洛梅奥·科莱奥尼": {
+      "name": "巴托洛梅奥·科莱奥尼",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "巴托洛梅奥·科莱奥尼",
+      "group": "",
+      "type": "轻巡"
+    },
+    "巴拉卡少校": {
+      "name": "巴拉卡少校",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "巴拉卡少校",
+      "group": "",
+      "type": "潜艇"
+    },
+    "布吕歇尔": {
+      "name": "布吕歇尔",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "布吕歇尔",
+      "group": "",
+      "type": "重巡"
+    },
+    "布什": {
+      "name": "布什",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "布什",
+      "group": "",
+      "type": "驱逐"
+    },
+    "布伦努斯": {
+      "name": "布伦努斯",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "布伦努斯",
+      "group": "",
+      "type": "重巡"
+    },
+    "布莱默顿": {
+      "name": "布莱默顿",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "布莱默顿",
+      "group": "",
+      "type": "重巡"
+    },
+    "布里斯托尔": {
+      "name": "布里斯托尔",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "布里斯托尔",
+      "group": "",
+      "type": "驱逐"
+    },
+    "布鲁克林": {
+      "name": "布鲁克林",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "布鲁克林",
+      "group": "",
+      "type": "轻巡"
+    },
+    "Z43": {
+      "name": "Z43",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "Z43",
+      "group": "",
+      "type": "驱逐"
+    },
+    "Z47": {
+      "name": "Z47",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "Z47",
+      "group": "",
+      "type": "驱逐"
+    },
+    "Z46": {
+      "name": "Z46",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "Z46",
+      "group": "",
+      "type": "驱逐"
+    },
+    "帕萨迪纳": {
+      "name": "帕萨迪纳",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "帕萨迪纳",
+      "group": "",
+      "type": "轻巡"
+    },
+    "帝国": {
+      "name": "帝国",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "帝国",
+      "group": "",
+      "type": "航母"
+    },
+    "平海": {
+      "name": "平海",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "平海",
+      "group": "",
+      "type": "轻巡"
+    },
+    "幻想号": {
+      "name": "幻想号",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "幻想号",
+      "group": "",
+      "type": "风帆V"
+    },
+    "库尔斯克": {
+      "name": "库尔斯克",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "库尔斯克",
+      "group": "",
+      "type": "重巡"
+    },
+    "库拉索": {
+      "name": "库拉索",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "库拉索",
+      "group": "",
+      "type": "轻巡"
+    },
+    "库珀": {
+      "name": "库珀",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "库珀",
+      "group": "",
+      "type": "驱逐"
+    },
+    "应瑞": {
+      "name": "应瑞",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "应瑞",
+      "group": "",
+      "type": "轻巡"
+    },
+    "庞培·马格诺": {
+      "name": "庞培·马格诺",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "庞培·马格诺",
+      "group": "",
+      "type": "驱逐"
+    },
+    "康克德": {
+      "name": "康克德",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "康克德",
+      "group": "",
+      "type": "轻巡"
+    },
+    "建武": {
+      "name": "建武",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "建武",
+      "group": "",
+      "type": "重巡"
+    },
+    "弗朗西斯科·卡拉乔洛": {
+      "name": "弗朗西斯科·卡拉乔洛",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "弗朗西斯科·卡拉乔洛",
+      "group": "",
+      "type": "战列"
+    },
+    "弗莱彻": {
+      "name": "弗莱彻",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "弗莱彻",
+      "group": "",
+      "type": "驱逐"
+    },
+    "彗星": {
+      "name": "彗星",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "彗星",
+      "group": "",
+      "type": "驱逐"
+    },
+    "彭萨科拉": {
+      "name": "彭萨科拉",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "彭萨科拉",
+      "group": "",
+      "type": "重巡"
+    },
+    "彰武": {
+      "name": "彰武",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "彰武",
+      "group": "",
+      "type": "重巡"
+    },
+    "德文郡": {
+      "name": "德文郡",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "德文郡",
+      "group": "",
+      "type": "重巡"
+    },
+    "忒修斯": {
+      "name": "忒修斯",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "忒修斯",
+      "group": "",
+      "type": "轻航"
+    },
+    "怨仇": {
+      "name": "怨仇",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "怨仇",
+      "group": "",
+      "type": "航母"
+    },
+    "恐怖": {
+      "name": "恐怖",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "恐怖",
+      "group": "",
+      "type": "重炮"
+    },
+    "恰巴耶夫": {
+      "name": "恰巴耶夫",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "恰巴耶夫",
+      "group": "",
+      "type": "轻巡"
+    },
+    "恶毒": {
+      "name": "恶毒",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "恶毒",
+      "group": "",
+      "type": "驱逐"
+    },
+    "恶毒(μ兵装)": {
+      "name": "恶毒(μ兵装)",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "恶毒(μ兵装)",
+      "group": "",
+      "type": "驱逐"
+    },
+    "葛兹·冯·伯利欣根": {
+      "name": "葛兹·冯·伯利欣根",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "葛兹·冯·伯利欣根",
+      "group": "",
+      "type": "战列"
+    },
+    "戈里齐亚": {
+      "name": "戈里齐亚",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "戈里齐亚",
+      "group": "",
+      "type": "重巡"
+    },
+    "扎拉": {
+      "name": "扎拉",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "扎拉",
+      "group": "",
+      "type": "重巡"
+    },
+    "托里拆利": {
+      "name": "托里拆利",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "托里拆利",
+      "group": "",
+      "type": "潜艇"
+    },
+    "抚顺": {
+      "name": "抚顺",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "抚顺",
+      "group": "",
+      "type": "驱逐"
+    },
+    "拉·加利索尼埃": {
+      "name": "拉·加利索尼埃",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "拉·加利索尼埃",
+      "group": "",
+      "type": "轻巡"
+    },
+    "拉德福特": {
+      "name": "拉德福特",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "拉德福特",
+      "group": "",
+      "type": "驱逐"
+    },
+    "拉斐尔": {
+      "name": "拉斐尔",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "拉斐尔",
+      "group": "",
+      "type": "战列"
+    },
+    "拉菲": {
+      "name": "拉菲",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "拉菲",
+      "group": "",
+      "type": "驱逐"
+    },
+    "拉菲II": {
+      "name": "拉菲II",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "拉菲II",
+      "group": "",
+      "type": "驱逐"
+    },
+    "摩尔曼斯克": {
+      "name": "摩尔曼斯克",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "摩尔曼斯克",
+      "group": "",
+      "type": "轻巡"
+    },
+    "撒切尔": {
+      "name": "撒切尔",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "撒切尔",
+      "group": "",
+      "type": "驱逐"
+    },
+    "敌对": {
+      "name": "敌对",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "敌对",
+      "group": "",
+      "type": "驱逐"
+    },
+    "敦刻尔克": {
+      "name": "敦刻尔克",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "敦刻尔克",
+      "group": "",
+      "type": "战巡"
+    },
+    "文森斯": {
+      "name": "文森斯",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "文森斯",
+      "group": "",
+      "type": "重巡"
+    },
+    "文琴佐·焦贝蒂": {
+      "name": "文琴佐·焦贝蒂",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "文琴佐·焦贝蒂",
+      "group": "",
+      "type": "驱逐"
+    },
+    "斐济": {
+      "name": "斐济",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "斐济",
+      "group": "",
+      "type": "轻巡"
+    },
+    "斯坦利": {
+      "name": "斯坦利",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "斯坦利",
+      "group": "",
+      "type": "驱逐"
+    },
+    "斯库拉": {
+      "name": "斯库拉",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "斯库拉",
+      "group": "",
+      "type": "轻巡"
+    },
+    "斯彭斯": {
+      "name": "斯彭斯",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "斯彭斯",
+      "group": "",
+      "type": "驱逐"
+    },
+    "斯特拉斯堡": {
+      "name": "斯特拉斯堡",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "斯特拉斯堡",
+      "group": "",
+      "type": "战巡"
+    },
+    "斯莫利": {
+      "name": "斯莫利",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "斯莫利",
+      "group": "",
+      "type": "驱逐"
+    },
+    "新奥尔良": {
+      "name": "新奥尔良",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "新奥尔良",
+      "group": "",
+      "type": "重巡"
+    },
+    "新月": {
+      "name": "新月",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "新月",
+      "group": "",
+      "type": "驱逐"
+    },
+    "新月JP": {
+      "name": "新月JP",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "新月JP",
+      "group": "",
+      "type": "驱逐"
+    },
+    "无惧": {
+      "name": "无惧",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "无惧",
+      "group": "",
+      "type": "驱逐"
+    },
+    "无敌": {
+      "name": "无敌",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "无敌",
+      "group": "",
+      "type": "驱逐"
+    },
+    "无畏": {
+      "name": "无畏",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "无畏",
+      "group": "",
+      "type": "航母"
+    },
+    "昆西": {
+      "name": "昆西",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "昆西",
+      "group": "",
+      "type": "重巡"
+    },
+    "明尼阿波利斯": {
+      "name": "明尼阿波利斯",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "明尼阿波利斯",
+      "group": "",
+      "type": "重巡"
+    },
+    "明斯克": {
+      "name": "明斯克",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "明斯克",
+      "group": "",
+      "type": "驱逐"
+    },
+    "星座": {
+      "name": "星座",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "星座",
+      "group": "",
+      "type": "战巡"
+    },
+    "普林斯顿": {
+      "name": "普林斯顿",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "普林斯顿",
+      "group": "",
+      "type": "轻航"
+    },
+    "曼彻斯特": {
+      "name": "曼彻斯特",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "曼彻斯特",
+      "group": "",
+      "type": "轻巡"
+    },
+    "本宁顿": {
+      "name": "本宁顿",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "本宁顿",
+      "group": "",
+      "type": "航母"
+    },
+    "本森": {
+      "name": "本森",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "本森",
+      "group": "",
+      "type": "驱逐"
+    },
+    "朱利奥·凯撒": {
+      "name": "朱利奥·凯撒",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "朱利奥·凯撒",
+      "group": "",
+      "type": "战列"
+    },
+    "朱塞佩·加里波第": {
+      "name": "朱塞佩·加里波第",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "朱塞佩·加里波第",
+      "group": "",
+      "type": "轻巡"
+    },
+    "朱诺": {
+      "name": "朱诺",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "朱诺",
+      "group": "",
+      "type": "轻巡"
+    },
+    "浦波": {
+      "name": "浦波",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "浦波",
+      "group": "",
+      "type": "驱逐"
+    },
+    "朴茨茅斯冒险号": {
+      "name": "朴茨茅斯冒险号",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "朴茨茅斯冒险号",
+      "group": "",
+      "type": "风帆V"
+    },
+    "白雪": {
+      "name": "白雪",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "白雪",
+      "group": "",
+      "type": "驱逐"
+    },
+    "水无月": {
+      "name": "水无月",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "水无月",
+      "group": "",
+      "type": "驱逐"
+    },
+    "杓鹬": {
+      "name": "杓鹬",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "杓鹬",
+      "group": "",
+      "type": "轻巡"
+    },
+    "杜威": {
+      "name": "杜威",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "杜威",
+      "group": "",
+      "type": "驱逐"
+    },
+    "山风": {
+      "name": "山风",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "山风",
+      "group": "",
+      "type": "驱逐"
+    },
+    "妙风": {
+      "name": "妙风",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "妙风",
+      "group": "",
+      "type": "驱逐"
+    },
+    "杰金斯": {
+      "name": "杰金斯",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "杰金斯",
+      "group": "",
+      "type": "驱逐"
+    },
+    "睦月": {
+      "name": "睦月",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "睦月",
+      "group": "",
+      "type": "驱逐"
+    },
+    "松鲷": {
+      "name": "松鲷",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "松鲷",
+      "group": "",
+      "type": "潜艇"
+    },
+    "果敢": {
+      "name": "果敢",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "果敢",
+      "group": "",
+      "type": "驱逐"
+    },
+    "风云": {
+      "name": "风云",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "风云",
+      "group": "",
+      "type": "驱逐"
+    },
+    "长月": {
+      "name": "长月",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "长月",
+      "group": "",
+      "type": "驱逐"
+    },
+    "晓": {
+      "name": "晓",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "晓",
+      "group": "",
+      "type": "驱逐"
+    },
+    "龙骧": {
+      "name": "龙骧",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "龙骧",
+      "group": "",
+      "type": "轻航"
+    },
+    "矶风": {
+      "name": "矶风",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "矶风",
+      "group": "",
+      "type": "驱逐"
+    },
+    "电": {
+      "name": "电",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "电",
+      "group": "",
+      "type": "驱逐"
+    },
+    "绫波": {
+      "name": "绫波",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "绫波",
+      "group": "",
+      "type": "驱逐"
+    },
+    "查尔斯·奥斯本": {
+      "name": "查尔斯·奥斯本",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "查尔斯·奥斯本",
+      "group": "",
+      "type": "驱逐"
+    },
+    "Z52": {
+      "name": "Z52",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "Z52",
+      "group": "",
+      "type": "驱逐"
+    },
+    "柯莱特": {
+      "name": "柯莱特",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "柯莱特",
+      "group": "",
+      "type": "驱逐"
+    },
+    "响": {
+      "name": "响",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "响",
+      "group": "",
+      "type": "驱逐"
+    },
+    "标枪": {
+      "name": "标枪",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "标枪",
+      "group": "",
+      "type": "驱逐"
+    },
+    "凉月": {
+      "name": "凉月",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "凉月",
+      "group": "",
+      "type": "驱逐"
+    },
+    "博伊西": {
+      "name": "博伊西",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "博伊西",
+      "group": "",
+      "type": "轻巡"
+    },
+    "博伊西(μ兵装)": {
+      "name": "博伊西(μ兵装)",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "博伊西(μ兵装)",
+      "group": "",
+      "type": "轻巡"
+    },
+    "荒潮": {
+      "name": "荒潮",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "荒潮",
+      "group": "",
+      "type": "驱逐"
+    },
+    "谷风": {
+      "name": "谷风",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "谷风",
+      "group": "",
+      "type": "驱逐"
+    },
+    "时雨": {
+      "name": "时雨",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "时雨",
+      "group": "",
+      "type": "驱逐"
+    },
+    "格伦维尔": {
+      "name": "格伦维尔",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "格伦维尔",
+      "group": "",
+      "type": "驱逐"
+    },
+    "沙恩霍斯特": {
+      "name": "沙恩霍斯特",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "沙恩霍斯特",
+      "group": "",
+      "type": "战巡"
+    },
+    "英格拉罕": {
+      "name": "英格拉罕",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "英格拉罕",
+      "group": "",
+      "type": "驱逐"
+    },
+    "格拉斯哥": {
+      "name": "格拉斯哥",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "格拉斯哥",
+      "group": "",
+      "type": "轻巡"
+    },
+    "格罗斯特": {
+      "name": "格罗斯特",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "格罗斯特",
+      "group": "",
+      "type": "轻巡"
+    },
+    "格里德利": {
+      "name": "格里德利",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "格里德利",
+      "group": "",
+      "type": "驱逐"
+    },
+    "格里芬": {
+      "name": "格里芬",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "格里芬",
+      "group": "",
+      "type": "驱逐"
+    },
+    "朝凪": {
+      "name": "朝凪",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "朝凪",
+      "group": "",
+      "type": "驱逐"
+    },
+    "吹雪": {
+      "name": "吹雪",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "吹雪",
+      "group": "",
+      "type": "驱逐"
+    },
+    "塞德利茨": {
+      "name": "塞德利茨",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "塞德利茨",
+      "group": "",
+      "type": "战巡"
+    },
+    "春月": {
+      "name": "春月",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "春月",
+      "group": "",
+      "type": "驱逐"
+    },
+    "初春": {
+      "name": "初春",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "初春",
+      "group": "",
+      "type": "驱逐"
+    },
+    "雷": {
+      "name": "雷",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "雷",
+      "group": "",
+      "type": "驱逐"
+    },
+    "深雪": {
+      "name": "深雪",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "深雪",
+      "group": "",
+      "type": "驱逐"
+    },
+    "白露": {
+      "name": "白露",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "白露",
+      "group": "",
+      "type": "驱逐"
+    },
+    "清波": {
+      "name": "清波",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "清波",
+      "group": "",
+      "type": "驱逐"
+    },
+    "棘鳍": {
+      "name": "棘鳍",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "棘鳍",
+      "group": "",
+      "type": "潜艇"
+    },
+    "松风": {
+      "name": "松风",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "松风",
+      "group": "",
+      "type": "驱逐"
+    },
+    "卷波": {
+      "name": "卷波",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "卷波",
+      "group": "",
+      "type": "驱逐"
+    },
+    "夕暮": {
+      "name": "夕暮",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "夕暮",
+      "group": "",
+      "type": "驱逐"
+    },
+    "朝潮": {
+      "name": "朝潮",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "朝潮",
+      "group": "",
+      "type": "驱逐"
+    },
+    "追风": {
+      "name": "追风",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "追风",
+      "group": "",
+      "type": "驱逐"
+    },
+    "夕立": {
+      "name": "夕立",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "夕立",
+      "group": "",
+      "type": "驱逐"
+    },
+    "若叶": {
+      "name": "若叶",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "若叶",
+      "group": "",
+      "type": "驱逐"
+    },
+    "卯月": {
+      "name": "卯月",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "卯月",
+      "group": "",
+      "type": "驱逐"
+    },
+    "宵月": {
+      "name": "宵月",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "宵月",
+      "group": "",
+      "type": "驱逐"
+    },
+    "神风": {
+      "name": "神风",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "神风",
+      "group": "",
+      "type": "驱逐"
+    },
+    "有明": {
+      "name": "有明",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "有明",
+      "group": "",
+      "type": "驱逐"
+    },
+    "花月": {
+      "name": "花月",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "花月",
+      "group": "",
+      "type": "驱逐"
+    },
+    "浦风": {
+      "name": "浦风",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "浦风",
+      "group": "",
+      "type": "驱逐"
+    },
+    "滨风": {
+      "name": "滨风",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "滨风",
+      "group": "",
+      "type": "驱逐"
+    },
+    "旗风": {
+      "name": "旗风",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "旗风",
+      "group": "",
+      "type": "驱逐"
+    },
+    "如月": {
+      "name": "如月",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "如月",
+      "group": "",
+      "type": "驱逐"
+    },
+    "满潮": {
+      "name": "满潮",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "满潮",
+      "group": "",
+      "type": "驱逐"
+    },
+    "文月": {
+      "name": "文月",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "文月",
+      "group": "",
+      "type": "驱逐"
+    },
+    "初月": {
+      "name": "初月",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "初月",
+      "group": "",
+      "type": "驱逐"
+    },
+    "三日月": {
+      "name": "三日月",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "三日月",
+      "group": "",
+      "type": "驱逐"
+    },
+    "初霜": {
+      "name": "初霜",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "初霜",
+      "group": "",
+      "type": "驱逐"
+    },
+    "欧若拉": {
+      "name": "欧若拉",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "欧若拉",
+      "group": "",
+      "type": "轻巡"
+    },
+    "比洛克西": {
+      "name": "比洛克西",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "比洛克西",
+      "group": "",
+      "type": "轻巡"
+    },
+    "水星纪念": {
+      "name": "水星纪念",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "水星纪念",
+      "group": "",
+      "type": "轻巡"
+    },
+    "沃克兰": {
+      "name": "沃克兰",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "沃克兰",
+      "group": "",
+      "type": "驱逐"
+    },
+    "法戈": {
+      "name": "法戈",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "法戈",
+      "group": "",
+      "type": "轻巡"
+    },
+    "泛用型布里": {
+      "name": "泛用型布里",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "泛用型布里",
+      "group": "",
+      "type": "驱逐"
+    },
+    "波尔塔瓦": {
+      "name": "波尔塔瓦",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "波尔塔瓦",
+      "group": "",
+      "type": "战列"
+    },
+    "波拉": {
+      "name": "波拉",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "波拉",
+      "group": "",
+      "type": "重巡"
+    },
+    "波特兰": {
+      "name": "波特兰",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "波特兰",
+      "group": "",
+      "type": "重巡"
+    },
+    "曾克海军上将": {
+      "name": "曾克海军上将",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "曾克海军上将",
+      "group": "",
+      "type": "战巡"
+    },
+    "泽西": {
+      "name": "泽西",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "泽西",
+      "group": "",
+      "type": "驱逐"
+    },
+    "洪亮": {
+      "name": "洪亮",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "洪亮",
+      "group": "",
+      "type": "驱逐"
+    },
+    "济安": {
+      "name": "济安",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "济安",
+      "group": "",
+      "type": "轻巡"
+    },
+    "海伦娜": {
+      "name": "海伦娜",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "海伦娜",
+      "group": "",
+      "type": "轻巡"
+    },
+    "海圻": {
+      "name": "海圻",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "海圻",
+      "group": "",
+      "type": "轻巡"
+    },
+    "海天": {
+      "name": "海天",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "海天",
+      "group": "",
+      "type": "轻巡"
+    },
+    "海容": {
+      "name": "海容",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "海容",
+      "group": "",
+      "type": "轻巡"
+    },
+    "齐柏林伯爵": {
+      "name": "齐柏林伯爵",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "齐柏林伯爵",
+      "group": "",
+      "type": "航母"
+    },
+    "海筹": {
+      "name": "海筹",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "海筹",
+      "group": "",
+      "type": "轻巡"
+    },
+    "海豚号": {
+      "name": "海豚号",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "海豚号",
+      "group": "",
+      "type": "风帆S"
+    },
+    "渡良濑": {
+      "name": "渡良濑",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "渡良濑",
+      "group": "",
+      "type": "轻巡"
+    },
+    "火力": {
+      "name": "火力",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "火力",
+      "group": "",
+      "type": "驱逐"
+    },
+    "火奴鲁鲁": {
+      "name": "火奴鲁鲁",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "火奴鲁鲁",
+      "group": "",
+      "type": "轻巡"
+    },
+    "火枪手": {
+      "name": "火枪手",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "火枪手",
+      "group": "",
+      "type": "驱逐"
+    },
+    "灵敏": {
+      "name": "灵敏",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "灵敏",
+      "group": "",
+      "type": "驱逐"
+    },
+    "热心": {
+      "name": "热心",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "热心",
+      "group": "",
+      "type": "驱逐"
+    },
+    "焦苏埃·卡尔杜齐": {
+      "name": "焦苏埃·卡尔杜齐",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "焦苏埃·卡尔杜齐",
+      "group": "",
+      "type": "驱逐"
+    },
+    "爱丁堡": {
+      "name": "爱丁堡",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "爱丁堡",
+      "group": "",
+      "type": "轻巡"
+    },
+    "爱斯基摩人": {
+      "name": "爱斯基摩人",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "爱斯基摩人",
+      "group": "",
+      "type": "驱逐"
+    },
+    "牙买加": {
+      "name": "牙买加",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "牙买加",
+      "group": "",
+      "type": "轻巡"
+    },
+    "特伦托": {
+      "name": "特伦托",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "特伦托",
+      "group": "",
+      "type": "重巡"
+    },
+    "特拉法尔加": {
+      "name": "特拉法尔加",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "特拉法尔加",
+      "group": "",
+      "type": "驱逐"
+    },
+    "特立尼达": {
+      "name": "特立尼达",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "特立尼达",
+      "group": "",
+      "type": "轻巡"
+    },
+    "特装型布里MKIII": {
+      "name": "特装型布里MKIII",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "特装型布里MKIII",
+      "group": "",
+      "type": "驱逐"
+    },
+    "图林根": {
+      "name": "图林根",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "图林根",
+      "group": "",
+      "type": "战列"
+    },
+    "爱宕": {
+      "name": "爱宕",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "爱宕",
+      "group": "",
+      "type": "重巡"
+    },
+    "摩耶": {
+      "name": "摩耶",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "摩耶",
+      "group": "",
+      "type": "重巡"
+    },
+    "羽黑": {
+      "name": "羽黑",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "羽黑",
+      "group": "",
+      "type": "重巡"
+    },
+    "青叶": {
+      "name": "青叶",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "青叶",
+      "group": "",
+      "type": "重巡"
+    },
+    "加古": {
+      "name": "加古",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "加古",
+      "group": "",
+      "type": "重巡"
+    },
+    "那智": {
+      "name": "那智",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "那智",
+      "group": "",
+      "type": "重巡"
+    },
+    "夕张": {
+      "name": "夕张",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "夕张",
+      "group": "",
+      "type": "轻巡"
+    },
+    "狐提": {
+      "name": "狐提",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "狐提",
+      "group": "",
+      "type": "驱逐"
+    },
+    "筑摩": {
+      "name": "筑摩",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "筑摩",
+      "group": "",
+      "type": "重巡"
+    },
+    "独立": {
+      "name": "独立",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "独立",
+      "group": "",
+      "type": "轻航"
+    },
+    "独角兽": {
+      "name": "独角兽",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "独角兽",
+      "group": "",
+      "type": "轻航"
+    },
+    "狮": {
+      "name": "狮",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "狮",
+      "group": "",
+      "type": "战列"
+    },
+    "足柄": {
+      "name": "足柄",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "足柄",
+      "group": "",
+      "type": "重巡"
+    },
+    "铃谷": {
+      "name": "铃谷",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "铃谷",
+      "group": "",
+      "type": "重巡"
+    },
+    "三隈": {
+      "name": "三隈",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "三隈",
+      "group": "",
+      "type": "轻巡"
+    },
+    "古鹰": {
+      "name": "古鹰",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "古鹰",
+      "group": "",
+      "type": "重巡"
+    },
+    "熊野": {
+      "name": "熊野",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "熊野",
+      "group": "",
+      "type": "重巡"
+    },
+    "云仙": {
+      "name": "云仙",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "云仙",
+      "group": "",
+      "type": "重巡"
+    },
+    "衣笠": {
+      "name": "衣笠",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "衣笠",
+      "group": "",
+      "type": "重巡"
+    },
+    "鸟海": {
+      "name": "鸟海",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "鸟海",
+      "group": "",
+      "type": "重巡"
+    },
+    "猎人": {
+      "name": "猎人",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "猎人",
+      "group": "",
+      "type": "驱逐"
+    },
+    "浅间": {
+      "name": "浅间",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "浅间",
+      "group": "",
+      "type": "重巡"
+    },
+    "鬼怒": {
+      "name": "鬼怒",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "鬼怒",
+      "group": "",
+      "type": "轻巡"
+    },
+    "最上": {
+      "name": "最上",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "最上",
+      "group": "",
+      "type": "轻巡"
+    },
+    "名取": {
+      "name": "名取",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "名取",
+      "group": "",
+      "type": "轻巡"
+    },
+    "妙高": {
+      "name": "妙高",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "妙高",
+      "group": "",
+      "type": "重巡"
+    },
+    "高雄": {
+      "name": "高雄",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "高雄",
+      "group": "",
+      "type": "重巡"
+    },
+    "玛丽·西莱斯特号": {
+      "name": "玛丽·西莱斯特号",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "玛丽·西莱斯特号",
+      "group": "",
+      "type": "风帆S"
+    },
+    "珍珠号": {
+      "name": "珍珠号",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "珍珠号",
+      "group": "",
+      "type": "风帆M"
+    },
+    "雷根斯堡": {
+      "name": "雷根斯堡",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "雷根斯堡",
+      "group": "",
+      "type": "轻巡"
+    },
+    "瑟堡": {
+      "name": "瑟堡",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "瑟堡",
+      "group": "",
+      "type": "超巡"
+    },
+    "甘古特": {
+      "name": "甘古特",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "甘古特",
+      "group": "",
+      "type": "战列"
+    },
+    "田纳西": {
+      "name": "田纳西",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "田纳西",
+      "group": "",
+      "type": "战列"
+    },
+    "百眼巨人": {
+      "name": "百眼巨人",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "百眼巨人",
+      "group": "",
+      "type": "轻航"
+    },
+    "的里雅斯特": {
+      "name": "的里雅斯特",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "的里雅斯特",
+      "group": "",
+      "type": "重巡"
+    },
+    "皇家方舟": {
+      "name": "皇家方舟",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "皇家方舟",
+      "group": "",
+      "type": "航母"
+    },
+    "皇家橡树": {
+      "name": "皇家橡树",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "皇家橡树",
+      "group": "",
+      "type": "战列"
+    },
+    "皇家詹姆斯号": {
+      "name": "皇家詹姆斯号",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "皇家詹姆斯号",
+      "group": "",
+      "type": "风帆V"
+    },
+    "皇家财富号": {
+      "name": "皇家财富号",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "皇家财富号",
+      "group": "",
+      "type": "风帆S"
+    },
+    "盐湖城": {
+      "name": "盐湖城",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "盐湖城",
+      "group": "",
+      "type": "重巡"
+    },
+    "确捷": {
+      "name": "确捷",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "确捷",
+      "group": "",
+      "type": "轻巡"
+    },
+    "神速": {
+      "name": "神速",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "神速",
+      "group": "",
+      "type": "驱逐"
+    },
+    "福尔班": {
+      "name": "福尔班",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "福尔班",
+      "group": "",
+      "type": "驱逐"
+    },
+    "福煦": {
+      "name": "福煦",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "福煦",
+      "group": "",
+      "type": "重巡"
+    },
+    "科尔克": {
+      "name": "科尔克",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "科尔克",
+      "group": "",
+      "type": "驱逐"
+    },
+    "科本斯": {
+      "name": "科本斯",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "科本斯",
+      "group": "",
+      "type": "轻航"
+    },
+    "科罗拉多": {
+      "name": "科罗拉多",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "科罗拉多",
+      "group": "",
+      "type": "战列"
+    },
+    "突击者": {
+      "name": "突击者",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "突击者",
+      "group": "",
+      "type": "轻航"
+    },
+    "竞技神": {
+      "name": "竞技神",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "竞技神",
+      "group": "",
+      "type": "轻航"
+    },
+    "让·巴尔": {
+      "name": "让·巴尔",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "让·巴尔",
+      "group": "",
+      "type": "战列"
+    },
+    "米勒": {
+      "name": "米勒",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "米勒",
+      "group": "",
+      "type": "驱逐"
+    },
+    "絮库夫": {
+      "name": "絮库夫",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "絮库夫",
+      "group": "",
+      "type": "潜艇"
+    },
+    "絮弗伦": {
+      "name": "絮弗伦",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "絮弗伦",
+      "group": "",
+      "type": "重巡"
+    },
+    "红色山脉": {
+      "name": "红色山脉",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "红色山脉",
+      "group": "",
+      "type": "轻巡"
+    },
+    "约克": {
+      "name": "约克",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "约克",
+      "group": "",
+      "type": "重巡"
+    },
+    "约克DE": {
+      "name": "约克DE",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "约克DE",
+      "group": "",
+      "type": "重巡"
+    },
+    "约克公爵": {
+      "name": "约克公爵",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "约克公爵",
+      "group": "",
+      "type": "战列"
+    },
+    "约克城": {
+      "name": "约克城",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "约克城",
+      "group": "",
+      "type": "航母"
+    },
+    "约克城II": {
+      "name": "约克城II",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "约克城II",
+      "group": "",
+      "type": "航母"
+    },
+    "约翰·罗杰斯": {
+      "name": "约翰·罗杰斯",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "约翰·罗杰斯",
+      "group": "",
+      "type": "驱逐"
+    },
+    "纳尔逊": {
+      "name": "纳尔逊",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "纳尔逊",
+      "group": "",
+      "type": "战列"
+    },
+    "纽卡斯尔": {
+      "name": "纽卡斯尔",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "纽卡斯尔",
+      "group": "",
+      "type": "轻巡"
+    },
+    "绫濑": {
+      "name": "绫濑",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "绫濑",
+      "group": "",
+      "type": "轻巡"
+    },
+    "维克斯堡": {
+      "name": "维克斯堡",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "维克斯堡",
+      "group": "",
+      "type": "轻巡"
+    },
+    "维托里奥·维内托": {
+      "name": "维托里奥·维内托",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "维托里奥·维内托",
+      "group": "",
+      "type": "战列"
+    },
+    "维达号": {
+      "name": "维达号",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "维达号",
+      "group": "",
+      "type": "风帆S"
+    },
+    "罗利": {
+      "name": "罗利",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "罗利",
+      "group": "",
+      "type": "轻巡"
+    },
+    "罗德尼": {
+      "name": "罗德尼",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "罗德尼",
+      "group": "",
+      "type": "战列"
+    },
+    "罗马": {
+      "name": "罗马",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "罗马",
+      "group": "",
+      "type": "战列"
+    },
+    "肇和": {
+      "name": "肇和",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "肇和",
+      "group": "",
+      "type": "轻巡"
+    },
+    "肯特": {
+      "name": "肯特",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "肯特",
+      "group": "",
+      "type": "重巡"
+    },
+    "胜利": {
+      "name": "胜利",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "胜利",
+      "group": "",
+      "type": "航母"
+    },
+    "胡德": {
+      "name": "胡德",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "胡德",
+      "group": "",
+      "type": "战巡"
+    },
+    "胡蜂": {
+      "name": "胡蜂",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "胡蜂",
+      "group": "",
+      "type": "航母"
+    },
+    "腓特烈·卡尔": {
+      "name": "腓特烈·卡尔",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "腓特烈·卡尔",
+      "group": "",
+      "type": "重巡"
+    },
+    "艾伦·萨姆纳": {
+      "name": "艾伦·萨姆纳",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "艾伦·萨姆纳",
+      "group": "",
+      "type": "驱逐"
+    },
+    "罗恩(μ兵装)": {
+      "name": "罗恩(μ兵装)",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "罗恩(μ兵装)",
+      "group": "",
+      "type": "重巡"
+    },
+    "艾尔温": {
+      "name": "艾尔温",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "艾尔温",
+      "group": "",
+      "type": "驱逐"
+    },
+    "岛风": {
+      "name": "岛风",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "岛风",
+      "group": "",
+      "type": "驱逐"
+    },
+    "希佩尔海军上将": {
+      "name": "希佩尔海军上将",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "希佩尔海军上将",
+      "group": "",
+      "type": "重巡"
+    },
+    "希佩尔海军上将(μ兵装)": {
+      "name": "希佩尔海军上将(μ兵装)",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "希佩尔海军上将(μ兵装)",
+      "group": "",
+      "type": "重巡"
+    },
+    "芝加哥": {
+      "name": "芝加哥",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "芝加哥",
+      "group": "",
+      "type": "重巡"
+    },
+    "花剑": {
+      "name": "花剑",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "花剑",
+      "group": "",
+      "type": "驱逐"
+    },
+    "新泽西": {
+      "name": "新泽西",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "新泽西",
+      "group": "",
+      "type": "战列"
+    },
+    "长波": {
+      "name": "长波",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "长波",
+      "group": "",
+      "type": "驱逐"
+    },
+    "苏塞克斯": {
+      "name": "苏塞克斯",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "苏塞克斯",
+      "group": "",
+      "type": "重巡"
+    },
+    "苏维埃罗西亚": {
+      "name": "苏维埃罗西亚",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "苏维埃罗西亚",
+      "group": "",
+      "type": "战列"
+    },
+    "苏维埃同盟": {
+      "name": "苏维埃同盟",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "苏维埃同盟",
+      "group": "",
+      "type": "战列"
+    },
+    "苏维埃贝拉罗斯": {
+      "name": "苏维埃贝拉罗斯",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "苏维埃贝拉罗斯",
+      "group": "",
+      "type": "战列"
+    },
+    "野分": {
+      "name": "野分",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "野分",
+      "group": "",
+      "type": "驱逐"
+    },
+    "若月": {
+      "name": "若月",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "若月",
+      "group": "",
+      "type": "驱逐"
+    },
+    "英仙座": {
+      "name": "英仙座",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "英仙座",
+      "group": "",
+      "type": "轻航"
+    },
+    "英勇": {
+      "name": "英勇",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "英勇",
+      "group": "",
+      "type": "战列"
+    },
+    "英王乔治五世": {
+      "name": "英王乔治五世",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "英王乔治五世",
+      "group": "",
+      "type": "战列"
+    },
+    "英雄": {
+      "name": "英雄",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "英雄",
+      "group": "",
+      "type": "驱逐"
+    },
+    "明石": {
+      "name": "明石",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "明石",
+      "group": "",
+      "type": "维修"
+    },
+    "江风": {
+      "name": "江风",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "江风",
+      "group": "",
+      "type": "驱逐"
+    },
+    "大潮": {
+      "name": "大潮",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "大潮",
+      "group": "",
+      "type": "驱逐"
+    },
+    "莱比锡": {
+      "name": "莱比锡",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "莱比锡",
+      "group": "",
+      "type": "轻巡"
+    },
+    "莫加多尔": {
+      "name": "莫加多尔",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "莫加多尔",
+      "group": "",
+      "type": "驱逐"
+    },
+    "莫斯科": {
+      "name": "莫斯科",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "莫斯科",
+      "group": "",
+      "type": "重巡"
+    },
+    "莫里茨亲王": {
+      "name": "莫里茨亲王",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "莫里茨亲王",
+      "group": "",
+      "type": "重巡"
+    },
+    "莫里": {
+      "name": "莫里",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "莫里",
+      "group": "",
+      "type": "驱逐"
+    },
+    "莱姆号": {
+      "name": "莱姆号",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "莱姆号",
+      "group": "",
+      "type": "风帆V"
+    },
+    "莱昂纳多·达·芬奇": {
+      "name": "莱昂纳多·达·芬奇",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "莱昂纳多·达·芬奇",
+      "group": "",
+      "type": "潜艇"
+    },
+    "天津风": {
+      "name": "天津风",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "天津风",
+      "group": "",
+      "type": "驱逐"
+    },
+    "海风": {
+      "name": "海风",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "海风",
+      "group": "",
+      "type": "驱逐"
+    },
+    "菲尼克斯": {
+      "name": "菲尼克斯",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "菲尼克斯",
+      "group": "",
+      "type": "轻巡"
+    },
+    "弗里茨·鲁梅": {
+      "name": "弗里茨·鲁梅",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "弗里茨·鲁梅",
+      "group": "",
+      "type": "航母"
+    },
+    "萤火虫": {
+      "name": "萤火虫",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "萤火虫",
+      "group": "",
+      "type": "驱逐"
+    },
+    "萨拉托加": {
+      "name": "萨拉托加",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "萨拉托加",
+      "group": "",
+      "type": "航母"
+    },
+    "欧根亲王": {
+      "name": "欧根亲王",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "欧根亲王",
+      "group": "",
+      "type": "重巡"
+    },
+    "欧根亲王(μ兵装)": {
+      "name": "欧根亲王(μ兵装)",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "欧根亲王(μ兵装)",
+      "group": "",
+      "type": "重巡"
+    },
+    "萨福克": {
+      "name": "萨福克",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "萨福克",
+      "group": "",
+      "type": "重巡"
+    },
+    "萨里": {
+      "name": "萨里",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "萨里",
+      "group": "",
+      "type": "重巡"
+    },
+    "阳炎": {
+      "name": "阳炎",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "阳炎",
+      "group": "",
+      "type": "驱逐"
+    },
+    "蒙彼利埃": {
+      "name": "蒙彼利埃",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "蒙彼利埃",
+      "group": "",
+      "type": "轻巡"
+    },
+    "不知火": {
+      "name": "不知火",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "不知火",
+      "group": "",
+      "type": "驱逐"
+    },
+    "黑潮": {
+      "name": "黑潮",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "黑潮",
+      "group": "",
+      "type": "驱逐"
+    },
+    "蓝鳃鱼": {
+      "name": "蓝鳃鱼",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "蓝鳃鱼",
+      "group": "",
+      "type": "潜艇"
+    },
+    "藤波": {
+      "name": "藤波",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "藤波",
+      "group": "",
+      "type": "驱逐"
+    },
+    "亲潮": {
+      "name": "亲潮",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "亲潮",
+      "group": "",
+      "type": "驱逐"
+    },
+    "虎": {
+      "name": "虎",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "虎",
+      "group": "",
+      "type": "轻巡"
+    },
+    "虎贲": {
+      "name": "虎贲",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "虎贲",
+      "group": "",
+      "type": "驱逐"
+    },
+    "苍龙": {
+      "name": "苍龙",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "苍龙",
+      "group": "",
+      "type": "航母"
+    },
+    "日向": {
+      "name": "日向",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "日向",
+      "group": "",
+      "type": "战列"
+    },
+    "伊19": {
+      "name": "伊19",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "伊19",
+      "group": "",
+      "type": "潜艇"
+    },
+    "西北风": {
+      "name": "西北风",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "西北风",
+      "group": "",
+      "type": "驱逐"
+    },
+    "西南风": {
+      "name": "西南风",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "西南风",
+      "group": "",
+      "type": "驱逐"
+    },
+    "西姆斯": {
+      "name": "西姆斯",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "西姆斯",
+      "group": "",
+      "type": "驱逐"
+    },
+    "西弗吉尼亚": {
+      "name": "西弗吉尼亚",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "西弗吉尼亚",
+      "group": "",
+      "type": "战列"
+    },
+    "试作型布里MKII": {
+      "name": "试作型布里MKII",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "试作型布里MKII",
+      "group": "",
+      "type": "驱逐"
+    },
+    "伊404": {
+      "name": "伊404",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "伊404",
+      "group": "",
+      "type": "潜母"
+    },
+    "诺福克": {
+      "name": "诺福克",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "诺福克",
+      "group": "",
+      "type": "重巡"
+    },
+    "纽伦堡": {
+      "name": "纽伦堡",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "纽伦堡",
+      "group": "",
+      "type": "轻巡"
+    },
+    "谢菲尔德": {
+      "name": "谢菲尔德",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "谢菲尔德",
+      "group": "",
+      "type": "轻巡"
+    },
+    "谢菲尔德(μ兵装)": {
+      "name": "谢菲尔德(μ兵装)",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "谢菲尔德(μ兵装)",
+      "group": "",
+      "type": "轻巡"
+    },
+    "豪": {
+      "name": "豪",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "豪",
+      "group": "",
+      "type": "战列"
+    },
+    "那珂": {
+      "name": "那珂",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "那珂",
+      "group": "",
+      "type": "轻巡"
+    },
+    "阿贺野": {
+      "name": "阿贺野",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "阿贺野",
+      "group": "",
+      "type": "轻巡"
+    },
+    "名寄": {
+      "name": "名寄",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "名寄",
+      "group": "",
+      "type": "轻巡"
+    },
+    "阿武隈": {
+      "name": "阿武隈",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "阿武隈",
+      "group": "",
+      "type": "轻巡"
+    },
+    "酒匂": {
+      "name": "酒匂",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "酒匂",
+      "group": "",
+      "type": "轻巡"
+    },
+    "能代": {
+      "name": "能代",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "能代",
+      "group": "",
+      "type": "轻巡"
+    },
+    "能代(μ兵装)": {
+      "name": "能代(μ兵装)",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "能代(μ兵装)",
+      "group": "",
+      "type": "轻巡"
+    },
+    "川内": {
+      "name": "川内",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "川内",
+      "group": "",
+      "type": "轻巡"
+    },
+    "长良": {
+      "name": "长良",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "长良",
+      "group": "",
+      "type": "轻巡"
+    },
+    "神通": {
+      "name": "神通",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "神通",
+      "group": "",
+      "type": "轻巡"
+    },
+    "木津": {
+      "name": "木津",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "木津",
+      "group": "",
+      "type": "轻巡"
+    },
+    "贝亚恩": {
+      "name": "贝亚恩",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "贝亚恩",
+      "group": "",
+      "type": "航母"
+    },
+    "贝利": {
+      "name": "贝利",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "贝利",
+      "group": "",
+      "type": "驱逐"
+    },
+    "贝劳森林": {
+      "name": "贝劳森林",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "贝劳森林",
+      "group": "",
+      "type": "轻航"
+    },
+    "贝奇": {
+      "name": "贝奇",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "贝奇",
+      "group": "",
+      "type": "驱逐"
+    },
+    "贝尔": {
+      "name": "贝尔",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "贝尔",
+      "group": "",
+      "type": "驱逐"
+    },
+    "贝尔法斯特": {
+      "name": "贝尔法斯特",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "贝尔法斯特",
+      "group": "",
+      "type": "轻巡"
+    },
+    "布伦希尔德": {
+      "name": "布伦希尔德",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "布伦希尔德",
+      "group": "",
+      "type": "战巡"
+    },
+    "贾维斯": {
+      "name": "贾维斯",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "贾维斯",
+      "group": "",
+      "type": "驱逐"
+    },
+    "赫敏": {
+      "name": "赫敏",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "赫敏",
+      "group": "",
+      "type": "轻巡"
+    },
+    "海因里希亲王": {
+      "name": "海因里希亲王",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "海因里希亲王",
+      "group": "",
+      "type": "重巡"
+    },
+    "路易斯维尔": {
+      "name": "路易斯维尔",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "路易斯维尔",
+      "group": "",
+      "type": "重巡"
+    },
+    "进取": {
+      "name": "进取",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "进取",
+      "group": "",
+      "type": "轻巡"
+    },
+    "迪凯纳": {
+      "name": "迪凯纳",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "迪凯纳",
+      "group": "",
+      "type": "重巡"
+    },
+    "迪普莱克斯": {
+      "name": "迪普莱克斯",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "迪普莱克斯",
+      "group": "",
+      "type": "重巡"
+    },
+    "迪盖·特鲁因": {
+      "name": "迪盖·特鲁因",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "迪盖·特鲁因",
+      "group": "",
+      "type": "轻巡"
+    },
+    "追赶者": {
+      "name": "追赶者",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "追赶者",
+      "group": "",
+      "type": "轻航"
+    },
+    "逸仙": {
+      "name": "逸仙",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "逸仙",
+      "group": "",
+      "type": "轻巡"
+    },
+    "邦克山": {
+      "name": "邦克山",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "邦克山",
+      "group": "",
+      "type": "航母"
+    },
+    "里士满": {
+      "name": "里士满",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "里士满",
+      "group": "",
+      "type": "轻巡"
+    },
+    "里昂": {
+      "name": "里昂",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "里昂",
+      "group": "",
+      "type": "战列"
+    },
+    "里诺": {
+      "name": "里诺",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "里诺",
+      "group": "",
+      "type": "轻巡"
+    },
+    "重剑": {
+      "name": "重剑",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "重剑",
+      "group": "",
+      "type": "驱逐"
+    },
+    "金伯利": {
+      "name": "金伯利",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "金伯利",
+      "group": "",
+      "type": "驱逐"
+    },
+    "金鹿号": {
+      "name": "金鹿号",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "金鹿号",
+      "group": "",
+      "type": "风帆V"
+    },
+    "镇海": {
+      "name": "镇海",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "镇海",
+      "group": "",
+      "type": "轻航"
+    },
+    "长岛": {
+      "name": "长岛",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "长岛",
+      "group": "",
+      "type": "轻航"
+    },
+    "长春": {
+      "name": "长春",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "长春",
+      "group": "",
+      "type": "驱逐"
+    },
+    "长风": {
+      "name": "长风",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "长风",
+      "group": "",
+      "type": "驱逐"
+    },
+    "阿卡司塔": {
+      "name": "阿卡司塔",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "阿卡司塔",
+      "group": "",
+      "type": "驱逐"
+    },
+    "阿基里斯": {
+      "name": "阿基里斯",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "阿基里斯",
+      "group": "",
+      "type": "轻巡"
+    },
+    "柯尼斯堡": {
+      "name": "柯尼斯堡",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "柯尼斯堡",
+      "group": "",
+      "type": "轻巡"
+    },
+    "阿尔及利亚": {
+      "name": "阿尔及利亚",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "阿尔及利亚",
+      "group": "",
+      "type": "重巡"
+    },
+    "阿尔弗雷多·奥里亚尼": {
+      "name": "阿尔弗雷多·奥里亚尼",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "阿尔弗雷多·奥里亚尼",
+      "group": "",
+      "type": "驱逐"
+    },
+    "阿尔比恩": {
+      "name": "阿尔比恩",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "阿尔比恩",
+      "group": "",
+      "type": "轻航"
+    },
+    "阿尔汉格尔斯克": {
+      "name": "阿尔汉格尔斯克",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "阿尔汉格尔斯克",
+      "group": "",
+      "type": "战列"
+    },
+    "提尔比茨": {
+      "name": "提尔比茨",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "提尔比茨",
+      "group": "",
+      "type": "战列"
+    },
+    "阿尔萨斯": {
+      "name": "阿尔萨斯",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "阿尔萨斯",
+      "group": "",
+      "type": "战列"
+    },
+    "阿尔贝托·迪·朱塞诺": {
+      "name": "阿尔贝托·迪·朱塞诺",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "阿尔贝托·迪·朱塞诺",
+      "group": "",
+      "type": "轻巡"
+    },
+    "阿布鲁齐公爵": {
+      "name": "阿布鲁齐公爵",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "阿布鲁齐公爵",
+      "group": "",
+      "type": "轻巡"
+    },
+    "阿达尔伯特亲王": {
+      "name": "阿达尔伯特亲王",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "阿达尔伯特亲王",
+      "group": "",
+      "type": "重巡"
+    },
+    "阿拉巴马": {
+      "name": "阿拉巴马",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "阿拉巴马",
+      "group": "",
+      "type": "战列"
+    },
+    "阿斯托利亚": {
+      "name": "阿斯托利亚",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "阿斯托利亚",
+      "group": "",
+      "type": "重巡"
+    },
+    "阿瑞托莎": {
+      "name": "阿瑞托莎",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "阿瑞托莎",
+      "group": "",
+      "type": "轻巡"
+    },
+    "阿罗芒什": {
+      "name": "阿罗芒什",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "阿罗芒什",
+      "group": "",
+      "type": "轻航"
+    },
+    "阿芙乐尔": {
+      "name": "阿芙乐尔",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "阿芙乐尔",
+      "group": "",
+      "type": "轻巡"
+    },
+    "阿蒂利奥·雷戈洛": {
+      "name": "阿蒂利奥·雷戈洛",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "阿蒂利奥·雷戈洛",
+      "group": "",
+      "type": "驱逐"
+    },
+    "阿贝克隆比": {
+      "name": "阿贝克隆比",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "阿贝克隆比",
+      "group": "",
+      "type": "重炮"
+    },
+    "阿贾克斯": {
+      "name": "阿贾克斯",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "阿贾克斯",
+      "group": "",
+      "type": "轻巡"
+    },
+    "亚德": {
+      "name": "亚德",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "亚德",
+      "group": "",
+      "type": "轻航"
+    },
+    "雅努斯": {
+      "name": "雅努斯",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "雅努斯",
+      "group": "",
+      "type": "驱逐"
+    },
+    "雪风": {
+      "name": "雪风",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "雪风",
+      "group": "",
+      "type": "驱逐"
+    },
+    "雷鸣": {
+      "name": "雷鸣",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "雷鸣",
+      "group": "",
+      "type": "驱逐"
+    },
+    "旧金山": {
+      "name": "旧金山",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "旧金山",
+      "group": "",
+      "type": "重巡"
+    },
+    "霍比": {
+      "name": "霍比",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "霍比",
+      "group": "",
+      "type": "驱逐"
+    },
+    "霞": {
+      "name": "霞",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "霞",
+      "group": "",
+      "type": "驱逐"
+    },
+    "霞飞": {
+      "name": "霞飞",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "霞飞",
+      "group": "",
+      "type": "航母"
+    },
+    "吕佐夫": {
+      "name": "吕佐夫",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "吕佐夫",
+      "group": "",
+      "type": "战巡"
+    },
+    "云龙": {
+      "name": "云龙",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "云龙",
+      "group": "",
+      "type": "航母"
+    },
+    "鞍山": {
+      "name": "鞍山",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "鞍山",
+      "group": "",
+      "type": "驱逐"
+    },
+    "顽皮": {
+      "name": "顽皮",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "顽皮",
+      "group": "",
+      "type": "驱逐"
+    },
+    "飞云": {
+      "name": "飞云",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "飞云",
+      "group": "",
+      "type": "驱逐"
+    },
+    "香格里拉": {
+      "name": "香格里拉",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "香格里拉",
+      "group": "",
+      "type": "航母"
+    },
+    "马塞纳": {
+      "name": "马塞纳",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "马塞纳",
+      "group": "",
+      "type": "战巡"
+    },
+    "马布尔黑德": {
+      "name": "马布尔黑德",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "马布尔黑德",
+      "group": "",
+      "type": "轻巡"
+    },
+    "马拉尼": {
+      "name": "马拉尼",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "马拉尼",
+      "group": "",
+      "type": "驱逐"
+    },
+    "马格德堡": {
+      "name": "马格德堡",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "马格德堡",
+      "group": "",
+      "type": "轻巡"
+    },
+    "马耶·布雷泽": {
+      "name": "马耶·布雷泽",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "马耶·布雷泽",
+      "group": "",
+      "type": "驱逐"
+    },
+    "马萨诸塞": {
+      "name": "马萨诸塞",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "马萨诸塞",
+      "group": "",
+      "type": "战列"
+    },
+    "马赛曲": {
+      "name": "马赛曲",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "马赛曲",
+      "group": "",
+      "type": "轻巡"
+    },
+    "马里兰": {
+      "name": "马里兰",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "马里兰",
+      "group": "",
+      "type": "战列"
+    },
+    "扶桑": {
+      "name": "扶桑",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "扶桑",
+      "group": "",
+      "type": "战列"
+    },
+    "安土": {
+      "name": "安土",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "安土",
+      "group": "",
+      "type": "战巡"
+    },
+    "鲁莽": {
+      "name": "鲁莽",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "鲁莽",
+      "group": "",
+      "type": "驱逐"
+    },
+    "鲁莽(μ兵装)": {
+      "name": "鲁莽(μ兵装)",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "鲁莽(μ兵装)",
+      "group": "",
+      "type": "驱逐"
+    },
+    "三笠": {
+      "name": "三笠",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "三笠",
+      "group": "",
+      "type": "战列"
+    },
+    "榛名": {
+      "name": "榛名",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "榛名",
+      "group": "",
+      "type": "战巡"
+    },
+    "陆奥": {
+      "name": "陆奥",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "陆奥",
+      "group": "",
+      "type": "战列"
+    },
+    "比叡": {
+      "name": "比叡",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "比叡",
+      "group": "",
+      "type": "战巡"
+    },
+    "纪伊": {
+      "name": "纪伊",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "纪伊",
+      "group": "",
+      "type": "战列"
+    },
+    "金刚": {
+      "name": "金刚",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "金刚",
+      "group": "",
+      "type": "战巡"
+    },
+    "金刚(μ兵装)": {
+      "name": "金刚(μ兵装)",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "金刚(μ兵装)",
+      "group": "",
+      "type": "战巡"
+    },
+    "鲦鱼": {
+      "name": "鲦鱼",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "鲦鱼",
+      "group": "",
+      "type": "潜艇"
+    },
+    "长门": {
+      "name": "长门",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "长门",
+      "group": "",
+      "type": "战列"
+    },
+    "骏河": {
+      "name": "骏河",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "骏河",
+      "group": "",
+      "type": "战列"
+    },
+    "鲱鱼": {
+      "name": "鲱鱼",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "鲱鱼",
+      "group": "",
+      "type": "潜艇"
+    },
+    "山城": {
+      "name": "山城",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "山城",
+      "group": "",
+      "type": "战列"
+    },
+    "尾张": {
+      "name": "尾张",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "尾张",
+      "group": "",
+      "type": "战列"
+    },
+    "武藏": {
+      "name": "武藏",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "武藏",
+      "group": "",
+      "type": "战列"
+    },
+    "近江": {
+      "name": "近江",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "近江",
+      "group": "",
+      "type": "战列"
+    },
+    "伊势": {
+      "name": "伊势",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "伊势",
+      "group": "",
+      "type": "战列"
+    },
+    "雾岛": {
+      "name": "雾岛",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "雾岛",
+      "group": "",
+      "type": "战巡"
+    },
+    "信浓": {
+      "name": "信浓",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "信浓",
+      "group": "",
+      "type": "航母"
+    },
+    "龙凤": {
+      "name": "龙凤",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "龙凤",
+      "group": "",
+      "type": "轻航"
+    },
+    "隼鹰": {
+      "name": "隼鹰",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "隼鹰",
+      "group": "",
+      "type": "轻航"
+    },
+    "飞鹰": {
+      "name": "飞鹰",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "飞鹰",
+      "group": "",
+      "type": "轻航"
+    },
+    "千岁": {
+      "name": "千岁",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "千岁",
+      "group": "",
+      "type": "轻航"
+    },
+    "千代田": {
+      "name": "千代田",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "千代田",
+      "group": "",
+      "type": "轻航"
+    },
+    "葛城": {
+      "name": "葛城",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "葛城",
+      "group": "",
+      "type": "航母"
+    },
+    "祥凤": {
+      "name": "祥凤",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "祥凤",
+      "group": "",
+      "type": "轻航"
+    },
+    "瑞鹤": {
+      "name": "瑞鹤",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "瑞鹤",
+      "group": "",
+      "type": "航母"
+    },
+    "鹦鹉螺": {
+      "name": "鹦鹉螺",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "鹦鹉螺",
+      "group": "",
+      "type": "潜艇"
+    },
+    "大凤": {
+      "name": "大凤",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "大凤",
+      "group": "",
+      "type": "航母"
+    },
+    "大凤(μ兵装)": {
+      "name": "大凤(μ兵装)",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "大凤(μ兵装)",
+      "group": "",
+      "type": "航母"
+    },
+    "翔鹤": {
+      "name": "翔鹤",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "翔鹤",
+      "group": "",
+      "type": "航母"
+    },
+    "鹰": {
+      "name": "鹰",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "鹰",
+      "group": "",
+      "type": "航母"
+    },
+    "瑞凤": {
+      "name": "瑞凤",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "瑞凤",
+      "group": "",
+      "type": "轻航"
+    },
+    "麦考尔": {
+      "name": "麦考尔",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "麦考尔",
+      "group": "",
+      "type": "驱逐"
+    },
+    "黎塞留": {
+      "name": "黎塞留",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "黎塞留",
+      "group": "",
+      "type": "战列"
+    },
+    "黑太子": {
+      "name": "黑太子",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "黑太子",
+      "group": "",
+      "type": "轻巡"
+    },
+    "黑暗界": {
+      "name": "黑暗界",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "黑暗界",
+      "group": "",
+      "type": "重炮"
+    },
+    "黑泽伍德": {
+      "name": "黑泽伍德",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "黑泽伍德",
+      "group": "",
+      "type": "驱逐"
+    },
+    "黛朵": {
+      "name": "黛朵",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "黛朵",
+      "group": "",
+      "type": "轻巡"
+    },
+    "黛朵(μ兵装)": {
+      "name": "黛朵(μ兵装)",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "黛朵(μ兵装)",
+      "group": "",
+      "type": "轻巡"
+    },
+    "水无濑": {
+      "name": "水无濑",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "水无濑",
+      "group": "",
+      "type": "轻巡"
+    },
+    "飞龙": {
+      "name": "飞龙",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "飞龙",
+      "group": "",
+      "type": "航母"
+    },
+    "龙武": {
+      "name": "龙武",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "龙武",
+      "group": "",
+      "type": "驱逐"
+    },
+    "龙骑兵": {
+      "name": "龙骑兵",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "龙骑兵",
+      "group": "",
+      "type": "驱逐"
+    },
+    "亚利桑那·META": {
+      "name": "亚利桑那·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "亚利桑那·META",
+      "group": "META",
+      "type": "战列"
+    },
+    "伊丽莎白女王·META": {
+      "name": "伊丽莎白女王·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "伊丽莎白女王·META",
+      "group": "META",
+      "type": "战列"
+    },
+    "U-556·META": {
+      "name": "U-556·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "U-556·META",
+      "group": "META",
+      "type": "潜艇"
+    },
+    "光荣·META": {
+      "name": "光荣·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "光荣·META",
+      "group": "META",
+      "type": "航母"
+    },
+    "克利夫兰·META": {
+      "name": "克利夫兰·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "克利夫兰·META",
+      "group": "META",
+      "type": "轻巡"
+    },
+    "科隆·META": {
+      "name": "科隆·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "科隆·META",
+      "group": "META",
+      "type": "轻巡"
+    },
+    "内华达·META": {
+      "name": "内华达·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "内华达·META",
+      "group": "META",
+      "type": "战列"
+    },
+    "凤翔·META": {
+      "name": "凤翔·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "凤翔·META",
+      "group": "META",
+      "type": "轻航"
+    },
+    "博伊西·META": {
+      "name": "博伊西·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "博伊西·META",
+      "group": "META",
+      "type": "轻巡"
+    },
+    "博尔扎诺·META": {
+      "name": "博尔扎诺·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "博尔扎诺·META",
+      "group": "META",
+      "type": "重巡"
+    },
+    "反击·META": {
+      "name": "反击·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "反击·META",
+      "group": "META",
+      "type": "战巡"
+    },
+    "吸血鬼·META": {
+      "name": "吸血鬼·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "吸血鬼·META",
+      "group": "META",
+      "type": "驱逐"
+    },
+    "命运女神·META": {
+      "name": "命运女神·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "命运女神·META",
+      "group": "META",
+      "type": "驱逐"
+    },
+    "易北·META": {
+      "name": "易北·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "易北·META",
+      "group": "META",
+      "type": "轻航"
+    },
+    "基洛夫·META": {
+      "name": "基洛夫·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "基洛夫·META",
+      "group": "META",
+      "type": "轻巡"
+    },
+    "声望·META": {
+      "name": "声望·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "声望·META",
+      "group": "META",
+      "type": "战巡"
+    },
+    "大凤·META": {
+      "name": "大凤·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "大凤·META",
+      "group": "META",
+      "type": "航母"
+    },
+    "大黄蜂·META": {
+      "name": "大黄蜂·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "大黄蜂·META",
+      "group": "META",
+      "type": "航母"
+    },
+    "格奈森瑙·META": {
+      "name": "格奈森瑙·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "格奈森瑙·META",
+      "group": "META",
+      "type": "战巡"
+    },
+    "女灶神·META": {
+      "name": "女灶神·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "女灶神·META",
+      "group": "META",
+      "type": "维修"
+    },
+    "威奇塔·META": {
+      "name": "威奇塔·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "威奇塔·META",
+      "group": "META",
+      "type": "重巡"
+    },
+    "孟菲斯·META": {
+      "name": "孟菲斯·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "孟菲斯·META",
+      "group": "META",
+      "type": "轻巡"
+    },
+    "安德烈亚·多利亚·META": {
+      "name": "安德烈亚·多利亚·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "安德烈亚·多利亚·META",
+      "group": "META",
+      "type": "战列"
+    },
+    "布里斯托尔·META": {
+      "name": "布里斯托尔·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "布里斯托尔·META",
+      "group": "META",
+      "type": "驱逐"
+    },
+    "技能": {
+      "name": "技能",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "技能",
+      "group": "",
+      "type": ""
+    },
+    "拉·加利索尼埃·META": {
+      "name": "拉·加利索尼埃·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "拉·加利索尼埃·META",
+      "group": "META",
+      "type": "轻巡"
+    },
+    "敦刻尔克·META": {
+      "name": "敦刻尔克·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "敦刻尔克·META",
+      "group": "META",
+      "type": "战巡"
+    },
+    "普林斯顿·META": {
+      "name": "普林斯顿·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "普林斯顿·META",
+      "group": "META",
+      "type": "轻航"
+    },
+    "朱利奥·凯撒·META": {
+      "name": "朱利奥·凯撒·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "朱利奥·凯撒·META",
+      "group": "META",
+      "type": "战列"
+    },
+    "杜威·META": {
+      "name": "杜威·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "杜威·META",
+      "group": "META",
+      "type": "驱逐"
+    },
+    "格伦维尔·META": {
+      "name": "格伦维尔·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "格伦维尔·META",
+      "group": "META",
+      "type": "驱逐"
+    },
+    "沙恩霍斯特·META": {
+      "name": "沙恩霍斯特·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "沙恩霍斯特·META",
+      "group": "META",
+      "type": "战巡"
+    },
+    "夕立·META": {
+      "name": "夕立·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "夕立·META",
+      "group": "META",
+      "type": "驱逐"
+    },
+    "旗风·META": {
+      "name": "旗风·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "旗风·META",
+      "group": "META",
+      "type": "驱逐"
+    },
+    "比叡·META": {
+      "name": "比叡·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "比叡·META",
+      "group": "META",
+      "type": "战巡"
+    },
+    "水星纪念·META": {
+      "name": "水星纪念·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "水星纪念·META",
+      "group": "META",
+      "type": "轻巡"
+    },
+    "海伦娜·META": {
+      "name": "海伦娜·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "海伦娜·META",
+      "group": "META",
+      "type": "轻巡"
+    },
+    "灵敏·META": {
+      "name": "灵敏·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "灵敏·META",
+      "group": "META",
+      "type": "驱逐"
+    },
+    "特伦托·META": {
+      "name": "特伦托·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "特伦托·META",
+      "group": "META",
+      "type": "重巡"
+    },
+    "猎人·META": {
+      "name": "猎人·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "猎人·META",
+      "group": "META",
+      "type": "驱逐"
+    },
+    "雷根斯堡·META": {
+      "name": "雷根斯堡·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "雷根斯堡·META",
+      "group": "META",
+      "type": "轻巡"
+    },
+    "甘古特·META": {
+      "name": "甘古特·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "甘古特·META",
+      "group": "META",
+      "type": "战列"
+    },
+    "皇家方舟·META": {
+      "name": "皇家方舟·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "皇家方舟·META",
+      "group": "META",
+      "type": "航母"
+    },
+    "福煦·META": {
+      "name": "福煦·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "福煦·META",
+      "group": "META",
+      "type": "重巡"
+    },
+    "约克城·META": {
+      "name": "约克城·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "约克城·META",
+      "group": "META",
+      "type": "航母"
+    },
+    "罗德尼·META": {
+      "name": "罗德尼·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "罗德尼·META",
+      "group": "META",
+      "type": "战列"
+    },
+    "胜利·META": {
+      "name": "胜利·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "胜利·META",
+      "group": "META",
+      "type": "航母"
+    },
+    "希佩尔海军上将·META": {
+      "name": "希佩尔海军上将·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "希佩尔海军上将·META",
+      "group": "META",
+      "type": "重巡"
+    },
+    "江风·META": {
+      "name": "江风·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "江风·META",
+      "group": "META",
+      "type": "驱逐"
+    },
+    "萨拉托加·META": {
+      "name": "萨拉托加·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "萨拉托加·META",
+      "group": "META",
+      "type": "航母"
+    },
+    "苍龙·META": {
+      "name": "苍龙·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "苍龙·META",
+      "group": "META",
+      "type": "航母"
+    },
+    "纽伦堡·META": {
+      "name": "纽伦堡·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "纽伦堡·META",
+      "group": "META",
+      "type": "轻巡"
+    },
+    "谢菲尔德·META": {
+      "name": "谢菲尔德·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "谢菲尔德·META",
+      "group": "META",
+      "type": "轻巡"
+    },
+    "神通·META": {
+      "name": "神通·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "神通·META",
+      "group": "META",
+      "type": "轻巡"
+    },
+    "贝亚恩·META": {
+      "name": "贝亚恩·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "贝亚恩·META",
+      "group": "META",
+      "type": "航母"
+    },
+    "金伯利·META": {
+      "name": "金伯利·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "金伯利·META",
+      "group": "META",
+      "type": "驱逐"
+    },
+    "长门·META": {
+      "name": "长门·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "长门·META",
+      "group": "META",
+      "type": "战列"
+    },
+    "柯尼斯堡·META": {
+      "name": "柯尼斯堡·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "柯尼斯堡·META",
+      "group": "META",
+      "type": "轻巡"
+    },
+    "阿尔及利亚·META": {
+      "name": "阿尔及利亚·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "阿尔及利亚·META",
+      "group": "META",
+      "type": "重巡"
+    },
+    "霞·META": {
+      "name": "霞·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "霞·META",
+      "group": "META",
+      "type": "驱逐"
+    },
+    "扶桑·META": {
+      "name": "扶桑·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "扶桑·META",
+      "group": "META",
+      "type": "战列"
+    },
+    "山城·META": {
+      "name": "山城·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "山城·META",
+      "group": "META",
+      "type": "战列"
+    },
+    "隼鹰·META": {
+      "name": "隼鹰·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "隼鹰·META",
+      "group": "META",
+      "type": "轻航"
+    },
+    "飞鹰·META": {
+      "name": "飞鹰·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "飞鹰·META",
+      "group": "META",
+      "type": "轻航"
+    },
+    "黑暗界·META": {
+      "name": "黑暗界·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "黑暗界·META",
+      "group": "META",
+      "type": "重炮"
+    },
+    "飞龙·META": {
+      "name": "飞龙·META",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "飞龙·META",
+      "group": "META",
+      "type": "航母"
+    },
+    "龙骑兵·META": {
+      "name": "龙骑兵·META",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "龙骑兵·META",
+      "group": "META",
+      "type": "驱逐"
+    },
+    "佐治亚": {
+      "name": "佐治亚",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "佐治亚",
+      "group": "方案",
+      "type": "战列"
+    },
+    "出云": {
+      "name": "出云",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "出云",
+      "group": "方案",
+      "type": "战列"
+    },
+    "加斯科涅": {
+      "name": "加斯科涅",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "加斯科涅",
+      "group": "方案",
+      "type": "战列"
+    },
+    "君主": {
+      "name": "君主",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "君主",
+      "group": "方案",
+      "type": "战列"
+    },
+    "哈尔福德": {
+      "name": "哈尔福德",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "哈尔福德",
+      "group": "方案",
+      "type": "驱逐"
+    },
+    "埃吉尔": {
+      "name": "埃吉尔",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "埃吉尔",
+      "group": "方案",
+      "type": "超巡"
+    },
+    "堪萨斯": {
+      "name": "堪萨斯",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "堪萨斯",
+      "group": "方案",
+      "type": "战列"
+    },
+    "大山": {
+      "name": "大山",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "大山",
+      "group": "方案",
+      "type": "战列"
+    },
+    "奇尔沙治": {
+      "name": "奇尔沙治",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "奇尔沙治",
+      "group": "方案",
+      "type": "航战"
+    },
+    "契卡洛夫": {
+      "name": "契卡洛夫",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "契卡洛夫",
+      "group": "方案",
+      "type": "航母"
+    },
+    "奥古斯特·冯·帕塞瓦尔": {
+      "name": "奥古斯特·冯·帕塞瓦尔",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "奥古斯特·冯·帕塞瓦尔",
+      "group": "方案",
+      "type": "航母"
+    },
+    "安克雷奇": {
+      "name": "安克雷奇",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "安克雷奇",
+      "group": "方案",
+      "type": "重巡"
+    },
+    "伊吹": {
+      "name": "伊吹",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "伊吹",
+      "group": "方案",
+      "type": "重巡"
+    },
+    "布雷斯特": {
+      "name": "布雷斯特",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "布雷斯特",
+      "group": "方案",
+      "type": "超巡"
+    },
+    "兴登堡": {
+      "name": "兴登堡",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "兴登堡",
+      "group": "方案",
+      "type": "重巡"
+    },
+    "弗兰德尔": {
+      "name": "弗兰德尔",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "弗兰德尔",
+      "group": "方案",
+      "type": "战列"
+    },
+    "菲利克斯·舒尔茨": {
+      "name": "菲利克斯·舒尔茨",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "菲利克斯·舒尔茨",
+      "group": "方案",
+      "type": "驱逐"
+    },
+    "德雷克": {
+      "name": "德雷克",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "德雷克",
+      "group": "方案",
+      "type": "重巡"
+    },
+    "普利茅斯": {
+      "name": "普利茅斯",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "普利茅斯",
+      "group": "方案",
+      "type": "轻巡"
+    },
+    "暴风雨": {
+      "name": "暴风雨",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "暴风雨",
+      "group": "方案",
+      "type": "驱逐"
+    },
+    "柴郡": {
+      "name": "柴郡",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "柴郡",
+      "group": "方案",
+      "type": "重巡"
+    },
+    "梅克伦堡": {
+      "name": "梅克伦堡",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "梅克伦堡",
+      "group": "方案",
+      "type": "战列"
+    },
+    "奥丁": {
+      "name": "奥丁",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "奥丁",
+      "group": "方案",
+      "type": "战巡"
+    },
+    "海王星": {
+      "name": "海王星",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "海王星",
+      "group": "方案",
+      "type": "轻巡"
+    },
+    "哈尔滨": {
+      "name": "哈尔滨",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "哈尔滨",
+      "group": "方案",
+      "type": "轻巡"
+    },
+    "高梁": {
+      "name": "高梁",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "高梁",
+      "group": "方案",
+      "type": "轻巡"
+    },
+    "吾妻": {
+      "name": "吾妻",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "吾妻",
+      "group": "方案",
+      "type": "超巡"
+    },
+    "马克斯·殷麦曼": {
+      "name": "马克斯·殷麦曼",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "马克斯·殷麦曼",
+      "group": "方案",
+      "type": "航母"
+    },
+    "瓦尔帕莱索": {
+      "name": "瓦尔帕莱索",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "瓦尔帕莱索",
+      "group": "方案",
+      "type": "战列"
+    },
+    "美因茨": {
+      "name": "美因茨",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "美因茨",
+      "group": "方案",
+      "type": "轻巡"
+    },
+    "纳希莫夫海军上将": {
+      "name": "纳希莫夫海军上将",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "纳希莫夫海军上将",
+      "group": "方案",
+      "type": "航母"
+    },
+    "维托里奥·库尼贝尔蒂": {
+      "name": "维托里奥·库尼贝尔蒂",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "维托里奥·库尼贝尔蒂",
+      "group": "方案",
+      "type": "驱逐"
+    },
+    "腓特烈大帝": {
+      "name": "腓特烈大帝",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "腓特烈大帝",
+      "group": "方案",
+      "type": "战列"
+    },
+    "罗恩": {
+      "name": "罗恩",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "罗恩",
+      "group": "方案",
+      "type": "重巡"
+    },
+    "北风": {
+      "name": "北风",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "北风",
+      "group": "方案",
+      "type": "驱逐"
+    },
+    "鲁普雷希特亲王": {
+      "name": "鲁普雷希特亲王",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "鲁普雷希特亲王",
+      "group": "方案",
+      "type": "战巡"
+    },
+    "四万十": {
+      "name": "四万十",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "四万十",
+      "group": "方案",
+      "type": "轻巡"
+    },
+    "西雅图": {
+      "name": "西雅图",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "西雅图",
+      "group": "方案",
+      "type": "轻巡"
+    },
+    "贝亚德": {
+      "name": "贝亚德",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "贝亚德",
+      "group": "方案",
+      "type": "轻巡"
+    },
+    "路易九世": {
+      "name": "路易九世",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "路易九世",
+      "group": "方案",
+      "type": "重巡"
+    },
+    "迪米特里·顿斯科伊": {
+      "name": "迪米特里·顿斯科伊",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "迪米特里·顿斯科伊",
+      "group": "方案",
+      "type": "轻巡"
+    },
+    "邓肯": {
+      "name": "邓肯",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "邓肯",
+      "group": "方案",
+      "type": "战巡"
+    },
+    "那不勒斯": {
+      "name": "那不勒斯",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "那不勒斯",
+      "group": "方案",
+      "type": "重巡"
+    },
+    "金狮": {
+      "name": "金狮",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "金狮",
+      "group": "方案",
+      "type": "重巡"
+    },
+    "香槟": {
+      "name": "香槟",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "香槟",
+      "group": "方案",
+      "type": "战列"
+    },
+    "马可·波罗": {
+      "name": "马可·波罗",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "马可·波罗",
+      "group": "方案",
+      "type": "战列"
+    },
+    "白龙": {
+      "name": "白龙",
+      "rarity": "UR",
+      "base_rarity": "UR",
+      "base_name": "白龙",
+      "group": "方案",
+      "type": "航母"
+    },
+    "Z1.改": {
+      "name": "Z1.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "Z1",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "五十铃.改": {
+      "name": "五十铃.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "五十铃",
+      "group": "改造",
+      "type": "轻巡"
+    },
+    "什罗普郡.改": {
+      "name": "什罗普郡.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "什罗普郡",
+      "group": "改造",
+      "type": "重巡"
+    },
+    "伦敦.改": {
+      "name": "伦敦.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "伦敦",
+      "group": "改造",
+      "type": "重巡"
+    },
+    "俄克拉荷马.改": {
+      "name": "俄克拉荷马.改",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "俄克拉荷马",
+      "group": "改造",
+      "type": "战列"
+    },
+    "科隆.改": {
+      "name": "科隆.改",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "科隆",
+      "group": "改造",
+      "type": "轻巡"
+    },
+    "兰利.改": {
+      "name": "兰利.改",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "兰利",
+      "group": "改造",
+      "type": "轻航"
+    },
+    "内华达.改": {
+      "name": "内华达.改",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "内华达",
+      "group": "改造",
+      "type": "战列"
+    },
+    "利安得.改": {
+      "name": "利安得.改",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "利安得",
+      "group": "改造",
+      "type": "轻巡"
+    },
+    "勇敢.改": {
+      "name": "勇敢.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "勇敢",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "勒马尔.改": {
+      "name": "勒马尔.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "勒马尔",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "华甲.改": {
+      "name": "华甲.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "华甲",
+      "group": "改造",
+      "type": "轻航"
+    },
+    "博格.改": {
+      "name": "博格.改",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "博格",
+      "group": "改造",
+      "type": "轻航"
+    },
+    "卡辛.改": {
+      "name": "卡辛.改",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "卡辛",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "厌战.改": {
+      "name": "厌战.改",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "厌战",
+      "group": "改造",
+      "type": "战列"
+    },
+    "命运女神.改": {
+      "name": "命运女神.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "命运女神",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "哈曼.改": {
+      "name": "哈曼.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "哈曼",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "唐斯.改": {
+      "name": "唐斯.改",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "唐斯",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "圣地亚哥.改": {
+      "name": "圣地亚哥.改",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "圣地亚哥",
+      "group": "改造",
+      "type": "轻巡"
+    },
+    "埃克塞特.改": {
+      "name": "埃克塞特.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "埃克塞特",
+      "group": "改造",
+      "type": "重巡"
+    },
+    "埃塞克斯.改": {
+      "name": "埃塞克斯.改",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "埃塞克斯",
+      "group": "改造",
+      "type": "航母"
+    },
+    "埃尔德里奇.改": {
+      "name": "埃尔德里奇.改",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "埃尔德里奇",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "埃米尔·贝尔汀.改": {
+      "name": "埃米尔·贝尔汀.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "埃米尔·贝尔汀",
+      "group": "改造",
+      "type": "轻巡"
+    },
+    "卡尔斯鲁厄.改": {
+      "name": "卡尔斯鲁厄.改",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "卡尔斯鲁厄",
+      "group": "改造",
+      "type": "轻巡"
+    },
+    "太原.改": {
+      "name": "太原.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "太原",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "女将.改": {
+      "name": "女将.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "女将",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "Z23.改": {
+      "name": "Z23.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "Z23",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "宁海.改": {
+      "name": "宁海.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "宁海",
+      "group": "改造",
+      "type": "轻巡"
+    },
+    "小天鹅.改": {
+      "name": "小天鹅.改",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "小天鹅",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "尼古拉斯.改": {
+      "name": "尼古拉斯.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "尼古拉斯",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "平海.改": {
+      "name": "平海.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "平海",
+      "group": "改造",
+      "type": "轻巡"
+    },
+    "库拉索.改": {
+      "name": "库拉索.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "库拉索",
+      "group": "改造",
+      "type": "轻巡"
+    },
+    "应瑞.改": {
+      "name": "应瑞.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "应瑞",
+      "group": "改造",
+      "type": "轻巡"
+    },
+    "彗星.改": {
+      "name": "彗星.改",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "彗星",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "抚顺.改": {
+      "name": "抚顺.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "抚顺",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "拉菲.改": {
+      "name": "拉菲.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "拉菲",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "新月.改": {
+      "name": "新月.改",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "新月",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "朱诺.改": {
+      "name": "朱诺.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "朱诺",
+      "group": "改造",
+      "type": "轻巡"
+    },
+    "杓鹬.改": {
+      "name": "杓鹬.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "杓鹬",
+      "group": "改造",
+      "type": "轻巡"
+    },
+    "睦月.改": {
+      "name": "睦月.改",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "睦月",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "绫波.改": {
+      "name": "绫波.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "绫波",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "查尔斯·奥斯本.改": {
+      "name": "查尔斯·奥斯本.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "查尔斯·奥斯本",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "标枪.改": {
+      "name": "标枪.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "标枪",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "谷风.改": {
+      "name": "谷风.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "谷风",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "时雨.改": {
+      "name": "时雨.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "时雨",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "初春.改": {
+      "name": "初春.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "初春",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "白露.改": {
+      "name": "白露.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "白露",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "松风.改": {
+      "name": "松风.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "松风",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "夕暮.改": {
+      "name": "夕暮.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "夕暮",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "夕立.改": {
+      "name": "夕立.改",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "夕立",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "神风.改": {
+      "name": "神风.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "神风",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "有明.改": {
+      "name": "有明.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "有明",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "滨风.改": {
+      "name": "滨风.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "滨风",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "如月.改": {
+      "name": "如月.改",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "如月",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "初霜.改": {
+      "name": "初霜.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "初霜",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "水星纪念.改": {
+      "name": "水星纪念.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "水星纪念",
+      "group": "改造",
+      "type": "轻巡"
+    },
+    "波特兰.改": {
+      "name": "波特兰.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "波特兰",
+      "group": "改造",
+      "type": "重巡"
+    },
+    "海伦娜.改": {
+      "name": "海伦娜.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "海伦娜",
+      "group": "改造",
+      "type": "轻巡"
+    },
+    "热心.改": {
+      "name": "热心.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "热心",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "加古.改": {
+      "name": "加古.改",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "加古",
+      "group": "改造",
+      "type": "重巡"
+    },
+    "那智.改": {
+      "name": "那智.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "那智",
+      "group": "改造",
+      "type": "重巡"
+    },
+    "夕张.改": {
+      "name": "夕张.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "夕张",
+      "group": "改造",
+      "type": "轻巡"
+    },
+    "狐提.改": {
+      "name": "狐提.改",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "狐提",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "独立.改": {
+      "name": "独立.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "独立",
+      "group": "改造",
+      "type": "轻航"
+    },
+    "独角兽.改": {
+      "name": "独角兽.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "独角兽",
+      "group": "改造",
+      "type": "轻航"
+    },
+    "古鹰.改": {
+      "name": "古鹰.改",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "古鹰",
+      "group": "改造",
+      "type": "重巡"
+    },
+    "鬼怒.改": {
+      "name": "鬼怒.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "鬼怒",
+      "group": "改造",
+      "type": "轻巡"
+    },
+    "最上.改": {
+      "name": "最上.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "最上",
+      "group": "改造",
+      "type": "轻巡"
+    },
+    "皇家方舟.改": {
+      "name": "皇家方舟.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "皇家方舟",
+      "group": "改造",
+      "type": "航母"
+    },
+    "福尔班.改": {
+      "name": "福尔班.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "福尔班",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "科罗拉多.改": {
+      "name": "科罗拉多.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "科罗拉多",
+      "group": "改造",
+      "type": "战列"
+    },
+    "突击者.改": {
+      "name": "突击者.改",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "突击者",
+      "group": "改造",
+      "type": "轻航"
+    },
+    "竞技神.改": {
+      "name": "竞技神.改",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "竞技神",
+      "group": "改造",
+      "type": "轻航"
+    },
+    "约克.改": {
+      "name": "约克.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "约克",
+      "group": "改造",
+      "type": "重巡"
+    },
+    "纳尔逊.改": {
+      "name": "纳尔逊.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "纳尔逊",
+      "group": "改造",
+      "type": "战列"
+    },
+    "纽卡斯尔.改": {
+      "name": "纽卡斯尔.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "纽卡斯尔",
+      "group": "改造",
+      "type": "轻巡"
+    },
+    "肇和.改": {
+      "name": "肇和.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "肇和",
+      "group": "改造",
+      "type": "轻巡"
+    },
+    "希佩尔海军上将.改": {
+      "name": "希佩尔海军上将.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "希佩尔海军上将",
+      "group": "改造",
+      "type": "重巡"
+    },
+    "莱比锡.改": {
+      "name": "莱比锡.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "莱比锡",
+      "group": "改造",
+      "type": "轻巡"
+    },
+    "莫里.改": {
+      "name": "莫里.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "莫里",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "萤火虫.改": {
+      "name": "萤火虫.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "萤火虫",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "萨拉托加.改": {
+      "name": "萨拉托加.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "萨拉托加",
+      "group": "改造",
+      "type": "航母"
+    },
+    "萨福克.改": {
+      "name": "萨福克.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "萨福克",
+      "group": "改造",
+      "type": "重巡"
+    },
+    "阳炎.改": {
+      "name": "阳炎.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "阳炎",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "不知火.改": {
+      "name": "不知火.改",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "不知火",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "苍龙.改": {
+      "name": "苍龙.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "苍龙",
+      "group": "改造",
+      "type": "航母"
+    },
+    "日向.改": {
+      "name": "日向.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "日向",
+      "group": "改造",
+      "type": "战列"
+    },
+    "西姆斯.改": {
+      "name": "西姆斯.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "西姆斯",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "西弗吉尼亚.改": {
+      "name": "西弗吉尼亚.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "西弗吉尼亚",
+      "group": "改造",
+      "type": "战列"
+    },
+    "阿武隈.改": {
+      "name": "阿武隈.改",
+      "rarity": "N",
+      "base_rarity": "N",
+      "base_name": "阿武隈",
+      "group": "改造",
+      "type": "轻巡"
+    },
+    "川内.改": {
+      "name": "川内.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "川内",
+      "group": "改造",
+      "type": "轻巡"
+    },
+    "神通.改": {
+      "name": "神通.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "神通",
+      "group": "改造",
+      "type": "轻巡"
+    },
+    "贝利.改": {
+      "name": "贝利.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "贝利",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "贝尔法斯特.改": {
+      "name": "贝尔法斯特.改",
+      "rarity": "SSR",
+      "base_rarity": "SSR",
+      "base_name": "贝尔法斯特",
+      "group": "改造",
+      "type": "轻巡"
+    },
+    "逸仙.改": {
+      "name": "逸仙.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "逸仙",
+      "group": "改造",
+      "type": "轻巡"
+    },
+    "镇海.改": {
+      "name": "镇海.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "镇海",
+      "group": "改造",
+      "type": "轻航"
+    },
+    "长岛.改": {
+      "name": "长岛.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "长岛",
+      "group": "改造",
+      "type": "轻航"
+    },
+    "长春.改": {
+      "name": "长春.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "长春",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "阿卡司塔.改": {
+      "name": "阿卡司塔.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "阿卡司塔",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "阿基里斯.改": {
+      "name": "阿基里斯.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "阿基里斯",
+      "group": "改造",
+      "type": "轻巡"
+    },
+    "阿贾克斯.改": {
+      "name": "阿贾克斯.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "阿贾克斯",
+      "group": "改造",
+      "type": "轻巡"
+    },
+    "霞.改": {
+      "name": "霞.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "霞",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "鞍山.改": {
+      "name": "鞍山.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "鞍山",
+      "group": "改造",
+      "type": "驱逐"
+    },
+    "马里兰.改": {
+      "name": "马里兰.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "马里兰",
+      "group": "改造",
+      "type": "战列"
+    },
+    "扶桑.改": {
+      "name": "扶桑.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "扶桑",
+      "group": "改造",
+      "type": "战列"
+    },
+    "山城.改": {
+      "name": "山城.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "山城",
+      "group": "改造",
+      "type": "战列"
+    },
+    "伊势.改": {
+      "name": "伊势.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "伊势",
+      "group": "改造",
+      "type": "战列"
+    },
+    "祥凤.改": {
+      "name": "祥凤.改",
+      "rarity": "R",
+      "base_rarity": "R",
+      "base_name": "祥凤",
+      "group": "改造",
+      "type": "轻航"
+    },
+    "飞龙.改": {
+      "name": "飞龙.改",
+      "rarity": "SR",
+      "base_rarity": "SR",
+      "base_name": "飞龙",
+      "group": "改造",
+      "type": "航母"
+    }
+  }
+}

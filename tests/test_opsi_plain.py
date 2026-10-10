@@ -33,6 +33,9 @@ class PlainStatisticsCase(unittest.TestCase):
         self.addCleanup(folder.cleanup)
         self.root = Path(folder.name)
         (self.root / 'config').mkdir()
+        from module.persistence.database import _directory
+        token = _directory.set(self.root / 'config')
+        self.addCleanup(_directory.reset, token)
         (self.root / 'log' / 'cl1' / 'inst').mkdir(parents=True)
         self.cl1 = self.root / 'config' / 'cl1_data.db'
         self.local = self.root / 'config' / 'azurstats_local.db'
@@ -44,8 +47,7 @@ class PlainStatisticsCase(unittest.TestCase):
         previous = opsi_secure._VAULT
         opsi_secure.set_vault(self.store)
         self.addCleanup(opsi_secure.set_vault, previous)
-        for item in (patch.object(Cl1Database, '_auto_migrate'),
-                     patch.object(AzurStats, 'LOCAL_DB', str(self.local)),
+        for item in (patch.object(AzurStats, 'LOCAL_DB', str(self.local)),
                      patch.object(AzurStats, 'LOCAL_MEOW_CSV', str(self.csv)),
                      patch.object(resource_stats, '_LOCAL_DB', str(self.local)),
                      patch.object(resource_stats, '_table_ensured', False),
@@ -69,7 +71,23 @@ class PlainStatisticsCase(unittest.TestCase):
             conn.execute('UPDATE cl1_data SET data_json=?', (canonical(self.full).decode(),))
         make_loot_db(self.local)
         self.ship.write_bytes(canonical({'battle_times': [1, 2, 3], 'custom': {'ship': 7}}))
-        self.csv.write_bytes(b'a,b\n1,2\n')
+        header = ','.join(AzurStats.meowofficer_farming_labels)
+        self.csv_raw = (header + '\n' + '\n'.join(f'{i},1800000000,1,20,2,0,0' for i in range(1, 7)) + '\n').encode('utf-8')
+        self.csv.write_bytes(self.csv_raw)
+        now = datetime.now().replace(microsecond=0).isoformat(' ')
+        daily = self.root / 'config' / 'daily_summary.db'
+        # 独立旧工具用例直接种入旧格式，不能经过已迁移的运行适配器写原件。
+        with closing(sqlite3.connect(daily)) as conn, conn:
+            conn.execute('CREATE TABLE daily_summary_cl1_events(id INTEGER PRIMARY KEY,instance TEXT,ts TEXT,'
+                         'duration_seconds REAL,estimated_exp INTEGER,secure_payload TEXT)')
+            conn.execute('INSERT INTO daily_summary_cl1_events VALUES(1,?,?,?,?,NULL)', ('inst', now, 23.5, 1871))
+            conn.execute("CREATE TABLE daily_summary_periods(id INTEGER PRIMARY KEY,instance TEXT,period_key TEXT,report_text TEXT,"
+                         "server TEXT DEFAULT 'cn',window_start TEXT DEFAULT '2026-10-05 00:00:00',"
+                         "window_end TEXT DEFAULT '2026-10-06 00:00:00',status TEXT DEFAULT 'sent',"
+                         "llm_attempts INTEGER DEFAULT 0,send_attempts INTEGER DEFAULT 0,error_kind TEXT,"
+                         "created_at TEXT DEFAULT '2026-10-05 00:00:00',updated_at TEXT DEFAULT '2026-10-05 00:00:00')")
+            conn.execute('INSERT INTO daily_summary_periods(instance,period_key,report_text) VALUES(?,?,?)',
+                         ('inst', '2026-10-05', '完整日报：23.5 秒，1871 经验'))
         # 首次加密前的原始备份应恢复成完全相同的字节。
         archive = self.root / 'AzurPilot_Data_Backup' / '2026-10-01' / 'cl1_data.db'
         archive.parent.mkdir(parents=True)
@@ -79,11 +97,6 @@ class PlainStatisticsCase(unittest.TestCase):
         vault = opsi_secure.Vault(self.root, provider=self.provider, background_migration=False, deep_check=False)
         opsi_secure.set_vault(vault)
         self.assertTrue(vault.ensure_ready())
-        summary = DailySummaryStore(self.root / 'config' / 'daily_summary.db')
-        now = datetime.now().replace(microsecond=0)
-        summary.record_cl1_battle_event('inst', now, 23.5, 1871)
-        self.assertTrue(summary.claim_period('inst', '2026-10-05', 'cn', now, now + timedelta(days=1)))
-        summary.update_period('inst', '2026-10-05', 'sent', report_text='完整日报：23.5 秒，1871 经验')
         self.encrypted = vault
         opsi_secure.set_vault(self.store)
 
@@ -100,18 +113,17 @@ class PlainStatisticsCase(unittest.TestCase):
             self.assertFalse(store.encrypted)
             self.assertFalse(store.keyring_path.exists())
 
-    def test_cl1_writes_full_plain_json(self):
+    def test_native_cl1_writes_complete_snapshot(self):
         database = Cl1Database(self.cl1)
         database.increment_battle_count('inst', 3)
         database.add_ap_snapshot('inst', 131, source='cl1')
         database.add_commission_income('inst', {'Gem': 5})
-        raw, encrypted, legacy = self.sql(self.cl1, 'SELECT data_json,secure_json,encrypted_blob FROM cl1_data')[0]
-        data = json.loads(raw)
+        data = database.get_stats('inst', datetime.now().strftime('%Y-%m'))
         self.assertEqual(data['battle_count'], 3)
         self.assertEqual(data['ap_snapshots'][0]['ap'], 131)
         self.assertEqual(len(data['commission_income_entries']), 1)
-        self.assertIsNone(encrypted)
-        self.assertIsNone(legacy)
+        self.assertEqual(self.sql(database.db_path, 'SELECT battle_count FROM cl1_months'), [(3,)])
+        self.assertFalse(self.cl1.exists())
 
     def test_loot_writes_business_columns(self):
         row = {'imgid': 'img', 'device_id': 'dev', 'instance': 'inst', 'genre': 'opsi_abyssal',
@@ -119,41 +131,39 @@ class PlainStatisticsCase(unittest.TestCase):
                'zone_id': 5, 'hazard_level': 6, 'item': 'PlateGeneralT4', 'amount': 3,
                'tag': 'gold', 'combat_count': 2}
         self.assertEqual(AzurStats._insert_local_opsi_items([row]), 1)
-        self.assertEqual(self.sql(self.local, 'SELECT item,amount,hazard_level,secure_payload FROM opsi_items'),
-                         [('PlateGeneralT4', 3, 6, None)])
+        self.assertEqual(self.sql(AzurStats._database().path, 'SELECT item,amount,hazard_level FROM opsi_items'),
+                         [('PlateGeneralT4', 3, 6)])
         data = AzurStats._load_local_opsi_items(genre='opsi_abyssal', instance='inst')
         self.assertEqual(data[0]['amount'], 3)
 
     def test_resource_writes_plain_values(self):
         self.assertTrue(resource_stats.record_resource_snapshot('inst', {'Oil': 500, 'ActionPoint': 131,
                                                                        'YellowCoin': 777, 'PurpleCoin': 45}))
-        self.assertEqual(self.sql(self.local, 'SELECT oil,action_point,yellow_coin,purple_coin,opsi_payload FROM resource_snapshots'),
-                         [(500, 131, 777, 45, None)])
+        self.assertEqual(self.sql(self.root / 'config' / 'azurpilot.db', 'SELECT oil,action_point,yellow_coin,purple_coin FROM resource_snapshots'),
+                         [(500, 131, 777, 45)])
         self.assertEqual(resource_stats.get_resource_timeline('inst')[0]['action_point'], 131)
 
-    def test_ship_file_is_plain_json(self):
+    def test_native_ship_snapshot_roundtrip(self):
         stats = ShipExpStats(self.ship, 'inst')
         stats.data = {'battle_times': [23.5], 'custom': {'keep': True}}
         stats._save()
-        self.assertEqual(json.loads(self.ship.read_bytes()), stats.data)
+        self.assertFalse(self.ship.exists())
         self.assertEqual(ShipExpStats(self.ship, 'inst').data, stats.data)
 
-    def test_farming_csv_remains_directly_readable(self):
+    def test_native_farming_cache_remains_readable_without_csv(self):
         data = np.zeros((6, len(AzurStats.meowofficer_farming_labels)))
-        data[0, 0] = 17
+        data[:, 0] = np.arange(1, 7)
+        data[0, 3] = 17
         AzurStats._write_meowofficer_farming(data)
-        header = ','.join(AzurStats.meowofficer_farming_labels)
-        # 产品 CSV 采用 UTF-8；断言也显式读取，不能依赖 Windows 的系统默认编码。
-        self.assertEqual(self.csv.read_bytes().splitlines()[0], header.encode('utf-8'))
-        self.assertTrue(self.csv.read_text(encoding='utf-8').startswith(header + '\n'))
+        self.assertFalse(self.csv.exists())
         np.testing.assert_array_equal(AzurStats.load_meowofficer_farming(), data)
 
     def test_daily_events_and_report_are_plain(self):
         store = DailySummaryStore(self.root / 'config' / 'daily_summary.db')
         now = datetime.now().replace(microsecond=0)
         store.record_cl1_battle_event('inst', now, 23.5, 1871)
-        self.assertEqual(self.sql(store.db_path, 'SELECT duration_seconds,estimated_exp,secure_payload FROM daily_summary_cl1_events'),
-                         [(23.5, 1871, None)])
+        self.assertEqual(self.sql(store.db_path, 'SELECT duration_seconds,estimated_exp FROM daily_summary_cl1_events'),
+                         [(23.5, 1871)])
         summary = store.get_cl1_interval_summary('inst', now, now + timedelta(hours=1))
         self.assertEqual(summary['estimated_exp'], 1871)
         self.assertEqual(summary['battles'], 1)
@@ -166,9 +176,9 @@ class PlainStatisticsCase(unittest.TestCase):
         database = Cl1Database(self.cl1)
         database.increment_battle_count('inst', 3)
         with self.assertRaises(RuntimeError), database._stats_transaction() as conn:
-            conn.execute('DELETE FROM cl1_data')
+            conn.execute('DELETE FROM cl1_months')
             raise RuntimeError('故障')
-        self.assertEqual(json.loads(self.sql(self.cl1, 'SELECT data_json FROM cl1_data')[0][0])['battle_count'], 3)
+        self.assertEqual(database.get_stats('inst', datetime.now().strftime('%Y-%m'))['battle_count'], 3)
 
     def test_plain_seal_rejects_accidental_encryption(self):
         with self.assertRaises(opsi_secure.VaultError):
@@ -199,7 +209,7 @@ class PlainStatisticsCase(unittest.TestCase):
         self.assertEqual(self.sql(self.local, 'SELECT action_point,yellow_coin,purple_coin,opsi_payload FROM resource_snapshots'),
                          [(131, 500, 20, None)])
         self.assertEqual(json.loads(self.ship.read_bytes()), {'battle_times': [1, 2, 3], 'custom': {'ship': 7}})
-        self.assertEqual(self.csv.read_bytes(), b'a,b\n1,2\n')
+        self.assertEqual(self.csv.read_bytes(), self.csv_raw)
         self.assertEqual(self.archive.read_bytes(), self.archive_raw)
         daily = self.root / 'config' / 'daily_summary.db'
         self.assertEqual(self.sql(daily, 'SELECT duration_seconds,estimated_exp,secure_payload FROM daily_summary_cl1_events'),
@@ -258,10 +268,10 @@ class PlainStatisticsCase(unittest.TestCase):
         folder = self.root / 'AzurPilot_Data_Backup' / '2026-10-05'
         folder.mkdir(parents=True)
         files = backup_module.backup_database(folder)
-        self.assertIn('cl1_data.db', [entry['name'] for entry in files])
-        target = folder / 'cl1_data.db'
+        self.assertIn('azurpilot.db', [entry['name'] for entry in files])
+        target = folder / 'azurpilot.db'
         self.assertEqual(target.read_bytes()[:16], b'SQLite format 3\x00')
-        self.assertEqual(json.loads(self.sql(target, 'SELECT data_json FROM cl1_data')[0][0])['battle_count'], 3)
+        self.assertEqual(self.sql(target, 'SELECT battle_count FROM cl1_months'), [(3,)])
         backup_module.backup_config(folder)
         self.assertFalse((folder / 'opsi_secure').exists())
 
@@ -317,8 +327,8 @@ class PlainStatisticsCase(unittest.TestCase):
         self.assertFalse(self.store.writer_ready())
         self.assertEqual(self.sql(self.cl1, 'SELECT data_json,secure_json FROM cl1_data'), before)
         self.assertEqual(self.ship.read_bytes(), ship)
-        with self.assertRaises(opsi_secure.VaultLocked):
-            Cl1Database(self.cl1).increment_battle_count('inst', 99)
+        Cl1Database(self.cl1).increment_battle_count('inst', 99)
+        self.assertEqual(self.sql(self.cl1, 'SELECT data_json,secure_json FROM cl1_data'), before)
         self.provider.offline = False
         self.assertTrue(self.store.writer_ready())
         self.assertEqual(json.loads(self.sql(self.cl1, 'SELECT data_json FROM cl1_data')[0][0]), self.full)
@@ -432,7 +442,7 @@ for _ in range(20):
         for process in processes:
             _, errors = process.communicate(timeout=60)
             self.assertEqual(process.returncode, 0, errors.decode('utf-8', errors='replace'))
-        self.assertEqual(json.loads(self.sql(self.cl1, 'SELECT data_json FROM cl1_data')[0][0])['battle_count'], 41)
+        self.assertEqual(Cl1Database(self.cl1).get_stats('inst', datetime.now().strftime('%Y-%m'))['battle_count'], 41)
 
 
 if __name__ == '__main__':
@@ -462,9 +472,11 @@ class UpstreamPlainCompatibility(unittest.TestCase):
         self.assertEqual(self.sql(self.cl1, 'SELECT secure_json FROM cl1_data'), [(None,)])
 
     def test_plain_resource_payload_restores_all_original_points(self):
-        resource_stats._ensure_table()
+        make_loot_db(self.local)
         now = datetime.now().isoformat()
         with closing(sqlite3.connect(self.local)) as conn, conn:
+            conn.execute('ALTER TABLE resource_snapshots ADD COLUMN opsi_payload TEXT')
+            conn.execute('DELETE FROM resource_snapshots')
             for i in range(11):
                 conn.execute('INSERT INTO resource_snapshots(instance,ts,oil,action_point,yellow_coin,purple_coin,opsi_payload) '
                              'VALUES (?,?,?,?,?,?,?)', ('inst', now, i, None, None, None,
@@ -499,7 +511,8 @@ class UpstreamPlainCompatibility(unittest.TestCase):
             conn.execute('UPDATE cl1_data SET secure_json=?', ('{damaged',))
         before = self.cl1.read_bytes()
         self.assertFalse(self.store.ensure_ready())
-        with self.assertRaises(opsi_secure.StoreUnavailable):
+        from module.persistence.migration import MigrationError
+        with self.assertRaises(MigrationError):
             Cl1Database(self.cl1).increment_battle_count('inst', 1)
         self.assertEqual(self.cl1.read_bytes(), before)
 
@@ -546,35 +559,34 @@ class UpstreamPlainCompatibility(unittest.TestCase):
         self.assertEqual(self.provider.states, {})
 
 
-    def test_late_unreadable_payload_blocks_explicit_save_and_increment(self):
+    def test_late_legacy_payload_is_preserved_without_reimport(self):
+        make_cl1_db(self.cl1)
         database = Cl1Database(self.cl1)
         database.increment_battle_count('inst', 3)
-        self.assertTrue(self.store._checked)
         month = datetime.now().strftime('%Y-%m')
         for value in ('OPSIV2.XCHACHA20-POLY1305.corrupt', '{damaged'):
             with self.subTest(value=value):
-                self.store._checked = True
                 with closing(sqlite3.connect(self.cl1)) as conn, conn:
+                    if not conn.execute("SELECT 1 FROM pragma_table_info('cl1_data') WHERE name='secure_json'").fetchone():
+                        conn.execute('ALTER TABLE cl1_data ADD COLUMN secure_json TEXT')
                     conn.execute('UPDATE cl1_data SET secure_json=?', (value,))
                 original = self.sql(self.cl1, 'SELECT data_json,secure_json,encrypted_blob FROM cl1_data')
                 displayed = database.get_stats('inst', month)
-                with self.assertRaises(opsi_secure.StoreUnavailable):
-                    database.save_stats('inst', month, displayed)
+                database.save_stats('inst', month, displayed)
                 self.assertEqual(self.sql(self.cl1, 'SELECT data_json,secure_json,encrypted_blob FROM cl1_data'), original)
-                with self.assertRaises(opsi_secure.StoreUnavailable):
-                    database.increment_battle_count('inst', 1)
+                database.increment_battle_count('inst', 1)
                 self.assertEqual(self.sql(self.cl1, 'SELECT data_json,secure_json,encrypted_blob FROM cl1_data'), original)
 
-    def test_late_legacy_aes_blocks_explicit_save(self):
+    def test_late_legacy_aes_remains_untouched_by_native_save(self):
+        make_cl1_db(self.cl1)
         database = Cl1Database(self.cl1)
         database.increment_battle_count('inst', 3)
         month = datetime.now().strftime('%Y-%m')
         with closing(sqlite3.connect(self.cl1)) as conn, conn:
             conn.execute('UPDATE cl1_data SET encrypted_blob=?,data_json=NULL', (b'opaque AES source',))
-        original = self.sql(self.cl1, 'SELECT data_json,secure_json,encrypted_blob FROM cl1_data')
-        with self.assertRaises(opsi_secure.StoreUnavailable):
-            database.save_stats('inst', month, {'battle_count': 0})
-        self.assertEqual(self.sql(self.cl1, 'SELECT data_json,secure_json,encrypted_blob FROM cl1_data'), original)
+        original = self.sql(self.cl1, 'SELECT data_json,encrypted_blob FROM cl1_data')
+        database.save_stats('inst', month, {'battle_count': 0})
+        self.assertEqual(self.sql(self.cl1, 'SELECT data_json,encrypted_blob FROM cl1_data'), original)
 
     def test_late_cipher_file_is_not_overwritten(self):
         self.assertTrue(self.store.ensure_ready())
@@ -584,14 +596,16 @@ class UpstreamPlainCompatibility(unittest.TestCase):
             opsi_secure.write_file('ships', self.ship, {'replacement': 0})
         self.assertEqual(self.ship.read_bytes(), original)
 
-    def test_late_cipher_report_is_not_overwritten(self):
+    def test_late_legacy_cipher_report_is_not_overwritten(self):
         summary = DailySummaryStore(self.root / 'config' / 'daily_summary.db')
         now = datetime.now().replace(microsecond=0)
         period = now.strftime('%Y-%m-%d')
         summary.claim_period('inst', period, 'cn', now, now + timedelta(days=1))
         original = 'OPSIV2.XCHACHA20-POLY1305.corrupt'
-        with closing(sqlite3.connect(summary.db_path)) as conn, conn:
-            conn.execute('UPDATE daily_summary_periods SET report_text=?', (original,))
-        with self.assertRaises(opsi_secure.StoreUnavailable):
-            summary.update_period('inst', period, 'sent', report_text='替换正文')
-        self.assertEqual(self.sql(summary.db_path, 'SELECT report_text FROM daily_summary_periods'), [(original,)])
+        legacy = self.root / 'config' / 'daily_summary.db'
+        with closing(sqlite3.connect(legacy)) as conn, conn:
+            conn.execute('CREATE TABLE daily_summary_periods(report_text TEXT)')
+            conn.execute('INSERT INTO daily_summary_periods VALUES(?)', (original,))
+        summary.update_period('inst', period, 'sent', report_text='替换正文')
+        self.assertEqual(self.sql(legacy, 'SELECT report_text FROM daily_summary_periods'), [(original,)])
+        self.assertEqual(summary.get_period('inst', period)['report_text'], '替换正文')

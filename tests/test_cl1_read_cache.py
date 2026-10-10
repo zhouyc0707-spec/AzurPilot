@@ -1,15 +1,16 @@
 """CL1 只读缓存的语义测试。
 
 `Cl1Database.read_cache()` 是给只读渲染路径用的：一次渲染会经由多条路径重复读取
-同一个月份的 blob（每个都是一次 2~4 MB JSON 反序列化）。缓存的失效语义很容易被
+同一个月份的原生关联表快照。缓存的失效语义很容易被
 后续改动破坏，而这些破坏不会在功能上表现出来（只会读到过期数据），因此单独测。
 """
 
 import tempfile
 import unittest
+import sqlite3
+from contextlib import closing
 from pathlib import Path
 
-from module.statistics import opsi_secure
 from module.statistics.cl1_database import Cl1Database
 from tests.opsi_test_support import install_vault
 
@@ -64,10 +65,21 @@ class TestCl1ReadCache(unittest.TestCase):
         """worker 是另一个进程，进程内失效看不到它 —— 靠库文件签名识别。"""
         with self.db.read_cache():
             self.assertEqual(1, self.db.get_stats("probe", "2026-09")["battle_count"])
-            # 独立存储对象通过正式加密入口写入，模拟外部进程更新。
+            # 独立存储对象通过原生事务写入，模拟外部进程更新。
             other = Cl1Database(self.db.db_path)
             other.save_stats("probe", "2026-09", {"battle_count": 99})
             self.assertEqual(99, self.db.get_stats("probe", "2026-09")["battle_count"])
+
+    def test_committed_wal_invalidates_cache_before_database_checkpoint(self):
+        with closing(self.db.store.connect(readonly=True, factory=sqlite3.Connection)) as keeper:
+            keeper.execute('SELECT battle_count FROM cl1_months').fetchall()
+            with self.db.read_cache():
+                self.assertEqual(1, self.db.get_stats('probe', '2026-09')['battle_count'])
+                signature = self.db._db_signature()
+                Cl1Database(self.db.db_path).save_stats('probe', '2026-09', {'battle_count': 88})
+                self.assertEqual(signature[1:3], self.db._db_signature()[1:3])
+                self.assertNotEqual(signature[3:], self.db._db_signature()[3:])
+                self.assertEqual(88, self.db.get_stats('probe', '2026-09')['battle_count'])
 
     def test_cache_expires_after_ttl(self):
         """超过 TTL 必须重新查库，避免长期显示旧数据。"""
@@ -87,28 +99,27 @@ class TestCl1ReadCache(unittest.TestCase):
             other.save_stats("probe", "2026-09", {"battle_count": 77})
             self.assertEqual(77, self.db.get_stats("probe", "2026-09")["battle_count"])
 
-    def test_unavailable_provider_cannot_return_cached_decrypted_data(self):
+    def test_native_cache_does_not_depend_on_legacy_credentials(self):
         with self.db.read_cache():
             self.assertEqual(1, self.db.get_stats("probe", "2026-09")["battle_count"])
             original = self.db.db_path.read_bytes()
             self.vault.provider.offline = True
-            self.assertEqual(0, self.db.get_stats("probe", "2026-09")["battle_count"])
-            self.assertEqual({}, self.db._read_cache)
+            self.assertEqual(1, self.db.get_stats("probe", "2026-09")["battle_count"])
             self.assertEqual(original, self.db.db_path.read_bytes())
             self.assertFalse(self.vault.status()["blocked"])
             self.vault.provider.offline = False
             self.assertEqual(1, self.db.get_stats("probe", "2026-09")["battle_count"])
 
-    def test_quarantine_cannot_return_cached_data_or_overwrite_original(self):
+    def test_missing_native_database_cannot_return_cached_data_or_reimport_sources(self):
         with self.db.read_cache():
             self.assertEqual(1, self.db.get_stats("probe", "2026-09")["battle_count"])
-            original = self.db.db_path.read_bytes()
-            self.vault.wipe("测试冻结")
-            self.assertEqual(0, self.db.get_stats("probe", "2026-09")["battle_count"])
-            self.assertEqual({}, self.db._read_cache)
-            with self.assertRaises(opsi_secure.VaultLocked):
+            self.db.db_path.unlink()
+            with self.assertRaises(FileNotFoundError):
+                self.db.get_stats("probe", "2026-09")
+            with self.assertRaises(FileNotFoundError):
                 self.db.save_stats("probe", "2026-09", {"battle_count": 99})
-            self.assertEqual(original, self.db.db_path.read_bytes())
+            self.assertFalse(self.db.db_path.exists())
+            self.assertTrue(self.db.store.marker.exists())
 
 
 if __name__ == "__main__":

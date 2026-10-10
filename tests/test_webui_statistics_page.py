@@ -1,8 +1,12 @@
 import threading
+import sqlite3
+import tempfile
 import unittest
 from contextlib import nullcontext
+from pathlib import Path
 from unittest.mock import patch
 
+from module.persistence.database import BusinessDatabase, use_database
 from module.webui.app_statistics_page import StatisticsPageMixin
 
 
@@ -316,6 +320,104 @@ class TestStatisticsPanelRegions(unittest.TestCase):
             ],
             delays,
         )
+
+
+class TestStatisticsSourceSignature(unittest.TestCase):
+    """以真实文件和 WAL 检查当前总库，签名检测不得触发迁移或建库。"""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.store = BusinessDatabase(Path(temporary.name) / "config")
+        binding = use_database(self.store)
+        binding.__enter__()
+        self.addCleanup(binding.__exit__, None, None, None)
+        guard = patch.object(BusinessDatabase, "ensure_ready", side_effect=AssertionError("签名不能初始化总库"))
+        guard.start()
+        self.addCleanup(guard.stop)
+        javascript = patch("module.webui.app_statistics_page.run_js")
+        javascript.start()
+        self.addCleanup(javascript.stop)
+        translation = patch("module.webui.app_statistics_page.t", side_effect=lambda key: key)
+        translation.start()
+        self.addCleanup(translation.stop)
+        self.gui = _StatisticsHarness()
+        self.gui.page = "Stat"
+        self.gui._get_statistics_source_signature = self.signature
+        self.gui._statistics_cache_key = self.gui._get_statistics_cache_key()
+
+    def signature(self):
+        return StatisticsPageMixin._get_statistics_source_signature(self.gui)
+
+    def test_missing_database_is_observed_without_creating_files(self):
+        signature = self.signature()
+
+        self.assertEqual(
+            signature[1],
+            ((str(self.store.path), None), (str(self.store.path) + "-wal", None)),
+        )
+        self.assertFalse(self.store.directory.exists())
+
+    def test_legacy_file_changes_do_not_replace_current_sources(self):
+        self.store.directory.mkdir()
+        before = self.signature()
+        for name in ("cl1_data.db", "cl1_data.db-wal", "azurstats_local.db", "azurstats_local.db-wal"):
+            (self.store.directory / name).write_bytes(b"legacy data")
+        (self.store.directory / "ship_exp_data.json").write_text("{}", encoding="utf-8")
+
+        self.assertEqual(before, self.signature())
+        self.assertFalse(self.store.path.exists())
+        self.assertFalse(self.store.marker.exists())
+
+    def test_current_config_directory_is_part_of_signature(self):
+        before = self.signature()
+        other = BusinessDatabase(self.store.directory.parent / "other")
+        with use_database(other):
+            after = self.signature()
+
+        self.assertNotEqual(before, after)
+        self.assertEqual(str(other.path), after[1][0][0])
+        self.assertFalse(other.directory.exists())
+
+    def test_wal_only_write_marks_refresh_without_rendering_sections(self):
+        self.store.directory.mkdir()
+        writer = sqlite3.connect(self.store.path)
+        self.addCleanup(writer.close)
+        writer.execute("PRAGMA journal_mode=WAL")
+        writer.execute("PRAGMA wal_autocheckpoint=0")
+        writer.execute("CREATE TABLE signature_fixture (value TEXT)")
+        writer.commit()
+        writer.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        self.gui._statistics_source_signature = self.signature()
+        database_version = self.gui._statistics_source_signature[1][0]
+
+        writer.execute("INSERT INTO signature_fixture VALUES ('new data')")
+        writer.commit()
+        self.gui._refresh_statistics_if_changed()
+
+        self.assertEqual(database_version, self.signature()[1][0], "新数据仅在 WAL，主库版本不变")
+        self.assertTrue(self.gui._statistics_refresh_pending)
+        self.assertEqual([], self.gui.rendered)
+        self.assertFalse(self.store.marker.exists())
+
+    def test_refresh_after_wal_write_clears_pending_hint(self):
+        self.store.directory.mkdir()
+        writer = sqlite3.connect(self.store.path)
+        self.addCleanup(writer.close)
+        writer.execute("PRAGMA journal_mode=WAL")
+        writer.execute("CREATE TABLE signature_fixture (value TEXT)")
+        writer.commit()
+        self.gui._statistics_source_signature = self.signature()
+        writer.execute("INSERT INTO signature_fixture VALUES ('new data')")
+        writer.commit()
+        self.gui._refresh_statistics_if_changed()
+        self.assertTrue(self.gui._statistics_refresh_pending)
+
+        self.gui._refresh_statistics_page()
+        self.gui._refresh_statistics_if_changed()
+
+        self.assertFalse(self.gui._statistics_refresh_pending)
+        self.assertEqual(["ap", "resource", "opsi", "ship", "commission"], self.gui.rendered)
 
 
 if __name__ == "__main__":

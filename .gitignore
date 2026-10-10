@@ -33,6 +33,11 @@ config/*.db
 # 数据库备份（如 cl1_data.db.bak-<标签>-<时间戳>）：既不以 .db 也不以 .bak 结尾，
 # 需单独忽略，避免个人统计数据被提交并推送到公开仓库
 config/*.db.bak*
+config/*.db-wal
+config/*.db-shm
+/config/azurpilot.migrated*
+/config/azurpilot.*.tmp*
+/config/storage-backups/
 # 账号保险库（上游账号系统）：实例目录下的账号库与销毁标记
 config/*/config.db*
 config/*/account.destroyed

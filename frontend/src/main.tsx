@@ -36,6 +36,7 @@ class ErrorBoundary extends Component<{children: ReactNode}, {failed: boolean}> 
   }
 }
 const SchedulerProgram = lazy(() => import('./pages/SchedulerProgram').then(module => ({default: module.SchedulerProgram})))
+const MindCalculator = lazy(() => import('./pages/MindCalculator').then(module => ({default: module.MindCalculator})))
 const ResourceManagement = lazy(() => import('./pages/ResourceManagement').then(module => ({default: module.ResourceManagement})))
 
 const router = createHashRouter([
@@ -43,6 +44,7 @@ const router = createHashRouter([
   {path: '/i/:instance', element: <App/>, errorElement: <ErrorPage/>, children: [
     {index: true, element: <Navigate to="overview" replace/>},
     {path: 'overview', element: <Overview/>}, {path: 'task/:task', element: <TaskConfig/>},
+    {path: 'mind-calculator', element: <Suspense fallback={<div>{translateCurrentUi('common.loading')}</div>}><MindCalculator/></Suspense>},
     {path: 'resources', element: <Suspense fallback={<div>{translateCurrentUi('common.loading')}</div>}><ResourceManagement/></Suspense>},
     // 交易页由 App 的实例 Activity 托管，来回切换不销毁总览与交易状态。
     {path: 'stock-exchange', element: null},

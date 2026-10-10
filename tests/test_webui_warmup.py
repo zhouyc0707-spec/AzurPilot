@@ -12,6 +12,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from module.persistence.database import BusinessDatabase, use_database
 from module.webui import warmup
 
 
@@ -68,12 +69,13 @@ class TestWarmupGuards(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         config_dir = Path(tmp.name) / "config"
         config_dir.mkdir()
-        db_path = config_dir / "cl1_data.db"
+        store = BusinessDatabase(config_dir)
+        db_path = store.path
         # 注意：sqlite3 连接必须显式 close，`with sqlite3.connect(...)` 只管事务提交，
         # Windows 下不关连接会让临时目录删不掉（WinError 32）。
         conn = sqlite3.connect(db_path)
         try:
-            conn.execute("CREATE TABLE cl1_data (instance TEXT, month TEXT)")
+            conn.execute("CREATE TABLE warmup_fixture (instance TEXT, month TEXT)")
             conn.commit()
         finally:
             conn.close()
@@ -87,12 +89,11 @@ class TestWarmupGuards(unittest.TestCase):
             recorded.append((str(database), kwargs.get("uri"), kwargs.get("mode")))
             return real_connect(database, *args, **kwargs)
 
-        # _warm_databases 自己按项目根推导路径，这里把它指向临时目录
         with (
-            patch.object(warmup, "__file__", str(config_dir.parent / "module" / "webui" / "warmup.py")),
+            use_database(store),
+            patch.object(BusinessDatabase, "ensure_ready", side_effect=AssertionError("预热不能初始化总库")),
             patch.object(sqlite3, "connect", side_effect=spy_connect),
         ):
-            (config_dir.parent / "module" / "webui").mkdir(parents=True, exist_ok=True)
             warmup._warm_databases()
 
         self.assertTrue(recorded, "应当打开过数据库")
@@ -102,20 +103,107 @@ class TestWarmupGuards(unittest.TestCase):
             self.assertIsNone(mode, "只读应由 URI 指定，而不是可写的 mode 参数")
         self.assertEqual(before, db_path.read_bytes(), "预热不得改动数据库内容")
         self.assertEqual(before_mtime, db_path.stat().st_mtime_ns, "预热不得触碰 mtime")
+        self.assertFalse(store.marker.exists(), "直接只读预热不得补迁移标记")
 
     def test_database_warmup_skips_missing_files(self):
         """库文件不存在时安静跳过，不建库。"""
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
-        (Path(tmp.name) / "module" / "webui").mkdir(parents=True)
+        store = BusinessDatabase(Path(tmp.name) / "config")
 
-        with patch.object(
-            warmup, "__file__", str(Path(tmp.name) / "module" / "webui" / "warmup.py")
+        with (
+            use_database(store),
+            patch.object(sqlite3, "connect") as connect,
+            patch.object(BusinessDatabase, "ensure_ready", side_effect=AssertionError("预热不能初始化总库")),
         ):
             warmup._warm_databases()  # 不应抛出，也不应创建文件
+            connect.assert_not_called()
 
-        self.assertEqual([], list((Path(tmp.name) / "config").glob("*.db"))
-                         if (Path(tmp.name) / "config").exists() else [])
+        self.assertFalse(store.directory.exists(), "预热不创建缺失的配置目录")
+
+    def test_legacy_sources_do_not_trigger_migration_or_creation(self):
+        """尚未迁移时保留旧库，预热不能成为第二个迁移入口。"""
+        with tempfile.TemporaryDirectory() as temporary:
+            store = BusinessDatabase(Path(temporary) / "config")
+            store.directory.mkdir()
+            legacy = store.directory / "cl1_data.db"
+            legacy.write_bytes(b"legacy fixture")
+            before = legacy.read_bytes()
+
+            with (
+                use_database(store),
+                patch.object(sqlite3, "connect") as connect,
+                patch.object(BusinessDatabase, "ensure_ready", side_effect=AssertionError("预热不能迁移旧库")),
+            ):
+                warmup._warm_databases()
+                connect.assert_not_called()
+
+            self.assertEqual(before, legacy.read_bytes())
+            self.assertEqual([legacy], list(store.directory.iterdir()))
+
+    def test_missing_migrated_database_is_not_recreated(self):
+        """已完成迁移却丢失总库时同样只跳过，交给正式入口报错和恢复。"""
+        with tempfile.TemporaryDirectory() as temporary:
+            store = BusinessDatabase(Path(temporary) / "config")
+            store.directory.mkdir()
+            store.marker.write_text("1\nfixture-digest\n", encoding="utf-8")
+            before = store.marker.read_bytes()
+
+            with use_database(store), patch.object(sqlite3, "connect") as connect:
+                warmup._warm_databases()
+                connect.assert_not_called()
+
+            self.assertFalse(store.path.exists())
+            self.assertEqual(before, store.marker.read_bytes())
+
+    def test_readonly_warmup_reads_current_wal_schema(self):
+        """不使用 immutable 旧快照：未 checkpoint 的新页仍属于当前总库。"""
+        with tempfile.TemporaryDirectory() as temporary:
+            store = BusinessDatabase(temporary)
+            writer = sqlite3.connect(store.path)
+            try:
+                writer.execute("PRAGMA journal_mode=WAL")
+                writer.execute("PRAGMA wal_autocheckpoint=0")
+                writer.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                before = store.path.read_bytes()
+                writer.execute("CREATE TABLE wal_only_fixture (value TEXT)")
+                writer.commit()
+                self.assertEqual(before, store.path.read_bytes())
+                rows = []
+                real_connect = sqlite3.connect
+
+                class ReadCursor:
+                    def __init__(self, cursor):
+                        self.cursor = cursor
+
+                    def fetchone(self):
+                        row = self.cursor.fetchone()
+                        rows.append(row)
+                        return row
+
+                class ReadConnection:
+                    def __init__(self, connection):
+                        self.connection = connection
+
+                    def execute(self, query):
+                        return ReadCursor(self.connection.execute(query))
+
+                    def close(self):
+                        self.connection.close()
+
+                def connect_readonly(database, **kwargs):
+                    self.assertIn("mode=ro", database)
+                    self.assertNotIn("immutable", database)
+                    return ReadConnection(real_connect(database, **kwargs))
+
+                with use_database(store), patch.object(sqlite3, "connect", side_effect=connect_readonly):
+                    warmup._warm_databases()
+
+                self.assertEqual([("wal_only_fixture",)], rows)
+                self.assertEqual(before, store.path.read_bytes())
+                self.assertFalse(store.marker.exists())
+            finally:
+                writer.close()
 
     def test_warmup_modules_are_importable(self):
         """预热导入的模块名必须真实存在，否则预热是静默无效的。"""

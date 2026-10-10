@@ -52,6 +52,7 @@ dependencies = [
     # Windows 目录按钮需要 COM 精确定位资源管理器窗口并切到前台。
     "pywin32==312; sys_platform == 'win32'",
     "portalocker>=3.2.0",
+    "openpyxl>=3.1.5,<4",
 ]
 
 [dependency-groups]

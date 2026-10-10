@@ -6,6 +6,8 @@
 
 实例侧栏新增独立 [资源管理](resource-management.md) 页 `/i/:instance/resources`，由 `pages/ResourceManagement.tsx` 与 `resources/` 提供 ECharts 桑基图、库存与收支明细。图节点支持资源与任务筛选，明细支持分页和完整区间 CSV 导出；原调度的石油自动控制使用现有配置事务接口保存。五种语言、窄屏和空数据状态均沿用控制台组件与主题。
 
+[心智单元计算器](mind-calculator.md) 使用独立实例页 `/i/:instance/mind-calculator`，新旧主题共用舰船清单、待核对状态、导入导出与费用计算。该页隐藏任务右栏；自动船坞扫描属于独立游戏工具，仅支持国服且要求当前实例已停止，其余计算和文件处理无需操作游戏。
+
 `TaskConfig` 把 `Task.<task>.help` 展示为参数列首卡，并在舰队信息中显示心情；旧数据缺少心情时显示未知。商店使用上游的任务参数和过滤器界面，活动商店的 `物品:数量上限` 兼容文本由配置翻译说明并原样提交。旧版统计整页、实例 `Activity` 缓存、顶栏重启与主题切换、模拟器运行状态、岛屿任务总开关及实时指挥喵报告继续沿用本地实现。
 
 frontend/ 是 AzurPilot 的 React 浏览器控制台，覆盖主页与实例导航、任务配置表单、总览日志与截图预览、统计图表、系统设置、远程访问与更新器；本地保留的 PyWebIO 是另一个运行入口。前端不包含任何游戏逻辑，所有业务操作都通过 WebSocket API 交给 [API 服务](api.md)执行。
@@ -21,6 +23,8 @@ frontend/README.md 与 frontend/API.md 已经是本前端的详细文档：前�
 统计页各分类均保留历史展示与筛选，并提供导出入口：页面可导出本类数据，表格有各自的导出明细按钮，图表支持保存为图片。
 
 旧版统计的「大世界数据收集」与「本月／历史耄耋相接收获」按对应月份隐藏无记录的侵蚀等级，已有记录的零收益行仍显示。「查看历史月份」弹窗的累计行由独立 `cumulativeRows` 提供，本月未运行的等级仍可查看以前的累计数据；旧响应缺少该字段时兼容原有累计列。
+
+新版分类统计只有在图表或原始记录卡至少一张可见时才请求时间序列；两者都隐藏时，汇总指标与其他表格继续读取。旧版整页统计仍走 `statistics.legacy`，不应用新版卡片隐藏规则。背景关闭时保留之前的地址和图库选择，重新启用相应来源即可恢复；侧栏把手仅在实际使用壁纸时显示。
 
 茗喵证券交易所的注册和登录使用 `src/stock/Captcha.tsx` 与 `recaptcha.ts` 中的 Google reCAPTCHA v2，脚本及验证 iframe 统一走 `www.recaptcha.net`，官方静态依赖使用 `www.gstatic.com/recaptcha/`。认证请求字段为 `recaptchaToken`；私密密钥由 Go 交易所环境变量 `RECAPTCHA_SECRET_KEY` 读取。站点停用域名验证，Go 不匹配 hostname 或 action。切换注册/登录时立即清空 token，提交后重置，组件卸载后忽略延迟回调；前端与 Go 服务须同步升级。
 
@@ -87,10 +91,11 @@ frontend/
 | `npm test --prefix frontend` | vitest 单元测试（client、组件与纯函数） |
 | `npm run test:e2e --prefix frontend` | Playwright e2e，主配置 |
 | `npm run test:e2e:mock --prefix frontend` | Playwright e2e，mock 配置 |
+| `npx playwright test --config playwright.mind.config.ts`（在 `frontend/` 内执行） | 心智单元计算器专用 mock 用例 |
 
 Node.js >= 22.12（推荐 24），首次准备用 `npm ci --prefix frontend`。
 
-两个 e2e 配置的区别：主配置在仓库根目录以 `uv run python -m tests.serve_frontend` 起服务——它使用临时配置目录、拒绝执行真实游戏任务（替换 `runtime.start/stop` 与 `updater.fetch/apply/cancel`），连接真实 Python API 跑除 `mock.spec.ts` 外的全部用例；mock 配置只跑 `mock.spec.ts`，同时拉起 mock server（22492）与 Vite mock 模式（5174），完全不需要 Python 与模拟器。
+主 e2e 配置在仓库根目录以 `uv run python -m tests.serve_frontend` 起服务，使用临时配置目录并拒绝执行真实游戏任务。主配置排除通用 mock、交易所、心智单元计算器和 PyWebIO 单次任务专用用例；它们分别由对应配置提供测试服务。通用 mock 配置拉起 mock server（22492）与 Vite mock 模式（5174），心智单元配置复用该服务并在离线文件处理时调用 Python，不连接模拟器。
 
 ## 6. 工作流程
 

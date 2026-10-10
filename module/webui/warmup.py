@@ -2,7 +2,7 @@
 
 **为什么需要**：`alas` 实例 worker 是新起的进程，第一次进总览页时才惰性导入
 统计相关模块（`cv2` / `numpy` / `module.statistics.*`）、首次打开
-`azurstats_local.db`(38 MB) 与 `cl1_data.db`(17 MB)、并首次读配置。这三件事叠加
+当前配置目录的 `azurpilot.db` 总库、并首次读配置。这三件事叠加
 在第一次渲染路径上，而 worker 之后就常驻了 —— 表现就是「刚重启后第一次进总览页
 慢，之后再进就正常」。
 
@@ -42,23 +42,20 @@ def _warm_modules() -> None:
 
 
 def _warm_databases() -> None:
-    """只读打开两个统计库，触发建连接与冷页读取。
+    """直接只读打开已存在的总库，触发建连接与冷页读取。
 
-    刻意不实例化 `Cl1Database`：它的 `__init__` 会 `_init_db()` 建表并在必要时
-    迁移，属于写操作。这里只做一次最小只读查询 —— 预热的目标是文件句柄与页缓存。
+    `get_database()` 只提供当前目录的路径，不调用其连接或迁移入口；总库尚不存在
+    时直接跳过。旧库由正式启动入口统一迁移，预热不创建总库或迁移标记。
     """
     import sqlite3
     from contextlib import closing
-    from pathlib import Path
+    from module.persistence.database import get_database
 
-    project_root = Path(__file__).resolve().parents[2]
-    for name in ("cl1_data.db", "azurstats_local.db"):
-        path = project_root / "config" / name
-        if not path.exists():
-            continue
-        uri = f"file:{path.as_posix()}?mode=ro"
-        with closing(sqlite3.connect(uri, uri=True, timeout=2)) as conn:
-            conn.execute("SELECT name FROM sqlite_master LIMIT 1").fetchone()
+    path = get_database().path
+    if not path.is_file():
+        return
+    with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=2)) as conn:
+        conn.execute("SELECT name FROM sqlite_master LIMIT 1").fetchone()
 
 
 def _warm_config() -> None:

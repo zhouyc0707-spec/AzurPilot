@@ -1,23 +1,18 @@
 """CL1 数据库模块。
 
-使用 SQLite 本地存储战斗统计和掉落数据；大世界字段使用普通 JSON。
-兼容读取 secure_json 与 encrypted_blob 中的旧密文，并执行无损迁移。
+月度计数、事件与收益使用总库原生表；未知字段通过类型化兼容树保留。
+旧存储的只读解码由安装级迁移器统一处理。
 """
 
 # -*- coding: utf-8 -*-
-import sqlite3
 import json
-import os
-from contextlib import closing, contextmanager, suppress
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Tuple
 from collections import defaultdict
-from module.base.device_id import get_device_id, get_old_device_id
 from module.config.time_source import now as current_time
 from module.logger import logger
-from module.statistics import opsi_secure
-from module.statistics.cl1_legacy import derive_legacy_key, decrypt_legacy_payload
 
 
 # 凭证快照的抽取粒度与历史迁移版本。
@@ -178,205 +173,44 @@ class Cl1Database:
 
     """
     CL1 月度统计存储管理类。
-    所有实例共享一个数据库文件；旧版 encrypted_blob 仅用于自动读取还原迁移。
+    所有实例共享一个普通总库；旧版 encrypted_blob 只作为首次迁移来源。
     """
 
-    def __init__(self, db_path: Optional[Path] = None):
-        self._manage_legacy_db_path = db_path is None
-        # 只读缓存：{（instance, month): (库签名, 缓存时刻, 解析后的数据)}
-        # 默认关闭，由只读场景显式调用 enable_read_cache() 开启
-        self._read_cache: Dict[Tuple[str, str], Tuple[Tuple[int, int], datetime, Dict[str, Any]]] = {}
+    def __init__(self, db_path: Optional[Path] = None, *, store=None):
+        from module.persistence.database import for_legacy_path
+        self._store = store or (for_legacy_path(db_path, 'cl1') if db_path is not None else None)
         self._read_cache_enabled = False
-        if db_path is None:
-            project_root = Path(__file__).resolve().parents[2]
-            self.db_dir = project_root / "config"
-            self.db_path = self.db_dir / "cl1_data.db"
-        else:
-            self.db_path = db_path
-            self.db_dir = self.db_path.parent
+        self._read_cache = {}
+        self._coins_history_checked = set()
+        self._coins_cleanup_checked = set()
 
-        self._ensure_dir()
-        if self._manage_legacy_db_path:
-            self._move_legacy_db()
-        self._init_db()
-        self._legacy_decryption_keys = self._get_legacy_decryption_keys()
-        self._migrate_encrypted_rows()
-        if self._manage_legacy_db_path:
-            self._auto_migrate()
+    @property
+    def store(self):
+        from module.persistence.database import get_database
+        return self._store or get_database()
 
-    def _ensure_dir(self):
-        try:
-            self.db_dir.mkdir(parents=True, exist_ok=True)
-        except Exception as e:
-            logger.error(f"[Statistics] 创建数据库目录失败: {type(e).__name__}")
+    @property
+    def db_path(self):
+        return self.store.path
 
-    def _init_db(self):
-        """初始化数据库表，并兼容旧版 encrypted_blob 结构。
+    @property
+    def db_dir(self):
+        return self.store.directory
 
-        唯一键必须是 (instance, month)——写入 SQL 依赖它的 ON CONFLICT；被外部
-        工具改坏（重建表后主键不符）时按原结构重建并搬运全部数据。
-        """
-        try:
-            with closing(sqlite3.connect(self.db_path, timeout=30)) as conn:
-                cursor = conn.cursor()
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS cl1_data (
-                        instance TEXT,
-                        month TEXT,
-                        data_json TEXT,
-                        encrypted_blob BLOB,
-                        PRIMARY KEY (instance, month)
-                    )
-                """)
-                cursor.execute("PRAGMA table_info(cl1_data)")
-                columns = {row[1] for row in cursor.fetchall()}
-                if "data_json" not in columns:
-                    cursor.execute("ALTER TABLE cl1_data ADD COLUMN data_json TEXT")
-                if "encrypted_blob" not in columns:
-                    cursor.execute("ALTER TABLE cl1_data ADD COLUMN encrypted_blob BLOB")
-                if "secure_json" not in columns:
-                    # 保留旧密文列用于无损迁移，普通存储直接使用 data_json。
-                    cursor.execute("ALTER TABLE cl1_data ADD COLUMN secure_json TEXT")
-                if self._primary_key(cursor) != ["instance", "month"]:
-                    self._rebuild_table(cursor)
-                conn.commit()
-        except sqlite3.IntegrityError:
-            logger.exception("CL1 结构无法无损修复，已保留原表，停止打开数据库")
-            raise
-        except Exception as e:
-            logger.exception(f"初始化 CL1 数据库失败: {type(e).__name__}")
 
-    @staticmethod
-    def _primary_key(cursor):
-        """读取 cl1_data 主键列（按定义顺序）；无主键时返回空列表。"""
-        for row in cursor.execute("PRAGMA index_list(cl1_data)").fetchall():
-            # index_list 行：(seq, name, unique, origin, partial)；origin='pk' 为主键索引。
-            if row[3] == "pk":
-                return [info[2] for info in cursor.execute(f'PRAGMA index_info("{row[1]}")').fetchall()]
-        return []
-
-    def _rebuild_table(self, cursor):
-        """唯一键不符时按 (instance, month) 重建 cl1_data 并搬运数据。
-
-        重复身份、未知列或已有重建表必须人工判断，不能通过覆盖或删表丢弃历史。
-        """
-        if cursor.execute("SELECT 1 FROM cl1_data GROUP BY instance, month HAVING COUNT(*) > 1 LIMIT 1").fetchone():
-            raise sqlite3.IntegrityError("同一实例月份存在多条历史，拒绝自动覆盖")
-        columns = {row[1] for row in cursor.execute("PRAGMA table_info(cl1_data)").fetchall()}
-        if columns != {"instance", "month", "data_json", "encrypted_blob", "secure_json"}:
-            raise sqlite3.IntegrityError("月度表包含未知字段，拒绝自动丢弃")
-        if cursor.execute("SELECT 1 FROM sqlite_master WHERE name='cl1_data_rebuild'").fetchone():
-            raise sqlite3.IntegrityError("已存在重建对象，拒绝自动删除")
-        cursor.execute("""
-            CREATE TABLE cl1_data_rebuild (
-                instance TEXT,
-                month TEXT,
-                data_json TEXT,
-                encrypted_blob BLOB,
-                secure_json TEXT,
-                PRIMARY KEY (instance, month)
-            )
-        """)
-        cursor.execute("""
-            INSERT INTO cl1_data_rebuild
-                (instance, month, data_json, encrypted_blob, secure_json)
-            SELECT instance, month, data_json, encrypted_blob, secure_json FROM cl1_data
-        """)
-        cursor.execute("DROP TABLE cl1_data")
-        cursor.execute("ALTER TABLE cl1_data_rebuild RENAME TO cl1_data")
-        logger.warning("[Statistics] cl1_data 唯一键与预期不符，已无损重建并保留全部历史")
-
-    def _derive_key(self, device_id: str) -> bytes:
-        """基于 device_id 派生 256 位 AES 密钥"""
-        return derive_legacy_key(device_id)
-
-    def _get_legacy_decryption_keys(self) -> List[bytes]:
-        """生成旧密文迁移时可尝试的读取还原密钥。"""
-        device_ids = []
-        with suppress(Exception):
-            device_ids.append(get_device_id())
-        old_id = get_old_device_id()
-        if old_id:
-            device_ids.append(old_id)
-
-        keys = []
-        seen = set()
-        for device_id in device_ids:
-            if not device_id or device_id in seen:
-                continue
-            seen.add(device_id)
-            keys.append(self._derive_key(device_id))
-        return keys
-
-    def _migrate_encrypted_rows(self):
-        """旧快照交给版本化存储迁移，原只读缓存同时失效。"""
-        self.invalidate_read_cache()
-
-    def _move_legacy_db(self):
-        """将旧位置的 CL1 数据库移动到 config 目录后再初始化表结构。"""
-        project_root = Path(__file__).resolve().parents[2]
-        old_db_dir = project_root / "log" / "cl1"
-        old_db_path = old_db_dir / "cl1_data.db"
-
-        if old_db_path.exists() and not self.db_path.exists():
-            import shutil
-
+    def _db_signature(self) -> tuple:
+        """同时核对总库路径、文件与 WAL，捕捉 worker 已提交的新记录。"""
+        path = self.db_path
+        signature = [str(path.resolve())]
+        for candidate in (path, path.with_name(path.name + '-wal')):
             try:
-                shutil.move(str(old_db_path), str(self.db_path))
-                logger.info(
-                    f"已移动旧版 CL1 数据库: {old_db_path} -> {self.db_path}"
-                )
-            except Exception as e:
-                logger.error(f"[Statistics] 移动旧版 CL1 数据库失败: {type(e).__name__}")
-
-    def _serialize_data(self, data: Dict[str, Any]) -> str:
-        """将公共字段序列化为 JSON。"""
-        return json.dumps(data, ensure_ascii=False, separators=(",", ":"))
-
-    def _deserialize_data(self, data_json: Optional[str]) -> Optional[Dict[str, Any]]:
-        """从 JSON 读取公共字段。"""
-        if not data_json:
-            return None
-        try:
-            data = json.loads(data_json)
-        except Exception as e:
-            logger.warning(f"[Statistics] 读取 CL1 JSON 失败: {type(e).__name__}")
-            return None
-        return data if isinstance(data, dict) else None
-
-    def _decrypt_payload(self, blob: bytes, key: bytes) -> Dict[str, Any]:
-        return decrypt_legacy_payload(blob, key)
-
-    def _decrypt_with_key(self, blob: bytes, key: bytes) -> Optional[Dict[str, Any]]:
-        """辅助方法：使用指定密钥进行读取还原"""
-        if not blob or len(blob) < 32:
-            return None
-        try:
-            return self._decrypt_payload(blob, key)
-        except Exception:
-            return None
-
-    def _decrypt(self, blob: bytes) -> Optional[Dict[str, Any]]:
-        """尝试读取还原旧版 AES-GCM 数据。"""
-        if not blob or len(blob) < 32:
-            return None
-        for key in self._legacy_decryption_keys:
-            data = self._decrypt_with_key(blob, key)
-            if data is not None:
-                return data
-        return None
-
-    def _db_signature(self) -> Tuple[int, int]:
-        """库文件的 (修改时间, 大小)，用于识别外部进程的写入。
-
-        worker 与 WebUI 是两个进程，进程内的失效标记看不到对方的写入，因此靠
-        文件本身的属性判断：「修改时间 + 大小」任一变化即认为数据已更新。
-        """
-        try:
-            stat = os.stat(self.db_path)
-            return (int(stat.st_mtime_ns), int(stat.st_size))
-        except OSError:
-            return (0, 0)
+                stat = candidate.stat()
+                # 只读连接也可能创建空 WAL，尚无帧时不应使本次快照缓存失效。
+                signature.extend((0, 0) if candidate.name.endswith('-wal') and stat.st_size <= 32
+                                 else (int(stat.st_mtime_ns), int(stat.st_size)))
+            except OSError:
+                signature.extend((0, 0))
+        return tuple(signature)
 
     def invalidate_read_cache(self) -> None:
         """清空只读缓存。任何写操作后都必须调用。"""
@@ -385,10 +219,8 @@ class Cl1Database:
     def enable_read_cache(self) -> None:
         """开启只读缓存。
 
-        每次 ``get_stats`` 都要把整个月度 JSON（实测 2~4 MB）反序列化一遍，
-        单次 17~34 ms；而渲染一个板块会走多条读取路径（``get_meow_stats`` 每个
-        侵蚀等级一次、``get_build_cl1_summary`` 等），同一个月的 blob 被重复解析
-        十几次，累计 150~200 ms。开启缓存后同一周期内只解析一次。
+        原生关联表恢复出的月度快照被多个面板复用；同一渲染周期只组装一次，
+        总库或 WAL 变化、配置目录切换、TTL 到期或写入后立即失效。
 
         **只读场景专用**：缓存返回的是同一个 dict 对象，调用方若就地修改再写回，
         会同时改到缓存。写路径（``add_*`` / ``save_stats`` 等）不要开启，或者开启后
@@ -415,67 +247,24 @@ class Cl1Database:
         finally:
             self.disable_read_cache()
 
-    @opsi_secure.checked_read
     def get_stats(self, instance: str, month: str) -> Dict[str, Any]:
-        """获取指定实例和月份的统计数据"""
-        vault = opsi_secure.get_vault()
-        readable = vault.ensure_ready() or vault.legacy_plaintext_readable()
-        if not readable:
-            # 凭据不可用或已冻结时，不能用此前解密的缓存绕过存储校验。
-            self.invalidate_read_cache()
+        """读取原生月度快照，旧版面板保留一次渲染内的短期缓存。"""
+        self.store.ensure_ready()
         cache_key = (instance, month)
-        if self._read_cache_enabled and readable:
+        signature = self._db_signature()
+        now = datetime.now()
+        if self._read_cache_enabled:
             cached = self._read_cache.get(cache_key)
             if cached is not None:
-                signature, timestamp, data = cached
-                if (
-                    signature == self._db_signature()
-                    and (datetime.now() - timestamp).total_seconds() < self.READ_CACHE_TTL
-                ):
+                previous, timestamp, data = cached
+                if previous == signature and (now - timestamp).total_seconds() < self.READ_CACHE_TTL:
                     return data
-                # 库变了或过期了：丢掉，走正常读取
-                self._read_cache.pop(cache_key, None)
-        try:
-            with closing(sqlite3.connect(self.db_path)) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT data_json, encrypted_blob, secure_json FROM cl1_data WHERE instance = ? AND month = ?",
-                    (instance, month),
-                )
-                row = cursor.fetchone()
-                if row:
-                    data = self._deserialize_data(row[0])
-                    decoded = False
-                    if data is None and row[1]:
-                        data = self._decrypt(row[1])
-                        decoded = isinstance(data, dict)
-                    if decoded:
-                        try:
-                            with self._stats_transaction() as write_conn:
-                                merged = self._get_stats_in_connection(write_conn, instance, month)
-                                self._save_stats_in_connection(write_conn, instance, month, merged)
-                                data = merged
-                        except Exception:
-                            # 迁移只是读取时的可选维护，保存失败仍返回已经读取还原的数据。
-                            logger.warning(f"[Statistics] 旧数据迁移未落盘: {instance} {month}")
-                            if row[2]:
-                                data = self._merge_secure_part(data, row[2], month, instance)
-                        # 展示路径不需要保留降级标记。
-                        data.pop(opsi_secure.MISSING_MARKER, None)
-                        return data
-                    if isinstance(data, dict):
-                        data = self._merge_secure_part(data, row[2], month, instance)
-                        if self._read_cache_enabled and readable and not data.get(opsi_secure.MISSING_MARKER):
-                            self._read_cache[cache_key] = (
-                                self._db_signature(), datetime.now(), data,
-                            )
-                        # 展示路径不需要保留降级标记。
-                        data.pop(opsi_secure.MISSING_MARKER, None)
-                        return data
-        except Exception as e:
-            logger.error(f"[Statistics] 查询统计数据失败 {instance} {month}: {type(e).__name__}")
+        with self.store.transaction(write=False) as connection:
+            data = self._get_stats_in_connection(connection, instance, month)
+        if self._read_cache_enabled:
+            self._read_cache[cache_key] = (signature, now, data)
+        return data
 
-        return self._empty_data(month)
 
     def _empty_data(self, month: str) -> Dict[str, Any]:
         return {
@@ -711,23 +500,13 @@ class Cl1Database:
         return int(raw_battle_count), effective_rounds, should_save
 
     def _list_stats_rows(self, instance: Optional[str] = None) -> List[Tuple[str, str]]:
-        """列出数据库中已有的实例与月份。"""
-        try:
-            with closing(sqlite3.connect(self.db_path)) as conn:
-                cursor = conn.cursor()
-                if instance:
-                    cursor.execute(
-                        "SELECT instance, month FROM cl1_data WHERE instance = ? ORDER BY month",
-                        (instance,),
-                    )
-                else:
-                    cursor.execute(
-                        "SELECT instance, month FROM cl1_data ORDER BY instance, month"
-                    )
-                return [(row[0], row[1]) for row in cursor.fetchall()]
-        except Exception as e:
-            logger.error(f"[Statistics] 列出统计数据失败: {type(e).__name__}")
-            return []
+        with self.store.transaction(write=False) as connection:
+            if instance is None:
+                rows = connection.execute('SELECT instance,month FROM cl1_months ORDER BY instance,month')
+            else:
+                rows = connection.execute('SELECT instance,month FROM cl1_months WHERE instance=? ORDER BY month', (instance,))
+            return [(row[0], row[1]) for row in rows]
+
 
     def backfill_meow_stats(
         self, instance: str, year: int = None, month: int = None
@@ -796,88 +575,22 @@ class Cl1Database:
 
     @contextmanager
     def _stats_transaction(self):
-        """读取前取得 SQLite 写锁，跨线程和进程串行化整个读改写过程。
+        """整次统计读改写使用同一个总库写事务。"""
+        with self.store.transaction() as connection:
+            yield connection
+        self.invalidate_read_cache()
 
-        连接上下文负责提交及异常回滚，closing 保证提交失败也释放连接。
-        """
-        vault = opsi_secure.get_vault()
-        vault.check_database(self.db_path)
-        # writer_ready 与写入事务共用同一协调锁持有期：一次写入只做一次校验；
-        # 首次启用/迁移也必须发生在打开数据库连接之前（迁移会替换数据库文件）。
-        with vault.coordinator.lock():
-            if not vault.writer_ready():
-                raise opsi_secure.VaultLocked('统计运行环境暂不可用')
-            with closing(sqlite3.connect(self.db_path)) as conn:
-                with vault.transaction(conn, self.db_path):
-                    yield conn
 
     def _save_stats_in_connection(self, conn, instance, month, data):
-        """在已协调的事务内保存单个月份；不可用时由事务完整回滚。"""
-        vault = opsi_secure.get_vault()
-        if not vault.encrypted:
-            stored = conn.execute('SELECT secure_json,encrypted_blob FROM cl1_data WHERE instance=? AND month=?',
-                                  (instance, month)).fetchone()
-            if stored and (stored[1] or (stored[0] and (
-                    opsi_secure.is_ciphertext(stored[0]) or opsi_secure.decode_record('cl1', stored[0]) is None))):
-                # 首次迁移后外部放入旧载荷时，显式整体保存也不能覆盖原件。
-                vault._checked = False
-                raise opsi_secure.StoreUnavailable('现有统计载荷未完整迁移，保留原件并拒绝覆盖')
-        if data.pop(opsi_secure.MISSING_MARKER, False):
-            raise opsi_secure.VaultLocked('统计快照暂不可用')
-        public, blob = data, None
-        if vault.encrypted:
-            public, secure = opsi_secure.partition_cl1(data)
-            blob = vault.seal('cl1', secure, opsi_secure.row_context('cl1', {'instance': instance, 'month': month}))
-        conn.execute(
-            """
-            INSERT INTO cl1_data (instance, month, data_json, secure_json, encrypted_blob)
-            VALUES (?, ?, ?, ?, NULL)
-            ON CONFLICT(instance, month) DO UPDATE SET
-                data_json = excluded.data_json,
-                secure_json = excluded.secure_json,
-                encrypted_blob = NULL
-            """,
-            (instance, month, self._serialize_data(public), blob),
-        )
+        from module.persistence.snapshots import save_month
+        save_month(conn, instance, month, data)
 
-    def _merge_secure_part(self, data: dict, secure_json, month: str, instance: str) -> dict:
-        """合并大世界密文；暂不可读取还原时补齐默认值并打上降级标记。
-
-        始终保持完整的数据形状（缺失字段用默认值），避免调用方在密钥不可用的
-        降级读取上遇到 KeyError；写回路径根据降级标记保留原密文。
-        """
-        if not secure_json:
-            if not opsi_secure.get_vault().legacy_plaintext_readable():
-                public, _ = opsi_secure.partition_cl1(data)
-                defaults = self._empty_data(month)
-                return dict(public, **{key: defaults[key] for key in opsi_secure.CL1_SECURE_FIELDS if key in defaults})
-            return data
-        secure = opsi_secure.decode_record('cl1', secure_json, opsi_secure.row_context('cl1', {'instance': instance, 'month': month}))
-        if secure is not None:
-            return {**data, **secure}
-        defaults = self._empty_data(month)
-        data = {**{key: defaults[key] for key in opsi_secure.CL1_SECURE_FIELDS if key in defaults}, **data}
-        data[opsi_secure.MISSING_MARKER] = True
-        return data
 
     def _get_stats_in_connection(self, conn, instance, month):
-        """事务中的读取不能把数据库错误或损坏行当成空数据覆盖。
+        from module.persistence.snapshots import read_month
+        data = read_month(conn, instance, month)
+        return self._empty_data(month) if data is None else data
 
-        正常统计保存在完整的 data_json 中；兼容旧密文读取时仍保留
-        MISSING 标记，阻止用默认值覆盖尚未完整迁移的历史。
-        """
-        row = conn.execute(
-            "SELECT data_json, encrypted_blob, secure_json FROM cl1_data WHERE instance = ? AND month = ?",
-            (instance, month),
-        ).fetchone()
-        if row is None:
-            return self._empty_data(month)
-        data = self._deserialize_data(row[0])
-        if data is None and row[1]:
-            data = self._decrypt(row[1])
-        if not isinstance(data, dict):
-            raise ValueError(f"统计数据无法解码: {instance} {month}")
-        return self._merge_secure_part(data, row[2], month, instance)
 
     def increment_battle_count(self, instance: str, delta: int = 1):
         """增加战斗次数"""
@@ -986,9 +699,9 @@ class Cl1Database:
             return
         try:
             stored: Dict[str, Dict[str, Any]] = {}
-            with closing(sqlite3.connect(self.db_path)) as reader:
+            with self.store.transaction(write=False) as reader:
                 for (month,) in reader.execute(
-                    'select month from cl1_data where instance = ? order by month', (instance,)
+                    'select month from cl1_months where instance = ? order by month', (instance,)
                 ):
                     try:
                         stored[month] = self._get_stats_in_connection(reader, instance, month)
@@ -1046,9 +759,9 @@ class Cl1Database:
             return
         try:
             stored: Dict[str, Dict[str, Any]] = {}
-            with closing(sqlite3.connect(self.db_path)) as reader:
+            with self.store.transaction(write=False) as reader:
                 for (month,) in reader.execute(
-                    'select month from cl1_data where instance = ?', (instance,)
+                    'select month from cl1_months where instance = ?', (instance,)
                 ):
                     try:
                         stored[month] = self._get_stats_in_connection(reader, instance, month)
@@ -1236,93 +949,24 @@ class Cl1Database:
         )
 
     def migrate_from_json(self, json_path: Path, instance: str):
-        """从 JSON 文件迁移数据到数据库"""
-        if not json_path.exists():
-            return
+        """显式导入旧月份文件，只补缺月，不修改源文件。"""
+        import re
+        from module.persistence.migration import LegacyDecoder
+        from module.persistence.snapshots import read_month
+        path = Path(json_path).absolute()
+        data = LegacyDecoder(self.store.directory.parent).file('archives', path, path)
+        with self._stats_transaction() as connection:
+            for month in sorted(key for key in data if re.fullmatch(r'\d{4}-\d{2}', key)):
+                if read_month(connection, instance, month) is not None:
+                    continue
+                value = data[month]
+                if not isinstance(value, dict):
+                    record = self._empty_data(month)
+                    record.update(battle_count=value, akashi_encounters=data.get(month + '-akashi', 0),
+                                  akashi_ap=data.get(month + '-akashi-ap', 0), akashi_ap_entries=data.get(month + '-akashi-ap-entries', []))
+                    value = record
+                self._save_stats_in_connection(connection, instance, month, value)
 
-        logger.info(f"[Statistics] 开始从 JSON 迁移 CL1 数据: {json_path}, instance={instance}")
-        try:
-            with json_path.open("r", encoding="utf-8") as f:
-                old_data = json.load(f)
-            if isinstance(old_data, dict) and old_data.get(opsi_secure.WRAPPER_KEY):
-                vault = opsi_secure.get_vault()
-                old_data = vault.open_('archives', old_data['payload'], vault.file_context('archives', json_path))
-
-            if not isinstance(old_data, dict):
-                return
-
-            # JSON 格式比较杂乱，需要按月份归档
-            # 格式可能是: {"2026-02": 10, "2026-02-akashi": 1, "2026-02-akashi-ap": 120, "2026-02-akashi-ap-entries": [...]}
-            months = {
-                key[:7]
-                for key in old_data
-                if len(key) >= 7 and key[4] == "-"
-            }
-
-            for month in months:
-                # 首先检查数据库是否已有数据，避免覆盖
-                with self._stats_transaction() as conn:
-                    c = conn.cursor()
-                    c.execute(
-                        "SELECT 1 FROM cl1_data WHERE instance = ? AND month = ?",
-                        (instance, month),
-                    )
-                    if c.fetchone():
-                        logger.info(
-                            f"[Statistics] 数据库中已存在 {instance} {month}，跳过迁移"
-                        )
-                        continue
-
-                    new_stats = self._empty_data(month)
-                    new_stats["battle_count"] = old_data.get(month, 0)
-                    new_stats["akashi_encounters"] = old_data.get(f"{month}-akashi", 0)
-                    new_stats["akashi_ap"] = old_data.get(f"{month}-akashi-ap", 0)
-                    new_stats["akashi_ap_entries"] = old_data.get(
-                        f"{month}-akashi-ap-entries", []
-                    )
-
-                    self._save_stats_in_connection(conn, instance, month, new_stats)
-                logger.info(f"[Statistics] 已迁移 {instance} {month}")
-
-            vault = opsi_secure.get_vault()
-            # 原文件保留同一身份；普通存储保持可直接读取的 JSON。
-            vault.write_file('archives', json_path, old_data, wrapper=True)
-
-        except Exception as e:
-            logger.exception(f"从 JSON 迁移 CL1 数据失败: {type(e).__name__}")
-
-    def _auto_migrate(self):
-        """
-        初始化时自动扫描 log/cl1 下的所有实例并迁移旧数据
-        """
-        project_root = Path(__file__).resolve().parents[2]
-        old_db_dir = project_root / "log" / "cl1"
-        old_db_path = old_db_dir / "cl1_data.db"
-
-        if old_db_path.exists() and not self.db_path.exists():
-            import shutil
-
-            try:
-                shutil.move(str(old_db_path), str(self.db_path))
-                logger.info(
-                    f"Moved old CL1数据库 from {old_db_path} to {self.db_path}"
-                )
-            except Exception as e:
-                logger.error(f"[统计-数据库] 移动旧CL1数据库失败: {type(e).__name__}")
-
-        if not old_db_dir.exists():
-            return
-
-        # logger.info(f"在 {old_db_dir} 中扫描旧版 CL1 数据...")
-        try:
-            for instance_dir in old_db_dir.iterdir():
-                if instance_dir.is_dir():
-                    json_file = instance_dir / "cl1_monthly.json"
-                    if json_file.exists():
-                        # logger.info(f"发现实例旧数据: {instance_dir.name}")
-                        self.migrate_from_json(json_file, instance_dir.name)
-        except Exception as e:
-            logger.error(f"[统计-数据库] 自动迁移扫描错误: {type(e).__name__}")
 
     # ========== 耄耋相接数据记录方法 ==========
 

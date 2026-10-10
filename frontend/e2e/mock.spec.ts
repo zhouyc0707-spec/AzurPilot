@@ -350,11 +350,14 @@ test('玻璃装饰不阻挡导航，背景失败降级并尊重减少动态效�
   await page.goto('/')
   await expect(page.locator('.wallpaper img')).toBeVisible()
   await expect(page.locator('.glass-material-lens')).toHaveCount(1)
-  await page.keyboard.press('Tab')
+  await page.locator('.instance-card').first().click()
+  await expect(page.getByRole('heading', {name: 'demo-main', exact: true})).toBeVisible()
+  // 实例外壳的主区是真正的可聚焦内容目标，主页使用独立卡座布局。
+  await expect(page.getByRole('main')).not.toHaveClass(/motion-nav-/)
+  await page.getByRole('link', {name: '跳转到内容'}).focus()
   await expect(page.getByRole('link', {name: '跳转到内容'})).toBeFocused()
   await page.keyboard.press('Enter')
-  await expect(page.locator('main')).toBeFocused()
-  await page.locator('.instance-card').first().click()
+  await expect(page.getByRole('main')).toBeFocused()
   await page.getByRole('button', {name: '切换实例'}).click()
   await expect(page.getByRole('menuitemradio').first()).toBeVisible()
   await page.keyboard.press('Escape')
@@ -371,6 +374,10 @@ test('玻璃装饰不阻挡导航，背景失败降级并尊重减少动态效�
 
 test('总览三态、资源搭配记忆、日志与被动截图切换', async ({page}) => {
   const methods: string[] = []
+  // 固定本用例的四张初始卡，避免默认新增资源影响添加与排序验证。
+  await page.addInitScript(() => {
+    if (!localStorage.getItem('azurpilot.resources.demo-main')) localStorage.setItem('azurpilot.resources.demo-main', JSON.stringify(['Oil', 'Coin', 'Gem', 'Cube']))
+  })
   page.on('websocket', socket => socket.on('framesent', frame => { methods.push(JSON.parse(String(frame.payload)).method) }))
   await page.goto('/#/i/demo-main/overview')
   await expect(page.getByLabel('搜索日志')).toHaveCount(0)
@@ -379,7 +386,7 @@ test('总览三态、资源搭配记忆、日志与被动截图切换', async ({
   const settings = page.getByRole('dialog')
   await settings.getByRole('button', {name: '添加卡片', exact: true}).click()
   await settings.getByRole('button', {name: '行动力', exact: true}).click()
-  const editorCards = settings.locator('.resource-editor-card:not(.resource-editor-add)')
+  const editorCards = settings.locator('.resource-card-editor [data-resource-key]')
   const source = await editorCards.last().boundingBox()
   const target = await editorCards.first().boundingBox()
   expect(source).not.toBeNull()
@@ -394,9 +401,9 @@ test('总览三态、资源搭配记忆、日志与被动截图切换', async ({
   await expect(page.locator('.resource-card').first()).toContainText('行动力')
   const actionPoint = page.locator('.resource-card').filter({hasText: '行动力'})
   await expect(actionPoint.locator('.resource-heading')).toHaveText('行动力')
-  await expect(actionPoint.locator('.resource-value')).toHaveText('101/ 5,301')
-  await expect(actionPoint.locator('.resource-value small')).toHaveText('/ 5,301')
-  await expect(actionPoint.locator('.resource-icon-image')).toHaveAttribute('src', /guild_coin\.webp/)
+  await expect(actionPoint.locator('.resource-value')).toHaveText('101/ 6,001')
+  await expect(actionPoint.locator('.resource-value small')).toHaveText('/ 6,001')
+  await expect(actionPoint.locator('.resource-icon-image')).toHaveAttribute('src', /dog_small\.webp/)
   await page.reload()
   await expect(page.locator('.resource-card')).toHaveCount(5)
   await page.getByRole('button', {name: '启动调度器', exact: true}).click()
@@ -528,8 +535,13 @@ for (const theme of ['minimal', 'legacy-light', 'legacy-dark', 'extreme'] as con
 }
 
 test('任务二级菜单通过顶层浮层覆盖资源卡片', async ({page}) => {
-  await page.setViewportSize({width: 1134, height: 669})
-  await page.addInitScript(() => localStorage.setItem('azurpilot.resources.demo-main', JSON.stringify(['Oil', 'ActionPoint'])))
+  // 在较矮窗口触发菜单靠底夹紧，使菜单与资源卡实际相交。
+  await page.setViewportSize({width: 1134, height: 390})
+  await page.addInitScript(() => {
+    localStorage.setItem('azurpilot.resources.demo-main', JSON.stringify(['Oil', 'ActionPoint']))
+    // 这项验证使用普通材质的纯白菜单；玻璃材质有独立的透明度契约。
+    localStorage.setItem('azurpilot.material', 'plain')
+  })
   await page.goto('/#/i/demo-main/overview')
   await page.locator('.task-group-button').filter({hasText: '系统'}).click()
   const flyout = page.locator('.task-submenu-flyout')
@@ -579,11 +591,11 @@ test('舰队扫描和半自动工具在当前页面显示运行日志', async ({
       await dialog.getByRole('button', {name: '确认运行', exact: true}).click()
       running = true
       await expect(page).toHaveURL(new RegExp(`/i/${instance}/task/${task}$`))
-      await expect(logs).toContainText('模拟调度器已启动')
+      await expect(logs).toContainText('模拟独立工具已启动')
       if (task === 'FleetScan') await page.screenshot({path: 'test-results/tool-run-log.png', fullPage: true})
     } finally {
       if (running) {
-        const stop = page.getByRole('button', {name: '停止运行', exact: true})
+        const stop = page.getByRole('button', {name: '停止任务', exact: true})
         await expect(stop).toBeVisible()
         await stop.click()
         await expect(page.getByRole('button', {name: '启动调度器', exact: true})).toBeVisible()
@@ -786,8 +798,7 @@ test('配置字体、多行输入与 YAML 编辑实时保存及主题颜色', as
   await row.scrollIntoViewIfNeeded()
   await page.screenshot({path: 'test-results/yaml-light.png'})
   await page.goto('/#/interface')
-  await page.getByRole('combobox', {name: '界面主题', exact: true}).click()
-  await page.getByRole('option', {name: '深色', exact: true}).click()
+  await page.getByRole('tablist', {name: '明暗', exact: true}).getByRole('tab', {name: '深色', exact: true}).click()
   await page.goto('/#/i/demo-main/task/Alas')
   await expect(editor).toBeVisible()
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
@@ -1531,8 +1542,31 @@ test('商店配置只显示官源购买设置并保留普通过滤器保存', as
   await page.setViewportSize({width: 390, height: 844})
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   const close = page.locator('.mobile-close')
-  if (await close.isVisible()) await close.click()
+  if (await page.locator('.app-shell.mobile-open').count()) await close.click()
   await filter.scrollIntoViewIfNeeded()
   await expect(filter).toBeInViewport()
   await page.screenshot({path: 'test-results/shop-upstream-mobile.png', fullPage: true})
+})
+
+test('关闭背景后切回填写 URL 直接铺上，不必再点应用背景', async ({page}) => {
+  await page.route('https://api.yppp.net/api.php', route => route.fulfill({
+    contentType: 'image/svg+xml',
+    body: '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><rect width="1280" height="720" fill="#9acbff"/></svg>',
+  }))
+  /* 「关闭背景」档只在普通材质出现。 */
+  await page.addInitScript(() => {
+    localStorage.setItem('azurpilot.theme', 'light')
+    localStorage.setItem('azurpilot.material', 'plain')
+  })
+  await page.goto('/#/interface')
+  const source = page.locator('#ui-background-source')
+  await source.click()
+  await page.getByRole('option', {name: '填写 URL', exact: true}).click()
+  await expect(page.locator('.wallpaper img')).toBeVisible()
+  await source.click()
+  await page.getByRole('option', {name: '关闭背景', exact: true}).click()
+  await expect(page.locator('.wallpaper img')).toHaveCount(0)
+  await source.click()
+  await page.getByRole('option', {name: '填写 URL', exact: true}).click()
+  await expect(page.locator('.wallpaper img')).toBeVisible()
 })

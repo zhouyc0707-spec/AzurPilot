@@ -5,6 +5,8 @@ type Request = {id: string; method: string; params: {instance?: string; path?: s
 
 /** 只替换交易所只读响应，不访问交易所、开户、下单或启动真实游戏。 */
 async function isolatedExchange(page: Page) {
+  // 阻止外部埋点脚本受虚拟时钟影响，也确保隔离验收不会访问真实交易服务。
+  await page.route(/^https:\/\//, route => route.abort())
   const requests: Request[] = []
   const errors: string[] = []
   const held: Array<{kind: 'overview' | 'stock'; send: () => void}> = []
@@ -66,7 +68,7 @@ async function isolatedExchange(page: Page) {
   function logs(instance: string) {
     return {instance, cursor: 1, reset: false, entries: [{id: 1, level: 'INFO', text: 'INFO 2026-10-04 12:00:00 │ 交互缓存验收日志'}]}
   }
-  page.on('pageerror', error => errors.push(error.message))
+  page.on('pageerror', error => errors.push(error.stack ?? error.message))
   await page.routeWebSocket('**/api/v1/ws', socket => {
     const server = socket.connectToServer()
     sockets.push(socket)

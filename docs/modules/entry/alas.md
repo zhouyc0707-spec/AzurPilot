@@ -16,6 +16,8 @@
 
 WebUI 的「执行一次」使用同一实例互斥的独立 worker，但不进入上述调度循环：先绑定用户指定任务的配置，再执行一次 `run()`，完成后退出。它保留任务自身的正常逻辑和错误现场处理，不自动执行恢复队列或其他待运行任务；目标任务的下次时间成功后才提交，中止时保留原排程。入口、停止和服务重启边界见 [运行时服务](../webui/runtime.md#排程任务执行一次)。
 
+所有运行入口在业务 worker 启动前执行 `module.persistence.database.initialize()`。首次迁移先备份、转换与检查，失败停止启动并保留旧源；总库完成标记存在而数据库丢失时必须恢复备份。模块导入不创建总库，详见 [普通业务数据存储](../infra/persistence.md)。
+
 ## 2. 模块职责
 
 ### 负责
@@ -320,6 +322,7 @@ stateDiagram-v2
 | `ScriptError` | 代码 bug | 连续 3 次内注入 `Restart` 重试；达到 3 次退出 | `'recoverable'` / `exit(1)` |
 | `EmulatorNotRunningError` | 模拟器离线 | `_try_restart_emulator()`（永不放弃，超阈值只加长间隔）+ `Restart` | `'recoverable'` |
 | `RequestHumanTakeover` | 严重到无法安全自动判断 | 也先尝试重启模拟器自动恢复，不再直接终止 | `'recoverable'` |
+| `MindCalculatorScanError` | 船坞扫描识别或三排定位无法确认 | 记录具体原因、异常和错误截图，保留旧清单并结束当前工具任务；不重启模拟器 | `False` |
 | `AutoSearchSetError` | 自动搜索设置失败 | 重启游戏 | `'recoverable'` |
 | 其他 `Exception` | 未预期异常 | 连续计数达 `GameStuckThreshold` 升级为重启模拟器，否则仅重启游戏 | `'recoverable'` |
 | `EmulatorOpBusy` | 已有模拟器启停操作在跑 | 放弃本轮恢复，后台操作结束后下一轮调度接手（非错误，是并发保护） | `False`（重启函数内消化） |

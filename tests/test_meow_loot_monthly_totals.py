@@ -46,7 +46,7 @@ class MeowLootMonthlyTotalsTests(unittest.TestCase):
         self.assertEqual(set(totals), set(range(1, 7)))
         self.assertTrue(all(not any(totals[h].values()) for h in (1, 2, 3, 4, 6)))
         self.assertEqual(AzurStats.meow_loot_display_levels(totals), [3, 5])
-        with closing(sqlite3.connect(AzurStats.LOCAL_DB)) as conn:
+        with closing(sqlite3.connect(AzurStats._database().path)) as conn:
             self.assertEqual(conn.execute(
                 'SELECT item, amount FROM opsi_items WHERE hazard_level = 0 ORDER BY item').fetchall(), [
                     ('CoordinateObscure', 1), ('GearDesignPlanTorpedoT5', 1), ('PlateAntiAirT4', 1),
@@ -88,12 +88,12 @@ class MeowLootMonthlyTotalsTests(unittest.TestCase):
         self.insert(2, 'OperationCoin', device='other-device')
         self.insert(1, 'OperationCoin', genre='opsi_obscure')
         self.insert(4, 'OperationCoin', moment=datetime(2026, 9, 30, 12))
-        with closing(sqlite3.connect(AzurStats.LOCAL_DB)) as conn:
+        with closing(sqlite3.connect(AzurStats._database().path)) as conn:
             before = conn.execute('SELECT hazard_level, item, amount FROM opsi_items ORDER BY id').fetchall()
         self.assertEqual(monthly_meow_record_levels(2026, 10), {3, 5, 6})
         self.assertEqual(monthly_meow_record_levels(2026, 10, instance='fixture'), {3, 5})
         self.assertTrue(all(not any(values.values()) for values in self.totals().values()))
-        with closing(sqlite3.connect(AzurStats.LOCAL_DB)) as conn:
+        with closing(sqlite3.connect(AzurStats._database().path)) as conn:
             self.assertEqual(conn.execute('SELECT hazard_level, item, amount FROM opsi_items ORDER BY id').fetchall(),
                              before)
 

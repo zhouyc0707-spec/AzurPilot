@@ -1,6 +1,6 @@
 """岛屿计划的「一键暂停 / 恢复」服务（本地定制）。
 
-岛屿组下有 17 个任务（`IslandPlan` … `IslandPearlSell`），想临时全部停下时逐个点开关太麻烦。
+岛屿组下可调度任务较多，想临时全部停下时逐个点开关太麻烦。
 这里提供一次调用关闭**当前所有已启用**的岛屿任务，并记下是哪几个被这次操作关掉的；
 下次再点一下即可恢复。
 
@@ -82,8 +82,8 @@ class IslandSuspendService:
     def _island_tasks(data: dict) -> list:
         """配置里可调度的岛屿任务名（升序）。
 
-        只收有 `Scheduler` 组的任务：`IslandPlan` 是「全局配置」模块（当前只有季节一项），
-        本身没有 Scheduler，不参与启用/关闭。
+        只收有 `Scheduler` 组的任务。`IslandPlan` 的走位校验任务也参与；兼容旧版
+        只有全局参数、尚无 Scheduler 的配置，不因补齐任务列表而改动全局参数。
         """
         return sorted(
             task for task, groups in data.items()

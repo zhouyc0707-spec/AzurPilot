@@ -17,6 +17,8 @@ WebUI 不是一个目录，而是一个跨四层协作的体系：
 
 **本地兼容边界**：上游已迁移到 React 前端 + WebSocket API v1；本仓库另保留 `module/webui/` 和 `webapp/` 的 PyWebIO 运行入口。React 的「旧版主题」是 `legacy-light` / `legacy-dark`，顶部新旧 UI 切换只切换 React 主题，不切换后端。两种运行入口共用 `module/runtime` 的进程管理；任务列表的单次执行与停止也遵循同一实例互斥和运行批次核验。
 
+原 PyWebIO 的统计页保留已渲染内容，`app_statistics_page.py` 每 15 秒检查当前配置目录的 `azurpilot.db` 总库及 `-wal` 文件版本，有变化时提示刷新，不打断图表查看。签名包含文件路径、修改时间和大小，不再监听迁移后停止写入的旧统计库或舰船经验 JSON；检查本身不建连接、不触发迁移。`module/webui/warmup.py` 的每进程一次后台预热直接以 SQLite `mode=ro` 打开已存在的总库，不调用业务连接或初始化入口；未迁移、总库缺失时跳过，不创建总库或标记。正式迁移仍由运行入口负责。相关回归见 `tests/test_webui_statistics_page.py` 与 `tests/test_webui_warmup.py`。
+
 本篇是 WebUI 文档体系的导航篇：画全貌、定边界、解释跨层机制；各层细节见 [WebUI 启动器](../entry/gui.md)、[API 服务](api.md)、[运行时服务](runtime.md)、[前端](frontend.md)。独立实例密码、账号快照及 TPM 自动解锁见 [实例账号管理](accounts.md)。
 
 可视化自定义调度的编辑操作、三种运行模式、SQLite 保存及模拟边界见 [卡片式自定义调度](scheduler-program.md)。

@@ -4,8 +4,8 @@
 操作关掉的；下次再点一下恢复。恢复只处理**仍处于关闭状态**的那些 —— 中途被手动打开
 过的任务保持不动（用户 2026-10-01 确认的语义）。
 
-事实说明：`IslandPlan` 是「全局配置」模块（含季节与时间对齐），**没有 Scheduler 组**，
-不是可调度任务，因此永远不参与一键开关。
+`IslandPlan` 现在包含可调度的走位校验；启用时同样参与一键开关。兼容早期只有
+季节与时间对齐、尚无 Scheduler 的配置，暂停或恢复不改写这些全局参数。
 """
 import copy
 import json
@@ -17,18 +17,21 @@ from unittest.mock import patch
 import module.api.island_suspend as island_suspend
 from module.api.island_suspend import IslandSuspendService, read_state
 
-SCHEDULABLE = ['IslandBusiness', 'IslandFarm', 'IslandRancher', 'IslandRestaurant']
+SCHEDULABLE = ['IslandPlan', 'IslandBusiness', 'IslandFarm', 'IslandRancher', 'IslandRestaurant']
 
 
 def island_config(enabled=()):
-    """构造一份岛屿配置：全局配置模块 IslandPlan（无 Scheduler）+ 4 个可调度岛屿任务。"""
+    """构造包含全局参数、走位校验和日常任务的岛屿配置。"""
     data = {
         name: {'Scheduler': {'Enable': name in enabled, 'NextRun': '2026-10-01 08:00:00'}}
         for name in SCHEDULABLE
     }
-    # 与真实配置一致：IslandPlan 只有自己的组与 Storage，没有 Scheduler
-    data['IslandPlan'] = {'IslandPlan': {'Season': 'spring', 'TaskAlignment': 'hour'},
-                          'Storage': {'Keep': {}}}
+    data['IslandPlan'].update({
+        'IslandPlan': {'Season': 'spring', 'TaskAlignment': 'hour'},
+        'IslandProductionPlanner': {'Enabled': True, 'ProductionTargets': '{"Rice": 10}'},
+        'IslandWalk': {'DailyLisha': 'up 3000', 'DailyLishaEnable': True},
+        'Storage': {'Keep': {}},
+    })
     data['Alas'] = {'Scheduler': {'Enable': True}}
     return data
 
@@ -77,7 +80,7 @@ class IslandSuspendTest(unittest.TestCase):
             [('IslandBusiness.Scheduler.Enable', False), ('IslandFarm.Scheduler.Enable', False)],
         )
         self.assertEqual(sorted(read_state('alas')['suspended']), ['IslandBusiness', 'IslandFarm'])
-        # 未启用的任务与非岛屿任务不受影响；全局配置模块 IslandPlan 不参与
+        # 未启用的任务与非岛屿任务不受影响；默认关闭的走位校验不参与
         self.assertFalse(configs.data['IslandRancher']['Scheduler']['Enable'])
         self.assertTrue(configs.data['Alas']['Scheduler']['Enable'])
         self.assertNotIn('IslandPlan', state['suspended'])
@@ -112,7 +115,7 @@ class IslandSuspendTest(unittest.TestCase):
 
         state = service.state('alas')
 
-        # 只统计可调度任务：IslandPlan 不算在内
+        # 走位校验也属于可调度任务，但默认关闭
         self.assertEqual(state['total'], len(SCHEDULABLE))
         self.assertEqual(state['enabledCount'], 1)
         self.assertEqual(state['suspendedCount'], 0)
@@ -126,6 +129,32 @@ class IslandSuspendTest(unittest.TestCase):
         service.toggle('alas')
         self.assertEqual(configs.data['IslandFarm']['Scheduler']['NextRun'], '2026-10-01 08:00:00')
         self.assertTrue(configs.data['IslandFarm']['Scheduler']['Enable'])
+
+    def test_enabled_walk_verification_is_suspended_and_restored(self):
+        """只切换调度开关，不改变路线、生产规划、季节和时间对齐。"""
+        service, configs = self.build(enabled=['IslandPlan', 'IslandFarm'])
+        original = copy.deepcopy(configs.data['IslandPlan'])
+
+        state = service.toggle('alas')
+
+        self.assertEqual(state['suspended'], ['IslandFarm', 'IslandPlan'])
+        paused = copy.deepcopy(configs.data['IslandPlan'])
+        paused['Scheduler']['Enable'] = True
+        self.assertEqual(paused, original)
+        restored = service.toggle('alas')
+        self.assertEqual(restored['enabledCount'], 2)
+        self.assertEqual(configs.data['IslandPlan'], original)
+
+    def test_legacy_global_config_without_scheduler_is_not_toggled(self):
+        service, configs = self.build(enabled=['IslandFarm'])
+        del configs.data['IslandPlan']['Scheduler']
+        original = copy.deepcopy(configs.data['IslandPlan'])
+
+        state = service.toggle('alas')
+        self.assertEqual(state['total'], len(SCHEDULABLE) - 1)
+        self.assertNotIn('IslandPlan', state['suspended'])
+        service.toggle('alas')
+        self.assertEqual(configs.data['IslandPlan'], original)
 
 
 class IslandSuspendIntegrationTest(unittest.TestCase):
@@ -150,7 +179,8 @@ class IslandSuspendIntegrationTest(unittest.TestCase):
             self.skipTest('缺少 config/template.json，跳过真实配置服务用例')
         # 真实配置服务会按 args.json 校验整份配置，这里以模板为底再改岛屿任务的启用状态
         data = json.loads(template.read_text(encoding='utf-8'))
-        for task, enabled in (('IslandFarm', True), ('IslandRestaurant', True), ('IslandRancher', False)):
+        for task, enabled in (('IslandPlan', True), ('IslandFarm', True),
+                              ('IslandRestaurant', True), ('IslandRancher', False)):
             data.setdefault(task, {}).setdefault('Scheduler', {})['Enable'] = enabled
             data[task]['Scheduler']['NextRun'] = '2026-10-01 08:00:00'
         data.setdefault('IslandPlan', {}).setdefault('IslandPlan', {})['Season'] = 'winter'
@@ -165,11 +195,12 @@ class IslandSuspendIntegrationTest(unittest.TestCase):
         service = IslandSuspendService(configs)
 
         state = service.toggle(instance)
-        self.assertEqual(sorted(state['suspended']), ['IslandFarm', 'IslandRestaurant'])
+        self.assertEqual(sorted(state['suspended']), ['IslandFarm', 'IslandPlan', 'IslandRestaurant'])
 
         saved = json.loads((self.root / 'config' / f'{instance}.json').read_text(encoding='utf-8'))
         self.assertFalse(saved['IslandFarm']['Scheduler']['Enable'])
         self.assertFalse(saved['IslandRestaurant']['Scheduler']['Enable'])
+        self.assertFalse(saved['IslandPlan']['Scheduler']['Enable'])
         # 原本就关闭的任务不在记录里，恢复时也不会被打开
         self.assertFalse(saved['IslandRancher']['Scheduler']['Enable'])
         # 调度时间与全局配置（季节、时间对齐）原样保留
@@ -179,10 +210,11 @@ class IslandSuspendIntegrationTest(unittest.TestCase):
 
         restored = service.toggle(instance)
         self.assertEqual(restored['suspendedCount'], 0)
-        self.assertEqual(restored['enabledCount'], 2)
+        self.assertEqual(restored['enabledCount'], 3)
         saved = json.loads((self.root / 'config' / f'{instance}.json').read_text(encoding='utf-8'))
         self.assertTrue(saved['IslandFarm']['Scheduler']['Enable'])
         self.assertTrue(saved['IslandRestaurant']['Scheduler']['Enable'])
+        self.assertTrue(saved['IslandPlan']['Scheduler']['Enable'])
         self.assertFalse(saved['IslandRancher']['Scheduler']['Enable'])
         self.assertEqual(saved['IslandPlan']['IslandPlan']['TaskAlignment'], 'hour')
 

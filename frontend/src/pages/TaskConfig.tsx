@@ -236,6 +236,8 @@ export function TaskConfig() {
                   options={field.option}
                   disabled={readonly}
                   preserveText
+                  // 实测心情重新输入同一值也要提交，建立新的校准时刻。
+                  resubmitOnEdit={(group === 'Emotion' && /^Fleet[12]Value$/.test(arg)) || (group === 'PublicEmotion' && arg === 'FleetValue')}
                   invalid={edit?.status === 'error'}
                   label={label}
                   translateOption={option => t(`${group}.${arg}.${option}`)}

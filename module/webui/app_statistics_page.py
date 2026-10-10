@@ -205,18 +205,16 @@ class StatisticsPageMixin(WebUIMixinBase):
         return getattr(self, "alas_name", None), lang.LANG
 
     def _get_statistics_source_signature(self):
-        """以廉价的文件版本检查代替重复解析和绘图。"""
-        project_root = Path(__file__).resolve().parents[2]
-        instance_name = getattr(self, "alas_name", None) or "default"
+        """检查当前总库及 WAL 版本，不打开连接或触发安装级迁移。"""
+        from module.persistence.database import get_database
+
+        database_path = get_database().path
         paths = (
-            project_root / "config" / "cl1_data.db",
-            project_root / "config" / "cl1_data.db-wal",
-            project_root / "config" / "azurstats_local.db",
-            project_root / "config" / "azurstats_local.db-wal",
-            project_root / "log" / "cl1" / instance_name / "ship_exp_data.json",
+            database_path,
+            database_path.with_name(database_path.name + "-wal"),
         )
         return date.today().isoformat(), tuple(
-            self._get_statistics_file_version(path) for path in paths
+            (str(path), self._get_statistics_file_version(path)) for path in paths
         )
 
     @staticmethod
