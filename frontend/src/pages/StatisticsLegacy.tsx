@@ -243,9 +243,9 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
     try {
       const result = await api.request('statistics.meowScreenshotFolder.open', {instance, item, month})
       if (result.opened) {
-        notify(result.scope === 'month'
-          ? ui('legacyStats.screenshotFolderOpened', {path: result.path ?? result.requestedPath})
-          : ui('legacyStats.screenshotMonthMissing', {month, item: label, path: result.path ?? result.requestedPath}))
+        if (result.scope !== 'month') {
+          notify(ui('legacyStats.screenshotMonthMissing', {month, item: label, path: result.path ?? result.requestedPath}))
+        }
       } else {
         notify(ui('legacyStats.screenshotFolderMissing', {item: label, path: result.requestedPath}))
       }

@@ -365,6 +365,7 @@ test('旧版六类高价值物品文字后提供截图目录按钮，当前和�
     await button.click()
     await expect.poll(() => fixture.folderRequests.at(-1)?.params).toEqual({instance: 'testpilot', item, month: CURRENT_MONTH})
     await expect(button).toBeEnabled()
+    await expect(page.locator('.toast')).toHaveCount(0)
   }
   expect(fixture.folderRequests).toHaveLength(SCREENSHOT_ITEMS.length)
   expect(fixture.requests).toHaveLength(statisticsRequests)
@@ -382,6 +383,7 @@ test('旧版六类高价值物品文字后提供截图目录按钮，当前和�
     await button.click()
     await expect.poll(() => fixture.folderRequests.at(-1)?.params).toEqual({instance: 'testpilot', item, month: HISTORY_MONTH})
     await expect(button).toBeEnabled()
+    await expect(page.locator('.toast')).toHaveCount(0)
   }
   expect(fixture.folderRequests).toHaveLength(SCREENSHOT_ITEMS.length * 2)
   await expect(section.locator('tbody tr').first().locator('td')).toHaveText([
@@ -453,12 +455,14 @@ test('截图目录缺失给出提示，打开失败可以重试且不影响月�
   fixture.replyToFolder({error: '测试目录打开失败'})
   await expect(page.getByRole('alert')).toContainText('测试目录打开失败')
   await expect(failedButton).toBeEnabled()
+  await page.getByRole('alert').click()
+  await expect(page.locator('.toast')).toHaveCount(0)
   await failedButton.click()
   await expect(failedButton).toBeDisabled()
   await expect.poll(() => fixture.folderRequests.map(request => request.params.item)).toEqual(['Plate', 'Plate', 'GearDesignPlanT5', 'GearDesignPlanT5'])
   fixture.replyToFolder()
   await expect(failedButton).toBeEnabled()
-  await expect(page.getByRole('alert')).toHaveCount(0)
+  await expect(page.locator('.toast')).toHaveCount(0)
   await section.getByRole('button', {name: '查看历史月份', exact: true}).click()
   await expectCumulativeRows(page.getByRole('dialog'))
   expect(fixture.errors).toEqual([])
