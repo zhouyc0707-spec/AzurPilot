@@ -138,7 +138,9 @@ class MindCalculatorService:
         data, _ = self.configs.read(instance)
         saved = data.get(TASK, {}).get(GROUP, {}).get('Result', {})
         ships = saved.get('ships', [])
+        fields = data.get(TASK, {}).get(GROUP, {})
         return dict(instance=instance, revision=revision(ships), updated_at=saved.get('updated_at', ''),
+                    min_level=fields.get('MinLevel', 95), max_level=fields.get('MaxLevel', 120),
                     **calculate(ships))
 
     def save(self, instance, expected_revision, ships):
@@ -174,12 +176,17 @@ class MindCalculatorService:
         from PIL import Image, UnidentifiedImageError
         from module.runtime.mind_calculator import recognize
         try:
-            with Image.open(io.BytesIO(decode(content))) as image:
-                if image.size != (1280, 720):
-                    raise ValueError('请使用 1280×720 的模拟器船坞截图')
-                ships = recognize(image.convert('RGB'), Path(filename.replace('\\', '/')).name)
-        except (ValueError, OSError, UnidentifiedImageError) as exc:
+            raw = decode(content)
+            if len(raw) > 5_500_000:
+                raise ValueError('图片超过 5.5 MB 限制，请压缩后重试')
+            with Image.open(io.BytesIO(raw)) as image:
+                if image.format not in ('PNG', 'JPEG', 'WEBP'):
+                    raise ValueError('图片格式不支持，请上传 PNG、JPEG 或 WebP')
+                ships = recognize(image, Path(filename.replace('\\', '/')).name)
+        except (ValueError, OSError, UnidentifiedImageError, Image.DecompressionBombError) as exc:
             raise ApiError('INVALID_PARAMS', f'截图识别失败：{exc}') from None
+        except RuntimeError as exc:
+            raise ApiError('OCR_UNAVAILABLE', f'OCR 引擎无法完成识别，请检查模型和 OCR 配置：{str(exc)[:200]}') from None
         return {'ships': ships}
 
     def export(self, instance, format):

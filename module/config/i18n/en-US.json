@@ -6828,6 +6828,14 @@
       "name": "Cognitive chip calculator",
       "help": "Calculate Cognitive Chips I and coins to reach level 120."
     },
+    "MinLevel": {
+      "name": "Minimum scan level",
+      "help": "Inclusive. Import ships at or above this level."
+    },
+    "MaxLevel": {
+      "name": "Maximum scan level",
+      "help": "Inclusive. Import ships at or below this level."
+    },
     "Result": {
       "name": "Ship scan results",
       "help": "Stores ships, levels and review states per instance."

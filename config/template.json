@@ -3801,6 +3801,8 @@
   },
   "MindCalculatorScan": {
     "MindCalculator": {
+      "MinLevel": 95,
+      "MaxLevel": 120,
       "Result": {}
     },
     "Storage": {

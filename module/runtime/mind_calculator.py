@@ -13,17 +13,63 @@ MIND_COSTS = {
     'SR': (120, 240, 360, 600), 'SSR': (200, 400, 600, 1000), 'UR': (300, 600, 900, 1500),
 }
 RESULT_PATH = 'MindCalculatorScan.MindCalculator.Result'
+SHIP_DATA_FILE = Path(__file__).parents[2] / 'assets/ship/ship_data.json'
 
 
 @lru_cache(maxsize=1)
 def catalog():
-    """内置公共舰船资料，离线可用，不读取原工具的私人配置。"""
-    return json.loads((Path(__file__).parents[2] / 'assets/ship/mind_calculator.json').read_text(encoding='utf-8'))
+    """从共享舰船资料构建国服目录，改造按基础舰船稀有度计费。"""
+    data = json.loads(SHIP_DATA_FILE.read_text(encoding='utf-8'))
+    ships = {}
+    for ship_id, row in data.items():
+        if row['group_type'] is None or row['star_max'] is None or row['rarity_name'] not in RARITIES:
+            continue
+        # 剧情复制舰可能沿用模板群组，不能覆盖可获取舰船的身份与稀有度。
+        if int(ship_id) // 10 != row['group_type'] and not (row['is_retrofit'] and int(ship_id) < 900000):
+            continue
+        name = row['name']['cn'].strip()
+        name = re.sub(r'[.・]META$', '·META', name)
+        base = data.get(str(row['retrofit_base_id']), row) if row['is_retrofit'] else row
+        rarity = base['rarity_name']
+        if rarity not in RARITIES:
+            continue
+        group = ('联动' if row['nationality'] >= 100 else 'META' if row['nationality'] == 97
+                 else '幼体' if row.get('is_child') else '方案' if row['group_type'] // 100 % 100 == 99 else '')
+        info = dict(name=name, rarity=rarity, base_rarity=rarity,
+                    base_name=base['name']['cn'].strip() if row['is_retrofit'] else name,
+                    group=group, type=row['type_name'])
+        if row['is_retrofit']:
+            info.update(group='改造', rarity=RARITIES[max(0, RARITIES.index(rarity) - 1)])
+        ships[name] = info
+    for row in data.values():
+        base = ships.get(row['name']['cn'].strip())
+        if not base or row['is_retrofit']:
+            continue
+        for name in row.get('retrofit_names', []):
+            # 游戏 Ship.getRarity() 在改造后升一档；费用仍取基础稀有度。
+            ships[name] = dict(base, name=name, group='改造',
+                               rarity=RARITIES[max(0, RARITIES.index(base['base_rarity']) - 1)])
+    return dict(source='assets/ship/ship_data.json', updated_at='', ships=ships)
 
 
 def normalize_name(name):
     """规范化舰船名称以便匹配资料与合并重复项。"""
     return re.sub(r'[\s.·・．。]', '', unicodedata.normalize('NFKC', name)).casefold()
+
+
+def highest_ships(ships):
+    """同基础身份取最高等级；同级优先改造舰，II 型与 META 保留独立身份。"""
+    output = {}
+    for index, ship in enumerate(ships):
+        if not 1 <= ship['level'] <= 125:
+            continue
+        info = find_ship(ship['name'])
+        key = base_key(info) if info else normalize_name(ship['name'])
+        if ship['name'].startswith('未识别舰船'):
+            key = f'unknown:{index}'
+        if key not in output or preference(output[key]) < preference(ship):
+            output[key] = ship
+    return list(output.values())
 
 
 def find_ship(name):
@@ -50,13 +96,13 @@ def revision(ships):
 
 
 def enrich(ship):
-    """资料优先确定稀有度，未知改造船必须显式提供基础稀有度。"""
+    """资料补全默认稀有度，保留用户明确指定的计费基础稀有度。"""
     item = dict(ship)
     info = find_ship(item['name'])
     if info:
         item['name'] = info['name']
         item['rarity'] = info['rarity']
-        item['base_rarity'] = info['base_rarity']
+        item['base_rarity'] = item.get('base_rarity') or info['base_rarity']
         item['group'] = info['group']
         item['base_name'] = info['base_name']
     else:
@@ -79,13 +125,19 @@ def base_key(ship):
     return normalize_name(name)
 
 
+def preference(ship):
+    """最高等级优先，只有等级相同才优先保留已确认的改造身份。"""
+    info = find_ship(ship['name'])
+    return ship['level'], bool(info and info['group'] == '改造')
+
+
 def calculate(ships):
     """等级只能推断觉醒阶段：116 级起已走完四阶，目标限定为 120 级。"""
     rows = [enrich(ship) for ship in ships]
     highest = {}
     for index, ship in enumerate(rows):
         name = ship['name']
-        if ship['excluded'] or '兵装' in name or 'μ' in name.casefold() or ship['group'] == '幼体':
+        if ship['excluded'] or '兵装' in name or 'μ' in name.casefold() or ship['group'] in ('幼体', '联动'):
             ship['status'] = 'excluded'
         elif ship['review'] or not 1 <= ship['level'] <= 125 or ship['base_rarity'] not in RARITIES:
             ship['status'] = 'review'
@@ -93,7 +145,7 @@ def calculate(ships):
             ship['status'] = 'merged'
             key = base_key(ship)
             previous = highest.get(key)
-            if previous is None or rows[previous]['level'] < ship['level']:
+            if previous is None or preference(rows[previous]) < preference(ship):
                 highest[key] = index
         ship['mind'] = ship['gold'] = 0
     summary = {rarity: dict(rarity=rarity, stages=[0] * 6, stage_mind=[0] * 4,
@@ -120,10 +172,22 @@ def calculate(ships):
 
 
 def recognize(image, source='', *, name_ocr=None, level_ocr=None, row_origins=None):
-    """读取完整卡片；保留多轮识别提示，全部要求人工核对。"""
-    from module.runtime.mind_recognition import recognize_cards
-    return [card.ship for card in recognize_cards(image, source, name_ocr=name_ocr,
-                                                  level_ocr=level_ocr, row_origins=row_origins)]
+    """读取完整卡片；可靠结果直接计费，身份不明的条目保留核对提示。"""
+    import numpy as np
+    from module.retire.assets import DOCK_CHECK
+    from module.runtime.mind_recognition import normalize_screenshot, recognize_cards
+    image = normalize_screenshot(image)
+    pixels = np.array(image)
+    left, top, right, bottom = DOCK_CHECK.area
+    # Button.match 的反向模板参数对纯色输入可能返回 1，先排除没有文字的页头。
+    if pixels[top:bottom, left:right].std() < 10 or not DOCK_CHECK.match(pixels, offset=(0, 0)):
+        raise ValueError('截图未显示完整船坞界面，请上传包含顶部“船坞”标识及舰船卡片的游戏截图')
+    cards = recognize_cards(image, source, name_ocr=name_ocr, level_ocr=level_ocr, row_origins=row_origins)
+    invalid = [f'第 {sorted({card.y for card in cards}).index(card.y) + 1} 行第 {card.col + 1} 列'
+               for card in cards if not card.level_reliable]
+    if invalid:
+        raise ValueError('等级未能确认：' + '、'.join(invalid) + '；请上传清晰的静止船坞截图，未导入零等级数据')
+    return highest_ships([card.ship for card in cards])
 
 
 def detect_rows(image, ocr):

@@ -368,7 +368,8 @@ def func(
             "host": host,
             "port": port,
             "factory": True,
-            "ws_max_size": 1048576,
+            # 文件接口允许 8 MiB；普通请求仍由 Session 按 1 MiB 校验。
+            "ws_max_size": 8 * 1024 * 1024,
             "ws_max_queue": 16,
         }
         if ssl:
