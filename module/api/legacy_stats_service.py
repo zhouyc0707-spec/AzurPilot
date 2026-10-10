@@ -21,6 +21,7 @@
 from datetime import datetime
 
 from module.api.protocol import ApiError
+from module.statistics.legacy_display import has_cl1_records, has_meow_records, monthly_meow_record_levels
 
 # 资源仪表盘显示的 8 项（旧版统计页顶部）：行动力/黄币/紫币/舰队币不显示，
 # 避免与下方体力图表重复。顺序与 module/webui/app_dashboard.py 的显示清单一致。
@@ -138,8 +139,8 @@ def _ap_panel(instance):
     }
 
 
-def _opsi_panel(instance):
-    """「雪风大人的大世界数据收集」：一张表三行（侵蚀1 / 5 / 3）+ 汇总行。"""
+def _opsi_panel(instance, record_levels=None):
+    """「大世界数据收集」：只展示本月有记录的侵蚀等级及汇总行。"""
     from module.statistics.cl1_database import db as cl1_db
     from module.statistics.opsi_month import get_opsi_stats, compute_monthly_cl1_akashi_ap
     from module.statistics.ship_exp_stats import get_ship_exp_stats
@@ -166,7 +167,10 @@ def _opsi_panel(instance):
         avg_cl1_battle = _float_or_dash(exp_stats.get_average_battle_time())
         avg_cl1_round = _float_or_dash(exp_stats.get_average_round_time())
     except Exception:
+        exp_stats = None
         avg_cl1_battle = avg_cl1_round = DASH
+
+    has_cl1 = has_cl1_records(summary, getattr(exp_stats, 'data', None))
 
     cl1_values = {
         'Gui.Stat.Month': month,
@@ -196,6 +200,7 @@ def _opsi_panel(instance):
             avg_battle_time = float(data.get('avg_battle_time', 0.0) or 0)
             avg_round_time = float(data.get('avg_round_time', 0.0) or 0)
             meow[hazard_level] = {
+                'hasRecords': has_meow_records(data, hazard_level, summary.get('raw')),
                 'rounds': meow_rounds,
                 'battle_count': int(data.get('battle_count', 0) or 0),
                 'akashi_encounters': meow_encounters,
@@ -208,6 +213,10 @@ def _opsi_panel(instance):
             }
     except Exception:
         meow = {}
+
+    now = datetime.now()
+    loot_record_levels = (monthly_meow_record_levels(now.year, now.month, instance=instance or 'default')
+                          if record_levels is None else record_levels)
 
     columns = [
         _column('Gui.Stat.Month'),
@@ -229,6 +238,8 @@ def _opsi_panel(instance):
     rows = []
     for hazard_level in HAZARD_ROW_ORDER:
         if hazard_level == 1:
+            if not has_cl1:
+                continue
             row = [month, hazard_level, battles]
             for label in ('Gui.Stat.BattleRounds', 'Gui.Stat.SortieCost', 'Gui.Stat.AkashiEncounters',
                           'Gui.Stat.AkashiRate', 'Gui.Stat.AverageAP', 'Gui.Stat.SirenResearchDevices',
@@ -237,6 +248,8 @@ def _opsi_panel(instance):
             rows.append(row)
             continue
         data = meow.get(hazard_level)
+        if not (data and data.get('hasRecords')) and hazard_level not in loot_record_levels:
+            continue
         if data is None:
             # 该侵蚀等级这个月没有任何耄耋相接记录：整行占位符
             rows.append([month, hazard_level, *([DASH] * 10)])
@@ -269,7 +282,7 @@ def _opsi_panel(instance):
     return {'summary': summary_items, 'columns': columns, 'rows': rows}
 
 
-def _meow_loot_panel(instance, year, month):
+def _meow_loot_panel(instance, year, month, record_levels=None):
     """「本月 / 历史耄耋相接收获」：按等级展示月度掉落及累计平均值。"""
     from module.statistics.azurstats import AzurStats
     from module.statistics.cl1_database import db as cl1_db
@@ -300,14 +313,29 @@ def _meow_loot_panel(instance, year, month):
         for row in cumulative
     }
 
+    if record_levels is None:
+        record_levels = monthly_meow_record_levels(year, month)
+
     rows = []
-    for hazard_level in AzurStats.meow_loot_display_levels(loot_totals):
+    levels = sorted(set(AzurStats.meow_loot_display_levels(loot_totals)) | record_levels)
+    try:
+        month_data = cl1_db.get_stats(instance or 'default', month_str)
+    except Exception:
+        from module.logger import logger
+
+        logger.warning('[统计-旧版] 读取月度耄耋原始活动失败', exc_info=True)
+        month_data = {}
+    for hazard_level in levels:
         loot = loot_totals.get(hazard_level, {}) or {}
         try:
             meow_data = cl1_db.get_meow_stats(instance, year, month, hazard_level=hazard_level)
             rounds = int(round(float(meow_data.get('effective_rounds', 0) or 0)))
         except Exception:
+            meow_data = {}
             rounds = 0
+        if not (hazard_level in record_levels or any(loot.values())
+                or has_meow_records(meow_data, hazard_level, month_data)):
+            continue
         row = [
             month_str, hazard_level, rounds,
             int(loot.get('Plate', 0) or 0),
@@ -344,6 +372,8 @@ def _meow_loot_panel(instance, year, month):
             _column('Gui.Stat.MeowAvgObscure'),
         ],
         'rows': rows,
+        # 历史弹窗不依赖所选月份，避免本月空行筛选隐藏以前的累计记录。
+        'cumulativeRows': [[level, *extra[level]] for level in sorted(extra) if 1 <= level <= 6],
     }
 
 
@@ -518,13 +548,17 @@ def report(configs, instance, month=None):
     # 数 MB 的 JSON），旧界面用只读缓存包住整轮渲染，这里同样处理。
     from module.statistics.cl1_database import db as cl1_db
     with cl1_db.read_cache():
+        now = datetime.now()
+        # 数据收集按当前实例，收获保留全局历史口径；二者不能共用存在判断。
+        current_record_levels = monthly_meow_record_levels(now.year, now.month, instance=instance or 'default')
+        selected_record_levels = monthly_meow_record_levels(year, month_number)
         return {
             'instance': instance,
             'month': month_key,
             'dashboardKeys': list(DASHBOARD_KEYS),
             'apChart': _ap_panel(instance),
-            'opsi': _opsi_panel(instance),
-            'meowLoot': _meow_loot_panel(instance, year, month_number),
+            'opsi': _opsi_panel(instance, record_levels=current_record_levels),
+            'meowLoot': _meow_loot_panel(instance, year, month_number, record_levels=selected_record_levels),
             'shipExp': _ship_panel(instance),
             'commission': {
                 'periods': _commission_periods(instance),

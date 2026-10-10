@@ -227,6 +227,8 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
     MEOW_CUMULATIVE_KEYS.has(column.key) ? [] : [index])
   const cumulativeIndexes = data.meowLoot.columns.flatMap((column, index) =>
     column.key === 'Gui.Stat.HazardLevel' || MEOW_CUMULATIVE_KEYS.has(column.key) ? [index] : [])
+  const cumulativeRows = data.meowLoot.cumulativeRows
+    ?? data.meowLoot.rows.map(row => cumulativeIndexes.map(index => row[index]))
 
   return <div className="statistics-legacy legacy-stats">
     <h1 className="legacy-sr-title">{ui('nav.statistics')}</h1>
@@ -242,7 +244,7 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
         <LegacyApChart series={data.apChart.series} onRefresh={() => void load(false)} refreshing={busy}/>
       </section>
 
-      {/* 雪风大人的大世界数据收集：一张表按侵蚀等级分三行（1 / 5 / 3） */}
+      {/* 大世界数据收集：只显示本月有记录的侵蚀等级，行序为 1 / 5 / 3。 */}
       <section className="legacy-stats-section legacy-stats-card">
         <LegacySectionTitle title={text('Gui.Stat.OpsiDataCollectionTitle')} onRefresh={() => void load(false)} busy={busy}/>
         <LegacySummary items={data.opsi.summary} text={text}/>
@@ -385,7 +387,7 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
         <h3 className="legacy-month-heading">历月累计收获</h3>
         <p className="legacy-month-note">汇总所有已记录月份，按侵蚀等级分别统计，不随查看月份变化。</p>
         <LegacyTable columns={cumulativeIndexes.map(index => data.meowLoot.columns[index])}
-          rows={data.meowLoot.rows.map(row => cumulativeIndexes.map(index => row[index]))} text={text}/>
+          rows={cumulativeRows} text={text}/>
       </section>
     </Modal>}
   </div>

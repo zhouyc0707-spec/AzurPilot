@@ -4,7 +4,7 @@
 出现 360.8 这种小数），而侵蚀1 那行是 `(battles + 1) // 2` 的整数 —— 同一列两种
 形态看起来不一致。两张表都统一四舍五入取整：
 
-- 「雪风大人的大世界数据收集」三行表 → `app_stat_opsi._format_rounds`
+- 「大世界数据收集」表 → `app_stat_opsi._format_rounds`
 - 「本月耄耋相接收获」 → `app_stat_opsi_export._render_monthly_meow_loot`
 
 但**不改统计口径**：数据收集表的「出击消耗 = 每轮消耗 × 轮次」仍用未取整的原值算。
@@ -55,7 +55,7 @@ class TestHazardRowsRoundsColumn(unittest.TestCase):
     @staticmethod
     def _rows(meow_by_level):
         # cl1_labels 是侵蚀1 表的列名（不含「侵蚀等级」列，那一列由本方法插入）
-        labels = [MONTH_LABEL, ROUNDS_LABEL, COST_LABEL, "战斗场次"]
+        labels = [MONTH_LABEL, ROUNDS_LABEL, COST_LABEL, t("Gui.Stat.BattleCount")]
         values = ["2026-09", 1200, 6000, 2400]  # 侵蚀1 行：整数轮次
         return OpsiStatisticsMixin._build_hazard_rows(
             OpsiStatisticsMixin,
@@ -95,15 +95,11 @@ class TestHazardRowsRoundsColumn(unittest.TestCase):
         # 侵蚀5 每轮 30 点：128.4 × 30 = 3852（取整后是 3840）
         self.assertEqual(3852, by_level[5][cost_index])
 
-    def test_missing_level_falls_back_to_dash(self):
-        """该等级没有数据时，轮次与出击消耗都应是占位符。"""
+    def test_missing_level_is_hidden(self):
+        """该等级没有记录时，不显示整行占位符。"""
         labels, rows = self._rows({})
-        rounds_index = labels.index(ROUNDS_LABEL)
-        cost_index = labels.index(COST_LABEL)
         by_level = {row[labels.index(HAZARD_LABEL)]: row for row in rows}
-        for level in (3, 5):
-            self.assertEqual("-", by_level[level][rounds_index])
-            self.assertEqual("-", by_level[level][cost_index])
+        self.assertEqual(set(by_level), {1})
 
 
 class TestMeowLootTableRounds(unittest.TestCase):
@@ -149,6 +145,8 @@ class TestMeowLootTableRounds(unittest.TestCase):
             from module.statistics.cl1_database import db as cl1_db
 
             with (
+                patch('module.statistics.legacy_display.monthly_meow_record_levels', return_value=set()),
+                patch.object(cl1_db, 'get_stats', return_value={}),
                 patch.object(
                     AzurStats,
                     "get_meow_loot_monthly_totals",

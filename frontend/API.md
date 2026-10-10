@@ -75,7 +75,7 @@
 | `preview.capture` | instance | 读取最近一张缓存 JPEG；不主动截图，无缓存时 image/capturedAt 为 null |
 | `statistics.resources` | instance、days、resource | 兼容资源时间线，支持全部 12 种资源，最多 5,000 点 |
 | `statistics.report` | instance、category、month、days、period | 分类统计，含只读仓库快照，返回 metrics、series、tables 和 notes |
-| `statistics.legacy` | instance、可选 month | 旧版统计整页数据及指定月份的耄耋相接收获 |
+| `statistics.legacy` | instance、可选 month | 旧版统计整页数据及指定月份的耄耋相接收获；月度 rows 隐藏无记录等级，meowLoot.cumulativeRows 独立提供历月累计行 |
 | `statistics.resourceFlows` | instance、可选区间、资源、任务与分页参数 | 独立资源管理页的库存、收支聚合和明细；只读取本地记录 |
 | `statistics.refreshLoot` | instance | 重新聚合本设备已有本地短猫掉落记录，不访问游戏 |
 | `settings.get` | 无 | 部署设置定义及值，密码只写不读 |

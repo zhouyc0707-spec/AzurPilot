@@ -7482,7 +7482,7 @@
       "TodayExpHeader": "Today EXP",
       "TodayRun": "Today run: {value}{unit}",
       "TodayRunHeader": "Today run",
-      "OpsiDataCollectionTitle": "Yukikaze's Opsi data collection",
+      "OpsiDataCollectionTitle": "Opsi data collection",
       "MonthlyPurchasedAP": "AP purchased on Hazard-1 this month: {value}",
       "MonthlySortieCost": "Hazard-1 sortie cost: {value}",
       "MonthlyNetAP": "Hazard-1 net AP: {value}",

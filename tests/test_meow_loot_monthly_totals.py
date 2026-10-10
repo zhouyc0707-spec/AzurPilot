@@ -79,6 +79,24 @@ class MeowLootMonthlyTotalsTests(unittest.TestCase):
         self.assertEqual(AzurStats.get_meow_loot_available_months(), [(2026, 10)])
         self.assertEqual(self.totals()[5]['GearDesignPlanT5'], 1)
 
+    def test_legacy_presence_includes_low_value_records_without_modifying_rows(self):
+        from module.statistics.legacy_display import monthly_meow_record_levels
+
+        self.insert(3, 'OperationCoin', 0)
+        self.insert(None, 'GearDesignPlanGunT4')
+        self.insert(6, 'OperationCoin', instance='other-fixture')
+        self.insert(2, 'OperationCoin', device='other-device')
+        self.insert(1, 'OperationCoin', genre='opsi_obscure')
+        self.insert(4, 'OperationCoin', moment=datetime(2026, 9, 30, 12))
+        with closing(sqlite3.connect(AzurStats.LOCAL_DB)) as conn:
+            before = conn.execute('SELECT hazard_level, item, amount FROM opsi_items ORDER BY id').fetchall()
+        self.assertEqual(monthly_meow_record_levels(2026, 10), {3, 5, 6})
+        self.assertEqual(monthly_meow_record_levels(2026, 10, instance='fixture'), {3, 5})
+        self.assertTrue(all(not any(values.values()) for values in self.totals().values()))
+        with closing(sqlite3.connect(AzurStats.LOCAL_DB)) as conn:
+            self.assertEqual(conn.execute('SELECT hazard_level, item, amount FROM opsi_items ORDER BY id').fetchall(),
+                             before)
+
 
 if __name__ == '__main__':
     unittest.main()

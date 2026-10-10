@@ -12,7 +12,6 @@ from module.webui.app_dependencies import (
     put_scope,
     put_text,
     t,
-    toast,
     use_scope,
 )
 
@@ -130,7 +129,17 @@ class OpsiExportMixin(WebUIMixinBase):
             instance_name = all_instances[0] if all_instances else "default"
 
         rows = []
-        levels = AzurStats.meow_loot_display_levels(loot_totals)
+        from module.statistics.legacy_display import has_meow_records, monthly_meow_record_levels
+
+        record_levels = monthly_meow_record_levels(year, month)
+        levels = sorted(set(AzurStats.meow_loot_display_levels(loot_totals)) | record_levels)
+        try:
+            month_data = cl1_db.get_stats(instance_name, month_str)
+        except Exception:
+            from module.logger import logger
+
+            logger.warning('[统计-旧版] 读取月度耄耋原始活动失败', exc_info=True)
+            month_data = {}
         for hazard_level in levels:
             loot = loot_totals.get(hazard_level, {})
             # 出击轮次：与数据收集表一致的有效轮次口径，展示时取整 ——
@@ -144,7 +153,11 @@ class OpsiExportMixin(WebUIMixinBase):
                 )
                 rounds = int(round(float(meow_data.get("effective_rounds", 0) or 0)))
             except Exception:
+                meow_data = {}
                 rounds = 0
+            if not (hazard_level in record_levels or any(loot.values())
+                    or has_meow_records(meow_data, hazard_level, month_data)):
+                continue
             rows.append(
                 [
                     month_str,
@@ -164,8 +177,8 @@ class OpsiExportMixin(WebUIMixinBase):
         # 放在同一张表里对照更直接。
         extra = self._meow_extra_columns(AzurStats)
         empty_extra = ["-"] * 5
-        for hazard_level, row in zip(levels, rows):
-            row.extend(extra.get(hazard_level, empty_extra))
+        for row in rows:
+            row.extend(extra.get(row[1], empty_extra))
 
         # 月份切换按钮紧跟在标题右侧（标题列自适应内容宽度，按钮列吃掉剩余空间，
         # 因此按钮不会被推到最右边）；按钮统一用 color="off"，
@@ -233,7 +246,7 @@ class OpsiExportMixin(WebUIMixinBase):
             self._reset_meow_loot_month()
 
     def _show_meow_loot_month_picker(self):
-        """弹出历史月份选择器。"""
+        """弹出历史月份选择器及独立的历月累计表。"""
         from module.statistics.azurstats import AzurStats
 
         now = current_time()
@@ -250,12 +263,19 @@ class OpsiExportMixin(WebUIMixinBase):
             for y, m in months
             if (y, m) != (now.year, now.month)
         ]
-        if len(buttons) == 1:
-            toast("暂无历史月份数据")
-            return
-
         with popup("选择查看月份"):
+            if len(buttons) == 1:
+                put_text("暂无历史月份数据")
             put_buttons(buttons, onclick=lambda v: self._set_meow_loot_month(v))
+            extra = self._meow_extra_columns(AzurStats)
+            cumulative_rows = [[level, *extra[level]] for level in sorted(extra) if 1 <= level <= 6]
+            put_text("历月累计统计")
+            put_html(build_simple_table(
+                [t("Gui.Stat.HazardLevel"), t("Gui.Stat.MeowEffectiveRounds"),
+                 t("Gui.Stat.MeowAvgOperationCoin"), t("Gui.Stat.MeowAvgPlate"),
+                 t("Gui.Stat.MeowAvgAbyssal"), t("Gui.Stat.MeowAvgObscure")],
+                cumulative_rows,
+            ))
 
     def _set_meow_loot_month(self, value):
         """设置要查看的月份并重绘收获表格。value 为 None 表示本月。"""

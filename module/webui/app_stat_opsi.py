@@ -90,8 +90,11 @@ class OpsiStatisticsMixin(WebUIMixinBase):
         # 把侵蚀1 与耄耋相接的数据合成一张按侵蚀等级分行的表
         month = summary.get("month", "-")
         meow_by_level = self._build_meow_stats_by_level(cl1_db, instance_name)
+        from module.statistics.legacy_display import has_cl1_records
+
         labels, rows = self._build_hazard_rows(
-            labels, values, meow_by_level, month
+            labels, values, meow_by_level, month,
+            cl1_has_records=has_cl1_records(summary, getattr(exp_stats, 'data', None)),
         )
         self._render_opsi_summary(labels, rows, ap_bought, net_ap, loop_eff)
 
@@ -353,7 +356,17 @@ class OpsiStatisticsMixin(WebUIMixinBase):
         """
         stats = {}
         try:
+            from module.statistics.legacy_display import has_meow_records, monthly_meow_record_levels
+
             now = current_time()
+            try:
+                month_data = cl1_db.get_stats(instance_name or "default", f"{now.year:04d}-{now.month:02d}")
+            except Exception:
+                from module.logger import logger
+
+                logger.warning('[统计-旧版] 读取月度耄耋原始活动失败', exc_info=True)
+                month_data = {}
+            record_levels = monthly_meow_record_levels(now.year, now.month, instance=instance_name or "default")
             for hazard_level in (3, 5):
                 data = cl1_db.get_meow_stats(
                     instance_name or "default",
@@ -369,6 +382,8 @@ class OpsiStatisticsMixin(WebUIMixinBase):
                 avg_round_time = float(data.get("avg_round_time", 0.0) or 0)
                 siren_count = int(data.get("siren_research_devices", 0) or 0)
                 stats[hazard_level] = {
+                    "hasRecords": (hazard_level in record_levels
+                                   or has_meow_records(data, hazard_level, month_data)),
                     "battle_count": battles,
                     "rounds": rounds,
                     "akashi_encounters": encounters,
@@ -399,10 +414,10 @@ class OpsiStatisticsMixin(WebUIMixinBase):
             return {}
         return stats
 
-    def _build_hazard_rows(self, cl1_labels, cl1_values, meow_by_level, month):
-        """把侵蚀1 与耄耋相接的数据按侵蚀等级合成三行。
+    def _build_hazard_rows(self, cl1_labels, cl1_values, meow_by_level, month, cl1_has_records=None):
+        """把侵蚀1 与耄耋相接的数据按侵蚀等级合并，只显示有记录的行。
 
-        「雪风大人的大世界数据收集」是一张按侵蚀等级分行的表：侵蚀等级 1 用侵蚀1
+        「大世界数据收集」是一张按侵蚀等级分行的表：侵蚀等级 1 用侵蚀1
         的数据，3 / 5 用耄耋相接的数据。表格在最前面插入「侵蚀等级」列。
         出击消耗对三行都算：每轮行动力消耗 × 出击轮次（侵蚀1 每轮 5、侵蚀3 每轮
         15、侵蚀5 每轮 30）。净赚体力与循环效率都不在这张表里 —— 两者都是侵蚀1
@@ -413,9 +428,10 @@ class OpsiStatisticsMixin(WebUIMixinBase):
             cl1_values: 侵蚀1 那一行的值。
             meow_by_level: ``_build_meow_stats_by_level`` 的结果。
             month: 月份，填进「月份」列。
+            cl1_has_records: 侵蚀1 是否有当月记录；省略时从传入的计数判断。
 
         Returns:
-            tuple: ``(labels, rows)`` —— 插入侵蚀等级列后的列名与三行数据，
+            tuple: ``(labels, rows)`` —— 插入侵蚀等级列后的列名与有效数据行，
             行序见 ``HAZARD_ROW_ORDER``。
         """
         hazard_label = t("Gui.Stat.HazardLevel")
@@ -424,6 +440,14 @@ class OpsiStatisticsMixin(WebUIMixinBase):
         body_labels = [label for label in cl1_labels if label != month_label]
         labels = [month_label, hazard_label, *body_labels]
         cl1_row = dict(zip(cl1_labels, cl1_values))
+        if cl1_has_records is None:
+            from module.statistics.legacy_display import has_cl1_records
+
+            cl1_has_records = has_cl1_records({
+                'total_battles': cl1_row.get(t('Gui.Stat.BattleCount')),
+                'akashi_encounters': cl1_row.get(t('Gui.Stat.AkashiEncounters')),
+                'siren_research_devices': cl1_row.get(t('Gui.Stat.SirenResearchDevices')),
+            })
 
         meow_columns = {
             t("Gui.Stat.BattleCount"): "battle_count",
@@ -443,6 +467,8 @@ class OpsiStatisticsMixin(WebUIMixinBase):
         for hazard_level in self.HAZARD_ROW_ORDER:
             row = [month, hazard_level]
             if hazard_level == 1:
+                if not cl1_has_records:
+                    continue
                 # 侵蚀1 行严格按 cl1_labels 取值：cl1_row 就是按它建的，
                 # 若改成遍历去重后的 labels，一旦两者列集不同就会漏值导致错位
                 for label in cl1_labels:
@@ -451,6 +477,10 @@ class OpsiStatisticsMixin(WebUIMixinBase):
                 rows.append(row)
                 continue
             data = meow_by_level.get(hazard_level)
+            if not data or not data.get("hasRecords", any(
+                    data.get(key) not in (None, 0, 0.0, "0", "-", "0.0")
+                    for key in ("battle_count", "rounds", "akashi_encounters", "siren_devices"))):
+                continue
             for label in body_labels:
                 if label == rounds_label:
                     # 出击轮次直接取耄耋相接的有效轮次（取整展示，见 _format_rounds）
@@ -590,8 +620,9 @@ class OpsiStatisticsMixin(WebUIMixinBase):
             # grid-template-columns，窗口一窄就会把几条挤成多行；flex + wrap +
             # column-gap 的换行行为可预期，间距也不再依赖 None 占位项。
             try:
+                cl1_row = next(row for row in rows if row[labels.index(t("Gui.Stat.HazardLevel"))] == 1)
                 sortie_cost_total = (
-                    int(rows[0][labels.index(t("Gui.Stat.BattleCount"))]) + 1
+                    int(cl1_row[labels.index(t("Gui.Stat.BattleCount"))]) + 1
                 ) // 2 * 5
             except Exception:
                 sortie_cost_total = "-"

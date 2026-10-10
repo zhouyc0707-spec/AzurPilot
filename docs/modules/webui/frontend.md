@@ -20,6 +20,8 @@ frontend/README.md 与 frontend/API.md 已经是本前端的详细文档：前�
 
 统计页各分类均保留历史展示与筛选，并提供导出入口：页面可导出本类数据，表格有各自的导出明细按钮，图表支持保存为图片。
 
+旧版统计的「大世界数据收集」与「本月／历史耄耋相接收获」按对应月份隐藏无记录的侵蚀等级，已有记录的零收益行仍显示。「查看历史月份」弹窗的累计行由独立 `cumulativeRows` 提供，本月未运行的等级仍可查看以前的累计数据；旧响应缺少该字段时兼容原有累计列。
+
 茗喵证券交易所的注册和登录使用 `src/stock/Captcha.tsx` 与 `recaptcha.ts` 中的 Google reCAPTCHA v2，脚本及验证 iframe 统一走 `www.recaptcha.net`，官方静态依赖使用 `www.gstatic.com/recaptcha/`。认证请求字段为 `recaptchaToken`；私密密钥由 Go 交易所环境变量 `RECAPTCHA_SECRET_KEY` 读取。站点停用域名验证，Go 不匹配 hostname 或 action。切换注册/登录时立即清空 token，提交后重置，组件卸载后忽略延迟回调；前端与 Go 服务须同步升级。
 
 ## 2. 模块职责

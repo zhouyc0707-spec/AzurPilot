@@ -2,6 +2,10 @@ import {expect, test, type Locator, type Page} from '@playwright/test'
 import type {LegacyColumn, LegacyStatisticsReport} from '../src/api/types'
 
 type LegacyRequest = {id: string; method: string; params: {instance?: string; month?: string | null}}
+type StatisticsFixtureOptions = {
+  hazardsByMonth?: Record<string, number[]>
+  cumulativeRows?: (number | string)[][]
+}
 
 const CURRENT_MONTH = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
 const HISTORY_MONTH = '2026-09'
@@ -21,7 +25,7 @@ const MEOW_COLUMNS: LegacyColumn[] = [
 ]
 
 /** 只替换旧版统计响应，其他请求由临时测试后端处理，不读取真实历史或执行游戏。 */
-async function isolatedStatistics(page: Page, availableMonths = [HISTORY_MONTH, '2026-08'], extraMeowRows: (number | string)[][] = [], mergeUnknownLoot = false) {
+async function isolatedStatistics(page: Page, availableMonths = [HISTORY_MONTH, '2026-08'], extraMeowRows: (number | string)[][] = [], mergeUnknownLoot = false, options: StatisticsFixtureOptions = {}) {
   const requests: LegacyRequest[] = []
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))
@@ -38,16 +42,29 @@ async function isolatedStatistics(page: Page, availableMonths = [HISTORY_MONTH, 
       const month = request.params.month ?? CURRENT_MONTH
       const isCurrentMonth = !request.params.month
       const unknownLoot = mergeUnknownLoot ? 1 : 0
+      const selectedHazards = options.hazardsByMonth?.[month]
+      const currentHazards = options.hazardsByMonth?.[CURRENT_MONTH]
+      const meowRows = [
+        [month, 3, isCurrentMonth ? 31 : 13, 11, 12, 13, 14, 15, 16, ...CUMULATIVE_ROWS[0].slice(1)],
+        [month, 5, isCurrentMonth ? 51 : 15, 21 + unknownLoot, 22 + unknownLoot, 23, 24 + unknownLoot, 25, 26, ...CUMULATIVE_ROWS[1].slice(1)],
+        ...extraMeowRows.map(row => [month, ...row]),
+      ].filter(row => selectedHazards === undefined || selectedHazards.includes(Number(row[1])))
       const report: LegacyStatisticsReport = {
         instance: request.params.instance ?? 'testpilot', month, dashboardKeys: [],
-        apChart: {series: []}, opsi: {summary: [], columns: [], rows: []},
+        apChart: {series: []}, opsi: {
+          summary: [],
+          columns: currentHazards === undefined ? [] : [
+            {key: 'Gui.Stat.HazardLevel', format: 'int'},
+            {key: 'Gui.Stat.BattleRounds', format: 'int'},
+          ],
+          // 大世界统计固定本月，历史月份选择只影响耄耋收获表。
+          rows: (currentHazards ?? []).map(hazard => [hazard, hazard === 5 ? 51 : 31]),
+        },
         meowLoot: {
           month, isCurrentMonth, availableMonths, lastRecord: '2026-10-06 09:00:00', columns: MEOW_COLUMNS,
-          rows: [
-            [month, 3, isCurrentMonth ? 31 : 13, 11, 12, 13, 14, 15, 16, ...CUMULATIVE_ROWS[0].slice(1)],
-            [month, 5, isCurrentMonth ? 51 : 15, 21 + unknownLoot, 22 + unknownLoot, 23, 24 + unknownLoot, 25, 26, ...CUMULATIVE_ROWS[1].slice(1)],
-            ...extraMeowRows.map(row => [month, ...row]),
-          ],
+          rows: meowRows,
+          // 原有用例不传此字段，继续验证与旧后端的兼容派生路径。
+          ...(options.cumulativeRows === undefined ? {} : {cumulativeRows: options.cumulativeRows}),
         },
         shipExp: {hasData: false, columns: [], rows: []},
         commission: {
@@ -60,7 +77,10 @@ async function isolatedStatistics(page: Page, availableMonths = [HISTORY_MONTH, 
     })
     server.onMessage(raw => socket.send(raw))
   })
-  return {requests, errors}
+  return {requests, errors, setMonthHazards: (month: string, hazards: number[]) => {
+    options.hazardsByMonth ??= {}
+    options.hazardsByMonth[month] = hazards
+  }}
 }
 
 async function openStatistics(page: Page, theme = 'legacy-light') {
@@ -207,5 +227,78 @@ test('旧版未识别掉落归入侵蚀 5，保留侵蚀 6 且不改变轮次和
   await expectCumulativeRows(dialog, cumulativeRows)
   await expect(dialog.getByText('未识别', {exact: true})).toHaveCount(0)
   expect(fixture.requests.some(request => request.params.month === HISTORY_MONTH)).toBe(true)
+  expect(fixture.errors).toEqual([])
+})
+
+test('旧版仅显示有记录的侵蚀等级，切换月份和新增记录刷新后立即更新', async ({page}, testInfo) => {
+  const fixture = await isolatedStatistics(page, [HISTORY_MONTH], [], false, {
+    hazardsByMonth: {[CURRENT_MONTH]: [5], [HISTORY_MONTH]: [3]},
+    cumulativeRows: CUMULATIVE_ROWS,
+  })
+  const section = await openStatistics(page)
+  const opsi = page.locator('.legacy-stats-section').filter({has: page.getByRole('heading', {name: '大世界数据收集', exact: true})})
+  await expect(opsi).toBeVisible()
+  await expect(page.getByRole('heading', {name: '雪风大人的大世界数据收集', exact: true})).toHaveCount(0)
+  await expect(opsi.locator('tbody tr')).toHaveCount(1)
+  await expect(opsi.locator('tbody tr').locator('td')).toHaveText(['5', '51'])
+  await expect(section.locator('tbody tr')).toHaveCount(1)
+  await expect(section.locator('tbody tr').locator('td')).toHaveText([
+    CURRENT_MONTH, '5', '51', '21', '22', '23', '24', '25', '26',
+  ])
+  await page.screenshot({path: testInfo.outputPath('旧版本月仅显示侵蚀5.png')})
+
+  await section.getByRole('button', {name: '查看历史月份', exact: true}).click()
+  const dialog = page.getByRole('dialog')
+  // 本月隐藏的侵蚀 3 仍有历月累计；累计不从本月单行表错误派生。
+  await expectCumulativeRows(dialog)
+  await dialog.getByRole('button', {name: HISTORY_MONTH, exact: true}).click()
+  await expect(dialog).toHaveCount(0)
+  await expect(section.getByRole('heading', {name: `历史耄耋相接收获（${HISTORY_MONTH}）`, exact: true})).toBeVisible()
+  await expect(section.locator('tbody tr')).toHaveCount(1)
+  await expect(section.locator('tbody tr').locator('td')).toHaveText([
+    HISTORY_MONTH, '3', '13', '11', '12', '13', '14', '15', '16',
+  ])
+  await expect(opsi.locator('tbody tr').locator('td')).toHaveText(['5', '51'])
+  await section.getByRole('button', {name: '查看历史月份', exact: true}).click()
+  await expectCumulativeRows(dialog)
+  await dialog.getByRole('button', {name: '关闭', exact: true}).click()
+  await section.getByRole('button', {name: '回到本月', exact: true}).click()
+  await expect(section.getByRole('heading', {name: '本月耄耋相接收获', exact: true})).toBeVisible()
+  await expect(section.locator('tbody tr')).toHaveCount(1)
+
+  fixture.setMonthHazards(CURRENT_MONTH, [5, 3])
+  await section.getByRole('button', {name: '刷新统计', exact: true}).click()
+  await expect(opsi.locator('tbody tr')).toHaveCount(2)
+  await expect(opsi.locator('tbody tr').nth(1).locator('td')).toHaveText(['3', '31'])
+  await expect(section.locator('tbody tr')).toHaveCount(2)
+  await expect(section.locator('tbody tr').nth(0).locator('td').nth(1)).toHaveText('3')
+  await expect(section.locator('tbody tr').nth(1).locator('td').nth(1)).toHaveText('5')
+  expect(fixture.requests.some(request => request.params.month === HISTORY_MONTH)).toBe(true)
+  expect(fixture.requests.at(-1)?.params.month).toBeNull()
+  expect(fixture.errors).toEqual([])
+})
+
+test('旧版本月无记录时两张月度表不补零行，历史弹窗仍显示侵蚀 3/5 累计', async ({page}, testInfo) => {
+  const fixture = await isolatedStatistics(page, [HISTORY_MONTH], [], false, {
+    hazardsByMonth: {[CURRENT_MONTH]: [], [HISTORY_MONTH]: [3, 5]},
+    cumulativeRows: CUMULATIVE_ROWS,
+  })
+  const section = await openStatistics(page)
+  const opsi = page.locator('.legacy-stats-section').filter({has: page.getByRole('heading', {name: '大世界数据收集', exact: true})})
+  await expect(opsi).toBeVisible()
+  await expect(opsi.locator('tbody tr')).toHaveCount(0)
+  await expect(section.locator('tbody tr')).toHaveCount(0)
+  await expect(section.getByRole('button', {name: '查看历史月份', exact: true})).toBeEnabled()
+  await section.getByRole('button', {name: '查看历史月份', exact: true}).click()
+  const dialog = page.getByRole('dialog')
+  await expectCumulativeRows(dialog)
+  await page.screenshot({path: testInfo.outputPath('旧版本月空表保留历月累计.png')})
+  await dialog.getByRole('button', {name: HISTORY_MONTH, exact: true}).click()
+  await expect(dialog).toHaveCount(0)
+  await expect(section.getByRole('heading', {name: `历史耄耋相接收获（${HISTORY_MONTH}）`, exact: true})).toBeVisible()
+  await expect(section.locator('tbody tr')).toHaveCount(2)
+  await expect(opsi.locator('tbody tr')).toHaveCount(0)
+  await section.getByRole('button', {name: '查看历史月份', exact: true}).click()
+  await expectCumulativeRows(dialog)
   expect(fixture.errors).toEqual([])
 })

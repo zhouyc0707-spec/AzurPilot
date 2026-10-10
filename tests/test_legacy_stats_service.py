@@ -21,6 +21,7 @@ from module.api.legacy_stats_service import (
     _sign,
 )
 from module.api.protocol import ApiError
+from module.statistics.legacy_display import has_cl1_records, has_meow_records, monthly_meow_record_levels
 
 
 class ParseMonthTests(unittest.TestCase):
@@ -47,6 +48,42 @@ class SignTests(unittest.TestCase):
     def test_zero_and_placeholder_are_not_colored(self):
         self.assertEqual(_sign(0), '')
         self.assertEqual(_sign(DASH), '')
+
+
+class RecordPresenceTests(unittest.TestCase):
+    def test_meow_events_and_timing_samples_keep_zero_rounded_rows(self):
+        for data in ({'effective_rounds': .33}, {'battle_count': 1}, {'akashi_encounters': 1},
+                     {'siren_research_devices': 1}, {'avg_battle_time': 12},
+                     {'by_hazard': {'3': {'sample_count': 1}}}):
+            with self.subTest(data=data):
+                self.assertTrue(has_meow_records(data, 3))
+        self.assertTrue(has_meow_records({}, 3, {'meow_hazard_stats': {'3': {'battle_times': [0]}}}))
+
+    def test_other_level_samples_and_default_bucket_do_not_count(self):
+        self.assertFalse(has_meow_records({'round_times': [60], 'battle_times': [20],
+                                          'by_hazard': {'5': {'sample_count': 1}}}, 3))
+        self.assertFalse(has_meow_records({}, 3, {'meow_round_times': [{'hazard_level': 5, 'duration': 60}],
+                                                'meow_hazard_stats': {'3': {'effective_rounds': 0}}}))
+
+    def test_cl1_uses_current_month_daily_records_instead_of_global_default_average(self):
+        summary = {'month': '2026-10', 'total_battles': 0}
+        self.assertFalse(has_cl1_records(summary, {'battle_times': {'average': 52},
+                                                 'daily_stats': {'2026-09-30': {'battle_count': 1}}}))
+        self.assertTrue(has_cl1_records(summary, {'daily_stats': {'2026-10-01': {'total_run_time': 10}}}))
+        self.assertTrue(has_cl1_records({'raw': {'akashi_ap_entries': [{'source': 'cl1', 'amount': 0}]}}))
+        self.assertFalse(has_cl1_records({'raw': {'akashi_ap': 120,
+                                                'akashi_ap_entries': [{'source': 'meow', 'amount': 120}]}}))
+
+    def test_monthly_record_levels_include_zero_reward_and_fold_unknown_level(self):
+        from module.statistics.azurstats import AzurStats
+
+        rows = [{'hazard_level': 3, 'item': 'OperationCoin', 'amount': 0},
+                {'hazard_level': None}, {'hazard_level': 0}, {'hazard_level': 6}]
+        with patch.object(AzurStats, 'load_opsi_drop_rows', return_value=rows) as load:
+            self.assertEqual(monthly_meow_record_levels(2026, 12), {3, 5, 6})
+        load.assert_called_once_with(start=int(datetime(2026, 12, 1).timestamp()),
+                                     end=int(datetime(2027, 1, 1).timestamp()),
+                                     task='opsi_meowfficer_farming')
 
 
 def patch_sources(ship_exp=None, meow=None, summary=None, ap_bought=0, ap_rows=None, coin_rows=None,
@@ -77,6 +114,7 @@ def patch_sources(ship_exp=None, meow=None, summary=None, ap_bought=0, ap_rows=N
         patch('module.statistics.opsi_month.get_coins_timeline', current_month_rows(coin_rows or [])),
         patch('module.statistics.ship_exp_stats.get_ship_exp_stats', lambda instance_name=None: exp_stats),
         patch('module.statistics.cl1_database.db', cl1_db),
+        patch('module.api.legacy_stats_service.monthly_meow_record_levels', return_value=set()),
     ]
     return patches, cl1_db
 
@@ -135,26 +173,43 @@ class OpsiPanelTests(unittest.TestCase):
         self.assertEqual(summary_items['MonthlyLoopEfficiency']['sign'], 'gain')
         self.assertEqual(summary_items['MonthlyPurchasedAP']['sign'], '')
 
-    def test_zero_filled_meow_data_keeps_zeros_like_old_panel(self):
-        """数据库返回零值字典时旧界面照样显示 0（只有占比与均值是占位符）。"""
+    def test_zero_filled_defaults_have_no_record_and_are_hidden(self):
+        """数据库的默认全零桶不是记录，默认耗时也不应使空行出现。"""
         with patched(summary={'month': '2026-09', 'total_battles': 0}):
             panel = _opsi_panel('alas')
-        self.assertEqual([row[1] for row in panel['rows']], [1, 5, 3])
-        for row in panel['rows'][1:]:
-            self.assertEqual(row[2], 0)   # 战斗场次
-            self.assertEqual(row[3], 0)   # 出击轮次（0 也显示 0）
-            self.assertEqual(row[4], DASH)  # 出击消耗：轮次为 0 时给占位符
-            self.assertEqual(row[5], 0)   # 遇见明石次数
-            self.assertEqual(row[7], DASH)  # 平均体力：次数为 0
-            self.assertEqual(row[8], 0)   # 吊机次数
+        self.assertEqual(panel['rows'], [])
 
     def test_meow_read_failure_falls_back_to_dash(self):
-        """读不到耄耋相接数据时整行占位符，不把异常透出去。"""
+        """读不到耄耋相接数据且无明细证据时不生成假数据。"""
         with patched(summary={'month': '2026-09', 'total_battles': 0}, meow_raises=True):
             panel = _opsi_panel('alas')
-        self.assertEqual([row[1] for row in panel['rows']], [1, 5, 3])
-        self.assertTrue(all(value == DASH for value in panel['rows'][1][2:]))
-        self.assertTrue(all(value == DASH for value in panel['rows'][2][2:]))
+        self.assertEqual(panel['rows'], [])
+
+    def test_partial_round_and_nonbattle_activity_are_records(self):
+        with patched(meow={3: {'effective_rounds': .33}, 5: {'akashi_encounters': 1}}):
+            panel = _opsi_panel('alas')
+        self.assertEqual([row[1] for row in panel['rows']], [5, 3])
+        self.assertEqual(panel['rows'][1][3], 0)
+
+    def test_actual_cl1_record_with_zero_battles_keeps_row(self):
+        with patched(summary={'month': '2026-09', 'total_battles': 0, 'akashi_encounters': 1}):
+            panel = _opsi_panel('alas')
+        self.assertEqual([row[1] for row in panel['rows']], [1])
+
+    def test_loot_record_keeps_row_after_statistics_read_failure(self):
+        with patched(meow_raises=True), patch(
+                'module.api.legacy_stats_service.monthly_meow_record_levels', return_value={5}):
+            panel = _opsi_panel('alas')
+        self.assertEqual([row[1] for row in panel['rows']], [5])
+        self.assertTrue(all(value == DASH for value in panel['rows'][0][2:]))
+
+    def test_loot_record_presence_is_scoped_to_current_instance(self):
+        with patched(), patch('module.api.legacy_stats_service.monthly_meow_record_levels',
+                              return_value=set()) as levels:
+            panel = _opsi_panel('alas')
+        now = datetime.now()
+        levels.assert_called_once_with(now.year, now.month, instance='alas')
+        self.assertEqual(panel['rows'], [])
 
 
 class ApPanelTests(unittest.TestCase):
@@ -227,6 +282,8 @@ class ShipPanelTests(unittest.TestCase):
 
 
 class MeowLootPanelTests(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(patch('module.api.legacy_stats_service.monthly_meow_record_levels', return_value=set()))
     def test_rows_use_monthly_drops_and_cumulative_columns(self):
         from module.statistics.azurstats import AzurStats
 
@@ -287,7 +344,7 @@ class MeowLootPanelTests(unittest.TestCase):
                 patch('module.statistics.cl1_database.db', cl1_db):
             panel = _meow_loot_panel('alas', 2026, 10)
 
-        self.assertEqual([row[1] for row in panel['rows']], [3, 5, 6])
+        self.assertEqual([row[1] for row in panel['rows']], [5, 6])
         fifth, sixth = panel['rows'][-2:]
         self.assertEqual(fifth[3:9], [1, 1, 0, 1, 0, 0])
         self.assertEqual(fifth[2], 31)
@@ -300,8 +357,40 @@ class MeowLootPanelTests(unittest.TestCase):
         self.assertTrue(all(len(row) == 14 for row in panel['rows']))
         monthly.assert_called_once_with(year=2026, month=10)
 
+    def test_historical_cumulative_rows_are_independent_of_empty_selected_month(self):
+        from module.statistics.azurstats import AzurStats
+
+        cumulative = [[3, datetime(2026, 9, 8).timestamp(), 4, 1, 0, 0, 0]]
+        cl1_db = MagicMock()
+        cl1_db.get_meow_stats.return_value = {}
+        cl1_db.get_stats.return_value = {}
+        with patch.object(AzurStats, 'get_meow_loot_monthly_totals', return_value={3: {}, 5: {}}), \
+                patch.object(AzurStats, 'get_meow_loot_available_months', return_value=[]), \
+                patch.object(AzurStats, 'load_meowofficer_farming', return_value=cumulative), \
+                patch('module.statistics.cl1_database.db', cl1_db):
+            panel = _meow_loot_panel('alas', 2026, 10)
+        self.assertEqual(panel['rows'], [])
+        self.assertEqual(panel['cumulativeRows'], [[3, 4, '1.000000', '0.000000', '0.000000', '0.000000']])
+
+    def test_zero_high_value_loot_keeps_real_record_and_partial_round(self):
+        from module.statistics.azurstats import AzurStats
+
+        cl1_db = MagicMock()
+        cl1_db.get_meow_stats.side_effect = lambda instance, year, month, hazard_level=None: {
+            3: {'effective_rounds': .33}, 5: {}}[hazard_level]
+        cl1_db.get_stats.side_effect = RuntimeError('读取失败')
+        with patch.object(AzurStats, 'get_meow_loot_monthly_totals', return_value={3: {}, 5: {}}), \
+                patch.object(AzurStats, 'get_meow_loot_available_months', return_value=[]), \
+                patch.object(AzurStats, 'load_meowofficer_farming', return_value=[]), \
+                patch('module.statistics.cl1_database.db', cl1_db):
+            panel = _meow_loot_panel('alas', 2026, 10, record_levels={5})
+        self.assertEqual([row[1] for row in panel['rows']], [3, 5])
+        self.assertTrue(all(row[2] == 0 and row[3:9] == [0] * 6 for row in panel['rows']))
+
 
 class LegacyMeowLootViewTests(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(patch('module.statistics.legacy_display.monthly_meow_record_levels', return_value=set()))
     def test_pywebio_preserves_standard_rows_and_displays_unknown_loot_in_five(self):
         from module.statistics.azurstats import AzurStats
         from module.webui.app_stat_opsi_export import OpsiExportMixin
@@ -309,7 +398,7 @@ class LegacyMeowLootViewTests(unittest.TestCase):
         for totals, expected_levels in (
             ({3: {'Plate': 1}, 5: {}}, [3, 5]),
             ({3: {}, 5: {'Plate': 1, 'GearDesignPlanT5': 1, 'CoordinateObscure': 1},
-              6: {'CatT3': 2}}, [3, 5, 6]),
+              6: {'CatT3': 2}}, [5, 6]),
         ):
             with self.subTest(levels=expected_levels), ExitStack() as stack:
                 view = object.__new__(OpsiExportMixin)
@@ -338,7 +427,7 @@ class LegacyMeowLootViewTests(unittest.TestCase):
                 self.assertEqual(len(columns), 14)
                 self.assertTrue(all(len(row) == 14 for row in rows))
                 self.assertEqual([call.kwargs['hazard_level'] for call in cl1_db.get_meow_stats.call_args_list],
-                                 expected_levels)
+                                 [3, 5, *([6] if 6 in totals else [])])
                 monthly.assert_called_once_with(year=2026, month=10)
                 fifth = next(row for row in rows if row[1] == 5)
                 self.assertEqual(fifth[2], 31)
@@ -350,6 +439,54 @@ class LegacyMeowLootViewTests(unittest.TestCase):
                     self.assertEqual(rows[-1][9:], [4, '10.000000', '0.500000', '0.250000', '0.125000'])
                 else:
                     self.assertEqual(rows[0][3], 1)
+
+    def test_opsi_summary_does_not_use_first_meow_row_as_cl1_cost(self):
+        from module.webui.app_stat_opsi import OpsiStatisticsMixin
+
+        view = object.__new__(OpsiStatisticsMixin)
+        view._summary_item_html = MagicMock(return_value='')
+        view._render_meowofficer_farming = MagicMock()
+        with ExitStack() as stack:
+            for name in ('put_html', 'put_button', 'put_scope', 'build_title_icon_row',
+                         'refresh_icon_button_css', 'build_simple_table', 'use_scope'):
+                stack.enter_context(patch(f'module.webui.app_stat_opsi.{name}'))
+            stack.enter_context(patch('module.webui.app_stat_opsi.t', side_effect=lambda key: key))
+            labels = ['Gui.Stat.Month', 'Gui.Stat.HazardLevel', 'Gui.Stat.BattleCount']
+            view._render_opsi_summary(labels, [['2026-10', 5, 99]], 0, DASH, DASH)
+        self.assertEqual(view._summary_item_html.call_args_list[1].args,
+                         ('Gui.Stat.MonthlySortieCost', DASH))
+
+    def test_raw_month_read_failure_keeps_readable_hazard_activity(self):
+        from module.webui.app_stat_opsi import OpsiStatisticsMixin
+
+        view = object.__new__(OpsiStatisticsMixin)
+        cl1_db = MagicMock()
+        cl1_db.get_stats.side_effect = RuntimeError('原始数据读取失败')
+        cl1_db.get_meow_stats.side_effect = lambda instance, year, month, hazard_level=None: {
+            3: {'effective_rounds': .33}, 5: {}}[hazard_level]
+        with patch('module.webui.app_stat_opsi.t', side_effect=lambda key: key), \
+                patch('module.logger.logger.warning'):
+            levels = view._build_meow_stats_by_level(cl1_db, 'alas')
+        self.assertTrue(levels[3]['hasRecords'])
+        self.assertFalse(levels[5]['hasRecords'])
+
+    def test_history_picker_keeps_cumulative_rows_without_other_months(self):
+        from module.statistics.azurstats import AzurStats
+        from module.webui.app_stat_opsi_export import OpsiExportMixin
+
+        view = object.__new__(OpsiExportMixin)
+        view._meow_extra_columns = MagicMock(return_value={3: [4, '1', '0', '0', '0']})
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(AzurStats, 'get_meow_loot_available_months', return_value=[]))
+            stack.enter_context(patch('module.webui.app_stat_opsi_export.t', side_effect=lambda key: key))
+            for name in ('put_html', 'put_buttons', 'popup'):
+                stack.enter_context(patch(f'module.webui.app_stat_opsi_export.{name}'))
+            text_output = stack.enter_context(patch('module.webui.app_stat_opsi_export.put_text'))
+            table = stack.enter_context(patch('module.webui.app_stat_opsi_export.build_simple_table'))
+            view._show_meow_loot_month_picker()
+        text_output.assert_any_call('暂无历史月份数据')
+        self.assertEqual(len(table.call_args.args[0]), 6)
+        self.assertEqual(table.call_args.args[1], [[3, 4, '1', '0', '0', '0']])
 
 
 class CommissionRecentTests(unittest.TestCase):

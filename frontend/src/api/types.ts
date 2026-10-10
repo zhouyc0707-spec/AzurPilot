@@ -147,6 +147,8 @@ export interface LegacyOpsiPanel {summary: LegacySummaryItem[]; columns: LegacyC
 export interface LegacyMeowLootPanel {
   month: string; isCurrentMonth: boolean; availableMonths: string[]; lastRecord: string
   columns: LegacyColumn[]; rows: (number | string)[][]
+  /** 历月累计按侵蚀等级独立返回，不受所选月份是否有记录影响；兼容旧后端可省略。 */
+  cumulativeRows?: (number | string)[][]
 }
 export interface LegacyShipPanel {
   hasData: boolean; hasToday?: boolean; lastCheckTime?: string
