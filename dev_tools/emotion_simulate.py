@@ -35,6 +35,7 @@ SOURCE_SHA256 = {file: hashlib.sha256(Path(file).read_bytes()).hexdigest() for f
 
 class QuietLogger:
     def __getattr__(self, name):
+        """通过模拟状态对象读取对应的配置字段。"""
         return lambda *args, **kwargs: None
 
 
@@ -45,10 +46,12 @@ class ShipSpec:
 
     @property
     def cap(self):
+        """返回模拟恢复条件下的心情上限。"""
         return 119 if self.recover == 'not_in_dormitory' else 150
 
     @property
     def label(self):
+        """返回模拟策略的可读标识。"""
         return {'not_in_dormitory': '港区', 'dormitory_floor_1': '后宅一楼',
                 'dormitory_floor_2': '后宅二楼'}[self.recover] + ('已婚' if self.oath else '未婚')
 
@@ -57,6 +60,7 @@ class LuaOracle:
     """按独立的确定相位逐批次恢复，包含上限和零值截断。"""
 
     def __init__(self, spec, initial, origin, phase):
+        """初始化模拟器的时间、配置或舰队状态。"""
         self.spec = spec
         self.values = [initial, initial]
         self.last = origin
@@ -65,6 +69,7 @@ class LuaOracle:
         self.used = [0, 0]
 
     def advance(self, now):
+        """向前推进模拟时钟及心情恢复批次。"""
         assert now >= self.last
         while self.next_tick <= now:
             for i, old in enumerate(self.values):
@@ -79,6 +84,7 @@ class LuaOracle:
         self.last = now
 
     def consume(self, index, cost):
+        """模拟一次战斗产生的心情消耗。"""
         assert self.values[index] >= cost, '对照舰队心情不足，不能伪造完成出击'
         self.values[index] -= cost
         self.used[index] += cost
@@ -97,6 +103,7 @@ class MemoryConfig:
     """只替换存储介质，调度目标仍调用生产 task_delay。"""
 
     def __init__(self, clock, spec, initial, cost, control, public=False, shared=None):
+        """初始化模拟器的时间、配置或舰队状态。"""
         self.fields = {}
         self.shared = {} if shared is None else shared
         self.saves = 0
@@ -116,12 +123,14 @@ class MemoryConfig:
                 setattr(self, prefix + key, value)
 
     def __getattr__(self, key):
+        """通过模拟状态对象读取对应的配置字段。"""
         target = self.shared if key.startswith('PublicEmotion_Fleet') else self.fields
         if key not in target:
             raise AttributeError(key)
         return target[key]
 
     def __setattr__(self, key, value):
+        """将字段更新写入模拟配置存储。"""
         if key.startswith(('Emotion_', 'PublicEmotion_Fleet')):
             target = self.shared if key.startswith('PublicEmotion_Fleet') else self.fields
             target[key] = value
@@ -130,6 +139,7 @@ class MemoryConfig:
 
     @contextmanager
     def multi_set(self):
+        """批量更新模拟配置中的关联字段。"""
         try:
             yield
         finally:
@@ -142,6 +152,7 @@ class MemoryConfig:
             self.saves += 1
 
     def cross_set(self, key, value):
+        """按分组路径更新模拟配置字段。"""
         self.fields[key] = value
 
     task_delay = AzurLaneConfig.task_delay
@@ -149,15 +160,18 @@ class MemoryConfig:
 
 class Clock:
     def __init__(self, start, oracle):
+        """初始化模拟器的时间、配置或舰队状态。"""
         self.us = self.origin = start
         self.advanced = 0
         self.oracle = oracle
         self.observe = lambda: None
 
     def now(self):
+        """返回模拟测试当前时间。"""
         return BASE + timedelta(microseconds=self.us)
 
     def _move(self, target):
+        """调整模拟事件的时间或恢复条件。"""
         assert target >= self.us
         self.advanced += target - self.us
         self.us = target
@@ -165,6 +179,7 @@ class Clock:
         self.observe()
 
     def advance(self, delta):
+        """向前推进模拟时钟及心情恢复批次。"""
         assert type(delta) is int and delta >= 0
         target = self.us + delta
         while self.oracle.next_tick <= target:
@@ -181,6 +196,7 @@ class Clock:
 def simulate(spec, *, battles=10_000, cost=2, phase=179 * US, pattern='jitter90',
              control='prevent_green_face', public=False, dual=False, alternate=False, initial=None,
              measurement_us=None):
+    """按配置运行一次确定性的心情恢复模拟。"""
     start = spec.cap if initial is None else initial
     oracle = LuaOracle(spec, start, 500_000, phase)
     clock = Clock(500_000, oracle)
@@ -206,6 +222,7 @@ def simulate(spec, *, battles=10_000, cost=2, phase=179 * US, pattern='jitter90'
     scan_rng = random.Random(1092026)
 
     def observe():
+        """应用模拟截图获得的可信心情观测。"""
         nonlocal checks, max_over, max_under, max_segments, worst
         nonlocal absolute_error, zero_error, baseline_error, baseline_zero, baseline_over, baseline_under
         active.update()
@@ -345,6 +362,7 @@ def simulate(spec, *, battles=10_000, cost=2, phase=179 * US, pattern='jitter90'
 
 
 def run_suite(battles=10_000, passive=False):
+    """运行多组场景并报告模拟结果。"""
     results = []
     for recover in ('not_in_dormitory', 'dormitory_floor_1', 'dormitory_floor_2'):
         for oath in (False, True):

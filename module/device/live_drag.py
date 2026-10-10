@@ -15,6 +15,7 @@ class LiveDrag:
     """调用方逐帧移动触点；离开上下文时释放，绝不回退为点击。"""
 
     def __init__(self, device, name):
+        """初始化持续触控会话及其线程控制状态。"""
         self.device = device
         self.name = name
         self.method = device.config.Emulator_ControlMethod
@@ -31,9 +32,11 @@ class LiveDrag:
         self._motion_error = None
 
     def __enter__(self):
+        """进入触控会话并准备释放资源的上下文。"""
         return self
 
     def __exit__(self, exc_type, exc, traceback):
+        """退出会话时确保正在按住的触点被释放。"""
         try:
             self.up()
         except Exception as release_error:
@@ -43,6 +46,7 @@ class LiveDrag:
             logger.error(f'[设备-控制] 连续拖拽释放失败: {release_error}')
 
     def _send(self, operation, point):
+        """通过所选触控后端提交当前触点操作。"""
         device = self.device
         if self.method in ('minitouch', 'MaaTouch'):
             builder = device.minitouch_builder if self.method == 'minitouch' else device.maatouch_builder
@@ -70,6 +74,7 @@ class LiveDrag:
                 device._scrcpy_control.touch(*point, action)
 
     def down(self, point):
+        """按下并保持指定坐标上的触点。"""
         if self.active:
             raise ScriptError('连续拖拽已有活动触点')
         self.device.handle_control_check(self.name)
@@ -79,6 +84,7 @@ class LiveDrag:
         self._send('down', self.point)
 
     def move(self, point):
+        """将保持中的触点移动到目标坐标。"""
         if not self.active:
             raise ScriptError('连续拖拽尚未按下')
         self.hold()
@@ -100,6 +106,7 @@ class LiveDrag:
         self._motion_wake.set()
 
     def _glide_worker(self):
+        """在后台以受控的小步长持续移动触点。"""
         try:
             while not self._motion_stop.is_set():
                 with self._motion_lock:
@@ -126,6 +133,7 @@ class LiveDrag:
             raise error
 
     def _stop_motion(self):
+        """停止正在执行的连续触点移动。"""
         if self._motion is not None:
             self._motion_stop.set()
             self._motion_wake.set()
@@ -141,6 +149,7 @@ class LiveDrag:
         self.check_error()
 
     def up(self):
+        """释放触点并完成当前拖动会话。"""
         if self.active:
             self._stop_motion()
             self._send('up', self.point)

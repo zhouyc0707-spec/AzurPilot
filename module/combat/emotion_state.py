@@ -37,30 +37,36 @@ class EmotionRecoveryState:
 
     @property
     def signature(self):
+        """返回决定当前恢复速度的条件签名。"""
         return [self.recover, self.oath, self.onsen]
 
     @property
     def speed(self):
+        """返回每个恢复周期的整数心情增量。"""
         return DIC_RECOVER[self.recover] + int(self.oath) + int(self.onsen)
 
     @property
     def cap(self):
+        """返回当前恢复条件允许达到的心情上限。"""
         return 150 if self.onsen else DIC_RECOVER_MAX[self.recover]
 
     @property
     def lower(self):
+        """获取所有可能恢复相位对应心情的下界。"""
         if len(self.segments) == 1:
             return self.segments[0][2]
         return min(value for _, _, value in self.segments)
 
     @property
     def upper(self):
+        """获取所有可能恢复相位对应心情的上界。"""
         if len(self.segments) == 1:
             return self.segments[0][2]
         return max(value for _, _, value in self.segments)
 
     @property
     def value(self):
+        """返回用于展示的心情区间中间值。"""
         if len(self.segments) == 1:
             return self.segments[0][2]
         return (self.lower + self.upper) // 2
@@ -114,11 +120,13 @@ class EmotionRecoveryState:
             raise ValueError('恢复存档无效') from exc
 
     def export(self):
+        """序列化带恢复相位的状态以供配置保存。"""
         return {'version': 2, 'record': self.record.isoformat(timespec='microseconds'),
                 'signature': self.signature, 'segments': [list(item) for item in self.segments]}
 
     @staticmethod
     def _append(segments, start, stop, value):
+        """合并连续且心情值相同的相位区间。"""
         if segments and segments[-1][1] == start and segments[-1][2] == value:
             segments[-1] = (segments[-1][0], stop, value)
         else:

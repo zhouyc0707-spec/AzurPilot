@@ -22,10 +22,12 @@ def catalog():
 
 
 def normalize_name(name):
+    """规范化舰船名称以便匹配资料与合并重复项。"""
     return re.sub(r'[\s.·・．。]', '', unicodedata.normalize('NFKC', name)).casefold()
 
 
 def find_ship(name):
+    """根据名称查询内置舰船目录。"""
     ships = catalog()['ships']
     if name in ships:
         return ships[name]
@@ -43,6 +45,7 @@ def find_ship(name):
 
 
 def revision(ships):
+    """计算舰船清单的稳定版本摘要。"""
     return hashlib.sha256(json.dumps(ships, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
 
 
@@ -70,6 +73,7 @@ def enrich(ship):
 
 
 def base_key(ship):
+    """确定用于同名舰船合并的基础身份键。"""
     # META 身份不能与普通舰或改造舰合并。
     name = ship['name'] if ship['group'] == 'META' or 'meta' in ship['name'].casefold() else ship['base_name']
     return normalize_name(name)

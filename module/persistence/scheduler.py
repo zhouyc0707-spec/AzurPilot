@@ -11,6 +11,7 @@ RUNTIME_TABLES = ('scheduler_state_variables', 'scheduler_runtime', 'scheduler_c
 
 
 def numeric_columns(value):
+    """返回调度变量允许使用的数值列定义。"""
     if type(value) is int:
         return {'kind': 'int', 'int_value': value, 'real_value': None, 'text_value': None} if -(2 ** 63) <= value < 2 ** 63 else {
             'kind': 'bigint', 'int_value': None, 'real_value': None, 'text_value': str(value)}
@@ -20,10 +21,12 @@ def numeric_columns(value):
 
 
 def numeric_value(row):
+    """将调度数据转换为受支持的数值表示。"""
     return int(row['text_value']) if row['kind'] == 'bigint' else row['int_value'] if row['kind'] == 'int' else row['real_value']
 
 
 def save_document(connection, instance, slot, document):
+    """持久化指定实例的调度定义文档。"""
     from module.scheduler.models import ProgramDocument
     document = ProgramDocument.model_validate(normalize(document)).model_dump()
     connection.execute('DELETE FROM scheduler_documents WHERE instance=? AND slot=?', (instance, slot))
@@ -61,6 +64,7 @@ def save_document(connection, instance, slot, document):
 
 
 def read_document(connection, instance, slot):
+    """读取指定实例的调度定义文档。"""
     document = connection.execute('SELECT * FROM scheduler_documents WHERE instance=? AND slot=?', (instance, slot)).fetchone()
     if document is None:
         return None
@@ -98,6 +102,7 @@ def read_document(connection, instance, slot):
 
 
 def save_program(connection, instance, data, revision):
+    """保存调度程序及其当前修订版本。"""
     register_instance(connection, instance)
     connection.execute('''INSERT INTO scheduler_programs VALUES(?,?,?,?) ON CONFLICT(instance)
         DO UPDATE SET mode=excluded.mode,generation=excluded.generation,revision=excluded.revision''',
@@ -110,6 +115,7 @@ def save_program(connection, instance, data, revision):
 
 
 def read_program(connection, instance):
+    """读取已存储的调度程序及其修订信息。"""
     row = connection.execute('SELECT * FROM scheduler_programs WHERE instance=?', (instance,)).fetchone()
     if row is None:
         return None
@@ -118,6 +124,7 @@ def read_program(connection, instance):
 
 
 def relational_record(name, value):
+    """将调度节点映射为关系型数据记录。"""
     if name == 'lastResult':
         return type(value) is dict
     if type(value) is not dict:
@@ -135,6 +142,7 @@ def relational_record(name, value):
 
 
 def save_persistent(connection, instance, data):
+    """写入调度器需要持久保留的运行状态。"""
     data = normalize(data)
     register_instance(connection, instance)
     for table in RUNTIME_TABLES:
@@ -171,6 +179,7 @@ def save_persistent(connection, instance, data):
 
 
 def read_persistent(connection, instance):
+    """读取实例的调度持久变量与运行状态。"""
     variables = {row['name']: read_value(connection, row['value_set_id']) for row in connection.execute(
         'SELECT * FROM scheduler_state_variables WHERE instance=? ORDER BY rowid', (instance,))}
     runtime = connection.execute('SELECT * FROM scheduler_runtime WHERE instance=?', (instance,)).fetchone()
@@ -197,6 +206,7 @@ def read_persistent(connection, instance):
 
 
 def write_observation(connection, instance, name, value, timestamp, source):
+    """保存带观察时间与来源的资源观测。"""
     values = value if type(value) is dict else {'Value': value}
     numbers = [values.get(key) for key in ('Value', 'Limit', 'Total')]
     if any(not scalar(number, 'R')[0] for number in numbers):
@@ -209,12 +219,14 @@ def write_observation(connection, instance, name, value, timestamp, source):
 
 
 def read_observations(connection, instance):
+    """汇集指定实例已保存的资源观测。"""
     return {row['resource']: dict(Value=row['value'], Limit=row['resource_limit'], Total=row['total'],
         observedAt=row['observed_at'], source=row['source']) for row in connection.execute(
         'SELECT * FROM scheduler_observations WHERE instance=?', (instance,))}
 
 
 def delete_scheduler(connection, instance):
+    """清理指定实例的普通调度数据。"""
     connection.execute('DELETE FROM scheduler_programs WHERE instance=?', (instance,))
     for table in RUNTIME_TABLES:
         connection.execute(f'DELETE FROM {table} WHERE instance=?', (instance,))

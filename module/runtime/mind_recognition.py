@@ -27,6 +27,7 @@ class Card:
 
 
 def parse_level(text):
+    """解析截图中的等级文本并拒绝不确定读数。"""
     import re
     text = ''.join(text).strip()
     match = re.fullmatch(r'(?:[Ll1I][VvYy][.\s]*)?([1-9]\d{0,2})', text)
@@ -47,6 +48,7 @@ def level_vote(texts, digit_count=0):
 
 
 def _clusters(values, gap):
+    """将位置接近的识别坐标聚合为候选行。"""
     groups = []
     for value in sorted(values):
         if not groups or value - groups[-1][-1] > gap:
@@ -57,6 +59,7 @@ def _clusters(values, gap):
 
 
 def _runs(mask):
+    """提取连续像素区间作为定位候选。"""
     edges = np.diff(np.pad(mask.astype(np.int8), (1, 1)))
     return list(zip(np.flatnonzero(edges == 1), np.flatnonzero(edges == -1)))
 
@@ -120,6 +123,7 @@ def detect_rows(image, ocr):
 
 
 def _name_image(pixels):
+    """提取舰船名字区域中的文字前景。"""
     gray = cv2.min(extract_letters(pixels), extract_letters(pixels, (255, 170, 206), 108))
     count, components, stats, _ = cv2.connectedComponentsWithStats((gray < 120).astype(np.uint8), connectivity=8)
     for component in range(1, count):
@@ -130,6 +134,7 @@ def _name_image(pixels):
 
 
 def _digit_count(pixels):
+    """估计等级数字位数以减少百位误识别。"""
     # 去掉左侧 Lv，只对右侧数字统计；过短噪点不能作为百位证据。
     mask = (cv2.cvtColor(pixels[:, 25:], cv2.COLOR_RGB2GRAY) > 220).astype(np.uint8)
     count, _, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
@@ -149,7 +154,9 @@ def _digit_count(pixels):
 
 
 def _match_name(texts, frame_rarity):
+    """按照稀有度和唯一性约束匹配舰船名称。"""
     def consistent(info):
+        """确认候选舰船与截图卡框稀有度相符。"""
         if not frame_rarity or info['rarity'] == frame_rarity or frame_rarity == 'SSR' and info['rarity'] == 'UR':
             return True
         # 内置资料沿用原工具的基础稀有度，改造卡框在游戏内会升一档。
@@ -291,6 +298,7 @@ def estimate_scroll(previous, current):
 class ScanMerger:
     """跨页按列和绝对行坐标合并；同名同级的不同格子仍然保留。"""
     def __init__(self):
+        """初始化多页船坞扫描的空间合并状态。"""
         self.previous = None
         self.offset = 0
         self.slots = []
@@ -304,6 +312,7 @@ class ScanMerger:
         return shift
 
     def add(self, image, cards):
+        """将当前页卡片合入已定位的扫描结果。"""
         shift = self.advance(image)
         for card in cards:
             absolute_y = card.y + self.offset
@@ -320,4 +329,5 @@ class ScanMerger:
         return shift
 
     def ships(self):
+        """返回按扫描顺序去重后的舰船数据。"""
         return [card.ship for card, _ in sorted(self.slots, key=lambda item: (item[1], item[0].col))]

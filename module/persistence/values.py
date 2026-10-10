@@ -27,6 +27,7 @@ def scalar(value, kind):
 
 
 def write_value(connection, instance, value, *, document_id=None, month=None, runtime=False, ship=False):
+    """将嵌套值递归写入带类型标记的存储节点。"""
     register_instance(connection, instance)
     owner = (document_id, month, instance if runtime else None, instance if ship else None)
     if sum(item is not None for item in owner) != 1:
@@ -37,6 +38,7 @@ def write_value(connection, instance, value, *, document_id=None, month=None, ru
     rows = []
 
     def visit(item, parent=None, key=None, ordinal=0):
+        """遍历并编码嵌套数据中的各级子项。"""
         node = len(rows) + 1
         integer = real = text = None
         if item is None:
@@ -72,6 +74,7 @@ def write_value(connection, instance, value, *, document_id=None, month=None, ru
 
 
 def read_value(connection, value_id):
+    """从类型化节点恢复原始的嵌套业务值。"""
     rows = connection.execute('SELECT * FROM typed_value_nodes WHERE value_set_id=? ORDER BY node_no', (value_id,)).fetchall()
     if not rows or rows[0]['node_no'] != 1 or rows[0]['parent_no'] is not None:
         raise ValueError('扩展值缺少唯一根节点')

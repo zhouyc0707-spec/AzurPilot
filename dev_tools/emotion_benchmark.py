@@ -26,6 +26,7 @@ from module.retire.scanner import FleetEmotionScanner
 
 
 def load_baseline(ref, path, name):
+    """读取作为性能与正确性对照的基线数据。"""
     source = subprocess.check_output(['git', 'show', f'{ref}:{path}']).decode('utf-8')
     module = types.ModuleType(name)
     sys.modules[name] = module
@@ -34,6 +35,7 @@ def load_baseline(ref, path, name):
 
 
 def calculate(module, state_class, iterations):
+    """计算用于对比的心情恢复预测结果。"""
     cursor = [BASE + timedelta(microseconds=500_000)]
     clock = SimpleNamespace(now=lambda: cursor[0])
     config = MemoryConfig(clock, ShipSpec('dormitory_floor_2', True), 80, 2, 'prevent_green_face')
@@ -56,6 +58,7 @@ def calculate(module, state_class, iterations):
 
 
 def compare_without_observations(old_class):
+    """比较禁用观测时各恢复策略的预测误差。"""
     rng = random.Random(1092026)
     checks = 0
     for recover in ('not_in_dormitory', 'dormitory_floor_1', 'dormitory_floor_2'):
@@ -75,6 +78,7 @@ def compare_without_observations(old_class):
 
 
 def scan_flow(runner_class, real_ocr=False):
+    """执行模拟的舰队扫描与心情观测流程。"""
     counts, actions = Counter(), []
     state = EmotionRecoveryState.calibrate(144, BASE, 'dormitory_floor_2', True, False)
     fields = {'Mode': 'calculate'}
@@ -87,6 +91,7 @@ def scan_flow(runner_class, real_ocr=False):
                                                                    'FleetOrder': 'fleet1_all_fleet2_standby'}}})
 
     def save():
+        """记录基准测试生成的结果与状态。"""
         counts['save'] += 1
         for path, value in config.modified.items():
             deep_set(config.data, keys=path, value=value)
@@ -99,6 +104,7 @@ def scan_flow(runner_class, real_ocr=False):
     cursor, category = [BASE + timedelta(seconds=59)], [0]
 
     def screenshot():
+        """构造基准场景的截图输入。"""
         counts['screenshot'] += 1
         cursor[0] += timedelta(milliseconds=100)
         device.screenshot_deque.append({'time': cursor[0], 'image': image})
@@ -109,11 +115,13 @@ def scan_flow(runner_class, real_ocr=False):
     runner.dock_filter = SimpleNamespace(reset_first=True)
     for name in ('ui_ensure', 'dock_favourite_set', 'dock_sort_method_dsc_set', 'dock_filter_set', 'dock_reset'):
         def action(*args, _name=name, **kwargs):
+            """执行模拟场景中的单步操作。"""
             counts['click'] += 1
             actions.append((_name, repr(args), repr(kwargs)))
         setattr(runner, name, action)
 
     def wait_loaded():
+        """等待测试场景完成预定加载。"""
         # 同一替身在两个版本执行相同的已有加载截图，不模拟新增等待。
         screenshot()
         screenshot()
@@ -125,6 +133,7 @@ def scan_flow(runner_class, real_ocr=False):
         name_scanner = SimpleNamespace(name_matcher=SimpleNamespace(names=[f'ship{i}' for i in range(6)]))
 
         def scan(self, frame):
+            """采集模拟舰队并返回识别数据。"""
             counts['scan'] += 1
             counts['ocr'] += 3
             points = 150
@@ -148,6 +157,7 @@ def scan_flow(runner_class, real_ocr=False):
 
 
 def summary(pairs):
+    """汇总基准测试指标和误差分布。"""
     before, after = zip(*pairs)
     differences = [b - a for a, b in pairs]
     rng = random.Random(20261009)
@@ -158,6 +168,7 @@ def summary(pairs):
 
 
 def run(ref, pairs, iterations, ocr_pairs):
+    """执行心情恢复与观测的基准评估。"""
     old_state = load_baseline(ref, 'module/combat/emotion_state.py', '_emotion_baseline_state')
     old_emotion = load_baseline(ref, 'module/combat/emotion.py', '_emotion_baseline')
     old_emotion.EmotionRecoveryState = old_state.EmotionRecoveryState

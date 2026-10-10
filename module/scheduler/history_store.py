@@ -15,10 +15,12 @@ HISTORY_ERRORS = (ApiError, OSError, ValueError, TypeError, KeyError, AttributeE
 
 class AuthenticatedHistoryStore:
     def __init__(self, directory='config'):
+        """初始化独立的受认证行动力历史存储。"""
         self.directory = Path(directory).absolute() / 'scheduler'
 
 
     def path(self, instance, kind=None):
+        """返回指定实例的受保护历史数据库路径。"""
         from module.api.config_service import validate_name
         if validate_name(instance) != instance:
             raise ValueError('实例名不是规范形式')
@@ -78,6 +80,7 @@ class AuthenticatedHistoryStore:
                 ''')
                 connection.execute('BEGIN IMMEDIATE' if write else 'BEGIN')
                 def history_factory():
+                    """构造具备历史校验上下文的数据库连接。"""
                     nonlocal identity
                     if identity is None:
                         identity = protection.resolve(instance)
@@ -111,6 +114,7 @@ class AuthenticatedHistoryStore:
                 connection.close()
     @staticmethod
     def _write_observation(connection, name, value, timestamp, source):
+        """将受验证的行动力观测写入历史记录。"""
         values = value if isinstance(value, dict) else {'Value': value}
         # 在覆盖最新值之前保留实际采集的总行动力；同一时间的修正产生新游标。
         total = values.get('Total')
@@ -143,6 +147,7 @@ class AuthenticatedHistoryStore:
                     # 可选历史表损坏也不能阻断普通资源记录；茗交所读取时仍会报错。
 
     def observe(self, instance, name, value, timestamp, source):
+        """保存本次观察并更新历史校验状态。"""
         with self.connection(instance, write=True) as connection:
             self._write_observation(connection, name, value, timestamp, source)
 
@@ -161,6 +166,7 @@ class AuthenticatedHistoryStore:
 
 
     def archive(self, instance, backup):
+        """归档受保护的行动力历史以便安全恢复。"""
         path = self.path(instance)
         if path.exists():
             with config_transaction(path):

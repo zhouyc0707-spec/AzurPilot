@@ -20,10 +20,12 @@ TASK, GROUP = 'MindCalculatorScan', 'MindCalculator'
 
 
 def input_ship(ship):
+    """规范化用户输入的舰船字段并校验类型。"""
     return MindShip.model_validate(ship).model_dump()
 
 
 def decode(content):
+    """解码导入文件的内容并检查数据格式。"""
     try:
         return base64.b64decode(content, validate=True)
     except (ValueError, binascii.Error):
@@ -52,6 +54,7 @@ def table_ships(rows):
                 continue
             continue
         def value(key, default=''):
+            """读取导入单元格并转为可用的字符串。"""
             column = columns[key]
             return row[column] if 0 <= column < len(row) and row[column] is not None else default
         name = str(value('name')).strip()
@@ -69,6 +72,7 @@ def table_ships(rows):
         base_rarity = str(value('base_rarity')).strip()
         base_rarity = {cn: key for key, cn in RARITY_NAMES.items()}.get(base_rarity, base_rarity.upper())
         def boolean(key):
+            """将导入的标记字段转换为布尔值。"""
             raw = str(value(key)).strip().casefold()
             if raw not in ('', '0', '1', 'true', 'false', '是', '否'):
                 raise ValueError(f'第 {index + 1} 行 {key} 字段无效')
@@ -83,6 +87,7 @@ def table_ships(rows):
 
 
 def import_ships(filename, content):
+    """从上传的文件中解析舰船列表。"""
     raw = decode(content)
     suffix = Path(filename).suffix.casefold()
     try:
@@ -125,9 +130,11 @@ def import_ships(filename, content):
 
 class MindCalculatorService:
     def __init__(self, configs):
+        """绑定配置服务并初始化心智计算器接口。"""
         self.configs = configs
 
     def report(self, instance):
+        """返回指定实例保存的舰船列表及版本信息。"""
         data, _ = self.configs.read(instance)
         saved = data.get(TASK, {}).get(GROUP, {}).get('Result', {})
         ships = saved.get('ships', [])
@@ -135,6 +142,7 @@ class MindCalculatorService:
                     **calculate(ships))
 
     def save(self, instance, expected_revision, ships):
+        """按版本校验保存实例的心智计算器清单。"""
         with self.configs.lock, config_transaction(self.configs.path(instance)):
             data, _ = self.configs.read(instance)
             fields = data.setdefault(TASK, {}).setdefault(GROUP, {})
@@ -145,19 +153,23 @@ class MindCalculatorService:
             return self.report(instance)
 
     def catalog(self, instance):
+        """返回用于计算与人工核对的舰船资料。"""
         self.configs.path(instance)
         data = catalog()
         return dict(updated_at=data['updated_at'], ships=list(data['ships'].values()))
 
     def calculate(self, instance, ships):
+        """计算选定舰船升级所需的心智单元。"""
         self.configs.path(instance)
         return calculate(ships)
 
     def import_file(self, instance, filename, content):
+        """解析用户上传文件并返回可检查的舰船记录。"""
         self.configs.path(instance)
         return {'ships': import_ships(filename, content)}
 
     def recognize(self, instance, filename, content):
+        """识别上传截图中的舰船卡片和等级。"""
         self.configs.path(instance)
         from PIL import Image, UnidentifiedImageError
         from module.runtime.mind_calculator import recognize
@@ -171,6 +183,7 @@ class MindCalculatorService:
         return {'ships': ships}
 
     def export(self, instance, format):
+        """将指定实例的舰船清单导出为选定格式。"""
         report = self.report(instance)
         headers = ['船名', '等级', '稀有度', '基础稀有度', '排除', '需核对', '来源']
         fields = ['name', 'level', 'rarity', 'base_rarity', 'excluded', 'review', 'source']
@@ -182,6 +195,7 @@ class MindCalculatorService:
             writer = csv.writer(output)
             writer.writerow(headers)
             def csv_value(value):
+                """安全编码 CSV 单元格以防公式注入。"""
                 text = str(value)
                 return "'" + text if text[:1] in ('=', '+', '-', '@', '\t', '\r') else text
             writer.writerows([[csv_value(ship[key]) for key in fields] for ship in ships])

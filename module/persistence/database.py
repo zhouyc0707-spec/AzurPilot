@@ -18,6 +18,7 @@ _directory = ContextVar('business_database_directory', default=None)
 
 
 def current_directory():
+    """返回当前业务调用绑定的配置目录。"""
     return _directory.get() or _configured_directory
 _databases = {}
 _guard = threading.RLock()
@@ -27,6 +28,7 @@ class ClosingConnection(sqlite3.Connection):
     """进入上下文即取得写锁，提交和回滚之后都释放文件句柄。"""
 
     def __enter__(self):
+        """进入连接上下文并取得业务事务。"""
         try:
             if not self.in_transaction:
                 self.execute('BEGIN IMMEDIATE')
@@ -36,6 +38,7 @@ class ClosingConnection(sqlite3.Connection):
             raise
 
     def __exit__(self, *args):
+        """结束连接上下文并释放事务相关资源。"""
         try:
             return super().__exit__(*args)
         finally:
@@ -43,6 +46,7 @@ class ClosingConnection(sqlite3.Connection):
 
 
 def register_instance(connection, instance):
+    """在总库中登记实例身份与关联范围。"""
     if instance is not None:
         if not isinstance(instance, str):
             raise TypeError('实例名必须是字符串')
@@ -50,6 +54,7 @@ def register_instance(connection, instance):
 
 
 def create_schema(connection):
+    """执行版本化模式定义以初始化数据库。"""
     connection.executescript(Path(__file__).with_name('schema_v1.sql').read_text(encoding='utf-8'))
     connection.execute(f'PRAGMA user_version={VERSION}')
 
@@ -58,6 +63,7 @@ class BusinessDatabase:
     """一个配置目录对应一个普通总库，所有连接都经过迁移入口。"""
 
     def __init__(self, config_directory=None):
+        """初始化数据库连接配置及安装路径。"""
         self.directory = Path(config_directory or current_directory()).absolute()
         self.path = self.directory / 'azurpilot.db'
         self.marker = self.directory / 'azurpilot.migrated'
@@ -66,12 +72,14 @@ class BusinessDatabase:
         self._lock = threading.RLock()
 
     def add_legacy_source(self, kind, path):
+        """登记额外的历史数据迁移来源。"""
         path = Path(path).absolute()
         with self._lock:
             sources = self.legacy_sources.setdefault(kind, set())
             sources.add(path)
 
     def ensure_ready(self):
+        """检查总库与迁移状态，必要时完成首次初始化。"""
         if self._ready and self.path.is_file():
             return
         from module.logger import logger
@@ -103,6 +111,7 @@ class BusinessDatabase:
             logger.info('[存储] 总库已就绪，耗时 %.2f 秒：%s', time.perf_counter() - started, self.path)
 
     def _write_marker(self, digest):
+        """原子写入与总库对应的迁移完成标记。"""
         temporary = self.marker.with_suffix('.migrated.tmp')
         with temporary.open('w', encoding='utf-8') as file:
             file.write(f'{VERSION}\n{digest}\n')
@@ -111,6 +120,7 @@ class BusinessDatabase:
         os.replace(temporary, self.marker)
 
     def connect(self, *, timeout=10.0, readonly=False, factory=ClosingConnection):
+        """返回带事务生命周期管理的 SQLite 连接。"""
         self.ensure_ready()
         path = self.path.as_uri() + '?mode=ro' if readonly else self.path
         connection = sqlite3.connect(path, uri=readonly, timeout=timeout, factory=factory)
@@ -126,6 +136,7 @@ class BusinessDatabase:
 
     @contextmanager
     def transaction(self, *, write=True, timeout=10.0):
+        """为业务操作提供只读或可写的事务上下文。"""
         with closing(self.connect(timeout=timeout, readonly=not write, factory=sqlite3.Connection)) as connection:
             try:
                 connection.execute('BEGIN IMMEDIATE' if write else 'BEGIN')
@@ -136,6 +147,7 @@ class BusinessDatabase:
                 raise
 
     def backup(self, target):
+        """创建通过完整性校验的业务数据库备份。"""
         target = Path(target)
         if target.resolve() == self.path.resolve() or target.is_symlink():
             raise ValueError('备份目标不能覆盖普通总库或符号链接')
@@ -154,6 +166,7 @@ class BusinessDatabase:
 
 
 def get_database(config_directory=None):
+    """取得配置目录对应的共享数据库实例。"""
     directory = Path(config_directory or current_directory()).absolute()
     key = os.path.normcase(str(directory.resolve()))
     with _guard:
@@ -195,6 +208,7 @@ def configured_database(function):
     """适配保留参数契约的函数入口和服务方法。"""
     @wraps(function)
     def wrapped(owner, *args, **kwargs):
+        """在指定配置目录下执行被包装的业务调用。"""
         configs = getattr(owner, 'configs', owner)
         with use_database(get_database(getattr(configs, 'directory', None))):
             return function(owner, *args, **kwargs)

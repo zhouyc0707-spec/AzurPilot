@@ -111,6 +111,7 @@ def backup_recovery_file(source, target):
 
 
 def source_files(database):
+    """清点当前配置目录与历史日志中的旧数据来源。"""
     directory, root = database.directory, database.directory.parent
     result = {directory / name: kind for name, kind in DATABASE_KINDS.items()}
     old_cl1 = root / 'log' / 'cl1' / 'cl1_data.db'
@@ -198,10 +199,12 @@ def assert_no_workers(root):
 
 
 def snapshot_database(source, target):
+    """使用 SQLite 在线备份取得一致的旧数据库副本。"""
     io_path(target.parent).mkdir(parents=True, exist_ok=True)
     last_log = time.perf_counter()
 
     def progress(_status, remaining, total):
+        """输出迁移阶段的进度消息。"""
         nonlocal last_log
         now = time.perf_counter()
         if total > 0 and now - last_log >= 2:
@@ -225,6 +228,7 @@ def freeze_database(path):
             connection.rollback()
 
 def fingerprint(path):
+    """计算文件摘要以检测迁移期间的外部修改。"""
     digest = hashlib.sha256()
     for candidate in (path, path.with_name(path.name + '-wal')):
         digest.update(candidate.name.encode('utf-8'))
@@ -236,6 +240,7 @@ def fingerprint(path):
 
 
 def backup_sources(database, sources, target):
+    """备份全部旧数据源并生成来源摘要清单。"""
     root = database.directory.parent
     copies, manifest = {}, []
     for ordinal, (path, kind) in enumerate(sorted(sources.items(), key=lambda pair: str(pair[0])), 1):
@@ -284,6 +289,7 @@ class LegacyDecoder:
     """复用旧解密原语，不调用改写、隔离或退役旧密钥的流程。"""
 
     def __init__(self, root):
+        """初始化旧格式的只读解码器及未迁移记录清单。"""
         from module.statistics import opsi_secure
         self.secure = opsi_secure
         self.root = root
@@ -318,12 +324,14 @@ class LegacyDecoder:
         return self._legacy_ids
 
     def legacy_keys(self):
+        """收集可用于解密历史记录的已有密钥材料。"""
         if self._legacy_keys is None:
             from module.statistics.cl1_legacy import derive_legacy_key
             self._legacy_keys = [derive_legacy_key(value) for value in self.legacy_device_ids()]
         return self._legacy_keys
 
     def record_unmigrated(self, source, kind, identity, error):
+        """记录无法解码的历史数据与跳过原因。"""
         relative = str(source.relative_to(self.root)) if source.is_relative_to(self.root) else str(source)
         self.unmigrated.append(dict(source=relative, kind=kind, identity=identity, reason=str(error)))
         if len(self.unmigrated) <= 10 or len(self.unmigrated) % 1000 == 0:
@@ -335,6 +343,7 @@ class LegacyDecoder:
             self.unmigrated_months.add((identity['instance'], identity['month']))
 
     def payload(self, kind, raw, context):
+        """解码并返回受保护的历史载荷。"""
         if self.secure.is_ciphertext(raw):
             encoding = 'V2' if raw.startswith(self.secure.BLOB_PREFIX) else 'V1'
             if (kind, encoding) not in self._decoding_kinds:
@@ -353,6 +362,7 @@ class LegacyDecoder:
         return result
 
     def cl1(self, row):
+        """读取旧版 CL1 数据以准备转换。"""
         data = None
         if row.get('data_json'):
             try:
@@ -401,6 +411,7 @@ class LegacyDecoder:
             return data
 
     def _file(self, kind, original, copy):
+        """从冻结副本读取旧快照并尝试可用的备份。"""
         try:
             raw = io_path(copy).read_text(encoding='utf-8-sig')
         except UnicodeDecodeError as error:
@@ -464,6 +475,7 @@ def _source_rows(source, table, query):
 
 
 def import_database(connection, path, kind, original, decoder):
+    """将旧 SQLite 业务表导入临时统一数据库。"""
     with closing(sqlite3.connect(sqlite_uri(path, 'ro'), uri=True)) as source:
         source.row_factory = sqlite3.Row
         tables = {row[0] for row in source.execute("SELECT name FROM sqlite_master WHERE type='table'")}
@@ -543,6 +555,7 @@ def import_database(connection, path, kind, original, decoder):
 
 
 def import_scheduler(connection, source, tables, instance):
+    """转换旧调度器数据库中的定义和运行状态。"""
     if 'scheduler_programs' in tables:
         if source.execute('PRAGMA user_version').fetchone()[0] != VERSION or source.execute('PRAGMA foreign_key_check').fetchone():
             raise MigrationError('旧调度切片的版本或引用无效')
@@ -586,6 +599,7 @@ def import_scheduler(connection, source, tables, instance):
 
 
 def import_archive(connection, original, copy, decoder):
+    """导入历史月份快照而不覆盖已导入的月份。"""
     data = decoder.file('archives', original, copy)
     instance = original.parent.name
     for month in sorted(key for key in data if re.fullmatch(r'\d{4}-\d{2}', key)):
@@ -605,6 +619,7 @@ def import_archive(connection, original, copy, decoder):
 
 
 def import_farming(connection, original, copy, decoder):
+    """导入历史刷取收益记录并保留来源归属。"""
     raw = io_path(copy).read_bytes()
     try:
         text = raw.decode('utf-8')
@@ -639,12 +654,14 @@ def import_farming(connection, original, copy, decoder):
 
 
 def migrate(database):
+    """备份并验证旧数据后原子发布统一业务数据库。"""
     started = time.perf_counter()
     directory = database.directory
     temporary = directory / ('azurpilot.' + uuid4().hex + '.tmp')
     backup = directory / 'storage-backups' / ('pre-v1-' + datetime.now().strftime('%Y%m%d-%H%M%S') + '-' + uuid4().hex[:8])
 
     def phase(message, *args):
+        """更新迁移阶段并输出可诊断的进度日志。"""
         nonlocal stage
         stage = message % args if args else message
         _log_progress('%s', stage)

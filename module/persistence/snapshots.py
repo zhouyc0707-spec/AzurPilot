@@ -54,10 +54,12 @@ FAMILIES = {
 
 
 def presence(data, fields):
+    """记录快照字段是否存在及其原始取值。"""
     return sum(1 << index for index, name in enumerate(fields) if name in data)
 
 
 def project(data, fields):
+    """将业务快照投影为可持久化的结构化字段。"""
     columns = {column: None for _, column, _ in fields if column}
     extra = {name: value for name, value in data.items() if name not in {field[0] for field in fields}}
     mask = 0
@@ -80,12 +82,14 @@ def project(data, fields):
 
 
 def insert(connection, table, data):
+    """向指定原生业务表写入规范化记录。"""
     columns = ','.join(data)
     marks = ','.join('?' for _ in data)
     return connection.execute(f'INSERT INTO {table}({columns}) VALUES({marks})', tuple(data.values())).lastrowid
 
 
 def save_row(connection, table, keys, data, fields, owner, *, entry=False):
+    """保存快照中的单条原生表记录。"""
     if type(data) is dict:
         columns, mask, extra = project(data, fields)
         value_id = write_value(connection, value=extra, **owner) if extra else None
@@ -103,6 +107,7 @@ def save_row(connection, table, keys, data, fields, owner, *, entry=False):
 
 
 def load_row(connection, row, fields, collections=None):
+    """从数据库读取一条记录并恢复快照字段。"""
     if 'entry_kind' in row.keys() and row['entry_kind'] == 'value':
         return read_value(connection, row['compat_value_set_id'])
     result = {}
@@ -123,6 +128,7 @@ def load_row(connection, row, fields, collections=None):
 
 
 def save_children(connection, table, row_id, record, owner):
+    """将快照嵌套条目映射到关联子表。"""
     if type(record) is not dict or table not in ('commission_income', 'research_drops'):
         return
     key = 'income_id' if table == 'commission_income' else 'drop_id'
@@ -143,6 +149,7 @@ def save_children(connection, table, row_id, record, owner):
 
 
 def load_children(connection, table, row_id):
+    """读取关联子表并恢复嵌套条目。"""
     if table not in ('commission_income', 'research_drops'):
         return {}
     key = 'income_id' if table == 'commission_income' else 'drop_id'
@@ -158,6 +165,7 @@ def load_children(connection, table, row_id):
 
 
 def canonical_integer(key):
+    """将合法整数值转换为数据库规范表示。"""
     try:
         value = int(key)
     except (ValueError, TypeError):
@@ -166,6 +174,7 @@ def canonical_integer(key):
 
 
 def save_meow_samples(connection, samples, kind, bucket, owner):
+    """保存喵箱收益统计中的独立样本。"""
     fields = (('duration', 'duration_seconds', 'R'), ('hazard_level', 'observed_hazard', 'I'))
     for ordinal, sample in enumerate(samples):
         columns = {'duration_seconds': None, 'observed_hazard': None}
@@ -186,6 +195,7 @@ def save_meow_samples(connection, samples, kind, bucket, owner):
 
 
 def load_meow_samples(connection, instance, month, kind, bucket):
+    """读取并重建喵箱收益统计样本。"""
     result = []
     fields = (('duration', 'duration_seconds', 'R'), ('hazard_level', 'observed_hazard', 'I'))
     for row in connection.execute('''SELECT * FROM meow_duration_samples
@@ -200,6 +210,7 @@ def load_meow_samples(connection, instance, month, kind, bucket):
 
 
 def save_month(connection, instance, month, data):
+    """将实例月度统计快照保存到统一数据库。"""
     data = normalize(data, special=True)
     if type(data) is not dict:
         raise TypeError('月度快照必须是字典')
@@ -289,6 +300,7 @@ def save_month(connection, instance, month, data):
 
 
 def read_month(connection, instance, month):
+    """按实例与月份读取保存的统计快照。"""
     row = connection.execute('SELECT * FROM cl1_months WHERE instance=? AND month=?', (instance, month)).fetchone()
     if row is None:
         return None
@@ -337,6 +349,7 @@ def read_month(connection, instance, month):
 
 
 def save_ship(connection, instance, data):
+    """保存指定实例的舰船经验统计快照。"""
     data = normalize(data, special=True)
     if type(data) is not dict:
         raise TypeError('舰船经验快照必须是字典')
@@ -387,6 +400,7 @@ def save_ship(connection, instance, data):
 
 
 def read_ship(connection, instance):
+    """读取指定实例持久化的舰船经验统计。"""
     row = connection.execute('SELECT * FROM ship_exp_checks WHERE instance=?', (instance,)).fetchone()
     if row is None:
         return None
