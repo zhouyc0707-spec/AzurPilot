@@ -77,18 +77,27 @@ def _matching_roots(shell: Any, native: _WindowsApi, target: str) -> list[int]:
     return [root for root, paths in visible_paths.items() if paths == {target}]
 
 
-def _foreground_matches(shell: Any, native: _WindowsApi, target: str) -> bool:
-    return native.gui.GetForegroundWindow() in _matching_roots(shell, native, target)
+def _stop_flashing(handle: int, native: _WindowsApi) -> None:
+    """停止该目录窗口已有的注意提示，不影响其他窗口或系统设置。"""
+    try:
+        # 返回值表示调用前标题栏的活动状态，False 不表示停止闪烁失败。
+        native.gui.FlashWindowEx(handle, native.constants.FLASHW_STOP, 0, 0)
+    except native.errors:
+        # 目录已经前置，清理提示失败不能将实际成功的打开操作误报为失败。
+        pass
+
+
+def _confirm_foreground(shell: Any, native: _WindowsApi, target: str) -> bool:
+    """核验正确目录已在前台，再取消该窗口可能残留的任务栏闪烁。"""
+    handle = native.gui.GetForegroundWindow()
+    if handle not in _matching_roots(shell, native, target):
+        return False
+    _stop_flashing(handle, native)
+    return True
 
 
 def _bring_to_foreground(handle: int, native: _WindowsApi) -> None:
     """恢复窗口并短暂关联前台输入线程；所有关联均在 finally 中解除。"""
-    try:
-        if native.gui.IsIconic(handle):
-            native.gui.ShowWindow(handle, native.constants.SW_RESTORE)
-        native.gui.SetForegroundWindow(handle)
-    except native.errors:
-        pass
     if native.gui.GetForegroundWindow() == handle:
         return
 
@@ -102,13 +111,19 @@ def _bring_to_foreground(handle: int, native: _WindowsApi) -> None:
                 threads.append(thread)
     attached = []
     try:
-        # 除当前前台线程外，还需要关联目标窗口线程，才能可靠恢复 Explorer 的活动窗口。
+        # 先关联再恢复、激活，避免先从后台直接前置遭拒而触发任务栏注意提示。
+        # 同时关联当前前台和目标线程，才能可靠恢复 Explorer 的活动窗口。
         for thread in threads:
             try:
                 native.process.AttachThreadInput(current_thread, thread, True)
                 attached.append(thread)
             except native.errors:
                 continue
+        try:
+            if native.gui.IsIconic(handle):
+                native.gui.ShowWindow(handle, native.constants.SW_RESTORE)
+        except native.errors:
+            pass
         for activate in (native.gui.BringWindowToTop, native.gui.SetActiveWindow, native.gui.SetForegroundWindow):
             try:
                 activate(handle)
@@ -152,12 +167,12 @@ def open_directory(path: Path) -> None:
             if getattr(error, 'hresult', None) != _RPC_E_CHANGED_MODE:
                 raise
         shell = native.client.Dispatch('Shell.Application')
-        if _foreground_matches(shell, native, target):
+        if _confirm_foreground(shell, native, target):
             return
         for handle in _matching_roots(shell, native, target):
             opened = True
             _bring_to_foreground(handle, native)
-            if _foreground_matches(shell, native, target):
+            if _confirm_foreground(shell, native, target):
                 return
 
         # 不可见标签页或尚未存在的目录先交给 Shell 打开，再按实际路径确认。
@@ -165,13 +180,13 @@ def open_directory(path: Path) -> None:
         opened = True
         attempted: set[int] = set()
         while True:
-            if _foreground_matches(shell, native, target):
+            if _confirm_foreground(shell, native, target):
                 return
             for handle in _matching_roots(shell, native, target):
                 if handle not in attempted:
                     attempted.add(handle)
                     _bring_to_foreground(handle, native)
-                    if _foreground_matches(shell, native, target):
+                    if _confirm_foreground(shell, native, target):
                         return
             remaining = deadline - time.monotonic()
             if remaining <= 0:

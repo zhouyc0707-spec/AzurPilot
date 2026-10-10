@@ -54,13 +54,14 @@ class WindowsDirectoryTests(unittest.TestCase):
                 SetForegroundWindow=Mock(side_effect=self.focus),
                 BringWindowToTop=Mock(),
                 SetActiveWindow=Mock(),
+                FlashWindowEx=Mock(return_value=False),
             ),
             process=SimpleNamespace(
                 GetWindowThreadProcessId=Mock(return_value=(22, 222)),
                 AttachThreadInput=Mock(),
             ),
             api=SimpleNamespace(GetCurrentThreadId=Mock(return_value=11)),
-            constants=SimpleNamespace(GA_ROOT=2, SW_RESTORE=9),
+            constants=SimpleNamespace(GA_ROOT=2, SW_RESTORE=9, FLASHW_STOP=0),
             errors=(NativeError,),
         )
         self.clock = Clock()
@@ -82,7 +83,9 @@ class WindowsDirectoryTests(unittest.TestCase):
         self.assertEqual(self.foreground, 100)
         self.open.assert_not_called()
         self.native.gui.SetForegroundWindow.assert_called_once_with(100)
-        self.native.process.AttachThreadInput.assert_not_called()
+        self.assertEqual(self.native.process.AttachThreadInput.call_args_list,
+                         [unittest.mock.call(11, 22, True), unittest.mock.call(11, 22, False)])
+        self.native.gui.FlashWindowEx.assert_called_once_with(100, 0, 0, 0)
         self.assert_com_released()
 
     def test_already_foreground_directory_does_not_repeat_opening_or_focus(self):
@@ -91,6 +94,10 @@ class WindowsDirectoryTests(unittest.TestCase):
         directory.open_directory(self.path)
         self.open.assert_not_called()
         self.native.gui.SetForegroundWindow.assert_not_called()
+        self.native.gui.BringWindowToTop.assert_not_called()
+        self.native.gui.SetActiveWindow.assert_not_called()
+        self.native.process.AttachThreadInput.assert_not_called()
+        self.native.gui.FlashWindowEx.assert_called_once_with(100, 0, 0, 0)
         self.assert_com_released()
 
     def test_minimized_child_handle_restores_and_focuses_root_window(self):
@@ -143,7 +150,7 @@ class WindowsDirectoryTests(unittest.TestCase):
         self.assertLess(self.clock.now, 3)
         self.assert_com_released()
 
-    def test_attach_is_only_fallback_and_is_detached_after_success(self):
+    def test_input_is_attached_before_first_foreground_attempt_and_detached_after_success(self):
         self.windows = [shell_window(self.path, 100)]
         attached = False
 
@@ -164,7 +171,77 @@ class WindowsDirectoryTests(unittest.TestCase):
         self.assertEqual(self.native.process.AttachThreadInput.call_args_list,
                          [unittest.mock.call(11, 22, True), unittest.mock.call(11, 22, False)])
         self.assertEqual(self.foreground, 100)
+        self.native.gui.SetForegroundWindow.assert_called_once_with(100)
         self.open.assert_not_called()
+        self.assert_com_released()
+
+    def test_restore_and_activation_wait_until_both_input_threads_are_attached(self):
+        self.windows = [shell_window(self.path, 100)]
+        self.minimized.add(100)
+        self.native.process.GetWindowThreadProcessId.side_effect = lambda handle: (33 if handle == 100 else 22, 222)
+        events = []
+        attached = set()
+
+        def attach(current, thread, value):
+            self.assertEqual(current, 11)
+            events.append(('attach' if value else 'detach', thread))
+            if value:
+                attached.add(thread)
+            else:
+                attached.remove(thread)
+
+        def activate(name):
+            def action(handle, *_):
+                self.assertEqual(handle, 100)
+                self.assertEqual(attached, {22, 33})
+                events.append((name, handle))
+                if name == 'foreground':
+                    self.foreground = handle
+            return action
+
+        self.native.process.AttachThreadInput.side_effect = attach
+        self.native.gui.ShowWindow.side_effect = activate('restore')
+        self.native.gui.BringWindowToTop.side_effect = activate('raise')
+        self.native.gui.SetActiveWindow.side_effect = activate('active')
+        self.native.gui.SetForegroundWindow.side_effect = activate('foreground')
+        directory.open_directory(self.path)
+        self.assertEqual(events, [('attach', 22), ('attach', 33), ('restore', 100),
+                                  ('raise', 100), ('active', 100), ('foreground', 100),
+                                  ('detach', 33), ('detach', 22)])
+        self.assertEqual(attached, set())
+        self.native.gui.FlashWindowEx.assert_called_once_with(100, 0, 0, 0)
+        self.assert_com_released()
+
+    def test_flash_is_stopped_only_after_actual_foreground_and_directory_are_confirmed(self):
+        self.windows = [shell_window(self.path.parent, 50), shell_window(self.path, 100)]
+
+        def stop_flashing(handle, flags, count, timeout):
+            self.assertEqual((handle, flags, count, timeout), (100, 0, 0, 0))
+            self.assertEqual(self.foreground, handle)
+            self.assertEqual(directory._matching_roots(self.shell, self.native, directory._normalized_path(self.path)),
+                             [handle])
+            return False
+
+        self.native.gui.FlashWindowEx.side_effect = stop_flashing
+        directory.open_directory(self.path)
+        self.native.gui.FlashWindowEx.assert_called_once_with(100, 0, 0, 0)
+        self.open.assert_not_called()
+        self.assert_com_released()
+
+    def test_false_flash_return_does_not_turn_confirmed_foreground_into_failure(self):
+        self.windows = [shell_window(self.path, 100)]
+        self.native.gui.FlashWindowEx.return_value = False
+        directory.open_directory(self.path)
+        self.assertEqual(self.foreground, 100)
+        self.native.gui.FlashWindowEx.assert_called_once_with(100, 0, 0, 0)
+        self.assert_com_released()
+
+    def test_native_flash_error_does_not_turn_confirmed_foreground_into_failure(self):
+        self.windows = [shell_window(self.path, 100)]
+        self.native.gui.FlashWindowEx.side_effect = NativeError('cannot clear old attention flag')
+        directory.open_directory(self.path)
+        self.assertEqual(self.foreground, 100)
+        self.native.gui.FlashWindowEx.assert_called_once_with(100, 0, 0, 0)
         self.assert_com_released()
 
     def test_attach_is_detached_when_set_foreground_raises(self):
@@ -249,6 +326,7 @@ class WindowsDirectoryTests(unittest.TestCase):
         self.open.assert_called_once_with(str(self.path))
         self.assertAlmostEqual(self.clock.now, 3.0)
         self.assertTrue(all(0 < duration <= 0.1 for duration in self.clock.sleeps))
+        self.native.gui.FlashWindowEx.assert_not_called()
         self.assert_com_released()
 
     def test_ambiguous_windows_11_tabs_do_not_claim_wrong_page_is_foreground(self):
@@ -258,6 +336,7 @@ class WindowsDirectoryTests(unittest.TestCase):
             directory.open_directory(self.path)
         self.open.assert_called_once_with(str(self.path))
         self.native.gui.SetForegroundWindow.assert_not_called()
+        self.native.gui.FlashWindowEx.assert_not_called()
         self.assert_com_released()
 
     def test_hidden_target_tab_is_opened_then_verified_in_visible_window(self):
@@ -276,6 +355,7 @@ class WindowsDirectoryTests(unittest.TestCase):
         with self.assertRaises(directory.DirectoryForegroundError):
             directory.open_directory(self.path)
         self.open.assert_called_once_with(str(self.path))
+        self.native.gui.FlashWindowEx.assert_not_called()
         self.assert_com_released()
 
     def test_failed_com_initialization_is_not_uninitialized(self):
@@ -312,6 +392,7 @@ class WindowsDirectoryTests(unittest.TestCase):
         self.native.gui.SetForegroundWindow.side_effect = focus
         with self.assertRaises(directory.DirectoryForegroundError):
             directory.open_directory(self.path)
+        self.native.gui.FlashWindowEx.assert_not_called()
         self.assert_com_released()
 
     def test_disappearing_shell_entry_does_not_prevent_valid_directory_detection(self):
