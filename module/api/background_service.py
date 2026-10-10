@@ -383,7 +383,12 @@ def open_local_directory(path: Path) -> None:
     """复用系统文件管理器打开方式；路径必须由服务端构造，不接受 API 路径参数。"""
     try:
         if os.name == 'nt':
-            os.startfile(str(path))  # noqa: S606 - 服务端固定路径，非请求路径输入
+            from module.api.windows_directory import DirectoryForegroundError, open_directory
+
+            try:
+                open_directory(path)
+            except DirectoryForegroundError as error:
+                raise BackgroundError(str(error)) from error
         elif sys.platform == 'darwin':
             subprocess.Popen(['open', str(path)])
         else:

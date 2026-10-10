@@ -188,9 +188,9 @@ class LocalDirectoryOpenerTests(unittest.TestCase):
     def test_common_opener_uses_windows_shell_without_creating_directory(self):
         path = Path('archive')
         with patch.object(background_service.os, 'name', 'nt'), \
-                patch.object(background_service.os, 'startfile', create=True) as opener:
+                patch('module.api.windows_directory.open_directory') as opener:
             background_service.open_local_directory(path)
-        opener.assert_called_once_with(str(path))
+        opener.assert_called_once_with(path)
 
     def test_common_opener_uses_macos_command_arguments(self):
         path = Path('archive with spaces')
@@ -211,10 +211,21 @@ class LocalDirectoryOpenerTests(unittest.TestCase):
     def test_common_opener_wraps_system_error(self):
         path = Path('archive')
         with patch.object(background_service.os, 'name', 'nt'), \
-                patch.object(background_service.os, 'startfile', create=True, side_effect=OSError('private-detail')):
+                patch('module.api.windows_directory.open_directory', side_effect=OSError('private-detail')):
             with self.assertRaises(background_service.BackgroundError) as raised:
                 background_service.open_local_directory(path)
         self.assertEqual(str(raised.exception), '打开文件夹失败：OSError')
+
+    def test_common_opener_reports_opened_directory_without_confirmed_foreground(self):
+        from module.api.windows_directory import DirectoryForegroundError, FOREGROUND_FAILURE_MESSAGE
+
+        path = Path('archive')
+        with patch.object(background_service.os, 'name', 'nt'), \
+                patch('module.api.windows_directory.open_directory',
+                      side_effect=DirectoryForegroundError(FOREGROUND_FAILURE_MESSAGE)):
+            with self.assertRaises(background_service.BackgroundError) as raised:
+                background_service.open_local_directory(path)
+        self.assertEqual(str(raised.exception), FOREGROUND_FAILURE_MESSAGE)
 
 
 if __name__ == '__main__':

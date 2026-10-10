@@ -183,6 +183,8 @@ module/log_res/
 
 React 旧版收获表通过 `statistics.meowScreenshotFolder.open` 打开截图目录，请求仅接受实例、六种 `MEOW_LOOT_RULES` 分类键及 `YYYY-MM` 月份；后端从实例的 `Alas.DropRecord.SaveFolder` 解析根目录，再定位 `opsi_meowfficer_farming/<分类>/<YY年M月>`。优先打开所选月份；月目录缺失时打开已有分类目录并返回 `scope=category`，分类目录也缺失则返回 `opened=false`、`scope=missing`，不创建目录。打开操作作用于脚本服务所在电脑，和后台图库共用平台目录打开函数，不改变截图、配置或统计数据。只上传或关闭本地保存时，统计可能有收益而没有归档目录。
 
+Windows 的目录打开由 `module/api/windows_directory.py` 处理：在调用线程初始化并释放 COM，以完整目录匹配 Explorer 窗口，必要时等待新窗口出现、恢复最小化并请求前置，最终核验前台句柄。不能确认目标窗口或前置被 Windows 拒绝时，明确报告目录已打开但未能切到前台，不将启动请求成功当成前置成功。该辅助流程使用项目声明的 Windows 专用 `pywin32`，不向游戏发送操作；其他平台仍使用原有文件管理器命令。
+
 统计页仍按金菜（部件 T4）与彩图纸（研发图纸 T5，包括通用装备研发图纸）展示。独立或共用掉落开关的任务始终可筛选；任务次数取完整时间窗口，筛选仅影响收获明细。窗口内没有这两类物品的奖励不显示在掉落记录表。`/opsi-items/` 先查 `opsi_reward_items`，缺图时回退到 `opsi_items` 同名模板；`/research-items/` 先查 `research_items`，再查 `stats_basic`。图标回退只影响展示，不改变识别模板选择。
 
 ### 普通统计存储与旧密文迁移（opsi_plain.py）

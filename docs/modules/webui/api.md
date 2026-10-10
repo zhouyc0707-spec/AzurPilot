@@ -68,6 +68,8 @@ module/api/
 
 旧版收获表的 `statistics.meowScreenshotFolder.open(instance, item, month)` 是本机目录打开操作，按有副作用接口登记，演示模式禁用。`item` 仅接受六种高价值分类键，`month` 为 `YYYY-MM`；保存根目录只读自实例配置，不接受请求中的路径。返回 `opened/path/requestedPath/scope/item/month`，`scope` 区分打开月份、回退分类及目录缺失；打开失败抛出 `FOLDER_OPEN_FAILED`。前端用提示反馈，不重载统计。目录与归档对应关系见 [统计模块](../infra/statistics.md)。
 
+Windows 目录打开需确认对应 Explorer 窗口已前置；已经打开但无法确认前置时，同样用 `FOLDER_OPEN_FAILED` 返回明确的任务栏查看提示，保留已打开窗口供重试。后台图库共用此行为；Windows 以外的平台维持原有打开语义。[Windows 前台切换限制](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setforegroundwindow)由系统决定，辅助实现不修改全局焦点策略。
+
 ## 4. 核心入口
 
 | 入口 | 用途 |

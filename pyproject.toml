@@ -49,6 +49,8 @@ dependencies = [
     "textual>=0.80.0",
     "cryptography>=49.0.0",
     "keyring>=25.6.0",
+    # Windows 目录按钮需要 COM 精确定位资源管理器窗口并切到前台。
+    "pywin32==312; sys_platform == 'win32'",
     "portalocker>=3.2.0",
 ]
 
