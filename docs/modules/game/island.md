@@ -101,6 +101,14 @@ module/island_farm/ 等 16 个目录  # 薄壳：仅 button_extract 生成的 as
 
 ## 6. 工作流程
 
+### 岛屿管理入口就绪确认
+
+从岛屿主场景进入管理页前，共享 UI 导航与 `Island.goto_management()` 都通过 `UI.ui_island_management_entry_ready()` 持续截图确认 `ISLAND_CHECK`，并要求右上角管理入口的模板与颜色同时匹配、连续可见至少 1 秒且覆盖至少 3 帧，之后才点击。按当前服务器资源识别：CN／JP／TW 使用 `ISLAND_GOTO_MANAGEMENT`，EN 的右上入口直接使用 `ISLAND_CHECK`，不强制匹配 CN 图案。仅出现岛屿页面特征不能证明场景转场已结束；入口消失、页面变化或弹窗处理后重新累计稳定状态，不跨导航缓存，不用固定休眠猜测就绪。
+
+点击后仍以管理页特征正向确认成功；独立入口保留默认 3 秒的可配置补点间隔，通用 `ui_goto()` 保留 5 秒导航点击间隔。就绪检测不放宽超时和设备卡死保护；长期无法进入时沿原异常或导航恢复流程处理。
+
+离线回归入口：[管理页导航](../../../tests/test_island_goto_management.py)、[共享入口就绪与通用导航](../../../tests/test_ui_island_management_entry.py)。
+
 ### 生产派遣的公共骨架
 
 农田、渔场、矿山林场等生产类任务的流程同构：

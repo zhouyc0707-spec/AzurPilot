@@ -42,7 +42,8 @@ from module.ocr.ocr import Ocr
 from module.os_handler.assets import (AUTO_SEARCH_REWARD, EXCHANGE_CHECK, RESET_FLEET_PREPARATION, RESET_TICKET_POPUP)
 from module.raid.assets import *
 from module.ui.assets import *
-from module.ui.page import Page, page_academy, page_campaign, page_event, page_main, page_main_white, page_sp
+from module.ui.page import (Page, page_academy, page_campaign, page_event, page_island,
+                            page_island_management, page_main, page_main_white, page_sp)
 from module.ui_white.assets import *
 
 
@@ -88,6 +89,28 @@ class UI(InfoHandler):
         """
         return (self.ui_page_appear(page_main, offset=offset, interval=interval)
                 or self.ui_page_appear(page_main_white, offset=offset, interval=interval))
+
+    def ui_island_management_entry_ready(self, confirm_timer):
+        """持续识别岛屿主页和管理入口，避开场景加载时短暂出现的界面。
+
+        Args:
+            confirm_timer (Timer): 调用方持有的连续可见计时器。
+
+        Returns:
+            bool: 页面与入口连续可见达到确认时长和帧数时返回 True。
+
+        Pages:
+            in: page_island 或进入岛屿的转场画面。
+            out: 当前页面，仅识别，不操作。
+        """
+        # 英文服的主页检查资源就是右上角入口，图案与中文服不同。
+        entry_button = ISLAND_CHECK if getattr(self.config, 'SERVER', 'cn') == 'en' else ISLAND_GOTO_MANAGEMENT
+        if (self.appear(ISLAND_CHECK, offset=(20, 20))
+                and self.match_template_color(entry_button, offset=(20, 20))):
+            confirm_timer.start()
+            return confirm_timer.reached()
+        confirm_timer.clear()
+        return False
 
     def ui_main_appear_then_click(self, page, offset=(30, 30), interval=3):
         """检测主界面是否出现，若出现则点击前往目标页面的按钮。
@@ -321,6 +344,7 @@ class UI(InfoHandler):
         logger.hr(f"UI 导航到 {destination}")
         # 导航超时计时器：长时间无法识别页面时触发恢复
         nav_timeout = Timer(30, count=60).start()
+        island_entry_confirm = Timer(1, count=2)
         while 1:
             GOTO_MAIN.clear_offset()
             if skip_first_screenshot:
@@ -342,6 +366,7 @@ class UI(InfoHandler):
             # 因此必须优先关闭，而不是等页面分支都没命中后才走 ui_additional
             if self.handle_guild_popup_cancel():
                 nav_timeout.reset()
+                island_entry_confirm.clear()
                 continue
 
             # 其他页面：按 A* 路径点击导航
@@ -349,11 +374,19 @@ class UI(InfoHandler):
             for page in Page.iter_pages():
                 if page.parent is None or page.check_button is None:
                     continue
+                # 先确认入口稳定，再消耗页面点击间隔，避免加载期间空等五秒。
+                if page == page_island and page.parent == page_island_management:
+                    if not self.appear(page.check_button, offset=offset):
+                        island_entry_confirm.clear()
+                        continue
+                    if not self.ui_island_management_entry_ready(island_entry_confirm):
+                        continue
                 if self.appear(page.check_button, offset=offset, interval=5):
                     logger.info(f'[UI] 页面切换: {page} -> {page.parent}')
                     button = page.links[page.parent]
                     self.device.click(button)
                     self.ui_button_interval_reset(button)
+                    island_entry_confirm.clear()
                     clicked = True
                     break
             if clicked:
@@ -363,6 +396,7 @@ class UI(InfoHandler):
             # 处理额外弹窗
             if self.ui_additional(get_ship=get_ship):
                 nav_timeout.reset()
+                island_entry_confirm.clear()
                 continue
 
             # 导航超时：当前页面无法识别，调用 ui_get_current_page 触发恢复
@@ -384,6 +418,7 @@ class UI(InfoHandler):
                 Page.init_connection(destination)
                 self.interval_clear(list(Page.iter_check_buttons()))
                 nav_timeout.reset()
+                island_entry_confirm.clear()
 
         # 重置页面连接
         Page.clear_connection()

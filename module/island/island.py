@@ -364,18 +364,23 @@ class Island(SelectCharacter):
             # 避免云机上因为画面还没切走而反复点击同一个入口按钮
             entry_timer = Timer(read_run_param(
                 self.config, 'UiWait_IslandEntryRetryWait', ISLAND_ENTRY_RETRY_WAIT, 1, 60)).clear()
+            entry_confirm = Timer(1, count=2)
             for _ in self.loop(timeout=20, skip_first=False):
                 if self.appear(ISLAND_MANAGEMENT_CHECK, offset=1):
                     break
-                in_island = self.appear(ISLAND_CHECK, offset=1)
+                if self.ui_additional(get_ship=False):
+                    entry_confirm.clear()
+                    continue
+                in_island = self.ui_island_management_entry_ready(entry_confirm)
                 in_season = self.appear(ISLAND_SEASON_CHECK, offset=1)
                 if (in_island or in_season) and entry_timer.reached():
+                    if in_island:
+                        logger.info('[岛屿] 管理入口已稳定，点击进入管理页')
                     self.device.click(
                         ISLAND_GOTO_MANAGEMENT if in_island else ISLAND_SEASON_GOTO_ISLAND
                     )
                     entry_timer.reset()
-                    continue
-                if self.ui_additional(get_ship=False):
+                    entry_confirm.clear()
                     continue
             else:
                 raise GameStuckError("进入岛屿管理页面超时")
