@@ -317,6 +317,37 @@ class CampaignUI(MapOperation, CampaignEvent, CampaignOcr):
         entrance.name = entrance_name
         return entrance
 
+    def campaign_refresh_entrance(self, name):
+        """从当前选关截图重新定位目标，不导航或点击。
+
+        进图阶段的 ``stage_entrance`` 保存的是入口按钮，而非 OCR 映射。
+        临时重建映射后恢复该属性，由进图循环核对连续截图并发布新入口。
+
+        Args:
+            name (str): 原请求的关卡名，沿用别名和普通／困难入口映射。
+
+        Returns:
+            Button | None: 当前帧的目标入口；页面或目标未确认时返回 None。
+
+        Pages:
+            in: page_campaign, page_event, page_sp
+            out: 同一选关页
+        """
+        if not self.is_in_stage_page():
+            return None
+
+        previous_entrances = self.stage_entrance
+        previous_chapter = self.campaign_chapter
+        try:
+            self._get_stage_name(self.device.image)
+            return self.campaign_get_entrance(name)
+        except (CampaignNameError, IndexError):
+            # 页面过渡、入口暂不可见时等待下一帧，其他异常继续上抛。
+            return None
+        finally:
+            self.stage_entrance = previous_entrances
+            self.campaign_chapter = previous_chapter
+
     def campaign_set_chapter_main(self, chapter, mode='normal'):
         """
         设置主线战役章节。

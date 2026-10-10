@@ -292,6 +292,11 @@ class MapOperation(MysteryHandler, FleetPreparation, Retirement, FastForwardHand
         """
         logger.hr('进入地图')
         campaign_timer = Timer(5)
+        entrance_refresh_timer = Timer(1)
+        entrance_refreshing = False
+        entrance_candidate = None
+        entrance_name = button.name
+        refresh_entrance = getattr(self, 'campaign_refresh_entrance', None)
         map_timer = Timer(5)
         fleet_timer = Timer(5)
         campaign_click = 0
@@ -422,10 +427,37 @@ class MapOperation(MysteryHandler, FleetPreparation, Retirement, FastForwardHand
                     continue
 
                 # 进入战役
-                if campaign_timer.reached() and self.appear_then_click(button):
-                    campaign_click += 1
-                    campaign_timer.reset()
-                    continue
+                if campaign_timer.reached():
+                    if not entrance_refreshing and self.appear_then_click(button):
+                        campaign_click += 1
+                        campaign_timer.reset()
+                        continue
+
+                    # 首帧的入口颜色或坐标可能随选关动画变化。仅在失败后
+                    # 重定位，且连续两次截图确认稳定，不把旧区域强行当按钮。
+                    if callable(refresh_entrance) and entrance_refresh_timer.reached():
+                        entrance_refresh_timer.reset()
+                        refreshed = refresh_entrance(entrance_name)
+                        if refreshed is None:
+                            entrance_candidate = None
+                            entrance_refreshing = False
+                        elif entrance_candidate is not None \
+                                and entrance_candidate.name == refreshed.name \
+                                and tuple(entrance_candidate.button) == tuple(refreshed.button) \
+                                and entrance_candidate.appear_on(self.device.image, threshold=30):
+                            button = refreshed
+                            self.ENTRANCE = button
+                            self.stage_entrance = button
+                            entrance_candidate = None
+                            entrance_refreshing = False
+                            logger.info(f'[地图-操作] 关卡 {button.name} 入口已重新识别并确认稳定')
+                            if self.appear_then_click(button):
+                                campaign_click += 1
+                                campaign_timer.reset()
+                                continue
+                        else:
+                            entrance_candidate = refreshed
+                            entrance_refreshing = True
 
                 # 结束判断
                 if self.map_is_auto_search:
