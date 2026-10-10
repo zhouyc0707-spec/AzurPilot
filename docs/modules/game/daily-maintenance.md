@@ -134,7 +134,9 @@ module/
 
 ### 战术学院
 
-`run()` 进 `page_reward` 后进入 `tactical_class_receive()` 的单一状态循环，每帧依次尝试一组处理器：添加学员（`ADD_NEW_STUDENT`）→ 急速训练（`RAPID_TRAINING`，按 `Tactical_RapidTrainingSlot` 槽位偏移匹配）→ 完成时间 OCR 与退出 → 各类弹窗 → 教材选择（`TACTICAL_CLASS_START`）→ 船坞 → 技能确认 → META 技能退出 → 教材空弹窗。
+`run()` 进 `page_reward` 后进入 `tactical_class_receive()` 的单一状态循环，每帧依次尝试一组处理器：添加学员（`ADD_NEW_STUDENT`）→ 急速训练（`RAPID_TRAINING`，按 `Tactical_RapidTrainingSlot` 槽位偏移匹配）→ 完成时间 OCR 与退出 → 各类弹窗 → 教材选择（`TACTICAL_CLASS_START`）→ 游戏提示 → 船坞 → 技能确认 → META 技能退出 → 教材空弹窗。
+
+游戏提示处理器返回 `True` 只表示本帧已点击关闭；学院流程重置空课程确认计时并继续截图，不把关闭提示当成任务完成，不清除学员或技能选择进度。完成课程处理后，必须正向识别返回 `REWARD_CHECK` 才结束循环，随后按实际读取的课程时间排程。相关离线回归见 `tests/test_tactical_game_tips.py`。
 
 选教材是核心决策点：`_tactical_books_get()` 轮询至教材数量稳定（15 次失败抛 `ScriptError`）→ 先选中第一本 → 按当前技能进度做**经验溢出过滤**（OCR `current/total`，10 级满级总经验 5800，`current + 教材经验 > total + 允许溢出量` 的教材被剔除）→ `BOOK_FILTER` 按配置排序 → 点击最优教材开课；过滤器无命中则取消本次课程。技能满级时（OCR 结果含 `MA`，即 `NEXT:MAX`），`Tactical_SkillAutoSwitch` 开启则自动切到下一个未满级技能；`AddNewStudent_Enable` 开启时从船坞选一名等级在 `AddNewStudent_MinLevel` ~ `AddNewStudent_MaxLevel` 之间的舰娘（等级限制为 0 表示该方向不限，`MaxLevel` 默认 0；阵营过滤自然跳过 META 舰）开始新课程。
 
@@ -408,10 +410,10 @@ for _ in self.loop():
 
 ## 19. 调试方法
 
-- **日志前缀**：`[奖励-领取]`、`[战术-教材/技能/船坞]`、`[宿舍-喂食/收取/调度]`、`[指挥喵-购买/训练/收集/强化/评分]`、`[大舰队-大厅/后勤/作战]`；`logger.attr` 输出的中间状态（教材列表、兑换排序、舰队切换）是定位误识别的第一手材料。
+- **日志前缀**：`[奖励-领取]`、`[战术-教材/技能/船坞/提示]`、`[宿舍-喂食/收取/调度]`、`[指挥喵-购买/训练/收集/强化/评分]`、`[大舰队-大厅/后勤/作战]`；`logger.attr` 输出的中间状态（教材列表、兑换排序、舰队切换）是定位误识别的第一手材料。
 - **WebUI 单任务运行**：在对应任务页点「立即执行」，观察 `task_delay` 日志确认排程是否符合预期。
 - **指挥喵评分**：先跑一次「工具 → 指挥喵评分」，产物在 `log/` 下；HTML 版可在 WebUI `/reports/meowfficer_score` 直接打开；识别率问题先看 `[指挥喵-评分] OCR 原始命中` 调试日志。
-- **常见问题**：战术卡在选教材 → 查 `[战术-教材] 尝试15次` 是否伴随加载动画；指挥喵没买箱 → 查「剩余次数/金币」OCR 值与每日上限修正日志；大舰队反复重启 → 是否命中 `GameBugError` 的两个已知场景。
+- **常见问题**：战术卡在选教材 → 先查是否进入教材识别；如果 `GAME_TIPS` 点击后立即出现「没有战术课程在运行」，应核查提示处理是否提前退出学院流程；如果已进入教材识别，查 `[战术-教材] 尝试15次` 是否伴随加载动画。指挥喵没买箱 → 查「剩余次数/金币」OCR 值与每日上限修正日志；大舰队反复重启 → 是否命中 `GameBugError` 的两个已知场景。
 
 ## 20. 相关模块
 

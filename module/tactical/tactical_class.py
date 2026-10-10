@@ -590,7 +590,7 @@ class RewardTacticalClass(Dock):
             skip_first_screenshot (bool): 是否跳过首次截图
 
         Returns:
-            bool: 是否已领取奖励
+            bool: 是否已完成学院处理并返回奖励页
 
         Pages:
             in: page_reward, TACTICAL_CLASS_START
@@ -634,9 +634,11 @@ class RewardTacticalClass(Dock):
                 study_finished = study_finished or finished
                 continue
 
-            # 2025.05.29 进入船坞时游戏弹出皮肤功能提示
+            # 关闭提示只表示已点击，仍需新截图确认教材、学员或课程状态。
             if self.handle_game_tips():
-                return True
+                logger.info('[战术-提示] 已处理游戏提示，继续确认战术学院状态')
+                empty_confirm.reset()
+                continue
 
             handled, finished = self._handle_tactical_dock()
             if handled:
@@ -866,7 +868,7 @@ class RewardTacticalClass(Dock):
 
         Pages:
             in: Any
-            out: page_tactical
+            out: page_reward
         """
         self.ui_ensure(page_reward)
 
