@@ -1,18 +1,32 @@
 """岛屿空投任务模块。
 
-处理岛屿每日空投领取逻辑，根据上次偷取时间判断是否执行空投流程。
-管理空投冷却时间（5小时）与每日重置边界，支持重复尝试与超时跳过。
+处理岛屿每日空投领取逻辑，按实际按钮文字与奖励状态确认领取。
+管理好友空投冷却时间（5小时）与每日重置边界，保留走位及补滑配置。
 """
 from module.island.island import *
-from time import sleep
 from module.ui.scroll import Scroll
+from module.base.decorator import cached_property
 from datetime import timedelta
 from module.config.time_source import now as current_time
 from module.config.utils import get_server_last_update
 
 
+AIR_DROP_RECEIVE = Button(
+    area=(795, 374, 1029, 412), color=(), button=(880, 379, 1000, 409),
+    name='AIR_DROP_RECEIVE',
+)
+
+
 class IslandAirDrop(Island):
     """岛屿空投日常任务执行器。"""
+
+    AIR_DROP_TIMEOUT = 15
+
+    @cached_property
+    def air_drop_action_ocr(self):
+        # 分享与接收共用白色交互按钮，只读取文字，不把分享资源当作领取模板。
+        return Ocr((860, 369, 1036, 418), lang='cnocr', letter=(74, 77, 74),
+                   threshold=128, name='AIR_DROP_ACTION')
 
     def run(self):
         """执行岛屿空投任务流程。
@@ -31,26 +45,15 @@ class IslandAirDrop(Island):
             self.goto_postmanage()
             if self.appear_then_click(MY_AIR_DROP_ALREADY):
                 self.ui_goto(page_island, get_ship=False)
-                self.island_air_drop()
-                while 1:
-                    self.device.screenshot()
-                    if self.appear(ISLAND_CHECK):
-                        break
-                    if self.appear(ISLAND_PHONE_CHECK, offset=1):
-                        self.device.click(ISLAND_SEASON_GOTO_ISLAND)
-                        continue
-                    if self.appear(ISLAND_SEASON_CHECK, offset=1):
-                        self.device.click(ISLAND_SEASON_GOTO_ISLAND)
-                        continue
-                    if self.appear_then_click(AIR_DROP_SKIP, offset=1):
-                        self.device.sleep(0.5)
-                        continue
-                    self.device.sleep(0.5)
-                if self.appear(ISLAND_SEASON_CHECK, offset=1):
-                    self.device.click(ISLAND_SEASON_GOTO_ISLAND)
-                self.device.sleep(1)
+                collected = self.island_air_drop()
                 self.island_walk_route('AirDropSelf')
-                self.island_air_drop()
+                if not collected:
+                    collected = self.island_air_drop()
+                if not collected:
+                    self.device.save_screenshot(genre='island_air_drop_unknown', interval=0)
+                    logger.warning('[岛屿-每日补给] 未确认自己的补给已领取，保留领取日期，延后至少五分钟并按全局对齐复查')
+                    self.config.task_delay(target=current_time() + timedelta(minutes=5))
+                    return
         # 是否前往其他玩家岛屿拿补给
         if self.config.IslandAirDrop_VisitOtherIsland:
             has_drops = True
@@ -70,7 +73,10 @@ class IslandAirDrop(Island):
                     has_drops = True
                     if self.find_air_drop():
                         self.device.sleep(1)
-                        self.run_and_get()
+                        collected = self.run_and_get()
+                        if not collected:
+                            logger.warning('[岛屿-每日补给] 未确认好友补给已领取，保留剩余次数并按冷却复查')
+                            break
                         self.device.sleep(3)
                         # 每次完成补给后立即重新检测剩余次数，确认消耗是否成功
                         # 因为运行可能失败导致次数没使用成功
@@ -252,19 +258,62 @@ class IslandAirDrop(Island):
         self.device.click_record_clear()
 
     def island_air_drop(self):
-        """执行空投交互点击动作组合。"""
-        self.device.click(ISLAND_AIR_DROP_A)
-        sleep(0.1)
-        self.device.click(ISLAND_AIR_DROP_B)
-        sleep(0.1)
-        self.device.click(ISLAND_AIR_DROP_C)
-        sleep(0.5)
-        self.device.click(ISLAND_AIR_DROP_A)
-        sleep(0.1)
-        self.device.click(ISLAND_AIR_DROP_B)
-        sleep(0.1)
-        self.device.click(ISLAND_AIR_DROP_C)
-        sleep(0.5)
+        """识别接收补给并确认结果，分享剩余补给只作为结束状态。
+
+        Returns:
+            bool: 已观察到分享状态或领取奖励并回到场景返回 True；
+                正常场景暂未找到接收入口返回 False，由调用方继续补滑。
+
+        Pages:
+            in: 自己或好友岛屿的补给交互／领取过场。
+            out: 自己或好友岛屿场景。
+        """
+        reward_seen = False
+        ready = Timer(0.8, count=2)
+        click = Timer(2)
+        for _ in self.loop(skip_first=False, timeout=Timer(self.AIR_DROP_TIMEOUT)):
+            # 奖励可能覆盖背景分享按钮，先关闭已识别奖励，不能提前结束留住弹窗。
+            if self.appear(GET_ITEMS_ISLAND, offset=(20, 20)) or self.appear(ISLAND_GET, offset=30):
+                reward_seen = True
+                ready.clear()
+                if click.reached():
+                    self.device.click(ISLAND_CLICK_SAFE_AREA)
+                    click.reset()
+                continue
+            if self.appear(AIR_DROP_SKIP, offset=(20, 20)):
+                ready.clear()
+                self.appear_then_click(AIR_DROP_SKIP, offset=(20, 20), interval=2)
+                continue
+            if self.appear(ISLAND_PHONE_CHECK, offset=1):
+                ready.clear()
+                self.appear_then_click(ISLAND_PHONE_GOTO_ISLAND, offset=1, interval=2)
+                continue
+            if self.appear(ISLAND_SEASON_CHECK, offset=1):
+                ready.clear()
+                self.appear_then_click(ISLAND_SEASON_GOTO_ISLAND, offset=1, interval=2)
+                continue
+            if self.appear(ISLAND_CHECK) or self.is_in_friend_island():
+                # A/B/C 资源均是分享文字，匹配它们只能停止，绝不继续点该位置。
+                if self.appear(ISLAND_AIR_DROP_A, offset=(30, 30)):
+                    logger.info('[岛屿-每日补给] 已显示分享剩余补给，停止领取，不点击分享')
+                    return True
+                action = ''.join(str(self.air_drop_action_ocr.ocr(self.device.image) or '').split())
+                if action == '分享剩余补给':
+                    logger.info('[岛屿-每日补给] 已识别分享剩余补给，停止领取')
+                    return True
+                if action == '接收补给':
+                    ready.clear()
+                    if click.reached():
+                        self.device.click(AIR_DROP_RECEIVE)
+                        click.reset()
+                    continue
+                ready.start()
+                if ready.reached():
+                    return reward_seen
+                continue
+            ready.clear()
+        self.device.save_screenshot(genre='island_air_drop_unknown', interval=0)
+        raise GameStuckError('岛屿补给：领取后页面未确认，已保存现场')
 
     def run_and_get(self):
         """在好友岛屿上跑位寻路并拾取空投补给。
@@ -273,26 +322,16 @@ class IslandAirDrop(Island):
         对所有控制方式生效；拿不到补给时的补滑走 `AirDropRetry`。
         """
         self.island_walk_route('AirDrop')
-        self.island_air_drop()
+        collected = self.island_air_drop()
         # 补滑中途要反复检测补给，方向固定为 上/右/下，配置只给每一步的时长
         retry_durations = self.island_walk_composite_durations('AirDropRetry', 3)
-        for _ in range(1):
-            self.device.screenshot()
-            if self.appear(ISLAND_AIR_DROP_ALREADY_GETTED, offset=200):
+        for move, duration in zip((self.island_up, self.island_right, self.island_down), retry_durations):
+            if collected:
                 break
-            self.island_up(retry_durations[0])
-            self.island_air_drop()
-            self.device.screenshot()
-            if self.appear(ISLAND_AIR_DROP_ALREADY_GETTED, offset=200):
-                break
-            self.island_right(retry_durations[1])
-            self.island_air_drop()
-            self.device.screenshot()
-            if self.appear(ISLAND_AIR_DROP_ALREADY_GETTED, offset=200):
-                break
-            self.island_down(retry_durations[2])
-            self.island_air_drop()
+            move(duration)
+            collected = self.island_air_drop()
         self.exit_friend_island()
+        return collected
 
     def test(self):
         """测试 OCR 参数提取效果。"""
