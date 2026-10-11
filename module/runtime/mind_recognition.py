@@ -94,6 +94,24 @@ def level_vote(texts, digit_count=0):
     return level, ''
 
 
+def complete_level_vote(texts, digit_count, previous_texts=()):
+    """完整 Lv 行至少两次一致，且不能覆盖已有同位数的冲突候选。"""
+    import re
+    if not 1 <= digit_count <= 3:
+        return 0, '等级未能通过数字位数核验'
+    complete = [text.strip() for text in texts
+                if re.fullmatch(r'[Ll][Vv][.\s]*[1-9]\d{0,2}', text.strip())]
+    value, note = level_vote(complete, digit_count)
+    if not value:
+        return value, note
+    previous = {candidate for text in previous_texts if (candidate := parse_level(text))
+                and len(str(candidate)) == digit_count}
+    if previous - {value}:
+        candidates = sorted(previous | {value})
+        return 0, '等级候选需核对：' + ' / '.join(map(str, candidates))
+    return value, ''
+
+
 def _clusters(values, gap):
     groups = []
     for value in sorted(values):
@@ -255,7 +273,7 @@ def recognize_cards(image, source='', *, name_ocr=None, level_ocr=None, row_orig
     if not rows:
         raise ValueError('未能定位船坞卡片，请上传加载完成、包含完整船名和等级的船坞截图')
     boxes, name_images, frame_rarities, fleets = [], [], [], []
-    prepared = []
+    prepared, raw_levels = [], []
     for y in rows:
         for col in range(7):
             x = round(float(CARD_GRIDS.origin[0] + col * CARD_GRIDS.delta[0]))
@@ -270,6 +288,7 @@ def recognize_cards(image, source='', *, name_ocr=None, level_ocr=None, row_orig
             frame_rarities.append(frame_rarity)
             name_images.append(pixels[y + 160:y + 190, x - 10:x + 142])
             prepared.append(level_reader.prepare(raw_level))
+            raw_levels.append(raw_level)
             region = pixels[y + 117:y + 162, x:x + 35]
             fleets.append(fleet_status(region, fleet_reader))
     if not boxes:
@@ -289,6 +308,19 @@ def recognize_cards(image, source='', *, name_ocr=None, level_ocr=None, row_orig
         for position, index in enumerate(unresolved):
             values[index], level_notes[index] = level_vote([reads[position] for reads in digit_reads],
                                                      len(prepared[index][0]))
+        # 旧英文模型可能把细百位读成 I 或漏掉；完整 Lv 前缀提供独立上下文。
+        # 只补读锚点及位数已确认的失败卡片，不让 OCR 猜补被裁掉的数字。
+        pending = [(position, index) for position, index in enumerate(unresolved)
+                   if not values[index] and 1 <= len(prepared[index][0]) <= 3]
+        if pending:
+            complete_reads = [name_ocr.ocr_for_single_lines([raw_levels[index] for _, index in pending]),
+                              name_ocr.ocr_for_single_lines([
+                                  cv2.resize(raw_levels[index], None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+                                  for _, index in pending])]
+            for position, (previous_position, index) in enumerate(pending):
+                values[index], level_notes[index] = complete_level_vote(
+                    [reads[position] for reads in complete_reads], len(prepared[index][0]),
+                    [reads[previous_position] for reads in digit_reads])
     cards = []
     for index, (x, y, col) in enumerate(boxes):
         candidates = [str(names[index]).strip()]

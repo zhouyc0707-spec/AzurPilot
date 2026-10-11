@@ -7,6 +7,7 @@ import tempfile
 import threading
 import time
 import unittest
+from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -19,7 +20,10 @@ from module.api.config_service import ConfigService
 from module.api.mind_calculator_service import MindCalculatorService
 from module.api.protocol import ApiError, ConfigChange
 from module.runtime.mind_calculator import calculate
-from module.runtime.mind_recognition import Card, ScanMerger, ScanPolicy, _match_name, normalize_screenshot, recognize_cards
+from module.runtime.mind_recognition import (
+    Card, ScanMerger, ScanPolicy, _match_name, complete_level_vote, level_vote,
+    normalize_screenshot, recognize_cards,
+)
 from tests.test_api import fixture
 
 
@@ -205,6 +209,86 @@ class ScrollbarTests(unittest.TestCase):
 
 
 class NativeLevelTests(unittest.TestCase):
+    def test_complete_level_requires_prefix_two_votes_and_confirmed_digit_count(self):
+        self.assertEqual(complete_level_vote(['Lv.110', 'lv110'], 3), (110, ''))
+        for texts, digits in [
+            (['110', '110'], 3),
+            (['1v.110', '1v.110'], 3),
+            (['Ly.110', 'Ly.110'], 3),
+            (['Lv.110', ''], 3),
+            (['Lv.110', 'Lv.110'], 0),
+            (['Lv.110', 'Lv.110'], 2),
+            (['Lv.0', 'Lv.0'], 1),
+            (['Lv.126', 'Lv.126'], 3),
+            (['Lv.110', 'Lv.111'], 3),
+        ]:
+            with self.subTest(texts=texts, digits=digits):
+                value, note = complete_level_vote(texts, digits)
+                self.assertEqual(value, 0)
+                self.assertTrue(note)
+
+    def test_complete_level_never_overrides_valid_same_digit_conflict(self):
+        for previous in [['111'], ['Lv.111', '110'], ['125', 'I10']]:
+            with self.subTest(previous=previous):
+                value, note = complete_level_vote(['Lv.110', 'Lv110'], 3, previous)
+                self.assertEqual(value, 0)
+                self.assertIn('候选', note)
+        # 不把缺失百位的两位读数当作三位冲突，也不猜补不完整的当前读数。
+        self.assertEqual(complete_level_vote(['Lv.110', 'Lv110'], 3, ['I10', '10']), (110, ''))
+        self.assertEqual(complete_level_vote(['Lv.110', 'Lv110'], 3, ['110']), (110, ''))
+
+    def test_confirmed_native_levels_do_not_add_complete_text_reads(self):
+        names = Mock()
+        names.ocr_for_single_lines.side_effect = lambda regions: ['标枪'] * len(regions)
+        levels = Mock()
+        cards = recognize_cards(Image.open(FIXTURES / 'mind_dock_fleet_priority.png'),
+                                name_ocr=names, level_ocr=levels)
+        self.assertEqual(len(cards), 21)
+        self.assertTrue(all(card.level_reliable for card in cards))
+        # 没有等级失败时，只调用一次常规名字批量识别，不增加完整 Lv 识别成本。
+        names.ocr_for_single_lines.assert_called_once()
+        levels.ocr_for_single_lines.assert_not_called()
+
+    def test_real_failed_level_rows_recover_with_complete_text_without_changing_glyph_thresholds(self):
+        import cv2
+        from module.ocr.al_ocr import AlOcr, OcrSettings
+        from module.runtime.mind_level import dock_level_reader
+
+        reader = dock_level_reader()
+        legacy = AlOcr(name='azur_lane', settings=OcrSettings('onnx', 'cpu', False, 'alocr_en_v2_6'))
+        complete = AlOcr(name='ppocr_v6', settings=OcrSettings('onnx', 'cpu', False, 'standard'))
+        atlas = np.array(Image.open(FIXTURES / 'mind_level_complete_rows.png').convert('RGB'))
+        cases = json.loads((FIXTURES / 'mind_level_complete_rows.json').read_text(encoding='utf-8'))
+        self.assertEqual(atlas.shape, (32 * len(cases), 64, 3))
+        for index, case in enumerate(cases):
+            with self.subTest(source=case['source_filename']):
+                raw = atlas[index * 32:(index + 1) * 32]
+                glyphs, clean, color = reader.prepare(raw)
+                self.assertEqual(len(glyphs), len(str(case['level'])))
+                self.assertEqual(reader.read(glyphs), 0)
+                previous = [legacy.ocr_for_single_lines([region])[0] for region in (
+                    clean, color, cv2.resize(clean, None, fx=2, fy=2), cv2.resize(color, None, fx=2, fy=2),
+                )]
+                self.assertEqual(level_vote(previous, len(glyphs))[0], 0)
+                reads = complete.ocr_for_single_lines([
+                    raw, cv2.resize(raw, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC),
+                ])
+                self.assertEqual(complete_level_vote(reads, len(glyphs), previous), (case['level'], ''))
+                # 只用最小等级裁剪重建一个卡位，验证实际识别入口确实触发补读。
+                # 空白名字保持待核对，不能由等级修复顺带确认舰船身份。
+                left, top, right, bottom = case['crop_box']
+                x = left - 74
+                pixels = np.full((720, 1280, 3), 80, dtype=np.uint8)
+                pixels[top:top + 5, x:x + 138] = (235, 185, 60)
+                pixels[top:bottom, left:right] = raw
+                cards = recognize_cards(Image.fromarray(pixels), name_ocr=complete,
+                                        level_ocr=legacy, row_origins=[top])
+                self.assertEqual(len(cards), 1)
+                self.assertEqual((cards[0].y, cards[0].col, cards[0].ship['level']),
+                                 (case['row_origin'], case['column'] - 1, case['level']))
+                self.assertTrue(cards[0].level_reliable)
+                self.assertTrue(cards[0].ship['review'])
+
     def test_real_blue_frames_are_not_unknown_fleet_badges(self):
         from module.retire.scanner import FleetScanner
         from module.runtime.mind_recognition import fleet_status
@@ -256,6 +340,67 @@ class NativeLevelTests(unittest.TestCase):
         scanner._drag_rows(13)
         self.assertEqual(scanner.device.drag.call_args.args, ((1170, 470), (1170, 437)))
         self.assertEqual(scanner.device.drag.call_args.kwargs['hold_duration'], .4)
+
+
+class LevelRetryTests(unittest.TestCase):
+    @staticmethod
+    def scanner():
+        from module.retire.dock import DOCK_SCROLL
+        scanner = ScrollbarTests.scanner_with_thumb([(DOCK_SCROLL.total - 25, DOCK_SCROLL.total)])
+        scanner.config = SimpleNamespace(Emulator_ControlMethod='MaaTouch')
+        scanner.appear = Mock(return_value=True)
+        scanner._drag_rows = Mock()
+        return scanner
+
+    @staticmethod
+    def current_card(reliable):
+        return [Card(752, 304, 4, dict(name='小信浓', level=110 if reliable else 0,
+                                     rarity='SSR', source='', review=not reliable),
+                     6 if reliable else 4, reliable)]
+
+    def test_two_failed_reads_then_third_recovery_keeps_the_ship(self):
+        scanner = self.scanner()
+        with patch('module.retire.mind_scan.Timer') as timer, \
+                patch('module.retire.mind_scan.recognize_cards', side_effect=[
+                    self.current_card(False), self.current_card(False), self.current_card(True),
+                ]) as recognize:
+            timer.return_value.start.return_value = timer.return_value
+            timer.return_value.reached.return_value = True
+            ships = scanner._scan_pages(Mock(), Mock())
+        self.assertEqual([(ship['name'], ship['level']) for ship in ships], [('小信浓', 110)])
+        self.assertEqual(recognize.call_count, 3)
+        self.assertGreaterEqual(scanner.device.screenshot.call_count, 6)
+        scanner._drag_rows.assert_not_called()
+
+    def test_three_failed_reads_do_not_save_partial_scan_or_replace_previous_result(self):
+        from module.exception import MindCalculatorScanError
+        from module.retire.assets import DOCK_EMPTY
+
+        saved = {'ships': [{'name': '拉菲', 'level': 100}], 'updated_at': '旧结果'}
+        scanner = self.scanner()
+        scanner.config = SimpleNamespace(
+            Emulator_ControlMethod='MaaTouch', MindCalculator_MinLevel=95, MindCalculator_MaxLevel=120,
+            config_name='testpilot', data={'MindCalculatorScan': {'MindCalculator': {'Result': deepcopy(saved)}}},
+            save=Mock(), modified={},
+        )
+        scanner.ui_ensure = scanner.dock_reset = scanner.dock_sort_method_dsc_set = Mock()
+        scanner.appear = Mock(side_effect=lambda button: button is not DOCK_EMPTY)
+        with patch('module.retire.mind_scan.server.server', 'cn'), \
+                patch('module.retire.mind_scan.DOCK_SCROLL.set_top'), \
+                patch('module.retire.mind_scan.DOCK_SCROLL.at_top', return_value=True), \
+                patch('module.retire.mind_scan.Timer') as timer, \
+                patch('module.retire.mind_scan.recognize_cards', side_effect=[
+                    self.current_card(False), self.current_card(False), self.current_card(False),
+                ]) as recognize:
+            timer.return_value.start.return_value = timer.return_value
+            timer.return_value.reached.return_value = True
+            with self.assertRaisesRegex(MindCalculatorScanError, '304px 行第 5 列'):
+                scanner.run()
+        self.assertEqual(recognize.call_count, 3)
+        scanner.config.save.assert_not_called()
+        self.assertEqual(scanner.config.modified, {})
+        self.assertEqual(scanner.config.data['MindCalculatorScan']['MindCalculator']['Result'], saved)
+        scanner._drag_rows.assert_not_called()
 
 
 class ScreenshotTests(unittest.TestCase):

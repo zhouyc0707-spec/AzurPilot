@@ -1,0 +1,97 @@
+[
+  {
+    "source_filename": "2026-10-11_11-38-53-522773.png",
+    "source_sha256": "d9f12a0ff006a98f977a2816ccdb4cac1ecd057d99d770df877a10c1cd7ce194",
+    "source_size": [
+      1280,
+      720
+    ],
+    "row_origin": 304,
+    "column": 5,
+    "crop_box": [
+      826,
+      304,
+      890,
+      336
+    ],
+    "level": 110,
+    "name": "小信浓",
+    "training": false
+  },
+  {
+    "source_filename": "2026-10-11_11-38-53-722385.png",
+    "source_sha256": "a297a679c3072b8899abcf998a0a7a7966ea633bd74ee66eeeb64cc7a3693f22",
+    "source_size": [
+      1280,
+      720
+    ],
+    "row_origin": 304,
+    "column": 5,
+    "crop_box": [
+      826,
+      304,
+      890,
+      336
+    ],
+    "level": 110,
+    "name": "小信浓",
+    "training": false
+  },
+  {
+    "source_filename": "2026-10-11_11-38-53-921880.png",
+    "source_sha256": "09ce033ca60d07920ef74e0a6bf21e25f2dcf9eb560bfad3e01aab278a6e11e7",
+    "source_size": [
+      1280,
+      720
+    ],
+    "row_origin": 304,
+    "column": 5,
+    "crop_box": [
+      826,
+      304,
+      890,
+      336
+    ],
+    "level": 110,
+    "name": "小信浓",
+    "training": false
+  },
+  {
+    "source_filename": "2026-10-11_11-38-54-122264.png",
+    "source_sha256": "127d93772aa32bbb8dd1bf4e8ff3c3f3876629d3b11f757b13ad4faf4beb960f",
+    "source_size": [
+      1280,
+      720
+    ],
+    "row_origin": 304,
+    "column": 5,
+    "crop_box": [
+      826,
+      304,
+      890,
+      336
+    ],
+    "level": 110,
+    "name": "小信浓",
+    "training": false
+  },
+  {
+    "source_filename": "2026-10-11_11-38-54-322936.png",
+    "source_sha256": "90b0c215d85b88afab8e06ed8f4966e389abb7ab9b3d622ae0ad728f09d85670",
+    "source_size": [
+      1280,
+      720
+    ],
+    "row_origin": 304,
+    "column": 5,
+    "crop_box": [
+      826,
+      304,
+      890,
+      336
+    ],
+    "level": 110,
+    "name": "小信浓",
+    "training": false
+  }
+]
