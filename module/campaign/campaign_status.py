@@ -84,28 +84,21 @@ class CampaignStatus(UI):
             update (bool): 是否将读取到的数值写回配置。默认 False。
 
         Returns:
-            int: PT 数量，解析失败返回 0。
-        """
-        pt = OCR_PT.ocr(self.device.image)
+            int: PT 数量，解析失败返回 0 且保留已有记录。
 
-        # 首选匹配带前缀 X 的格式（历史上部分活动使用 ‘X1234’）
-        res = re.search(r'X(\d+)', pt)
+        Pages:
+            in: page_event、page_sp 等显示活动 PT 的选关页
+        """
+        text = OCR_PT.ocr(self.device.image).strip()
+        # 活动页既有 X 前缀，也有纯数字格式；必须确认整个结果，不能截取混杂文本。
+        res = re.fullmatch(r'X?([0-9]+)', text)
         if res:
             pt = int(res.group(1))
             logger.attr('活动PT', pt)
             LogRes(self.config).Pt = pt
         else:
-            # 回退：若 OCR 返回纯数字也接受（保留警告以便回溯）
-            res2 = re.search(r'(\d+)', pt)
-            if res2:
-                num = int(res2.group(1))
-                logger.warning(f"无效的PT结果格式 (missing 'X'): {pt}; fallback to digits: {num}")
-                logger.attr('活动PT_回退', num)
-                LogRes(self.config).Pt = num
-                pt = num
-            else:
-                logger.warning(f'无效的PT结果: {pt}')
-                pt = 0
+            logger.warning(f'无效的PT结果: {text}')
+            pt = 0
         if update:
             self.config.update()
         return pt
@@ -118,32 +111,48 @@ class CampaignStatus(UI):
             update (bool): 是否将读取到的数值写回配置。默认 False。
 
         Returns:
-            int: 金币当前数量。
+            int: 金币当前数量；未取得有效读数返回 0，保留已有记录。
+
+        Pages:
+            in: 显示顶部物资／石油资源栏的页面，如 page_campaign、page_event、page_sp
         """
-        _coin = {}
-        timeout = Timer(1, count=2).start()
-        while 1:
-            if skip_first_screenshot:
-                skip_first_screenshot = False
-            else:
-                self.device.screenshot()
+        return self._get_resource_balance('Coin', '物资', OCR_COIN, OCR_COIN_LIMIT,
+                                          (239, 239, 239), skip_first_screenshot, update)
 
-            if timeout.reached():
-                logger.warning('获取物资超时')
-                break
+    def _get_resource_balance(self, resource, label, value_button, limit_button, letter,
+                              skip_first_screenshot, update):
+        """截图重试资源读数，低余额需稳定确认，失败不覆盖记录。
 
-            _coin = {
-                'Value': self._get_num(OCR_COIN, 'OCR_COIN', (239, 239, 239), require_valid=True),
-                'Limit': self._get_num(OCR_COIN_LIMIT, 'OCR_COIN_LIMIT', (239, 239, 239), require_valid=True)
+        读取失败返回 0 供停止条件保守处理，仪表盘及资源观测保持原值；
+        上限单独读取失败不覆盖已有上限。
+        """
+        candidate = None
+        confirm = Timer(0.5, count=2)
+        for _ in self.loop(skip_first=skip_first_screenshot, timeout=Timer(1, count=3)):
+            values = {
+                'Value': self._get_num(value_button, f'OCR_{resource.upper()}', letter, require_valid=True),
+                'Limit': self._get_num(limit_button, f'OCR_{resource.upper()}_LIMIT', letter, require_valid=True),
             }
-            if _coin['Value'] is not None and _coin['Value'] >= 100:
-                break
-        LogRes(self.config).record('Coin', {key: value for key, value in _coin.items() if value is not None},
-                                   observed=_coin.get('Value') is not None and _coin['Value'] >= 100)
+            value = values['Value']
+            if value is not None and value >= 0:
+                if candidate != value:
+                    candidate = value
+                    confirm.reset()
+                # 沿用正常余额的快速读取；低值也可能是真实余额，须确认后返回实际值。
+                if value >= 100 or confirm.reached():
+                    LogRes(self.config).record(resource, {key: value for key, value in values.items() if value is not None},
+                                               observed=True)
+                    if update:
+                        self.config.update()
+                    return value
+            else:
+                candidate = None
+                confirm.clear()
+
+        logger.warning(f'获取{label}超时，未取得有效读数，保留上次有效记录')
         if update:
             self.config.update()
-
-        return _coin.get('Value') or 0
+        return 0
 
     def _get_num(self, _button, name, letter=(247, 247, 247), require_valid=False):
         """动态检测背景颜色并识别指定区域的数字。
@@ -152,14 +161,13 @@ class CampaignStatus(UI):
             _button: 按钮区域对象。
             name (str): 识别器标识名称。
             letter (tuple[int, int, int]): 字符目标颜色 RGB 值。默认 (247, 247, 247)。
+            require_valid (bool): 背景或数字无效时返回 None，交由调用方截图重试。
 
         Returns:
-            int: 识别到的数值。
+            int | None: 识别到的数值，要求有效性且读取失败时返回 None。
         """
-        # 更新偏移量
-        _ = self.appear(OCR_OIL_CHECK)
-
-        color = get_color(self.device.image, OCR_OIL_CHECK.button)
+        # OCR 数字使用固定 area；探针也必须同坐标系，不能沿用模板匹配遗留的点击偏移。
+        color = get_color(self.device.image, OCR_OIL_CHECK.area)
         if color_similar(color, OCR_OIL_CHECK.color):
             # 原始颜色
             if isinstance(_button, Ocr):
@@ -173,7 +181,11 @@ class CampaignStatus(UI):
             # 带黑色遮罩
             ocr = Digit(_button, name=name, letter=(165, 165, 165), threshold=128)
         else:
-            logger.warning('[战役-状态] 意外的OCR_OIL_CHECK颜色')
+            if require_valid:
+                # 过渡帧不猜测字符颜色；有界重试结束后由调用方报告失败。
+                logger.debug(f'[战役-状态] {name}资源栏背景未就绪: {color}')
+                return None
+            logger.warning(f'[战役-状态] {name}的OCR_OIL_CHECK颜色异常: {color}')
             ocr = Digit(_button, name=name, letter=(247, 247, 247), threshold=128)
 
         value = ocr.ocr(self.device.image)
@@ -187,36 +199,13 @@ class CampaignStatus(UI):
             update (bool): 是否将读取到的数值写回配置。默认 False。
 
         Returns:
-            int: 石油当前数量。
+            int: 石油当前数量；未取得有效读数返回 0，保留已有记录。
+
+        Pages:
+            in: 显示顶部物资／石油资源栏的页面，如 page_campaign、page_event、page_sp
         """
-        _oil = {}
-        timeout = Timer(1, count=2).start()
-        while 1:
-            if skip_first_screenshot:
-                skip_first_screenshot = False
-            else:
-                self.device.screenshot()
-
-            if not self.appear(OCR_OIL_CHECK, offset=(10, 2)):
-                logger.info('无石油图标')
-                self.device.sleep(1)
-
-            if timeout.reached():
-                logger.warning('获取石油超时')
-                break
-
-            _oil = {
-                'Value': self._get_num(OCR_OIL, 'OCR_OIL', (247, 247, 247), require_valid=True),
-                'Limit': self._get_num(OCR_OIL_LIMIT, 'OCR_OIL_LIMIT', (247, 247, 247), require_valid=True)
-            }
-            if _oil['Value'] is not None and _oil['Value'] >= 100:
-                break
-        LogRes(self.config).record('Oil', {key: value for key, value in _oil.items() if value is not None},
-                                   observed=_oil.get('Value') is not None and _oil['Value'] >= 100)
-        if update:
-            self.config.update()
-
-        return _oil.get('Value') or 0
+        return self._get_resource_balance('Oil', '石油', OCR_OIL, OCR_OIL_LIMIT,
+                                          (247, 247, 247), skip_first_screenshot, update)
 
     def is_balancer_task(self):
         """判断当前任务是否为活动任务（排除每日活动任务）。

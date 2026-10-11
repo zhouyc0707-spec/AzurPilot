@@ -26,11 +26,8 @@ class ReviewRegressionTests(unittest.TestCase):
                 runner.device = Mock()
                 runner.appear = Mock(return_value=True)
                 runner._get_num = Mock(side_effect=[300, None])
-                timer = Mock()
-                timer.start.return_value = timer
-                timer.reached.return_value = False
-                with patch('module.campaign.campaign_status.Timer', return_value=timer), \
-                        patch.object(LogRes, '_observe') as observe, \
+                runner.loop = Mock(return_value=iter([None]))
+                with patch.object(LogRes, '_observe') as observe, \
                         patch.object(LogRes, '_record_all_resource_snapshot'):
                     result = getattr(runner, f'get_{resource.lower()}')()
                 self.assertEqual(300, result)
