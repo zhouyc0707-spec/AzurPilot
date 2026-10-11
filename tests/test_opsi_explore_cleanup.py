@@ -268,9 +268,12 @@ class CleanupTests(unittest.TestCase):
         current = [1]
         runner.fleet_set = Mock(side_effect=lambda fleet: current.__setitem__(0, fleet))
         runner.fleet_selector = SimpleNamespace(get=lambda: current[0])
-        runner.clear_question = Mock(side_effect=lambda **kw: runner._solved_map_event.add('is_logging_tower'))
+        runner.clear_question = Mock(side_effect=AssertionError('补扫外层遍历后只清当前队'))
         runner.map_rescan = Mock(return_value=True)
-        self.assertTrue(OSMap.clear_question_any_fleet(runner))
+        with patch.object(OSMap, 'clear_question', autospec=True,
+                          side_effect=lambda runner, **kw: runner._solved_map_event.add('is_logging_tower')):
+            self.assertTrue(OSMap.clear_question_any_fleet(runner))
+        runner.clear_question.assert_not_called()
         self.assertEqual(runner.fleet_set.call_args_list, [call(fleet) for fleet in (1, 2, 3, 4)])
 
     def test_cleanup_does_not_use_hazard_one_fixed_patrol_coordinates(self):

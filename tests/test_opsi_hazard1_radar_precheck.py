@@ -32,6 +32,8 @@ class TestHazard1RadarPrecheck(unittest.TestCase):
         )
         self.runner.zone = SimpleNamespace(is_port=False)
         self.actions = []
+        self.marker_observations = []
+        self.current_fleet = self.runner.config.OpsiFleet_Fleet
         self.fresh_image = object()
         self.runner.device = SimpleNamespace(
             image=object(), screenshot=Mock(side_effect=self.screenshot)
@@ -40,11 +42,11 @@ class TestHazard1RadarPrecheck(unittest.TestCase):
             predict_question=Mock(side_effect=self.predict_question)
         )
         self.runner.run_strategic_search = Mock(side_effect=self.strategic_search)
-        self.runner.fleet_set = Mock(side_effect=lambda fleet: self.actions.append(('fleet', fleet)))
+        self.runner.fleet_set = Mock(side_effect=self.fleet_set)
         self.runner.map_rescan = Mock(side_effect=self.map_rescan)
         self.runner._forced_move_enabled = Mock(return_value=True)
         self.runner._execute_fixed_patrol_scan = Mock(
-            side_effect=lambda **kwargs: self.actions.append('forced_scan')
+            side_effect=lambda **kwargs: self.observe_marker('forced_scan')
         )
         self.runner.handle_after_auto_search = Mock(
             side_effect=lambda: self.actions.append('after_search')
@@ -53,6 +55,8 @@ class TestHazard1RadarPrecheck(unittest.TestCase):
             side_effect=AssertionError('主队预检不应调用多舰队清理')
         )
         self.question = None
+        self.questions_by_fleet = None
+        self.clear_unreachable = False
         self.clear_event = None
         self.scan_event = None
         self.search_completed = True
@@ -67,22 +71,34 @@ class TestHazard1RadarPrecheck(unittest.TestCase):
         self.actions.append('screenshot')
         self.runner.device.image = self.fresh_image
 
+    def fleet_set(self, fleet):
+        self.current_fleet = fleet
+        self.actions.append(('fleet', fleet))
+
+    def observe_marker(self, stage):
+        self.actions.append(stage)
+        self.marker_observations.append((stage, self.runner._cl1_prechecked_primary))
+
     def predict_question(self, image, in_port):
         self.assertIs(image, self.fresh_image)
         self.assertFalse(in_port)
         self.actions.append('radar')
+        if self.questions_by_fleet is not None:
+            return self.questions_by_fleet.get(self.current_fleet)
         return self.question
 
     def clear_question(self, runner, drop=None):
         self.assertIs(runner, self.runner)
         self.actions.append('primary_clear')
+        if self.clear_unreachable:
+            runner._question_unreachable = True
         if self.clear_event:
             runner._solved_map_event.add(self.clear_event)
             return True
         return False
 
     def map_rescan(self):
-        self.actions.append('map_rescan')
+        self.observe_marker('map_rescan')
         if self.scan_event:
             self.runner._solved_map_event.add(self.scan_event)
 
@@ -90,6 +106,7 @@ class TestHazard1RadarPrecheck(unittest.TestCase):
         self.runner._cl1_run_battle()
         self.runner.clear_question.assert_not_called()
         self.runner.handle_after_auto_search.assert_called_once_with()
+        self.assertIsNone(self.runner._cl1_prechecked_primary)
 
     def test_no_question_keeps_full_scan_and_existing_forced_scan(self):
         """雷达无问号时照常全图扫描，并由原开关决定后续补查。"""
@@ -171,6 +188,7 @@ class TestHazard1RadarPrecheck(unittest.TestCase):
                 self.primary_clear.side_effect = exception('测试中断')
                 with self.assertRaises(exception):
                     self.runner._cl1_run_battle()
+                self.assertIsNone(self.runner._cl1_prechecked_primary)
         self.runner.map_rescan.assert_not_called()
         self.runner._execute_fixed_patrol_scan.assert_not_called()
         self.runner.handle_after_auto_search.assert_not_called()
@@ -181,6 +199,81 @@ class TestHazard1RadarPrecheck(unittest.TestCase):
         self.run_battle()
         self.runner.radar.predict_question.assert_called_once_with(self.fresh_image, in_port=False)
         self.runner.map_rescan.assert_called_once_with()
+
+    def test_rescan_internal_supplement_only_checks_other_fleets(self):
+        """地图重扫内部触发补查时，同样复用本轮主队预检。"""
+        for primary in (1, 3):
+            for has_question in (False, True):
+                with self.subTest(primary=primary, has_question=has_question):
+                    self.make_runner()
+                    self.runner.config.OpsiFleet_Fleet = primary
+                    self.questions_by_fleet = {primary: (0, -1)} if has_question else {}
+                    self.runner._forced_move_enabled.return_value = False
+                    self.runner.map_rescan.side_effect = lambda: OSMap.clear_question_any_fleet(self.runner)
+                    self.run_battle()
+                    others = [fleet for fleet in (1, 2, 3, 4) if fleet != primary]
+                    self.assertEqual(self.runner.fleet_set.call_args_list,
+                                     [unittest.mock.call(fleet) for fleet in [primary, *others]])
+                    self.assertEqual(self.primary_clear.call_count, int(has_question))
+                    self.assertEqual(self.runner.radar.predict_question.call_count, 4)
+
+    def test_marker_reaches_full_scan_and_forced_fallback(self):
+        """无问号与清理失败两条路径都保留标记直到兜底结束。"""
+        for question in (None, (0, -1)):
+            with self.subTest(question=question):
+                self.make_runner()
+                self.question = question
+                self.run_battle()
+                self.assertEqual(self.marker_observations, [('map_rescan', 1), ('forced_scan', 1)])
+
+    def test_actual_mro_fallback_does_not_reenter_multifleet_clear(self):
+        """实际组合类的强制兜底外层遍历后，只清当前队，不重新从主队遍历。"""
+        self.questions_by_fleet = {2: (0, -1)}
+        self.runner._execute_fixed_patrol_scan.side_effect = lambda **kwargs: OSMap.clear_question_any_fleet(self.runner)
+        self.run_battle()
+        self.assertEqual(self.runner.fleet_set.call_args_list,
+                         [unittest.mock.call(fleet) for fleet in (1, 2, 3, 4)])
+        self.primary_clear.assert_called_once_with(self.runner, drop=None)
+
+    def test_failed_primary_unreachable_evidence_survives_low_ap_fallback(self):
+        """主队看到但到不了的线索不能被其余队补查清空，低行动力也执行挪队。"""
+        self.questions_by_fleet = {1: (0, -1)}
+        self.clear_unreachable = True
+        self.runner.config.task = SimpleNamespace(command='OpsiHazard1Leveling')
+        self.runner.map = SimpleNamespace(grids=[object()])
+        self.runner.map_init = Mock()
+        self.runner.clear_question_any_fleet = lambda: OSMap.clear_question_any_fleet(self.runner)
+        self.runner._read_current_action_point = Mock(return_value=0)
+        self.runner._move_fleets_and_rescan = Mock(return_value=False)
+        self.runner._execute_fixed_patrol_scan.side_effect = lambda **kwargs: OSMap._execute_fixed_patrol_scan(self.runner, **kwargs)
+        self.run_battle()
+        self.runner._read_current_action_point.assert_not_called()
+        self.runner._move_fleets_and_rescan.assert_called_once_with()
+        self.assertEqual(self.runner.fleet_set.call_args_list,
+                         [unittest.mock.call(fleet) for fleet in (1, 2, 3, 4, 1)])
+
+    def test_next_battle_resets_stale_unreachable_and_marks_new_primary(self):
+        """上一轮线索不能触发下一轮兜底，主队变化后使用新的当轮标记。"""
+        self.runner._question_unreachable = True
+        self.runner._cl1_prechecked_primary = 4
+        self.run_battle()
+        self.assertFalse(self.runner._question_unreachable)
+        self.marker_observations.clear()
+        self.runner.handle_after_auto_search.reset_mock()
+        self.runner.config.OpsiFleet_Fleet = 2
+        self.run_battle()
+        self.assertEqual(self.marker_observations, [('map_rescan', 2), ('forced_scan', 2)])
+
+    def test_rescan_or_fallback_exception_clears_marker(self):
+        """全图扫描与强制兜底异常退出后，其他任务不沿用这次主队预检。"""
+        for stage in ('map_rescan', '_execute_fixed_patrol_scan'):
+            with self.subTest(stage=stage):
+                self.make_runner()
+                getattr(self.runner, stage).side_effect = GameStuckError('测试中断')
+                with self.assertRaises(GameStuckError):
+                    self.runner._cl1_run_battle()
+                self.assertIsNone(self.runner._cl1_prechecked_primary)
+                self.runner.handle_after_auto_search.assert_not_called()
 
 
 if __name__ == '__main__':

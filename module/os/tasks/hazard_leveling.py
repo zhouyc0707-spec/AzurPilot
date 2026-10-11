@@ -136,6 +136,7 @@ class OpsiHazard1Leveling(CoinTaskMixin, OSMap):
         ):
             self._solved_map_event = set()
             self._solved_fleet_mechanism = False
+            self._question_unreachable = False
 
             # 先用主舰队的最新截图查附近问号，避免事件就在身边时仍移动镜头扫全图。
             logger.hr("[大世界-侵蚀1练级] 战后主舰队雷达预检", level=2)
@@ -144,27 +145,31 @@ class OpsiHazard1Leveling(CoinTaskMixin, OSMap):
             question = self.radar.predict_question(
                 self.device.image, in_port=self.zone.is_port
             )
-            if question is None:
-                logger.info("[大世界-侵蚀1练级] 主舰队附近无问号，继续地图重扫")
-                self.map_rescan()
-            else:
-                logger.info(f"[大世界-侵蚀1练级] 主舰队附近发现问号 {question}，优先清理")
-                # 显式走单舰队实现，避免组合类调用侵蚀一的多舰队遍历。
-                if OSMap.clear_question(self):
-                    logger.info("[大世界-侵蚀1练级] 主舰队问号已处理，跳过本轮地图重扫")
-                else:
-                    logger.info("[大世界-侵蚀1练级] 主舰队问号未处理成功，继续地图重扫")
+            # 本轮已检查主队；地图重扫内部触发的补查也应复用，避免再次切回主队。
+            self._cl1_prechecked_primary = self.config.OpsiFleet_Fleet
+            try:
+                if question is None:
+                    logger.info("[大世界-侵蚀1练级] 主舰队附近无问号，继续地图重扫")
                     self.map_rescan()
+                else:
+                    logger.info(f"[大世界-侵蚀1练级] 主舰队附近发现问号 {question}，优先清理")
+                    # 显式走单舰队实现，避免组合类调用侵蚀一的多舰队遍历。
+                    if OSMap.clear_question(self):
+                        logger.info("[大世界-侵蚀1练级] 主舰队问号已处理，跳过本轮地图重扫")
+                    else:
+                        logger.info("[大世界-侵蚀1练级] 主舰队问号未处理成功，继续地图重扫")
+                        self.map_rescan()
 
-            # 强制移动（开关）：开启后先零移动遍历 1~4 队雷达找问号；仍没找到
-            # 且行动力大于阈值时，再逐个挪动舰队重扫（见 _execute_fixed_patrol_scan）。
-            # 挪舰队那段的整图重扫在 _execute_fixed_patrol_scan 内部完成，返回后
-            # 不再二次重扫，否则清完明石后会再次重复进明石商店（购买之外的多余进店）。
-            if self._forced_move_enabled():
-                if not self._solved_map_event:
-                    self._execute_fixed_patrol_scan(ExecuteFixedPatrolScan=True)
+                # 强制移动先查其余舰队雷达；挪队后的地图重扫由兜底内部完成，
+                # 返回后不再重扫，避免清完明石后重复进店。
+                if self._forced_move_enabled():
+                    if not self._solved_map_event:
+                        self._execute_fixed_patrol_scan(ExecuteFixedPatrolScan=True)
 
-            self.handle_after_auto_search()
+                self.handle_after_auto_search()
+            finally:
+                # 只复用当轮预检，下轮与其他任务仍按各自流程检查主队。
+                self._cl1_prechecked_primary = None
 
         # 明石遭遇记录
         solved_events = getattr(self, "_solved_map_event", set())

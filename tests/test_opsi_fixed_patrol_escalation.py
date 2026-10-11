@@ -16,6 +16,7 @@ import inspect
 import unittest
 from contextlib import nullcontext
 from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 from module.config.redirect_utils.utils import execute_fixed_patrol_scan_redirect
 from module.os.map import ALREADY_SOLVED_MAP_EVENTS, OSMap
@@ -344,7 +345,9 @@ class AnyFleetStub:
 
 class TestAnyFleetFleetOrder(unittest.TestCase):
     def run_any_fleet(self, stub):
-        return OSMap.clear_question_any_fleet(stub)
+        with patch.object(OSMap, 'clear_question', autospec=True,
+                          side_effect=lambda runner, drop=None: runner.clear_question(drop=drop)):
+            return OSMap.clear_question_any_fleet(stub)
 
     def test_starts_from_primary_then_others(self):
         """先主队，再按编号补上其余舰队，且全程不切回主队。"""
@@ -379,6 +382,130 @@ class TestAnyFleetFleetOrder(unittest.TestCase):
         stub = AnyFleetStub([make_question_grid(), None, None, None])
         self.run_any_fleet(stub)
         self.assertTrue(stub._question_unreachable)
+
+    def test_prechecked_primary_is_excluded_from_supplement(self):
+        """已预检主队只补查其余三队，也支持主队不是第一队。"""
+        for primary in (1, 2, 3, 4):
+            with self.subTest(primary=primary):
+                stub = AnyFleetStub([None, None, None])
+                stub.config.OpsiFleet_Fleet = primary
+                stub._cl1_prechecked_primary = primary
+                self.run_any_fleet(stub)
+                self.assertEqual(stub.fleet_sets, [fleet for fleet in (1, 2, 3, 4) if fleet != primary])
+
+    def test_prechecked_primary_unreachable_flag_is_kept(self):
+        """主队此前看到却无法到达的问号，仍需由挪队兜底。"""
+        stub = AnyFleetStub([None, None, None])
+        stub._cl1_prechecked_primary = 1
+        stub._question_unreachable = True
+        self.run_any_fleet(stub)
+        self.assertTrue(stub._question_unreachable)
+        self.assertEqual(stub.fleet_sets, [2, 3, 4])
+
+    def test_unrelated_precheck_does_not_skip_current_primary(self):
+        """标记与当前主队不一致时，保留通用流程并清理旧线索。"""
+        stub = AnyFleetStub([None, None, None, None])
+        stub._cl1_prechecked_primary = 3
+        stub._question_unreachable = True
+        self.run_any_fleet(stub)
+        self.assertEqual(stub.fleet_sets, [1, 2, 3, 4])
+        self.assertFalse(stub._question_unreachable)
+
+
+class FleetMoveStub:
+    """离线执行真实 L2 调度，单队清理与实际移动由夹具提供。"""
+
+    _FIXED_PATROL_L2_AP = OSMap._FIXED_PATROL_L2_AP
+
+    def __init__(self, primary=1, move_on_fleet=None):
+        self.recover = Mock()
+        self.config = SimpleNamespace(
+            OpsiFleet_Fleet=primary,
+            task=SimpleNamespace(command='OpsiHazard1Leveling'),
+            temporary=Mock(return_value=SimpleNamespace(recover=self.recover)),
+        )
+        self.map = SimpleNamespace(grids=[object()])
+        self._cl1_prechecked_primary = primary
+        self.current_fleet = primary
+        self.move_on_fleet = move_on_fleet
+        self.fleet_sets = []
+        self.clear_fleets = []
+        self.move_calls = []
+        self.rescan_markers = []
+        self.clear_question = Mock(side_effect=AssertionError('L2 不应调用多舰队清理'))
+        self._forced_move_enabled = Mock(return_value=True)
+        self.map_init = Mock()
+        self._read_current_action_point = Mock(return_value=8)
+
+    def fleet_set(self, fleet):
+        self.current_fleet = fleet
+        self.fleet_sets.append(fleet)
+
+    def clear_current(self, drop=None):
+        self.clear_fleets.append(self.current_fleet)
+        return False
+
+    def clear_question_any_fleet(self):
+        self._question_unreachable = False
+        return False
+
+    def _move_fleet_to_patrol(self, fleet, location):
+        self.move_calls.append((fleet, location))
+        return fleet == self.move_on_fleet
+
+    def map_rescan(self, rescan_mode='full'):
+        self.rescan_markers.append(self._cl1_prechecked_primary)
+        self._solved_map_event.add('is_akashi')
+
+    def _move_fleets_and_rescan(self):
+        return OSMap._move_fleets_and_rescan(self)
+
+
+class TestFixedPatrolPrecheckedPrimary(unittest.TestCase):
+    def run_l2(self, stub, through_recovery=False):
+        with patch.object(OSMap, 'clear_question', autospec=True,
+                          side_effect=lambda runner, drop=None: runner.clear_current(drop=drop)):
+            if through_recovery:
+                OSMap._execute_fixed_patrol_scan(stub, ExecuteFixedPatrolScan=True)
+            else:
+                OSMap._move_fleets_and_rescan(stub)
+        stub.clear_question.assert_not_called()
+
+    def test_skips_primary_radar_but_still_tries_primary_patrol_move(self):
+        """L2 不再重复主队雷达，但保留挪动主队解除遮挡的能力。"""
+        for primary in (1, 3):
+            with self.subTest(primary=primary):
+                stub = FleetMoveStub(primary=primary)
+                self.run_l2(stub)
+                order = [primary, *[fleet for fleet in (1, 2, 3, 4) if fleet != primary]]
+                self.assertEqual(stub.fleet_sets, order)
+                self.assertEqual(stub.clear_fleets, order[1:])
+                self.assertEqual([fleet for fleet, _ in stub.move_calls], order)
+                self.assertEqual(stub.move_calls[0][1], (primary + 1, 0))
+                self.assertEqual(stub._cl1_prechecked_primary, primary)
+                stub.recover.assert_called_once_with()
+
+    def test_actual_primary_movement_invalidates_precheck_before_rescan(self):
+        """主队已换位置，随后的重扫应允许重新读取主队雷达。"""
+        stub = FleetMoveStub(move_on_fleet=1)
+        self.run_l2(stub, through_recovery=True)
+        self.assertEqual(stub.clear_fleets, [])
+        self.assertEqual(stub.move_calls, [(1, (2, 0))])
+        self.assertEqual(stub.rescan_markers, [None])
+        self.assertIsNone(stub._cl1_prechecked_primary)
+        self.assertEqual(stub.fleet_sets, [1, 1])
+        self.assertEqual(stub.current_fleet, 1)
+        stub.recover.assert_called_once_with()
+
+    def test_other_fleet_movement_invalidates_precheck_and_restores_primary(self):
+        """移动其他舰队也改变遮挡，失效预检并由外层恢复主队。"""
+        stub = FleetMoveStub(move_on_fleet=2)
+        self.run_l2(stub, through_recovery=True)
+        self.assertEqual(stub.clear_fleets, [2])
+        self.assertEqual(stub.move_calls, [(1, (2, 0)), (2, (3, 0))])
+        self.assertEqual(stub.rescan_markers, [None])
+        self.assertEqual(stub.fleet_sets, [1, 2, 1])
+        self.assertEqual(stub.current_fleet, 1)
 
 
 class MarkStub:

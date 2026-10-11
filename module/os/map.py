@@ -1458,6 +1458,8 @@ class OSMap(OSFleet, Map, GlobeCamera, StorageHandler, StrategicSearchHandler):
         若只是清掉普通问号，则先做一次全图扫描把清问号后才显现的事件捞出来，
         仍无所获才切换下一支舰队，直到找到目标或扫完所有舰队。
 
+        侵蚀一当轮已预检的主队不再重复检查；保留主队无法到达问号的线索。
+
         整轮结束后 `self._question_unreachable` 表示「有舰队看到了问号却清不掉」：
         换舰队点解决不了所有情况（目标本来就超出所有舰队的移动范围），
         调用方要为它挪一次舰队，且不受行动力门控限制。
@@ -1472,7 +1474,11 @@ class OSMap(OSFleet, Map, GlobeCamera, StorageHandler, StrategicSearchHandler):
         cleanup = getattr(self, "_opsi_meowfficer_cleanup", False)
         primary = self.config.OpsiFleet_Fleet
         fleets = [primary] + [f for f in [1, 2, 3, 4] if f != primary]
-        self._question_unreachable = False
+        if getattr(self, "_cl1_prechecked_primary", None) == primary:
+            fleets.remove(primary)
+            logger.info(f"[大世界-搜索] 舰队 {primary} 本轮已预检，仅补查其余舰队 {fleets}")
+        else:
+            self._question_unreachable = False
         for fleet in fleets:
             try:
                 self.fleet_set(fleet)
@@ -1491,8 +1497,8 @@ class OSMap(OSFleet, Map, GlobeCamera, StorageHandler, StrategicSearchHandler):
                 logger.info(f"[大世界-搜索] 舰队 {fleet} 雷达上无问号")
                 continue
             logger.info(f"[大世界-搜索] 舰队 {fleet} 雷达上找到问号 {grid}，前往处理")
-            # 保持当前舰队处于激活状态再走原有清除逻辑（雷达坐标系跟随舰队）
-            self.clear_question(drop=drop)
+            # 外层已逐队定位，显式清当前队，避免组合类再次从主队遍历。
+            OSMap.clear_question(self, drop=drop)
             # 短猫命中目标事件即停止；月度补扫还要检查其他事件与舰队。
             if self._solved_map_event & ALREADY_SOLVED_MAP_EVENTS and not cleanup:
                 logger.info("[大世界-搜索] 已解决目标事件，停止遍历舰队")
@@ -2226,8 +2232,8 @@ class OSMap(OSFleet, Map, GlobeCamera, StorageHandler, StrategicSearchHandler):
         侵蚀1战后常规重扫一无所获（疑似明石被舰队遮挡/刷新在雷达范围外）时，
         开启强制移动会分两段找：
 
-        L0/L1（零移动）：遍历 1~4 号舰队的雷达清剩余问号，只切换舰队看雷达、
-                一支舰队都不挪动，速度最快；找到明石/记录塔/装置就处理，命中即止。
+        L0/L1（零移动）：遍历舰队雷达，侵蚀一当轮已预检主队只查其余三队；
+                不挪动舰队，找到明石/记录塔/装置就处理，命中即止。
         L2（挪舰队）：逐个挪动舰队再整图重扫，把挡路的舰队让开。要不要挪分两种：
                 ① 有舰队看到了问号却点不到（被别的舰队挡住/超出移动范围）：
                    必须挪，和行动力无关——已经看见的事件不能因为行动力不够放跑；
@@ -2276,7 +2282,7 @@ class OSMap(OSFleet, Map, GlobeCamera, StorageHandler, StrategicSearchHandler):
 
         self._in_akashi_recovery = True
         try:
-            # ---- L0/L1：只切换舰队看雷达找问号（零移动，一支都不挪动） ----
+            # ---- L0/L1：只切队看雷达，复用侵蚀一当轮的主队预检 ----
             logger.hr("[大世界] 效率模式（仅切换舰队看雷达，不移动）")
             self._solved_map_event = set()
             self._solved_fleet_mechanism = False
@@ -2378,7 +2384,8 @@ class OSMap(OSFleet, Map, GlobeCamera, StorageHandler, StrategicSearchHandler):
                 self.fleet_set(fleet)
                 self._solved_map_event = set()
                 self._solved_fleet_mechanism = False
-                self.clear_question(drop=None)
+                if getattr(self, "_cl1_prechecked_primary", None) != fleet:
+                    OSMap.clear_question(self, drop=None)
                 if self._solved_map_event & ALREADY_SOLVED_MAP_EVENTS:
                     logger.info("[大世界] 强制移动 L2：移动前雷达预检解决事件，停止")
                     return True
@@ -2386,6 +2393,8 @@ class OSMap(OSFleet, Map, GlobeCamera, StorageHandler, StrategicSearchHandler):
                 if not self._move_fleet_to_patrol(fleet, location[fleet]):
                     continue
 
+                # 实际挪队后视野与遮挡已变化，不再沿用移动前的主队预检。
+                self._cl1_prechecked_primary = None
                 # 移开遮挡后整图重扫，看能否发现事件
                 self._solved_map_event = set()
                 self._solved_fleet_mechanism = False
