@@ -13,6 +13,7 @@ from module.ocr.ocr import Digit
 from module.shop.assets import *
 from module.ui.ui import UI
 from module.log_res import LogRes
+from module.logger import logger
 
 if server.server != 'jp':
     OCR_SHOP_GEMS = Digit(SHOP_GEMS, letter=(255, 243, 82), name='OCR_SHOP_GEMS')
@@ -62,13 +63,18 @@ class ShopStatus(UI):
         """获取当前钻石余额并同步至仪表盘。
 
         Returns:
-            int: 当前钻石数量。
+            int: 当前钻石数量；读取失败返回 0，但保留仪表盘上次有效记录。
 
         Pages:
-            in: page_shop、勋章商店等
+            in: page_shop、勋章商店、page_campaign、page_event 等显示钻石的页面
         """
         amount = OCR_SHOP_GEMS.ocr(self.device.image)
-        LogRes(self.config).record('Gem', amount, observed=bool(getattr(OCR_SHOP_GEMS, 'last_valid', False)))
+        # Digit 的空文本回退和真实零值都返回 0，必须按本次识别有效性决定是否写入。
+        # observed=False 仅跳过成功观测，仍会写 Dashboard，不能用来丢弃失败读数。
+        if bool(getattr(OCR_SHOP_GEMS, 'last_valid', False)):
+            LogRes(self.config).record('Gem', amount, observed=True)
+        else:
+            logger.warning('[商店-货币] 钻石读取无效，保留仪表盘上次有效记录')
         self.config.update()
         return amount
 

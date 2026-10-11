@@ -116,7 +116,11 @@ class LogRes:
             super().__setattr__(name=key, value=value)
 
     def record(self, name, value, *, observed=True, source=None):
-        """缓存回退与失败读数可以保留旧记录，但不能更新成功观察时间。"""
+        """写入资源值；observed=False 仅跳过成功观测，失败读数须由调用方丢弃。
+
+        建造等已确认消耗的推算值可更新仪表盘而不刷新观测时间；
+        OCR 读取失败不能将回退零值作为推算值传入。
+        """
         self.__dict__['_observation_enabled'] = observed
         self.__dict__['_observation_source'] = source
         try:

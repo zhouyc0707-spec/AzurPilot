@@ -179,7 +179,8 @@ flowchart TD
 ## 13. 缓存与持久化
 
 - `cached_property` 缓存网格与物品网格对象；勋章/白票商店翻页、货架刷新后用 `del_cached_property` 强制重建（勋章商店网格随勋章图标位置变化，必须重算）。
-- `ShopStatus` 每次读取货币即通过 `LogRes` 写入仪表盘并 `config.update()`。
+- `ShopStatus` 通过 `LogRes` 将有效货币读数写入仪表盘并 `config.update()`。钻石读取以本次 `Digit.last_valid` 区分真实零值和空文本回退：读取失败仍向购买判断返回 0，但不覆盖 Dashboard 数值、记录时间或历史快照；真实识别到 0 则正常记录。战役停止条件复用同一钻石读取入口。
+- `LogRes.record(observed=False)` 只跳过调度与账本的成功观测，仍会更新 Dashboard，供已确认消耗后的推算值使用；不能用它表示丢弃失败 OCR。回归见 `tests/test_shop_gem_observation.py`。
 
 ## 14. 生命周期
 

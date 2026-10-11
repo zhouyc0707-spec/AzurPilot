@@ -352,6 +352,7 @@ stateDiagram-v2
 - **活动结束联动会写别人的配置**：`_disable_tasks()` 修改同活动全部任务的 `Scheduler.Enable` 与心情温泉开关，并把 GemsFarming 重置回 2-4。调整禁用逻辑时必须同时检查 `_reset_gems_farming` 的回退目标。
 - **override 的可见性**：`config.override()` 作用于运行时副本；同键重复覆盖会更新值而非报错，作战档案的开荒策略切换依赖这一语义。反过来，依赖 `len(config.modified)` 判断「有修改需保存」的代码会被额外 override 干扰。
 - **停止条件的 `oil_check` 参数**：自动搜索菜单里读不到石油（OCR 区域被遮挡），循环里两处 `triggered_stop_condition` 分别传 `not is_in_auto_search_menu()` 与 `False`，调整判断顺序时勿破坏该语义。
+- **选关页钻石读取失败**：停止条件复用 `ShopStatus.status_get_gems()`，空文本回退的 0 不写入仪表盘或历史快照，继续保留上一次有效值与时间；明确识别到数字 0 则正常更新。资源栏尚未就绪时不能仅凭数值为 0 判定钻石耗尽。
 - **JP 服与 EN 服的识别差异**集中在 `_get_num()`（数字颜色/遮罩）与 `campaign_extract_name_image`（`@Config.when(SERVER='en')` 的独立实现），改识别参数需四服同查。
 
 ## 17. 已知限制
