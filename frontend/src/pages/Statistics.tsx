@@ -660,10 +660,18 @@ export function Statistics({embedded = false}: {embedded?: boolean} = {}) {
   // 旧版主题：整页还原本地旧版统计页（资源仪表盘 + 体力图表 + 大世界数据收集
   // + 本月耄耋收获 + 舰船经验 + 委托收益），数据走 statistics.legacy；其它主题保留
   // 上游的分类视图。旧版主题的整页还原见 定制化修改清单 第一章「旧版统计页整页还原」。
-  // 新版资源管理链接切到旧版时仍可读取原页面；独立和内嵌旧统计继续走本地实现。
-  if (legacy) return <Suspense fallback={<Loading/>}>{management
-    ? <ResourceManagement key={instance}/>
-    : <StatisticsLegacy embedded={embedded}/>}</Suspense>
+  // 旧版沿用整页统计内容，独立页面与新版共用资源管理入口；总览内嵌时不加切换条。
+  if (legacy) return <>
+    {!embedded && <div className="statistics-toolbar-row legacy-statistics-navigation">
+      <SegmentedControl<'resources' | 'management'> className="statistics-category-control" label={ui('stats.categoryLabel')}
+        value={management ? 'management' : 'resources'}
+        onChange={view => setSearchParams(view === 'management' ? {view: 'management'} : {})}
+        options={[{value: 'resources', label: ui('stats.category.resources')}, {value: 'management', label: ui('nav.resources')}]}/>
+    </div>}
+    <Suspense fallback={<Loading/>}>{management
+      ? <ResourceManagement key={instance}/>
+      : <StatisticsLegacy embedded={embedded}/>}</Suspense>
+  </>
 
   // 紧凑主题下页名与面包屑重复，省略标题行只留无障碍标题；其余主题保持原样。
   return condensed
