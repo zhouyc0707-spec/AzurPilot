@@ -108,6 +108,10 @@ flowchart TD
 
 每轮 `shop_buy` 先检查外观箱、未获得舰船等特殊商品，再按 `FILTER` 优先级与实际余额选品；刷新和购买数量采用官源规则。
 
+`ShopUI.shop_refresh()` 从已就绪的军需商店页进入，在同一个截图状态循环内点击刷新、处理确认弹窗并确认返回商店。商品购买错误弹窗优先取消；蓝色、白色确认弹窗优先处理，即使确认按钮处于点击冷却中，也继续获取截图等待，不把背景中的返回箭头当作结束。只有已执行刷新确认，并通过返回箭头的模板与颜色共同确认商店恢复可操作，才返回 `True`、继续读取刷新后的货架。刷新不可用或误点购买弹窗被取消并返回商店时，记录原因并返回 `False`；未知页面沿用设备卡死检测和上层恢复，不假定刷新成功。
+
+舰队商店保持独立启用和刷新开关：过滤器非空、购买流程正常结束且余额不少于 110 舰队币时才尝试刷新，最多处理刷新前后两轮货架。`Shop buy finished` 只表示当前货架没有可继续购买的过滤器命中商品，刷新开启时仍会进入刷新判断。
+
 活动商店先扫描全部货架，再处理 UR 舰与 URpt、为未获得物品保留 PT，最后按过滤器购买普通商品。活动是否结束以商店截止日期剩余不足 7 天判断。
 
 基础识别和购买流程采用官源。AzurPilot 保留普通商店独立开关、金币阈值及溢出买猫箱、仪表盘资源记录；大世界保留行动力专购、黄币完成状态与行动力统计。行动力专购不能更新普通黄币完成状态，也不能以其他未解锁商品判断失败。
@@ -154,6 +158,7 @@ flowchart TD
 | --- | --- | --- | --- |
 | `GeneralShop.Enable / UseGems / Refresh / BuySkinBox / ConsumeCoins / OverflowCoins` | bool/int | false / 0 | 钻石购买、刷新、外观箱、金币阈值功能 |
 | `GeneralShop.Filter` | string | BookRedT3 > ... > FoodT5 | 优先级串 |
+| `GuildShop.Enable / Refresh` | bool | true / true | 舰队商店购买与刷新开关；刷新前余额需不少于 110 舰队币 |
 | `GuildShop.Filter` 及 `BOX_T3/T4`、`BOOK_T2/T3`、`RETROFIT_T2/T3`、`PLATE_T2/T3/T4`、`PR1~3` | string/enum | 见 argument.yaml | 选择式商品的「买哪个」由这些键决定 |
 | `MedalShop2.Enable/Filter` 及 `RETROFIT_T1~3`、`PLATE_T1~3` | 同上 | `DR > PR > ...` | 勋章商店选择配置 |
 | `MeritShop.Enable/Refresh/BuyUnobtainedShip/Filter` | bool/string | false/Cube | 未获得舰船购买开关 |
@@ -171,7 +176,7 @@ flowchart TD
 | --- | --- | --- |
 | `ScriptError` | 选择式商品配置键不存在、`SELECT_ITEM_INFO_MAP` 无该组、库存/数量 OCR 为 0 | 上抛终止任务，不静默重试 |
 | `ItemNotFoundError`（活动商店） | 滚动位置上未找回目标商品 | `run()` 捕获后切换/刷新标签页重扫，最多 7 次 |
-| `GameStuckError` | 活动商店加载超时 | 上抛，由调度器统一恢复 |
+| `GameStuckError` | 活动商店加载超时，或普通商店刷新过程中持续无法识别当前页面 | 上抛，由调度器统一恢复 |
 | 物品加载超时 | 商店加载慢 | `shop_get_items` 超时后带当前结果继续，打 warning |
 
 购买弹窗识别失败不会无限重试：`shop_buy` 以 12 轮为上限；余额耗尽提前停止。
@@ -220,6 +225,7 @@ flowchart TD
 - 打开 `config_manual.py` 的 `SHOP_EXTRACT_TEMPLATE` 可将识别到的商品图存入对应 `assets/shop/*/` 模板目录，用于补模板。
 - 日志关键字：`[商店-通用]`、`[商店-购买]`、`[商店-勋章]`、`[活动商店-...]`；`logger.attr('物品排序', ...)` 输出过滤器命中顺序。
 - 离线识别验证：先用隔离配置和假设备准备商店实例，再调用 `shop_detect_items(image)`。传入图片不代表正常构造商店子类不会连接设备；该方法还依赖 `shop_items()` 和配置，启用 `SHOP_EXTRACT_TEMPLATE` 时会提取模板，纯识别测试应关闭此选项。
+- 刷新状态回归入口：`tests/test_shop_refresh.py`，使用隔离状态与假设备验证确认弹窗覆盖背景返回箭头、蓝／白确认、点击冷却、错误购买弹窗取消及确认后的商店恢复；不执行真实购买或刷新。
 - `module/shop/shop_reward.py` 末尾有 `__main__` 直跑入口（连真实设备）。
 
 ## 20. 相关模块

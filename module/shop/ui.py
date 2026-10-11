@@ -12,6 +12,7 @@ from module.ui.navbar import Navbar
 from module.ui.page import page_academy, page_munitions
 from module.ui.switch import Switch
 from module.ui.ui import UI
+from module.ui_white.assets import POPUP_CONFIRM_WHITE
 
 
 class ShopUI(UI):
@@ -94,51 +95,66 @@ class ShopUI(UI):
         """
         执行商店刷新操作。
 
-        流程：点击刷新按钮，等待弹出确认框，确认后返回结果。
+        流程：点击刷新按钮，优先处理确认框，再确认已返回商店。
         刷新按钮有两种激活颜色状态，若为暗色则表示不可刷新。
 
         Pages:
             in: page_munitions (SHOP_BACK_ARROW 可见)
+            out: page_munitions（刷新完成，或不可刷新／误入购买弹窗已关闭）
 
         Returns:
-            bool: 是否刷新成功
+            bool: 是否已点击刷新确认并确认返回商店。
         """
         logger.info('[商店-UI] 刷新商店')
         refreshed = False
+        refresh_failed = False
+        confirmation_seen = False
 
-        # 点击刷新按钮，等待确认弹窗出现
+        # 弹窗遮罩下返回箭头的形状仍可能匹配，先处理弹窗再判断结束。
         for _ in self.loop():
-            if self.appear(POPUP_CONFIRM, offset=(30, 30)):
+            if self.appear(SHOP_BUY_CONFIRM_MISTAKE, offset=(200, 200)):
+                if not refresh_failed:
+                    logger.warning('[商店-UI] 刷新误入商品购买弹窗，取消本次刷新')
+                refresh_failed = True
+                refreshed = False
+                if self.appear(SHOP_BUY_CONFIRM_MISTAKE, interval=3, offset=(200, 200)):
+                    self.device.click(SHOP_CLICK_SAFE_AREA)
+                continue
+
+            if self.appear(POPUP_CONFIRM, offset=(30, 30)) \
+                    or self.appear(POPUP_CONFIRM_WHITE, offset=(30, 30)):
+                confirmation_seen = True
+                if refresh_failed:
+                    self.handle_popup_cancel('SHOP_REFRESH_ERROR', offset=(30, 30))
+                elif self.handle_popup_confirm('SHOP_REFRESH_CONFIRM', offset=(30, 30)):
+                    refreshed = True
+                # 点击仍在冷却时也不能用背景箭头结束，下一轮获取新截图。
+                continue
+
+            if (refreshed or refresh_failed or confirmation_seen) \
+                    and self.match_template_color(SHOP_BACK_ARROW, offset=(30, 30)):
+                if refreshed:
+                    logger.info('[商店-UI] 刷新已确认，已返回商店')
+                elif not refresh_failed:
+                    logger.warning('[商店-UI] 刷新确认未完成，已返回商店')
                 break
+
+            if refreshed or refresh_failed or confirmation_seen:
+                continue
+
             # SHOP_REFRESH_CHECK 是刷新图标
             # SHOP_REFRESH 是带背景的刷新图标
-            if self.appear(SHOP_REFRESH_CHECK, offset=(30, 30), interval=3):
+            if self.appear(SHOP_REFRESH_CHECK, offset=(30, 30)):
                 # SHOP_REFRESH 激活时有两种颜色状态
-                if self.image_color_count(SHOP_REFRESH.button, color=(49, 142, 207), threshold=30, count=50):
-                    self.device.click(SHOP_REFRESH)
-                    continue
-                if self.image_color_count(SHOP_REFRESH.button, color=(54, 117, 161), threshold=30, count=50):
-                    self.device.click(SHOP_REFRESH)
+                if self.image_color_count(SHOP_REFRESH.button, color=(49, 142, 207), threshold=30, count=50) \
+                        or self.image_color_count(SHOP_REFRESH.button, color=(54, 117, 161),
+                                                  threshold=30, count=50):
+                    if self.appear(SHOP_REFRESH_CHECK, offset=(30, 30), interval=3):
+                        self.device.click(SHOP_REFRESH)
                     continue
                 if self.image_color_count(SHOP_REFRESH.button, color=(52, 74, 94), threshold=30, count=50):
                     logger.info('[商店-UI] 刷新不可用')
                     break
-                # 不使用 continue，当作 SHOP_REFRESH 未匹配处理
-                self.interval_clear(SHOP_REFRESH)
-
-        # 处理确认弹窗，等待返回商店主界面
-        for _ in self.loop():
-            if self.appear(SHOP_BACK_ARROW, offset=(30, 30)):
-                break
-            if self.appear(SHOP_BUY_CONFIRM_MISTAKE, interval=3, offset=(200, 200)):
-                logger.warning('[商店-UI] 刷新确认错误')
-                self.ui_click(SHOP_CLICK_SAFE_AREA, appear_button=POPUP_CONFIRM, check_button=SHOP_BACK_ARROW,
-                              offset=(20, 30), skip_first_screenshot=True)
-                refreshed = False
-                break
-            if self.handle_popup_confirm('SHOP_REFRESH_CONFIRM'):
-                refreshed = True
-                continue
 
         self.handle_info_bar()
         return refreshed
