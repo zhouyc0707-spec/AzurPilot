@@ -338,6 +338,11 @@ class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
         collected = False
         was_complete = False
         self.post_close()
+        if self.post_list_is_empty(post_button):
+            self.posts[post_id].update(state='idle', crop=None, runs=0)
+            if post_index < len(self.fishery_times):
+                self.fishery_times[post_index] = None
+            return False
         self.post_open(post_button)
         self.device.screenshot()
         was_complete = self.appear(ISLAND_WORK_COMPLETE, offset=1)

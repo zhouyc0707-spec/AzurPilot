@@ -229,6 +229,9 @@ class IslandShopBase(Island, WarehouseOCR):
         self.posts[post_id]['runs'] = 0
         setattr(self, time_var_name, None)
         self.post_close()
+        if self.post_list_is_empty(post_button):
+            self.posts[post_id]['status'] = 'idle'
+            return
         self.post_open(post_button)
         self.device.sleep(0.5)
         image = self.device.screenshot()

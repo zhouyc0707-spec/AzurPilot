@@ -76,6 +76,7 @@ class RanchPlannerCollectionTests(unittest.TestCase):
         for method in ('goto_postmanage', 'post_manage_mode', 'post_manage_swipe_to_top', 'post_close'):
             setattr(self.task, method, Mock())
         self.task.post_open = Mock(side_effect=self.open_post)
+        self.task.post_list_is_empty = Mock(return_value=False)
         self.task.post_get_and_close = Mock(return_value=True)
         self.task._planned_dispatch_recipe = Mock(return_value=4)
         self.task.loop = self.loop
@@ -141,6 +142,17 @@ class RanchPlannerCollectionTests(unittest.TestCase):
         self.task._planned_dispatch_recipe.assert_called_once_with(
             'ISLAND_RANCH_POST4', 'wool', 1000, 'time_ranch4', 'WorkerJuu', extra_stocks={})
         self.assertEqual(self.history[-1], ('screenshot', 'ISLAND_RANCH_POST4', 'idle'))
+
+    def test_confirmed_list_empty_still_enters_planned_dispatch(self):
+        self.task.post_list_is_empty = Mock(return_value=True)
+        self.task.time_ranch4 = NOW
+        self.task.run_planned_ranch(self.configs)
+        self.assertEqual(self.task.posts['ISLAND_RANCH_POST4']['state'], 'idle')
+        self.assertIsNone(self.task.time_ranch4)
+        self.task.post_open.assert_not_called()
+        self.task.post_get_and_close.assert_not_called()
+        self.task._planned_dispatch_recipe.assert_called_once_with(
+            'ISLAND_RANCH_POST4', 'wool', 1000, 'time_ranch4', 'WorkerJuu', extra_stocks={})
 
     def test_unknown_after_collection_keeps_the_existing_recovery_error(self):
         self.after_collection = 'unknown'

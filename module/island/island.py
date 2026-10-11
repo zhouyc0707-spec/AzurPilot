@@ -24,6 +24,7 @@ from module.base.runtime_params import (
     ISLAND_MAP_DESTINATION_WAIT,
 )
 from module.config.utils import read_run_param
+from module.island.post_list import is_empty_post_slot, is_post_title_confirmed
 from module.island.island_walk import (
     ISLAND_WALK_ACTIONS,
     ISLAND_WALK_MAX_HOLD,
@@ -1169,6 +1170,48 @@ class Island(SelectCharacter):
         if self.appear(ISLAND_SELECT_CHARACTER_CHECK, offset=1):
             logger.warning(f"[岛屿] {context}确认按钮未出现")
             return False
+        return True
+
+    def post_list_is_empty(self, post):
+        """在巡检前用两帧列表画面确认目标空岗，候选外不增加截图。
+
+        调用方须先关闭详情，当前帧应为关闭操作取得的最新列表截图。
+        只省略领取巡检，后续空岗排产仍使用正常的 ``post_open``。
+
+        Args:
+            post (Button): 目标岗位，类别标题用于本帧滚动定位。
+
+        Returns:
+            bool: 两帧均确认同一位置的完整空岗。
+
+        Pages:
+            in: page_island_postmanage
+            out: page_island_postmanage
+        """
+        if not isinstance(post, Button):
+            return False
+
+        def locate_empty():
+            if not self.ui_page_appear(page_island_postmanage) or self.is_post_detail_visible():
+                return None
+            # match 会修改 button 的偏移，仅使用本次标题匹配成功后的坐标。
+            if not self.appear(post, offset=300):
+                return None
+            if not is_post_title_confirmed(self.device.image, post):
+                return None
+            position = tuple(post.button)
+            if is_empty_post_slot(self.device.image, position):
+                return position
+            return None
+
+        first = locate_empty()
+        if first is None:
+            return False
+        self.device.screenshot()
+        second = locate_empty()
+        if second is None or any(abs(a - b) > 2 for a, b in zip(first, second)):
+            return False
+        logger.info(f"[岛屿] {post}: 列表确认空岗，跳过领取巡检")
         return True
 
     def post_open(self, post):

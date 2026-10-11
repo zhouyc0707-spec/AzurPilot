@@ -791,28 +791,34 @@ class IslandRancher(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
             self.post_manage_mode(POST_MANAGE_PRODUCTION)
             self.post_manage_swipe_to_top()
             self.post_close()
-            if not self.post_open(self.posts_ranch[pid]):
-                raise GameStuckError(f'{pid} 计划巡检未能打开岗位')
-            for _ in self.loop(timeout=Timer(20), skip_first=False):
-                if self.appear(ISLAND_GET, offset=1):
-                    self.device.click(ISLAND_POST_SAFE_AREA)
-                    continue
-                if self.appear_then_click(POST_GET, offset=(50, 0), interval=2):
-                    # 可收取阶段产物时队列仍可能工作；收取后用新截图复检实际剩余时间。
-                    continue
-                if self.appear(ISLAND_WORKING):
-                    finish = self.ranch_ocr_finish_time(pid)
-                    if finish is not None:
-                        setattr(self, time_var, finish)
-                        self.posts[pid]['state'] = 'working'
-                        break
-                if self.appear(ISLAND_WORK_COMPLETE, offset=1) or self.appear(ISLAND_POST_SELECT, offset=1):
-                    self.posts[pid]['state'] = 'idle'
-                    break
+            if self.post_list_is_empty(self.posts_ranch[pid]):
+                # 列表已确认空岗时省去领取巡检，仍继续下面的计划派遣。
+                self.posts[pid]['state'] = 'idle'
+                self.posts[pid]['crop'] = None
+                setattr(self, time_var, None)
             else:
-                raise GameStuckError(f'{pid} 计划巡检状态无法确认')
-            if not self.post_get_and_close():
-                raise GameStuckError(f'{pid} 巡检后未返回管理页')
+                if not self.post_open(self.posts_ranch[pid]):
+                    raise GameStuckError(f'{pid} 计划巡检未能打开岗位')
+                for _ in self.loop(timeout=Timer(20), skip_first=False):
+                    if self.appear(ISLAND_GET, offset=1):
+                        self.device.click(ISLAND_POST_SAFE_AREA)
+                        continue
+                    if self.appear_then_click(POST_GET, offset=(50, 0), interval=2):
+                        # 可收取阶段产物时队列仍可能工作；收取后用新截图复检实际剩余时间。
+                        continue
+                    if self.appear(ISLAND_WORKING):
+                        finish = self.ranch_ocr_finish_time(pid)
+                        if finish is not None:
+                            setattr(self, time_var, finish)
+                            self.posts[pid]['state'] = 'working'
+                            break
+                    if self.appear(ISLAND_WORK_COMPLETE, offset=1) or self.appear(ISLAND_POST_SELECT, offset=1):
+                        self.posts[pid]['state'] = 'idle'
+                        break
+                else:
+                    raise GameStuckError(f'{pid} 计划巡检状态无法确认')
+                if not self.post_get_and_close():
+                    raise GameStuckError(f'{pid} 巡检后未返回管理页')
             if self.posts[pid]['state'] == 'working':
                 continue
             _, outputs = recipe_runtime_terms(self.config, recipe_id)

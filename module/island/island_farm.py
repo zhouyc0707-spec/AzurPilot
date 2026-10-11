@@ -399,6 +399,13 @@ class IslandFarm(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
         self.post_close()
         self.posts[post_id]['state'] = 'unknown'
         self.posts[post_id]['runs'] = 0
+        if self.post_list_is_empty(post_button):
+            self.posts[post_id].update(state='idle', crop=None)
+            setattr(self, time_var_name, None)
+            post_index = int(post_id[-1]) - 1
+            if category in self.time_vars and post_index < len(self.time_vars[category]):
+                self.time_vars[category][post_index] = None
+            return
         self.post_open(post_button)
         self.device.screenshot()
         if self.appear(ISLAND_WORK_COMPLETE, offset=1):
