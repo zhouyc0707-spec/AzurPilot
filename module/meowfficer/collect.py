@@ -154,12 +154,18 @@ class MeowfficerCollect(MeowfficerCollectScore, MeowfficerBase):
     def _meow_is_special_talented(self, drop=None, shifted=None):
         """检查获取的指挥喵是否拥有至少一个特殊天赋。
 
+        开启评分时先在清晰领取页确认猫名，再逐项读取成长弹窗的当前天赋。
+
         Args:
             drop (DropImage, optional): 掉落统计截图记录对象。默认为 None。
             shifted (bool, optional): 已确认的领取页偏移；未提供时检测并等待加载。
 
         Returns:
             bool: 拥有特殊天赋返回 True，否则返回 False。
+
+        Pages:
+            in: MEOWFFICER_GET_CHECK
+            out: MEOWFFICER_GET_CHECK
         """
         # 等待界面完全加载后再检查天赋
         logger.info('[指挥喵-收集] 等待加载完成并检查基础天赋')
@@ -174,6 +180,8 @@ class MeowfficerCollect(MeowfficerCollectScore, MeowfficerBase):
         open_detail = handle_drop or score_enabled
         if score_enabled:
             self.meow_score_reset()
+            # 成长弹窗会虚化领取页背景，必须先在清晰页面确认本只猫的名字。
+            self.meow_score_capture_cat(self.device.image, shifted=shifted)
         talent_count = 0
         if handle_drop:
             drop.add(self.device.image)

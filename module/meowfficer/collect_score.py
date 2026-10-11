@@ -3,8 +3,8 @@
 把 :mod:`module.meowfficer.collect` 里「有没有特殊天赋」的颜色粗判，升级成
 **真实的天赋名识别 + 攻略口径评分**：
 
-- 复用收集流程本来就会打开的天赋详情面板（``_meow_talent_cap_handle``），
-  顺手 OCR 出天赋名，因此不需要任何新的游戏资源与页面导航。
+- 在清晰的领取页读取猫名，再复用成长弹窗的当前选中等级识别天赋，
+  不将升级预览当成已拥有的天赋，不增加页面导航。
 - 由 ``MeowfficerTrain_ScoreTalents`` 或 ``MeowfficerTrain_LockByAdvice`` 开关控制，默认关闭。
 - ``MeowfficerTrain_ScoreThreshold`` 大于 0 时，评分会参与「是否锁定保留」的判断。
 - 按评价锁定时，仅完整识别后评价为「建议喂掉」的金紫新猫不锁定，其余保护锁定。
@@ -15,7 +15,7 @@
 
 from module.logger import logger
 from module.meowfficer.cat_data import CATS
-from module.meowfficer.score import evaluate, normalize
+from module.meowfficer.score import TALENT_INDEX, evaluate, normalize
 from module.meowfficer.score_report import render_summary
 
 
@@ -48,6 +48,23 @@ class MeowfficerCollectScore:
         self._meow_score_details = 0
         self._meow_score_expected_talents = None
         self._meow_score_uncertain = False
+        self._meow_score_issues = []
+
+    def _meow_score_mark_uncertain(self, reason):
+        """保留本只猫的具体识别缺口，供保护锁定日志说明原因。"""
+        self._meow_score_uncertain = True
+        issues = self._meow_score_issues
+        if reason not in issues:
+            issues.append(reason)
+
+    @staticmethod
+    def _meow_score_talent_confirmed(talent):
+        """确认精确标题与天赋线、当前等级一致，拒绝错误的识别结果。"""
+        ref = TALENT_INDEX.get(normalize(talent.name))
+        return bool(ref is not None and talent.line == ref.line
+                    and talent.kind == ref.kind and talent.level == ref.level
+                    and not talent.inferred and talent.raw
+                    and normalize(talent.name) in normalize(talent.raw))
 
     def _meow_score_ocr(self):
         """惰性创建并缓存 OCR 实例（首次加载模型较慢）。
@@ -74,6 +91,35 @@ class MeowfficerCollectScore:
         self._meow_score_ocr_instance = ocr
         return ocr
 
+    def meow_score_capture_cat(self, image, shifted=False):
+        """在成长弹窗打开前，从清晰的领取页确认本只猫的名称。
+
+        Args:
+            image (np.ndarray): 已稳定的领取页截图。
+            shifted (bool): 领取页是否向左上偏移。
+        """
+        if not self.meow_score_enabled():
+            return
+        ocr = self._meow_score_ocr()
+        if ocr is None:
+            self._meow_score_mark_uncertain('领取页猫名 OCR 不可用')
+            return
+        try:
+            from module.meowfficer.collect_ocr import recognize_collection_cat
+            cat = recognize_collection_cat(image, ocr=ocr, shifted=shifted)
+        except Exception as e:
+            logger.warning(f'[指挥喵-评分] 领取页猫名识别失败：{e}')
+            self._meow_score_mark_uncertain('领取页猫名识别异常')
+            return
+        if cat not in CATS:
+            self._meow_score_mark_uncertain('领取页猫名未确认')
+            return
+        if self._meow_score_cat and cat != self._meow_score_cat:
+            self._meow_score_mark_uncertain('领取页猫名与本只猫的记录不一致')
+            return
+        self._meow_score_cat = cat
+        logger.attr('[指挥喵-评分] 领取页猫名', cat)
+
     def meow_score_capture(self, image):
         """从一张天赋详情面板截图里识别天赋并累加。
 
@@ -87,27 +133,26 @@ class MeowfficerCollectScore:
         self._meow_score_details += 1
         ocr = self._meow_score_ocr()
         if ocr is None:
-            self._meow_score_uncertain = True
+            self._meow_score_mark_uncertain('天赋 OCR 不可用')
             return
         try:
-            from module.meowfficer.score_ocr import recognize
-            talents, cat = recognize(image, ocr=ocr)
+            from module.meowfficer.collect_ocr import recognize_collection_talent
+            talents = recognize_collection_talent(image, ocr=ocr)
         except Exception as e:
             logger.warning(f'[指挥喵-评分] 天赋识别失败，跳过这一条：{e}')
-            self._meow_score_uncertain = True
+            self._meow_score_mark_uncertain(f'第 {self._meow_score_details} 项天赋识别异常')
             return
-        if cat:
-            if self._meow_score_cat and cat != self._meow_score_cat:
-                self._meow_score_uncertain = True
-            else:
-                self._meow_score_cat = cat
         known = {t.line: t for t in self._meow_score_talents}
         # 每个初始天赋槽只应对应一条详情。重复、模糊或漏识别不能作为放弃锁定的依据。
-        if len(talents) != 1 or any(
-                t.line in known or t.kind == 'unknown' or t.inferred
-                or not t.raw or normalize(t.name) not in normalize(t.raw)
-                for t in talents):
-            self._meow_score_uncertain = True
+        if len(talents) != 1:
+            self._meow_score_mark_uncertain(
+                f'第 {self._meow_score_details} 项当前天赋或选中等级未能唯一确认')
+        for talent in talents:
+            if talent.line in known:
+                self._meow_score_mark_uncertain(f'第 {self._meow_score_details} 项天赋重复')
+            if not self._meow_score_talent_confirmed(talent):
+                self._meow_score_mark_uncertain(
+                    f'第 {self._meow_score_details} 项天赋标题或当前等级未精确确认')
         for talent in talents:
             current = known.get(talent.line)
             if current is None:
@@ -159,16 +204,25 @@ class MeowfficerCollectScore:
             return False
         result = getattr(self, '_meow_score_result', None)
         expected = getattr(self, '_meow_score_expected_talents', None)
-        complete = (result is not None and expected is not None and expected > 0
-                    and getattr(self, '_meow_score_details', 0) == expected
-                    and len(result.talents) == expected
-                    and not getattr(self, '_meow_score_uncertain', True)
-                    and all(t.kind != 'unknown' and not t.inferred and t.raw
-                            and normalize(t.name) in normalize(t.raw) for t in result.talents)
-                    and result.cat in CATS and bool(result.primary)
-                    and result.primary[0] in result.rubrics)
-        if not complete:
-            logger.warning('[指挥喵-评分] 猫名或天赋未能完整确认，保护锁定')
+        reasons = list(getattr(self, '_meow_score_issues', ()))
+        if result is None:
+            reasons.append('评分结果未生成')
+        if expected is None or expected <= 0:
+            reasons.append('领取页天赋槽数量未确认')
+        elif (getattr(self, '_meow_score_details', 0) != expected
+              or result is not None and len(result.talents) != expected):
+            reasons.append('已读取天赋数量与领取页槽数不一致')
+        if result is not None:
+            if result.cat not in CATS:
+                reasons.append('猫名未确认')
+            if any(not self._meow_score_talent_confirmed(t) for t in result.talents):
+                reasons.append('天赋标题或当前等级未精确确认')
+            if not result.primary or result.primary[0] not in result.rubrics:
+                reasons.append('适用评分口径未确认')
+        if getattr(self, '_meow_score_uncertain', True) and not reasons:
+            reasons.append('天赋识别存在不确定结果')
+        if reasons:
+            logger.warning('[指挥喵-评分] 保护锁定：' + '；'.join(dict.fromkeys(reasons)))
             return True
         try:
             from module.meowfficer.advice import VERDICT_FEED, reset_advice

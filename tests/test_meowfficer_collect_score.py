@@ -142,7 +142,9 @@ class CollectQueueFixture(CollectPageFixture):
         spec = self.cats[self.index]
         cat = {'gold': '奥古喵', 'purple': '帕特喵'}[self.rarity]
         talents = evaluate(list(spec.get('names', ())), cat=cat).talents
-        with patch('module.meowfficer.score_ocr.recognize', side_effect=[([talent], cat) for talent in talents]):
+        with patch('module.meowfficer.collect_ocr.recognize_collection_cat', return_value=cat):
+            self.runner.meow_score_capture_cat(object())
+        with patch('module.meowfficer.collect_ocr.recognize_collection_talent', side_effect=[[talent] for talent in talents]):
             for talent in talents:
                 self.runner.meow_score_capture(object())
         self.runner.meow_score_finish(expected_talents=spec.get('expected', len(talents)))
@@ -272,6 +274,7 @@ class TestExistingCollectBehavior(unittest.TestCase):
         runner = MeowfficerCollectScore()
         runner.config = SimpleNamespace()
         runner._meow_score_ocr = Mock(side_effect=AssertionError('默认开关禁止加载 OCR'))
+        runner.meow_score_capture_cat(object())
         runner.meow_score_capture(object())
         self.assertIsNone(runner.meow_score_finish())
         self.assertTrue(runner.meow_score_passes())
@@ -367,11 +370,17 @@ class TestAdviceLockDecision(unittest.TestCase):
         return evaluate(list(names), cat='奥古喵').talents
 
     def capture(self, runner, responses, expected=None, cat=None):
-        with patch('module.meowfficer.score_ocr.recognize', side_effect=responses):
+        base_cat = cat or next((response[1] for response in responses
+                                if not isinstance(response, Exception)), None)
+        with patch('module.meowfficer.collect_ocr.recognize_collection_cat', return_value=base_cat):
+            runner.meow_score_capture_cat(object())
+        talents = [response if isinstance(response, Exception) else response[0]
+                   for response in responses]
+        with patch('module.meowfficer.collect_ocr.recognize_collection_talent', side_effect=talents):
             for _ in responses:
                 runner.meow_score_capture(object())
         return runner.meow_score_finish(
-            cat=cat, expected_talents=len(responses) if expected is None else expected,
+            expected_talents=len(responses) if expected is None else expected,
         )
 
     def test_advice_switch_enables_scoring_without_old_score_switch(self):
@@ -401,7 +410,71 @@ class TestAdviceLockDecision(unittest.TestCase):
         runner = self.make_runner(score=False)
         self.capture(runner, [(self.talents('炮击新手·主力'), '奥古喵')])
         self.assertFalse(runner.meow_should_lock_by_advice())
-        runner._meow_score_ocr.assert_called_once_with()
+        self.assertEqual(runner._meow_score_ocr.call_count, 2)
+
+    def test_base_page_identity_is_read_before_detail_and_not_overwritten(self):
+        runner = self.make_runner()
+        base_image, detail_image = object(), object()
+        with patch('module.meowfficer.collect_ocr.recognize_collection_cat', return_value='林德喵') as cat_ocr, \
+                patch('module.meowfficer.collect_ocr.recognize_collection_talent',
+                      return_value=self.talents('炮击新手·主力')) as talent_ocr, \
+                patch('module.meowfficer.score_ocr.recognize',
+                      side_effect=AssertionError('详情背景不能识别猫名或升级预览')):
+            runner.meow_score_capture_cat(base_image, shifted=True)
+            runner.meow_score_capture(detail_image)
+        cat_ocr.assert_called_once_with(base_image, ocr=runner._meow_score_ocr.return_value, shifted=True)
+        talent_ocr.assert_called_once_with(detail_image, ocr=runner._meow_score_ocr.return_value)
+        self.assertEqual(runner._meow_score_cat, '林德喵')
+        result = runner.meow_score_finish(expected_talents=1)
+        self.assertEqual(result.cat, '林德喵')
+        self.assertFalse(runner.meow_should_lock_by_advice())
+
+    def test_cat_ocr_errors_or_unavailable_remain_protected(self):
+        for error in (RuntimeError('领取页面离线识别失败'), None):
+            with self.subTest(error=error):
+                runner = self.make_runner()
+                if error is None:
+                    runner._meow_score_ocr.return_value = None
+                with patch('module.meowfficer.collect_ocr.recognize_collection_cat', side_effect=error) as cat_ocr:
+                    runner.meow_score_capture_cat(object())
+                if error is None:
+                    cat_ocr.assert_not_called()
+                else:
+                    cat_ocr.assert_called_once()
+                runner.meow_score_finish(expected_talents=1)
+                self.assertTrue(runner.meow_should_lock_by_advice())
+
+    def test_invalid_current_levels_and_mismatched_lines_or_kinds_are_protected(self):
+        normal = self.talents('炮击新手·主力')[0]
+        cases = (
+            dict(level=0), dict(level=4), dict(level=2),
+            dict(line='另一条天赋线'), dict(kind='special'),
+        )
+        for fields in cases:
+            with self.subTest(fields=fields):
+                talent = Talent(name=normal.name, line=normal.line, level=normal.level,
+                                kind=normal.kind, raw=normal.raw)
+                for name, value in fields.items():
+                    setattr(talent, name, value)
+                runner = self.make_runner()
+                self.capture(runner, [([talent], '奥古喵')])
+                self.assertTrue(runner.meow_should_lock_by_advice())
+
+    def test_missing_selected_level_is_not_replaced_by_upgrade_preview(self):
+        runner = self.make_runner()
+        self.capture(runner, [([], '奥古喵')])
+        self.assertTrue(runner.meow_should_lock_by_advice())
+        self.assertIn('第 1 项当前天赋或选中等级未能唯一确认', runner._meow_score_issues)
+
+    def test_protection_log_reports_the_actual_missing_field(self):
+        runner = self.make_runner()
+        self.capture(runner, [(self.talents('炮击新手·主力'), None)])
+        self.assertTrue(runner.meow_should_lock_by_advice())
+        from module.meowfficer import collect_score
+        message = collect_score.logger.warning.call_args.args[0]
+        self.assertIn('保护锁定：', message)
+        self.assertIn('猫名未确认', message)
+        self.assertNotIn('已读取天赋数量与领取页槽数不一致', message)
 
     def test_disabled_advice_does_not_claim_legacy_lock_decision(self):
         runner = self.make_runner(lock=False, score=True)
@@ -461,14 +534,21 @@ class TestAdviceLockDecision(unittest.TestCase):
         for cats in ((None, None), ('未知测试猫', '未知测试猫'), ('奥古喵', '乔治喵')):
             with self.subTest(cats=cats):
                 runner = self.make_runner()
-                names = self.talents('炮击新手·主力', '装填新手·战列')
-                self.capture(runner, [([talent], cat) for talent, cat in zip(names, cats)])
+                with patch('module.meowfficer.collect_ocr.recognize_collection_cat', side_effect=cats):
+                    for _ in cats:
+                        runner.meow_score_capture_cat(object())
+                talents = self.talents('炮击新手·主力', '装填新手·战列')
+                with patch('module.meowfficer.collect_ocr.recognize_collection_talent',
+                           side_effect=[[talent] for talent in talents]):
+                    for _ in talents:
+                        runner.meow_score_capture(object())
+                runner.meow_score_finish(expected_talents=len(talents))
                 self.assertTrue(runner.meow_should_lock_by_advice())
 
     def test_no_result_or_expected_count_cannot_unlock(self):
         runner = self.make_runner()
         self.assertTrue(runner.meow_should_lock_by_advice())
-        with patch('module.meowfficer.score_ocr.recognize', return_value=(self.talents('炮击新手·主力'), '奥古喵')):
+        with patch('module.meowfficer.collect_ocr.recognize_collection_talent', return_value=self.talents('炮击新手·主力')):
             runner.meow_score_capture(object())
         runner.meow_score_finish()
         self.assertTrue(runner.meow_should_lock_by_advice())
@@ -478,6 +558,11 @@ class TestAdviceLockDecision(unittest.TestCase):
         self.capture(runner, [RuntimeError('前一只识别失败')])
         self.assertTrue(runner.meow_should_lock_by_advice())
         runner.meow_score_reset()
+        self.assertEqual(runner._meow_score_details, 0)
+        self.assertEqual(runner._meow_score_talents, [])
+        self.assertEqual(runner._meow_score_issues, [])
+        self.assertIsNone(runner._meow_score_cat)
+        self.assertIsNone(runner._meow_score_expected_talents)
         self.capture(runner, [(self.talents('炮击新手·主力'), '乔治喵')])
         self.assertFalse(runner.meow_should_lock_by_advice())
 
@@ -485,7 +570,7 @@ class TestAdviceLockDecision(unittest.TestCase):
         for lock in (False, True):
             with self.subTest(lock=lock):
                 runner = self.make_runner(lock=lock, score=True)
-                with patch('module.meowfficer.score_ocr.recognize', return_value=(self.talents('炮击新手·主力'), '奥古喵')):
+                with patch('module.meowfficer.collect_ocr.recognize_collection_talent', return_value=self.talents('炮击新手·主力')):
                     runner.meow_score_capture(object())
                 with patch('module.meowfficer.collect_score.evaluate', side_effect=ValueError('离线评分失败')):
                     if lock:
@@ -516,7 +601,9 @@ class TestAdviceCollectBehavior(unittest.TestCase):
         def read_details(**kwargs):
             runner.meow_score_reset()
             talents = evaluate(list(names), cat=cat).talents
-            with patch('module.meowfficer.score_ocr.recognize', side_effect=[([talent], cat) for talent in talents]):
+            with patch('module.meowfficer.collect_ocr.recognize_collection_cat', return_value=cat):
+                runner.meow_score_capture_cat(object())
+            with patch('module.meowfficer.collect_ocr.recognize_collection_talent', side_effect=[[talent] for talent in talents]):
                 for talent in talents:
                     runner.meow_score_capture(object())
             runner.meow_score_finish(expected_talents=len(talents))
@@ -632,8 +719,14 @@ class TestAdviceCollectBehavior(unittest.TestCase):
         runner.device = SimpleNamespace(image=object())
         runner._meow_detect_shift = Mock(return_value=False)
         runner.meow_score_reset = Mock()
+        runner.meow_score_capture_cat = Mock()
         runner.meow_score_finish = Mock()
         runner._meow_talent_cap_handle = Mock()
+        sequence = Mock()
+        sequence.attach_mock(runner.meow_score_reset, 'reset')
+        sequence.attach_mock(runner.meow_score_capture_cat, 'cat')
+        sequence.attach_mock(runner._meow_talent_cap_handle, 'detail')
+        sequence.attach_mock(runner.meow_score_finish, 'finish')
         buttons = collect_module.MEOWFFICER_TALENT_GRID_1.buttons
 
         def color_count(button, **kwargs):
@@ -646,8 +739,44 @@ class TestAdviceCollectBehavior(unittest.TestCase):
         self.assertTrue(runner._meow_is_special_talented(drop=drop))
         self.assertEqual(runner._meow_talent_cap_handle.call_count, 2)
         runner.meow_score_reset.assert_called_once_with()
+        runner.meow_score_capture_cat.assert_called_once_with(runner.device.image, shifted=False)
         runner.meow_score_finish.assert_called_once_with(expected_talents=2)
+        self.assertEqual([call[0] for call in sequence.mock_calls],
+                         ['reset', 'cat', 'detail', 'detail', 'finish'])
         drop.add.assert_not_called()
+
+    def test_shifted_collect_page_passes_confirmed_offset_to_cat_read(self):
+        runner = MeowfficerCollect.__new__(MeowfficerCollect)
+        runner.config = SimpleNamespace(
+            MeowfficerTrain_LockByAdvice=True, MeowfficerTrain_ScoreTalents=False,
+            DropRecord_MeowfficerTalent='do_not',
+        )
+        runner.device = SimpleNamespace(image=object())
+        runner._meow_detect_shift = Mock(side_effect=AssertionError('已确认偏移不重复等待'))
+        runner.meow_score_reset = Mock()
+        runner.meow_score_capture_cat = Mock()
+        runner.meow_score_finish = Mock()
+        runner._meow_talent_cap_handle = Mock()
+        runner.image_color_count = Mock(return_value=True)
+        runner._meow_is_special_talented(shifted=True)
+        runner.meow_score_capture_cat.assert_called_once_with(runner.device.image, shifted=True)
+        runner._meow_detect_shift.assert_not_called()
+
+    def test_disabled_scoring_on_real_slot_path_does_not_read_cat_or_details(self):
+        runner = MeowfficerCollect.__new__(MeowfficerCollect)
+        runner.config = SimpleNamespace(
+            MeowfficerTrain_LockByAdvice=False, MeowfficerTrain_ScoreTalents=False,
+            DropRecord_MeowfficerTalent='do_not',
+        )
+        runner.device = SimpleNamespace(image=object())
+        runner.meow_score_capture_cat = Mock(side_effect=AssertionError('关闭开关不读取猫名'))
+        runner._meow_score_ocr = Mock(side_effect=AssertionError('关闭开关不加载 OCR'))
+        runner._meow_talent_cap_handle = Mock(side_effect=AssertionError('关闭评分和截图不展开详情'))
+        runner.image_color_count = Mock(return_value=False)
+        self.assertTrue(runner._meow_is_special_talented(shifted=False))
+        runner.meow_score_capture_cat.assert_not_called()
+        runner._meow_score_ocr.assert_not_called()
+        runner._meow_talent_cap_handle.assert_not_called()
 
     def test_multiple_cats_with_next_prelocked_gold_are_each_scored(self):
         for first_rarity in ('blue', 'purple'):
