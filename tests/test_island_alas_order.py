@@ -190,6 +190,8 @@ class OrderPolicyTests(unittest.TestCase):
         self.order.ui_goto = Mock()
         self.order._enter_daily_order = Mock()
         self.order._back_to_island_phone = Mock()
+        self.order._handle_popups = Mock(return_value=False)
+        self.order._order_popup_visible = Mock(return_value=False)
         self.order.detect_all_orders = Mock(return_value={
             'urgent': [], 'regular': [], 'season': [], 'cooldown': [(200, 200), (400, 200)]})
         self.order._read_time = Mock(side_effect=[timedelta(hours=2), timedelta(minutes=20)])

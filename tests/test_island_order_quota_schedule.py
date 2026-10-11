@@ -221,13 +221,13 @@ class DailyOrderQuotaScheduleTests(unittest.TestCase):
             target=self.now + timedelta(minutes=30), server_update=True)
 
     def test_popup_between_zero_readings_breaks_consecutive_confirmation(self):
-        page_checks = iter((True, False, True, True))
+        page_checks = iter((True, False, True, True, True))
 
         def appear(button, **_):
             return next(page_checks) if button is DAILY_ORDER_CHECK else button is ALAS_ORDER_BACKGROUND
 
         self.order.appear.side_effect = appear
-        self.order._handle_popups.return_value = True
+        self.order._handle_popups.side_effect = [False, True, False, False, False]
         self.order._ocr_daily_remaining.side_effect = [0, 0, None]
         self.order.run()
         self.assert_short_recheck()

@@ -75,6 +75,7 @@ class IslandOrder(IslandDailyOrder):
 
     # 底部冷却订单的圆心约在 y=600，旧范围裁掉其圆环会漏算下一次刷新。
     LEFT_PANEL_AREA = (60, 40, 832, 700)
+    PAGE_RECOVERY_TIMEOUT = 15
 
     @property
     def requirement_grid(self):
@@ -128,6 +129,10 @@ class IslandOrder(IslandDailyOrder):
         if self.appear(ISLAND_GET, offset=30):
             return self.appear_then_click(ISLAND_GET, offset=30, interval=2)
         return False
+
+    def _order_popup_visible(self):
+        """独立确认弹窗仍可见，不将点击冷却当作弹窗已经关闭。"""
+        return self.appear(ALAS_ORDER_LEVEL_UP, offset=20) or self.appear(ISLAND_GET, offset=30)
 
     def _submit_order(self, button, must_appear=False):
         """保留严格交付确认，兼容 ALAS 的空白/冷却页与升级模板。"""
@@ -414,13 +419,24 @@ class IslandOrder(IslandDailyOrder):
         empty_quota_attempts = 0
         empty_zero_readings = 0
         empty_quota_update = None
-        for _ in range(100):
+        page_recovery = Timer(self.PAGE_RECOVERY_TIMEOUT)
+        scan_count = 0
+        while True:
             self.device.screenshot()
-            if not self.appear(DAILY_ORDER_CHECK):
-                if self._handle_popups():
-                    empty_zero_readings = 0
-                    continue
-                self._unknown('扫描订单时页面未确认')
+            popup_handled = self._handle_popups()
+            page_ready = self.appear(DAILY_ORDER_CHECK)
+            if popup_handled or not page_ready or self._order_popup_visible():
+                # 升级收尾可能只剩暗幕；继续观察，不能把无可点击目标的一帧当作卡死。
+                empty_zero_readings = 0
+                page_recovery.start()
+                if page_recovery.reached():
+                    self._unknown('等待订单页恢复超时')
+                continue
+            page_recovery.clear()
+            # 动画和点击冷却的等待帧不占用订单业务处理次数。
+            if scan_count >= 100:
+                self._unknown('订单连续处理次数异常')
+            scan_count += 1
             orders = self.detect_all_orders()
             if any(orders.values()):
                 empty_quota_attempts = 0
@@ -483,8 +499,6 @@ class IslandOrder(IslandDailyOrder):
                 # 圆环完全未检出仍可能是漏识别，只有完整正向确认才能省略复查。
                 self._record_deadline(timedelta(minutes=5))
             break
-        else:
-            self._unknown('订单连续处理次数异常')
         self._back_to_island_phone()
         with self.config.multi_set():
             self.config.IslandDailyOrder_RejectCount = self.reject_count
