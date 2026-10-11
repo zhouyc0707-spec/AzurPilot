@@ -14403,9 +14403,15 @@
           "current_dossier_only"
         ]
       },
-      "OneHitMode": {
-        "type": "checkbox",
-        "value": true
+      "AssistRequestLimit": {
+        "type": "input",
+        "value": 0,
+        "validate": "^(-1|[0-9]+)$"
+      },
+      "AssistRequestState": {
+        "type": "stored",
+        "value": null,
+        "display": "hide"
       },
       "DossierAutoAttackMode": {
         "type": "checkbox",

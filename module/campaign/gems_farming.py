@@ -148,6 +148,8 @@ class GemsCampaignOverride(CampaignBase):
     def handle_exp_info(self):
         """处理战后经验结算弹窗。
 
+        自律寻敌的沉船提示交给公共战败处理器，保留撤退与心情记账。
+
         Returns:
             bool: 是否检测并点击了结算弹窗。
         """
@@ -161,6 +163,8 @@ class GemsCampaignOverride(CampaignBase):
         if self.appear_then_click(EXP_INFO_D):
             self.device.sleep((0.25, 0.5))
             return True
+        if self.map_is_auto_search:
+            return self.handle_auto_search_shipwreck()
         if self.appear_then_click(OPTS_INFO_D, offset=True, similarity=0.9):
             self.device.sleep((0.25, 0.5))
             return True

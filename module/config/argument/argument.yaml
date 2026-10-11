@@ -1525,7 +1525,13 @@ OpsiAshBeacon:
   AttackMode:
     value: current
     option: [current, current_dossier, current_dossier_only]
-  OneHitMode: true
+  AssistRequestLimit:
+    value: 0
+    validate: '^(-1|[0-9]+)$'
+  AssistRequestState:
+    type: stored
+    value: null
+    display: hide
   DossierAutoAttackMode: false
   RequestAssist: true
   EnsureFullyCollected: true

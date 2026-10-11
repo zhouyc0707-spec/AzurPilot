@@ -207,8 +207,11 @@ flowchart TD
 
 - `auto_search_moving()`：等待期间监视石油/物资 OCR（触发 `auto_search_oil/coin_limit_triggered`）与舰队等级，处理退役、低情绪弹窗；自动搜索菜单出现则抛 `CampaignEnd`。
 - `map_offensive_auto_search()`：处理提示或退役后恢复自律，等待战斗加载。每轮先确认奖励菜单或已直接返回关卡；关卡已结束时抛 `CampaignEnd`，交回原有结算、掉落记录和继续／停止流程。`handle_retirement()` 返回已操作也可能只是关闭游戏提示，不能据此假定一定会进入下一场战斗。
-- `auto_search_combat_execute()`：加载期处理弹窗；进入战斗后先扣基础情绪，然后与手动模式类似的循环（潜艇/自动切换/弹窗），但**不点战斗评价**——自律寻敌会自动过渡结算，脚本只识别评价等级用于情绪记账（非 S 评价记沉船），`OPTS_INFO_D` 弹窗是沉船的确认性标志。
-- `auto_search_combat_status()`：处理结算页与战败善后。战败策略由 `Campaign_DefeatWithdraw` 决定：`withdraw_continue`（撤退继续）、`switch_fleet`（切另一队继续，超时退化为撤退）、`withdraw_stop`（连续 3 次战败后终止任务，抛 `ScriptEnd`）。
+- `auto_search_combat_execute()`：加载期处理弹窗；进入战斗后先扣基础情绪，然后与手动模式类似的循环（潜艇/自动切换/弹窗），但**不点战斗评价**——自律寻敌会自动过渡结算，脚本只识别评价等级用于情绪记账（非 S 评价记沉船）。D 评价和结算超时只转交结算阶段，须见到 `OPTS_INFO_D` 才确认战败，避免转场误识别引发撤退。
+- `handle_auto_search_shipwreck()`：统一识别和关闭 `OPTS_INFO_D`，在点击前记录本场战败和待处理状态；同场提示重复出现只计一次战败、最多扣一次沉船心情。执行阶段、结算阶段和紧急委托的经验结算覆写共用此入口，识别不受点击冷却影响。
+- `auto_search_combat_status()`：先确认沉船，再处理经验结算及委托、剧情、奖励等弹窗，撤退等待期间也保持这些处理器可用。战败策略由 `Campaign_DefeatWithdraw` 决定：`withdraw_continue` 每次战败撤退后继续任务；`switch_fleet` 允许切另一队恢复自律，无可用舰队或切换超时则撤退；`withdraw_stop` 每次战败都撤退，连续 3 次战败后确认退出关卡再抛 `ScriptEnd('DefeatWithdraw=withdraw_stop')`，由运行器禁用当前任务。
+
+撤退待处理时不会点击 `AUTO_SEARCH_MAP_OPTION_OFF` 重新出击；若游戏自行恢复自律，则关闭 `AUTO_SEARCH_MAP_OPTION_ON` 后继续等撤退按钮。直接回到自动搜索菜单时先退出，回到选关页才完成战败收尾。正常战斗结束会清零连续战败计数，战败后的换队或自律恢复不会清零。
 
 与手动战斗的关键差异：没有 `combat_preparation`（游戏不开准备页），没有血量平衡与手动走位，情绪扣减点从「暂停按钮出现」提前到「战斗加载完成」，战败分支与撤退决策远比手动模式复杂。
 
@@ -395,6 +398,7 @@ stateDiagram-v2
 - **进阶潜艇绝不盲点**：`advanced_call` 必须看到 `SUBMARINE_READY` 才点、见 `SUBMARINE_CALLED` 才扣弹；点击重试不得重复扣减。旧模式（`boss_only` 等）没有宽限期语义，勿混用。
 - **潜艇寻路会污染全图 cost**：地图层为潜艇寻路后必须还原水面舰队寻路（`find_path_initial()`），这个配对不能拆。
 - **掉落记录与点击节奏耦合**：`save_get_items` 时 `battle_status_click_interval = 7`，结算画面会被 `appear(interval=7)` 压住不点，给掉落截图留窗口；调整结算逻辑时不要移除这个机制。
+- **沉船提示必须先记账再关闭**：`OPTS_INFO_D` 不能由经验结算覆写直接吞掉。自律寻敌统一调用 `handle_auto_search_shipwreck()`，保留撤退状态、单场去重和连续战败计数；不要只恢复 D 评价即撤退的旧逻辑，转场可能误匹配 D 模板。
 - **`hp_balance` 与舰队锁定互斥**：`Campaign_UseFleetLock=true` 时游戏禁止在准备页拖动舰船，`hp_balance()` 直接返回 False，属预期行为。
 
 ## 17. 已知限制
@@ -440,6 +444,7 @@ if plan is not None:
 
 ## 19. 调试方法
 
+- 自律寻敌战败回归：`uv run python -m unittest tests.test_auto_search_defeat`。使用内存画面状态和虚拟时钟，覆盖紧急委托结算链、两种撤退策略、三次战败禁用任务、切换舰队、重复提示、点击冷却及误匹配 D 评价，不连接模拟器或保存用户配置。
 - 日志按阶段打标：`[战斗-准备]`、`[战斗-执行]`、`[战斗-结算]`、`[战斗-结束]`（`logger.hr` 分隔），血量为 `[HP]`/`[血量]` 行，情绪为 `[情绪-*]`，潜艇为 `[地图-潜艇]` 与 `潜艇剩余弹药`。
 - 战斗画面识别异常时先看 `logger.attr('战斗UI', pause)` 输出的按钮名——皮肤没匹配上是战斗卡死的最常见原因。
 - 情绪问题先查三件事：`Emotion_*Value/Record` 是否被外部改过、`Control` 与 `Recover` 组合是否合法、`[情绪-Bug]` 累计扣减是否触发。

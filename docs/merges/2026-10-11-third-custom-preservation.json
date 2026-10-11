@@ -1,0 +1,69 @@
+{
+  "before": "f0df2b06dc8f942b22e443af38060dd9f6720745",
+  "incoming": "39f45453c4fcc6eb8dd1dcb78f1809688ac74169",
+  "local_delta_files": 692,
+  "incoming_delta_files": 25,
+  "overlap_files": [
+    "config/template.json",
+    "docs/modules/campaign.md",
+    "docs/modules/combat.md",
+    "docs/modules/config.md",
+    "docs/modules/os/auxiliary.md",
+    "docs/modules/webui/api.md",
+    "module/api/config_service.py",
+    "module/combat/auto_search_combat.py",
+    "module/config/argument/args.json",
+    "module/config/argument/argument.yaml",
+    "module/config/config_generated.py",
+    "module/config/config_updater.py",
+    "module/config/i18n/en-US.json",
+    "module/config/i18n/ja-JP.json",
+    "module/config/i18n/zh-CN.json",
+    "module/config/i18n/zh-MIAO.json",
+    "module/config/i18n/zh-TW.json",
+    "tests/test_api.py"
+  ],
+  "unchanged_local_files": 673,
+  "unexpected_changes_in_protected_files": [],
+  "reviewed_document_updates": [
+    "定制化修改清单.md"
+  ],
+  "local_config_fields": {
+    "module/config/argument/args.json": {
+      "unchanged_local_fields": 117,
+      "unexpected_field_changes": [],
+      "requires_semantic_review": []
+    },
+    "config/template.json": {
+      "unchanged_local_fields": 36,
+      "unexpected_field_changes": [],
+      "requires_semantic_review": []
+    },
+    "module/config/i18n/zh-CN.json": {
+      "unchanged_local_fields": 187,
+      "unexpected_field_changes": [],
+      "requires_semantic_review": []
+    },
+    "module/config/i18n/zh-MIAO.json": {
+      "unchanged_local_fields": 187,
+      "unexpected_field_changes": [],
+      "requires_semantic_review": []
+    },
+    "module/config/i18n/en-US.json": {
+      "unchanged_local_fields": 187,
+      "unexpected_field_changes": [],
+      "requires_semantic_review": []
+    },
+    "module/config/i18n/ja-JP.json": {
+      "unchanged_local_fields": 187,
+      "unexpected_field_changes": [],
+      "requires_semantic_review": []
+    },
+    "module/config/i18n/zh-TW.json": {
+      "unchanged_local_fields": 187,
+      "unexpected_field_changes": [],
+      "requires_semantic_review": []
+    }
+  },
+  "passed": true
+}

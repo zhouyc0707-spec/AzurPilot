@@ -113,6 +113,8 @@ module/os_simulator/
 | `AshBeaconAssist(Meta)` | 协助好友信标：成功领奖延迟到服务器刷新，失败 `task_delay(minute=(10, 20))` 重试 |
 | `handle_ash_beacon_attack()` | 在大世界战斗链路中调用：收集 ≥100 且可调度时 `task_call('OpsiAshBeacon')`；`AttackMode=current_dossier_only`（只打档案）时不触发——该模式下信标数据永不消耗，触发条件会永久成立并反复打断智能调度|
 
+`OpsiAshBeacon.AssistRequestLimit` 替代原「一击即走」开关：`0`（默认）打一刀后持续每半小时求援；`-1` 自行连续出击，是否求援仍由 `RequestAssist` 控制；正整数在求援指定轮数、最后等待半小时后，若信标仍未击破则自行连续打完。首次战斗前的求援计入，好友/大舰队/世界的一次操作合计一轮。正整数模式将轮数及下次检查时刻保存到隐藏的 `AssistRequestState`，防止首刀后立即重复计数，并在重启后继续；确认信标为空或本信标奖励领取完毕时清除。META 主入口、每日刷新和档案信标不会自行清零该记录。旧布尔值迁移为 `true → 0`、`false → -1`。离线回归见 `tests/test_meta_beacon.py`。
+
 ### os_combat
 
 - `ContinuousCombat`：塞壬扫描装置触发的连续战斗控制流异常，守护与任务循环捕获后继续。

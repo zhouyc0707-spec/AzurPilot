@@ -17,6 +17,7 @@ import yaml
 from deploy.atomic import atomic_write
 from module.api.protocol import ApiError
 from module.combat.emotion_state import EmotionRecoveryState
+from module.config.redirect_utils.utils import meta_assist_limit_redirect
 from module.config.time_source import now as current_time
 from module.config.transaction import config_transaction
 
@@ -286,6 +287,11 @@ class ConfigService:
                             if 'KeepCommonCV' not in fields and isinstance(legacy, bool):
                                 merged[task][group]['KeepCommonCV'] = legacy
                             merged[task][group].pop('SkipSingleCommonCV', None)
+                        if task == 'OpsiAshBeacon' and group == 'OpsiAshBeacon':
+                            if 'AssistRequestLimit' not in fields and 'OneHitMode' in fields:
+                                merged[task][group]['AssistRequestLimit'] = meta_assist_limit_redirect(
+                                    fields['OneHitMode'])
+                            merged[task][group].pop('OneHitMode', None)
         from module.config.redirect_utils.shop import migrate_shop_options
 
         merged, shop_warnings = migrate_shop_options(data, merged)

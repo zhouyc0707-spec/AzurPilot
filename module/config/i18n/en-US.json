@@ -3876,9 +3876,13 @@
       "current_dossier": "Current season + Dossier",
       "current_dossier_only": "Dossier"
     },
-    "OneHitMode": {
-      "name": "Hit and run",
-      "help": "Only attack each beacon once, then call for assist every half hour.\nDoes not work on Dossier beacons."
+    "AssistRequestLimit": {
+      "name": "Assist request limit",
+      "help": "0: Attack each beacon once, then keep requesting assistance every half hour (default).\n-1: Keep attacking; the Call for Assist setting controls assistance requests.\nPositive integer: Request assistance this many times, wait half an hour after the final request, then finish the beacon yourself if needed. The request before the first battle counts; friends, guild and world together count as one request.\nProgress survives restarts and resets for each new beacon. Does not affect Dossier beacons."
+    },
+    "AssistRequestState": {
+      "name": "Beacon assist progress",
+      "help": "Stores the current beacon's request count and next check time."
     },
     "DossierAutoAttackMode": {
       "name": "Dossier beacon auto combat",
