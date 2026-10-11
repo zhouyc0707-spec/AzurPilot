@@ -9,6 +9,7 @@
 # 此文件专门用于监测普通商店（包含勋章、功勋、核心商店等）中的资源余额状态。
 # 通过 OCR 提取钻石、金币、各类奖章的数值，并利用 LogRes 类将数据同步至 Dashboard。
 import module.config.server as server
+from module.base.timer import Timer
 from module.ocr.ocr import Digit
 from module.shop.assets import *
 from module.ui.ui import UI
@@ -60,23 +61,36 @@ class ShopStatus(UI):
         return amount
 
     def status_get_gems(self):
-        """获取当前钻石余额并同步至仪表盘。
+        """连续截图确认钻石余额稳定后同步至仪表盘。
 
         Returns:
-            int: 当前钻石数量；读取失败返回 0，但保留仪表盘上次有效记录。
+            int: 当前钻石数量；读取无效或不稳定时返回 0，保留上次有效记录。
 
         Pages:
             in: page_shop、勋章商店、page_campaign、page_event 等显示钻石的页面
         """
-        amount = OCR_SHOP_GEMS.ocr(self.device.image)
-        # Digit 的空文本回退和真实零值都返回 0，必须按本次识别有效性决定是否写入。
-        # observed=False 仅跳过成功观测，仍会写 Dashboard，不能用来丢弃失败读数。
-        if bool(getattr(OCR_SHOP_GEMS, 'last_valid', False)):
-            LogRes(self.config).record('Gem', amount, observed=True)
-        else:
-            logger.warning('[商店-货币] 钻石读取无效，保留仪表盘上次有效记录')
+        candidate = None
+        confirm = Timer(0.5, count=2)
+        # 页面到达时资源栏仍可能过渡，只读到部分数字也会被 Digit 判为有效。
+        # 使用新截图，至少三帧同值且持续超过半秒才写入，空读数中断确认。
+        for image in self.loop(skip_first=False, timeout=Timer(3)):
+            amount = OCR_SHOP_GEMS.ocr(image)
+            if not bool(getattr(OCR_SHOP_GEMS, 'last_valid', False)):
+                candidate = None
+                confirm.clear()
+                continue
+            if candidate != amount:
+                candidate = amount
+                confirm.reset()
+            if confirm.reached():
+                LogRes(self.config).record('Gem', amount, observed=True)
+                self.config.update()
+                return amount
+
+        # observed=False 仍会写 Dashboard；超时读数完全丢弃，不能把缓存用于购买。
+        logger.warning('[商店-货币] 钻石读取无效或未稳定，保留仪表盘上次有效记录')
         self.config.update()
-        return amount
+        return 0
 
     def status_get_medal(self):
         """获取当前荣誉勋章余额并同步至仪表盘。
