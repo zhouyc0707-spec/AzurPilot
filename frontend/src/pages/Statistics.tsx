@@ -5,7 +5,7 @@
 import {NumberDraftInput, Select} from '../components/FormControls'
 import { Fragment, lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { getSelectedKeysForCategory, getStatisticsPrefs, getStatisticsPrefsVersion, subscribeStatisticsPrefs } from '../app/statisticsPrefs'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import {
   Award,
   Calculator,
@@ -115,8 +115,10 @@ function getMetricIcon(label: string): LucideIcon | undefined {
 
 const StatisticsChart = lazy(() => import('../components/StatisticsChart').then(module => ({default: module.StatisticsChart})))
 const StatisticsLegacy = lazy(() => import('./StatisticsLegacy').then(module => ({default: module.StatisticsLegacy})))
+const ResourceManagement = lazy(() => import('./ResourceManagement').then(module => ({default: module.ResourceManagement})))
 const categories: Record<Category, UiKey> = {resources: 'stats.category.resources', action: 'stats.category.action', opsi: 'stats.category.opsi', commission: 'stats.category.commission', ships: 'stats.category.ships', loot: 'stats.category.loot', research: 'stats.category.research', storage: 'stats.category.storage'}
 type Category = NonNullable<Parameters['statistics.report']['category']>
+type StatisticsView = Category | 'management'
 
 /* 页面显示开关按固定顺序排列，与排序后的页面顺序无关。 */
 const fixedPageOrder = defaultStatisticsLayout().pages.flat()
@@ -149,6 +151,9 @@ function metricsTableData(title: string, metrics: StatisticsReport['metrics']): 
 export function Statistics({embedded = false}: {embedded?: boolean} = {}) {
   const {ui, theme, language, notify} = useApp()
   const {instance = ''} = useParams()
+  const [searchParams, setSearchParams] = useSearchParams()
+  // 总览内嵌统计沿用自己的页面状态，不跟随外层路由的资源管理参数。
+  const management = !embedded && searchParams.get('view') === 'management'
   const legacy = usesLegacyLayout(theme)
   const initialPrefs = useRef(readStatisticsPrefs()).current
   const [category, setCategoryState] = useState<Category>(initialPrefs.category)
@@ -393,6 +398,13 @@ export function Statistics({embedded = false}: {embedded?: boolean} = {}) {
   /* 非编辑模式一条链只留首个在前的页面；编辑模式七个页面都在，便于拆开组合。 */
   const chainOf = (page: Category) => layout.pages.find(chain => chain.includes(page)) ?? [page]
   const visiblePageEntries = pageEntries.filter(([id]) => (editMode || isPageEnabled(layout, id)) && (editMode || chainOf(id)[0] === id))
+  const navigationEntries: [StatisticsView, UiKey][] = []
+  for (const entry of visiblePageEntries) {
+    navigationEntries.push(entry)
+    if (chainOf(entry[0]).includes('resources') && !navigationEntries.some(([id]) => id === 'management')) navigationEntries.push(['management', 'nav.resources'])
+  }
+  // 资源趋势被隐藏时，管理入口仍需可达；它不参与统计卡片的组合与排序。
+  if (!navigationEntries.some(([id]) => id === 'management')) navigationEntries.unshift(['management', 'nav.resources'])
   const placedPages = layout.slots.flat()
   const freePages = pageIds.filter(id => !placedPages.includes(id))
   const pageLabels = Object.fromEntries(pageEntries.map(([id, label]) => [id, ui(label)])) as Record<string, string>
@@ -417,7 +429,9 @@ export function Statistics({embedded = false}: {embedded?: boolean} = {}) {
   }
 
   /* 单页视图把所有页面合到一条内容里，此时点目录栏改为跳到该页位置。 */
-  const selectPage = (id: Category) => {
+  const selectPage = (id: StatisticsView) => {
+    setSearchParams(id === 'management' ? {view: 'management'} : {})
+    if (id === 'management') return
     setCategory(id)
     if (singleView) document.querySelector(`[data-card-key^="${id}:"]`)?.scrollIntoView({block: 'start'})
   }
@@ -575,25 +589,26 @@ export function Statistics({embedded = false}: {embedded?: boolean} = {}) {
     )
   }
 
+  const categoryControl = <SegmentedControl<StatisticsView> className="statistics-category-control" label={ui('stats.categoryLabel')} value={management ? 'management' : category} onChange={selectPage} onItemContextMenu={editMode && !management ? id => {if (id !== 'management') togglePage(id, false)} : undefined} onItemMove={editMode && !management ? (id, delta) => {if (id !== 'management') movePageBy(id, delta)} : undefined} itemClassName={id => id === 'management' ? '' : `${isPageEnabled(layout, id) ? '' : 'is-disabled'}${!editMode && chainOf(id).length > 1 ? ' is-chained' : ''}`.trim()} trailing={!management && singleViewToggle} options={navigationEntries.map(([value, label]) => ({value, label: ui(label)}))}/>
   const content = <>
     {condensed
       ? <div className={`statistics-toolbar-row${compact ? ' is-compact' : ''}`} ref={toolbarRow}>
-          <SegmentedControl className="statistics-category-control" label={ui('stats.categoryLabel')} value={category} onChange={selectPage} onItemContextMenu={editMode ? id => togglePage(id, false) : undefined} onItemMove={editMode ? movePageBy : undefined} itemClassName={id => `${isPageEnabled(layout, id) ? '' : 'is-disabled'}${!editMode && chainOf(id).length > 1 ? ' is-chained' : ''}`.trim()} trailing={singleViewToggle} options={visiblePageEntries.map(([value, label]) => ({value: value as Category, label: ui(label)}))}/>
+          {categoryControl}
           {/* 放不下时改用单按钮下拉；指针移入或键盘聚焦即展开，见 Select 的 openOnFocus */}
-          <Select openOnFocus className="statistics-category-select" aria-label={ui('stats.categoryLabel')} value={category} onChange={event => setCategory(event.target.value as Category)}>
-            {visiblePageEntries.map(([value, label]) => <option value={value} key={value}>{ui(label)}</option>)}
+          <Select openOnFocus className="statistics-category-select" aria-label={ui('stats.categoryLabel')} value={management ? 'management' : category} onChange={event => selectPage(event.target.value as StatisticsView)}>
+            {navigationEntries.map(([value, label]) => <option value={value} key={value}>{ui(label)}</option>)}
           </Select>
-          <div className="statistics-toolbar-right" ref={toolbarRight}>{hasChart && activeView.foldControl(activeView.chartKey)}{hasChart && <button className="text-button" onClick={() => category && toggleExpanded(category)}>{expandedChart === category ? ui('stats.collapseChart') : ui('stats.expandChart')}</button>}{rangeControls}<ActionGroup>{actions}</ActionGroup></div>
+          <div className="statistics-toolbar-right" ref={toolbarRight}>{!management && <>{hasChart && activeView.foldControl(activeView.chartKey)}{hasChart && <button className="text-button" onClick={() => category && toggleExpanded(category)}>{expandedChart === category ? ui('stats.collapseChart') : ui('stats.expandChart')}</button>}{rangeControls}<ActionGroup>{actions}</ActionGroup></>}</div>
         </div>
       : <>
           <div className="statistics-toolbar-row">
-            <SegmentedControl className="statistics-category-control" label={ui('stats.categoryLabel')} value={category} onChange={selectPage} onItemContextMenu={editMode ? id => togglePage(id, false) : undefined} onItemMove={editMode ? movePageBy : undefined} itemClassName={id => `${isPageEnabled(layout, id) ? '' : 'is-disabled'}${!editMode && chainOf(id).length > 1 ? ' is-chained' : ''}`.trim()} trailing={singleViewToggle} options={visiblePageEntries.map(([value, label]) => ({value: value as Category, label: ui(label)}))}/>
-            {legacy && <ActionGroup>{actions}</ActionGroup>}
+            {categoryControl}
+            {legacy && !management && <ActionGroup>{actions}</ActionGroup>}
           </div>
-          <div className="statistics-controls period-controls"><strong>{ui(categories[category!])}</strong>{rangeControls}{hints}</div>
+          {!management && <div className="statistics-controls period-controls"><strong>{ui(categories[category!])}</strong>{rangeControls}{hints}</div>}
         </>}
-    {condensed && (category === 'ships' || category === 'loot') && <div className="statistics-controls period-controls">{hints}</div>}
-    {editMode && <StatisticsEditConsole customized={customized} pages={fixedPageOrder.map(id => ({id, label: ui(categories[id]), enabled: isPageEnabled(layout, id)}))} onTogglePage={id => togglePage(id, !isPageEnabled(layout, id))} onReset={resetLayout}>
+    {condensed && !management && (category === 'ships' || category === 'loot') && <div className="statistics-controls period-controls">{hints}</div>}
+    {editMode && !management && <StatisticsEditConsole customized={customized} pages={fixedPageOrder.map(id => ({id, label: ui(categories[id]), enabled: isPageEnabled(layout, id)}))} onTogglePage={id => togglePage(id, !isPageEnabled(layout, id))} onReset={resetLayout}>
       {/* 顺序控件：一次挪一格，组合链整体挪动。 */}
       <div className="statistics-page-order">
         {pageEntries.map(([id, label]) => {
@@ -610,6 +625,7 @@ export function Statistics({embedded = false}: {embedded?: boolean} = {}) {
       <PageChainSlots rows={layout.slots} labels={pageLabels} options={freePages} onPlace={placeInSlot} onRemove={removeFromSlot}/>
     </StatisticsEditConsole>}
     {/* 分节：每个卡片空间一段内容，链与顺序都在空间全量上算，跨页的链落进同一个容器。 */}
+    {management ? <Suspense fallback={<Loading/>}><ResourceManagement key={instance}/></Suspense> : <>
     {storageError && <ErrorBox message={storageError}/>}
     <div className="statistics-page-sections">
       {(singleView ? [spaceOf(category!)] : isPageEnabled(layout, category) ? [chainOf(category)] : []).map(space => {
@@ -638,23 +654,19 @@ export function Statistics({embedded = false}: {embedded?: boolean} = {}) {
         </Fragment>
       })}
     </div>
+    </>}
   </>
 
   // 旧版主题：整页还原本地旧版统计页（资源仪表盘 + 体力图表 + 大世界数据收集
   // + 本月耄耋收获 + 舰船经验 + 委托收益），数据走 statistics.legacy；其它主题保留
   // 上游的分类视图。旧版主题的整页还原见 定制化修改清单 第一章「旧版统计页整页还原」。
-  if (legacy) return <Suspense fallback={<Loading/>}><StatisticsLegacy embedded={embedded}/></Suspense>
-
-  // 旧版版式：整页只放统计内容（不放调度器与任务计划），页名由顶栏居中显示。
-  if (legacy) return <>
-    <div className="statistics-legacy">
-      <h1 className="legacy-sr-title">{ui('nav.statistics')}</h1>
-      {content}
-    </div>
-  </>
+  // 新版资源管理链接切到旧版时仍可读取原页面；独立和内嵌旧统计继续走本地实现。
+  if (legacy) return <Suspense fallback={<Loading/>}>{management
+    ? <ResourceManagement key={instance}/>
+    : <StatisticsLegacy embedded={embedded}/>}</Suspense>
 
   // 紧凑主题下页名与面包屑重复，省略标题行只留无障碍标题；其余主题保持原样。
   return condensed
     ? <><h1 className="sr-title">{ui('nav.statistics')}</h1>{content}</>
-    : <><PageTitle className="statistics-page-title" title={ui('nav.statistics')} actions={actions}/>{content}</>
+    : <><PageTitle className="statistics-page-title" title={ui('nav.statistics')} actions={!management && actions}/>{content}</>
 }

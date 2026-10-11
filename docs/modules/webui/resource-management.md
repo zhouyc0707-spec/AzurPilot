@@ -1,10 +1,11 @@
 # 资源管理
 
-> 将任务获取、用途与库存核对记录到本地账本，以独立页面支持精细化管理。
+> 将任务获取、用途与库存核对记录到本地账本，在资源统计中支持精细化管理。
 
 ## 1. 模块概述
 
-实例侧栏的「资源管理」打开 `/i/:instance/resources`。页面将来源任务、资源与用途任务连成桑基图，支持资源与任务筛选、最近 24 小时 / 7 天 / 30 天及自定义区间、库存搜索、分页明细和完整 CSV 导出。石油控制设置也放在本页，通过已有 `config.get` / `config.patch` 保存。
+新版主题的「资源统计 → 资源管理」打开 `/i/:instance/statistics?view=management`，标签位于「资源趋势」旁边；旧 `/i/:instance/resources` 链接在新版自动跳转。旧版主题保留一级「资源管理」和原独立路径，不改变整页定制统计。新版资源管理地址切换到旧版时直接显示同一资源管理组件；旧版总览内嵌统计忽略外层 `view=management`。页面将来源任务、资源与用途任务连成桑基图，支持资源与任务筛选、最近 24 小时 / 7 天 / 30 天及自定义区间、库存搜索、分页明细和完整 CSV 导出。石油控制设置也放在本页，通过已有 `config.get` / `config.patch` 保存。
+资源管理不参与统计卡片的隐藏、组合或排序，即使资源趋势被隐藏仍保留入口。刷新保留资源管理标签，切换回统计分类恢复该分类原有控件与数据读取。
 
 ## 2. 模块职责
 
@@ -23,7 +24,7 @@
 | `module/statistics/resource_flow.py` | 运行范围、收支与库存 SQLite 账本、聚合 |
 | `module/statistics/resource_tracking.py` | 奖励去重、购买与科研消耗、战役末轮核对 |
 | `module/api/resource_service.py` | 只读查询、区间校验、库存回退 |
-| `frontend/src/pages/ResourceManagement.tsx` | 独立页面、筛选、CSV 与控制设置 |
+| `frontend/src/pages/Statistics.tsx` / `ResourceManagement.tsx` | 标签入口、筛选、CSV 与控制设置 |
 | `frontend/src/resources/` | 桑基图守恒、绘制、样式及单元测试 |
 
 ## 4. 核心入口

@@ -6,9 +6,9 @@ import { Component, lazy, Suspense, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createHashRouter, RouterProvider, Navigate } from 'react-router-dom'
 import { App } from './app/App'
-import { AppProvider } from './app/context'
+import { AppProvider, useApp } from './app/context'
 import { ThemeWallpaper } from './components/GlassMaterial'
-import { applyTheme, getThemePreference } from './app/theme'
+import { applyTheme, getThemePreference, usesLegacyLayout } from './app/theme'
 import { Overview } from './pages/Overview'
 import { TaskConfig } from './pages/TaskConfig'
 import { Statistics } from './pages/Statistics'
@@ -39,17 +39,33 @@ const SchedulerProgram = lazy(() => import('./pages/SchedulerProgram').then(modu
 const MindCalculator = lazy(() => import('./pages/MindCalculator').then(module => ({default: module.MindCalculator})))
 const ResourceManagement = lazy(() => import('./pages/ResourceManagement').then(module => ({default: module.ResourceManagement})))
 
+/** 旧版保留原独立入口；新版将已有链接导向上游的新导航位置。 */
+function ResourceManagementEntry() {
+  const {theme} = useApp()
+  return usesLegacyLayout(theme)
+    ? <Suspense fallback={<div>{translateCurrentUi('common.loading')}</div>}><ResourceManagement/></Suspense>
+    : <Navigate to="../statistics?view=management" replace/>
+}
+
+function MindCalculatorEntry() {
+  const {theme} = useApp()
+  return usesLegacyLayout(theme)
+    ? <Suspense fallback={<div>{translateCurrentUi('common.loading')}</div>}><MindCalculator/></Suspense>
+    : <Navigate to="../task/MindCalculator" replace/>
+}
+
 const router = createHashRouter([
   {path: '/', element: <App/>, errorElement: <ErrorPage/>, children: [{index: true, element: <Home/>}, {path: 'announcement', element: <Announcement/>}, {path: 'interface', element: <InterfaceSettings/>}, {path: 'remote', element: <RemoteAccess/>}, {path: 'settings', element: <Settings/>}, {path: 'updater', element: <Updater/>}, {path: 'configs', element: <ConfigManager/>}, {path: 'dev', element: <DevControls/>}]},
   {path: '/i/:instance', element: <App/>, errorElement: <ErrorPage/>, children: [
     {index: true, element: <Navigate to="overview" replace/>},
     {path: 'overview', element: <Overview/>}, {path: 'task/:task', element: <TaskConfig/>},
-    {path: 'mind-calculator', element: <Suspense fallback={<div>{translateCurrentUi('common.loading')}</div>}><MindCalculator/></Suspense>},
-    {path: 'resources', element: <Suspense fallback={<div>{translateCurrentUi('common.loading')}</div>}><ResourceManagement/></Suspense>},
+    {path: 'mind-calculator', element: <MindCalculatorEntry/>},
+    {path: 'resources', element: <ResourceManagementEntry/>},
     // 交易页由 App 的实例 Activity 托管，来回切换不销毁总览与交易状态。
     {path: 'stock-exchange', element: null},
     {path: 'logs', element: <Navigate to="../overview" replace/>}, {path: 'statistics', element: <Statistics/>}, {path: 'scheduler', element: <Navigate to="../task/SchedulerProgram" replace/>}, {path: 'settings', element: <Navigate to="/settings" replace/>},
     {path: 'task/SchedulerProgram', element: <Suspense fallback={<div>{translateCurrentUi('common.loading')}</div>}><SchedulerProgram/></Suspense>},
+    {path: 'task/MindCalculator', element: <Suspense fallback={<div>{translateCurrentUi('common.loading')}</div>}><MindCalculator/></Suspense>},
   ]},
   {path: '*', element: <Navigate to="/" replace/>},
 ])

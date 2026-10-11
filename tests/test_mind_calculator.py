@@ -116,6 +116,27 @@ class CalculatorTests(unittest.TestCase):
         self.assertEqual(result['ships'][0]['group'], 'META')
         self.assertEqual(result['mind'], 1320)
 
+    def test_all_three_bulins_are_automatically_excluded_at_every_level(self):
+        for name, rarity in [('泛用型布里', 'SR'), ('试作型布里MKII', 'SSR'), ('特装型布里MKIII', 'UR')]:
+            self.assertEqual(catalog()['ships'][name]['base_rarity'], rarity)
+            for level in (1, 99, 100, 125):
+                with self.subTest(name=name, level=level):
+                    result = calculate([ship(name, level, excluded=False, review=False)])
+                    self.assertEqual(result['excluded'], 1)
+                    self.assertEqual(result['included'], 0)
+                    self.assertEqual(result['mind'], 0)
+                    self.assertEqual(result['gold'], 0)
+                    self.assertTrue(result['ships'][0]['automatic_excluded'])
+                    self.assertEqual(sum(row['count'] for row in result['summary']), 0)
+
+    def test_manual_status_changes_do_not_override_automatic_exclusions_or_invalid_levels(self):
+        for name in ('泛用型布里', 'DEAD MASTER', '小企业', '光辉(μ兵装)'):
+            self.assertEqual(calculate([ship(name, review=False, excluded=False)])['excluded'], 1)
+        result = calculate([ship('拉菲', 0, review=False, excluded=False)])
+        self.assertEqual(result['review'], 1)
+        self.assertEqual(result['mind'], 0)
+        self.assertFalse(calculate([ship('拉菲')])['ships'][0]['automatic_excluded'])
+
     def test_shared_data_extractor_attaches_resolved_retrofits_to_playable_ship(self):
         from dev_tools.ship_data_extractor import extract_ship_data
         with tempfile.TemporaryDirectory() as directory:
@@ -362,6 +383,36 @@ class ServiceTests(unittest.TestCase):
             file = self.service.export('testpilot', format)
             imported = import_ships(file['filename'], file['content'])
             self.assertEqual(calculate(imported)['mind'], saved['mind'])
+
+    def test_status_and_single_deletion_recalculate_and_persist_with_revision_checks(self):
+        rows = [ship('拉菲', 100), ship('约克城II', 100), ship('特装型布里MKIII', 99)]
+        report = self.service.save('testpilot', self.service.report('testpilot')['revision'], rows)
+        self.assertEqual(report['mind'], 4620)
+        original_revision = report['revision']
+        stale_revision = original_revision
+        for status, expected in [('excluded', 3300), ('review', 3300), ('included', 4620)]:
+            rows[0].update(excluded=status == 'excluded', review=status == 'review')
+            report = self.service.save('testpilot', report['revision'], rows)
+            reloaded = self.service.report('testpilot')
+            self.assertEqual(reloaded['ships'][0]['status'], status)
+            self.assertEqual(reloaded['mind'], expected)
+            self.assertEqual(reloaded['gold'], expected * 10)
+            if status == 'excluded':
+                stale_revision = report['revision']
+        self.assertEqual(report['revision'], original_revision)
+        with self.assertRaises(ApiError):
+            self.service.save('testpilot', stale_revision, rows[1:])
+        self.assertEqual(len(self.service.report('testpilot')['ships']), 3)
+        report = self.service.save('testpilot', report['revision'], rows[1:])
+        self.assertEqual(report['included'], 1)
+        self.assertEqual(report['excluded'], 1)
+        self.assertEqual(report['mind'], 3300)
+        self.assertEqual(sum(row['count'] for row in report['summary']), 1)
+        reloaded = MindCalculatorService(ConfigService(self.configs.root)).report('testpilot')
+        self.assertEqual([row['name'] for row in reloaded['ships']], ['约克城II', '特装型布里MKIII'])
+        report = self.service.save('testpilot', report['revision'], [])
+        self.assertEqual(report['ships'], [])
+        self.assertEqual(report['mind'], 0)
 
     def test_all_exports_import_back_without_losing_review_or_exclusion(self):
         rows = [ship('拉菲.改', 105, source='截图.png'), ship('待核对舰', review=True), ship('排除舰', excluded=True)]

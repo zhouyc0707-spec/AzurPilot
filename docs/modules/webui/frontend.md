@@ -4,9 +4,11 @@
 
 ## 1. 模块概述
 
-实例侧栏新增独立 [资源管理](resource-management.md) 页 `/i/:instance/resources`，由 `pages/ResourceManagement.tsx` 与 `resources/` 提供 ECharts 桑基图、库存与收支明细。图节点支持资源与任务筛选，明细支持分页和完整区间 CSV 导出；原调度的石油自动控制使用现有配置事务接口保存。五种语言、窄屏和空数据状态均沿用控制台组件与主题。
+[资源管理](resource-management.md) 在新版主题位于「资源统计」内的「资源趋势」旁边，路径为 `/i/:instance/statistics?view=management`；旧 `/resources` 链接在新版自动跳转。旧版主题保留一级「资源管理」入口及独立 `/resources` 页面；从新版资源管理切换为旧主题时仍显示资源管理，普通旧版统计及总览内嵌统计继续使用本地整页布局，内嵌页不跟随外层 `view` 参数。由 `pages/ResourceManagement.tsx` 与 `resources/` 提供 ECharts 桑基图、库存与收支明细。图节点支持资源与任务筛选，明细支持分页和完整区间 CSV 导出；原调度的石油自动控制使用现有配置事务接口保存。五种语言、窄屏和空数据状态均沿用控制台组件与主题。
 
-[心智单元计算器](mind-calculator.md) 使用独立实例页 `/i/:instance/mind-calculator`，新旧主题共用舰船清单、待核对状态、导入导出与费用计算。该页隐藏任务右栏；自动船坞扫描属于独立游戏工具，仅支持国服且要求当前实例已停止，其余计算和文件处理无需操作游戏。
+「舰队管理」下并列放置「舰队信息」与 [心智单元计算器](mind-calculator.md)。计算器路径为 `/i/:instance/task/MindCalculator`，旧 `/mind-calculator` 在新版主题自动跳转；旧版保留一级心智入口与原独立路径。沿用 `components/taskNavItems.ts` 的 WebUI 页面导航机制，同时覆盖侧栏树、悬浮菜单及顶栏任务跳转，不注册新的游戏任务。「舰队信息」由 `pages/FleetInfoPage.tsx` 提供舰队卡片和扫描开关，调用 `tasks.run(FleetScan)`，只在该扫描运行时调用 `scheduler.stop`；其他任务运行、更新或连接不可用时禁用。启动前等待配置队列保存，扫描运行期间及结束后重读舰队信息；浏览页面不启动游戏，也不修改实例自启设置。
+
+[心智单元计算器](mind-calculator.md) 的新旧入口共用舰船清单、待核对状态、导入导出与费用计算。该页隐藏任务右栏；自动船坞扫描属于独立游戏工具，仅支持国服且要求当前实例已停止，其余计算和文件处理无需操作游戏。
 
 `TaskConfig` 把 `Task.<task>.help` 展示为参数列首卡，并在舰队信息中显示心情；旧数据缺少心情时显示未知。商店使用上游的任务参数和过滤器界面，活动商店的 `物品:数量上限` 兼容文本由配置翻译说明并原样提交。旧版统计整页、实例 `Activity` 缓存、顶栏重启与主题切换、模拟器运行状态、岛屿任务总开关及实时指挥喵报告继续沿用本地实现。
 

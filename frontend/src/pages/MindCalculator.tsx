@@ -1,6 +1,6 @@
 import {useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent} from 'react'
 import {useParams} from 'react-router-dom'
-import {Calculator, Download, Plus, RefreshCw, Save, ScanLine, Upload} from 'lucide-react'
+import {Calculator, Download, Plus, RefreshCw, Save, ScanLine, Trash2, Upload} from 'lucide-react'
 import {api} from '../api/client'
 import {useApp, useConnection} from '../app/context'
 import {Select, useDraftInput} from '../components/FormControls'
@@ -38,9 +38,11 @@ export function MindCalculator() {
   const {instance = ''} = useParams(), {ui, instances, notify} = useApp(), connection = useConnection()
   const [catalog, setCatalog] = useState<MindCatalog>(), [saved, setSaved] = useState<MindReport>()
   const [ships, setShips] = useState<MindShip[]>([]), [result, setResult] = useState<MindCalculation>()
+  const calculatedShips = useRef<MindShip[]>([])
   const [dirty, setDirty] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('')
   const [autoSave, setAutoSave] = useState(false), editVersion = useRef(0)
   const [query, setQuery] = useState(''), [filter, setFilter] = useState('all'), [page, setPage] = useState(0)
+  const [filterMin, setFilterMin] = useState(''), [filterMax, setFilterMax] = useState(''), [filterRarity, setFilterRarity] = useState('')
   const [name, setName] = useState(''), [level, setLevel] = useState('100'), [rarity, setRarity] = useState<Rarity | ''>('')
   const [exportFormat, setExportFormat] = useState<'xlsx' | 'csv' | 'json'>('xlsx')
   const [scanMin, setScanMin] = useState('95'), [scanMax, setScanMax] = useState('120')
@@ -61,7 +63,9 @@ export function MindCalculator() {
     : dirty ? ui('mind.scanDraft') : ''
   function accept(report: MindReport, resetPage = true) {
     savedRef.current = report
-    setSaved(report); setShips(report.ships.map(editableShip)); setResult(report)
+    const next = report.ships.map(editableShip)
+    calculatedShips.current = next
+    setSaved(report); setShips(next); setResult(report)
     setScanMin(String(report.min_level ?? 95)); setScanMax(String(report.max_level ?? 120))
     dirtyRef.current = false; setDirty(false)
     if (resetPage) setPage(0)
@@ -114,7 +118,9 @@ export function MindCalculator() {
         if (active && !dirtyRef.current) {
           if (savedRef.current?.revision !== report.revision) {
             savedRef.current = report; setSaved(report)
-            setShips(report.ships.map(editableShip)); setResult(report)
+            const next = report.ships.map(editableShip)
+            calculatedShips.current = next
+            setShips(next); setResult(report)
           }
         }
       }).catch(error => {if (active) setError(error.message)})
@@ -126,7 +132,10 @@ export function MindCalculator() {
     const version = ++requestVersion.current
     const timer = setTimeout(() => {
       void api.request('mind.calculate', {instance, ships}).then(value => {
-        if (alive.current && dirtyRef.current && requestVersion.current === version) setResult(value)
+        if (alive.current && dirtyRef.current && requestVersion.current === version) {
+          calculatedShips.current = ships
+          setResult(value)
+        }
       }).catch(error => {if (alive.current && requestVersion.current === version) setError(error.message)})
     }, 250)
     return () => {clearTimeout(timer); requestVersion.current++}
@@ -155,14 +164,15 @@ export function MindCalculator() {
     }, 500)
     return () => clearTimeout(timer)
   }, [ships, autoSave, dirty, connection, busy, running, instance])
-  function edit(next: MindShip[], saveLevel = false) {
+  function edit(next: MindShip[], saveAutomatically = false) {
     editVersion.current++
-    setAutoSave(saveLevel)
+    requestVersion.current++
+    setAutoSave(saveAutomatically)
     setShips(next); setDirty(true); dirtyRef.current = true; setError('')
     try {sessionStorage.setItem(draftKey, JSON.stringify({revision: savedRef.current?.revision, ships: next}))} catch { /* 容量不足不阻止编辑。 */ }
   }
-  function change(index: number, patch: Partial<MindShip>, saveLevel = false) {
-    edit(ships.map((ship, i) => i === index ? {...ship, ...patch} : ship), saveLevel)
+  function change(index: number, patch: Partial<MindShip>, saveAutomatically = false) {
+    edit(ships.map((ship, i) => i === index ? {...ship, ...patch} : ship), saveAutomatically)
   }
   async function action(work: () => Promise<void>) {
     setBusy(true); setError('')
@@ -200,8 +210,10 @@ export function MindCalculator() {
     edit(highestShips([...ships, editableShip({name: name.trim(), level: Number(level), rarity: info?.rarity ?? baseRarity, base_rarity: baseRarity})], catalog?.ships))
     setName(''); setFilter('all'); setPage(Math.floor(ships.length / 50))
   }
-  const rows = useMemo(() => ships.map((ship, index) => ({ship, index, row: result?.ships[index]})).filter(({ship, row}) =>
-    ship.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()) && (filter === 'all' || row?.status === filter)), [ships, result, filter, query])
+  const rows = useMemo(() => ships.map((ship, index) => ({ship, index, row: calculatedShips.current[index] === ship ? result?.ships[index] : undefined})).filter(({ship, row}) =>
+    ship.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()) && (filter === 'all' || row?.status === filter) &&
+    (!filterMin || ship.level >= Number(filterMin)) && (!filterMax || ship.level <= Number(filterMax)) &&
+    (!filterRarity || row?.base_rarity === filterRarity)), [ships, result, filter, query, filterMin, filterMax, filterRarity])
   const pages = Math.max(1, Math.ceil(rows.length / 50))
   const currentPage = Math.min(page, pages - 1)
   const visible = rows.slice(currentPage * 50, (currentPage + 1) * 50)
@@ -255,12 +267,19 @@ export function MindCalculator() {
           <label>{ui('mind.baseRarity')}<Select aria-label={ui('mind.baseRarity')} value={rarity} onChange={event => setRarity(event.target.value as Rarity | '')}><option value="">{ui('mind.autoRarity')}</option>{rarities.map(r => <option key={r} value={r}>{labels(r)}</option>)}</Select></label>
           <button className="button secondary" disabled={busy || !ready || ships.length >= 5000}><Plus size={16}/>{ui('mind.add')}</button>
         </form>
-        <div className="mind-filters"><input aria-label={ui('mind.search')} placeholder={ui('mind.search')} value={query} onChange={event => {setQuery(event.target.value); setPage(0)}}/><Select aria-label={ui('mind.filter')} value={filter} onChange={event => {setFilter(event.target.value); setPage(0)}}>{(['all', 'included', 'review', 'merged', 'excluded'] as const).map(status => <option key={status} value={status}>{ui(`mind.${status}`)}</option>)}</Select><span className="muted">{ui('mind.rowCount', {count: rows.length})}</span></div>
-        {visible.length ? <div className="mind-table-wrap"><table className="mind-ship-table"><thead><tr><th>{ui('mind.name')}</th><th>{ui('mind.level')}</th><th>{ui('mind.baseRarity')}</th><th>{ui('mind.status')}</th><th>{ui('mind.mind')}</th></tr></thead><tbody>{visible.map(({ship, index, row}) => <tr key={index}>
+        <div className="mind-filters"><input aria-label={ui('mind.search')} placeholder={ui('mind.search')} value={query} onChange={event => {setQuery(event.target.value); setPage(0)}}/>
+          <label>{ui('mind.filterMin')}<input type="number" min={1} max={125} step={1} value={filterMin} onChange={event => {setFilterMin(event.target.value); setPage(0)}}/></label>
+          <label>{ui('mind.filterMax')}<input type="number" min={1} max={125} step={1} value={filterMax} onChange={event => {setFilterMax(event.target.value); setPage(0)}}/></label>
+          <Select aria-label={ui('mind.filterRarity')} value={filterRarity} onChange={event => {setFilterRarity(event.target.value); setPage(0)}}><option value="">{ui('mind.allRarities')}</option>{rarities.map(value => <option key={value} value={value}>{labels(value)}</option>)}</Select>
+          <Select aria-label={ui('mind.filter')} value={filter} onChange={event => {setFilter(event.target.value); setPage(0)}}>{(['all', 'included', 'review', 'merged', 'excluded'] as const).map(status => <option key={status} value={status}>{ui(`mind.${status}`)}</option>)}</Select><span className="muted">{ui('mind.rowCount', {count: rows.length})}</span></div>
+        {visible.length ? <div className="mind-table-wrap"><table className="mind-ship-table"><thead><tr><th>{ui('mind.name')}</th><th>{ui('mind.level')}</th><th>{ui('mind.baseRarity')}</th><th>{ui('mind.status')}</th><th>{ui('mind.mind')}</th><th>{ui('mind.actions')}</th></tr></thead><tbody>{visible.map(({ship, index, row}) => <tr key={`${index}:${ship.name}`}>
           <td><input aria-label={`${ui('mind.name')} ${index + 1}`} value={ship.name} readOnly/><small className="muted" title={ship.source}>{ship.source}</small></td>
           <td><ShipLevel label={`${ui('mind.level')} ${index + 1}`} value={ship.level} disabled={busy || running} onCommit={value => change(index, {level: value}, true)}/></td>
           <td><span className={`mind-rarity rarity-${row?.base_rarity}`}>{row?.base_rarity ? labels(row.base_rarity) : '—'}</span></td>
-          <td><span className={`mind-status status-${row?.status}`}>{ui(`mind.${row?.status ?? 'review'}`)}</span></td><td>{number(row?.mind ?? 0)}</td>
+          <td><Select aria-label={`${ui('mind.status')} ${index + 1}`} className={`mind-status status-${row?.status}`} value={row?.status ?? 'review'} disabled={busy || running || !row || row.automatic_excluded} title={row?.automatic_excluded ? ui('mind.autoExcluded') : undefined} onChange={event => change(index, {excluded: event.target.value === 'excluded', review: event.target.value === 'review'}, true)}>
+            <option value="included" disabled={!ship.level || !row?.base_rarity}>{ui('mind.included')}</option><option value="review">{ui('mind.review')}</option><option value="excluded">{ui('mind.excluded')}</option>{row?.status === 'merged' && <option value="merged" disabled>{ui('mind.merged')}</option>}
+          </Select></td><td>{number(row?.mind ?? 0)}</td>
+          <td><button className="button secondary" aria-label={`${ui('mind.delete')} ${ship.name}`} disabled={busy || running} onClick={() => edit(ships.filter((_, i) => i !== index), true)}><Trash2 size={15}/>{ui('mind.delete')}</button></td>
         </tr>)}</tbody></table></div> : <Empty title={ui('mind.empty')}>{ui('mind.emptyHint')}</Empty>}
         <div className="mind-pagination"><button className="button secondary" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>{ui('mind.previous')}</button><span>{currentPage + 1} / {pages}</span><button className="button secondary" disabled={currentPage + 1 >= pages} onClick={() => setPage(currentPage + 1)}>{ui('mind.next')}</button></div>
       </section>
