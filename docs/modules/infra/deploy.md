@@ -106,6 +106,8 @@ Alas.bat → python -m deploy.installer
 
 部署参数在 `config/deploy.yaml`（模型见 `deploy/config.py`）：git 仓库/分支/代理/SSL、Python 与 uv、镜像源、adb 替换与自动连接、OCR 服务器、更新检查间隔与自动重启时刻。安装器读它，WebUI 的部署设置页写它——两边经同一份文件交互。
 
+切换源码更新地址时，同时核对部署配置的 `Repository` 和 Git 的 `origin`：运行时更新检查直接从 `origin` 获取提交，实际安装更新则按 `Repository` 设置该远端。保留原分支和代理参数；定制仓库应使用自己的完整 GitHub 地址，不使用指向上游的 `global` 别名。地区自动重定向只针对官方 GitHub 地址，自定义仓库不会自动转到国内镜像。配置文件不纳入版本控制，调整前单独备份；正在运行的服务可能仍缓存旧配置，重启服务后统一加载新源。
+
 ## 11. 异常与错误处理
 
 | 情况 | 处理 |
