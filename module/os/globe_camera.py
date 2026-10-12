@@ -45,6 +45,9 @@ class GlobeCamera(GlobeOperation, ZoneManager):
     """
     globe: GlobeDetection
     globe_camera: tuple
+    GLOBE_NAVIGATION_TIMEOUT = 30
+    GLOBE_NAVIGATION_STALL_LIMIT = 3
+    GLOBE_NAVIGATION_MIN_PROGRESS = 10
 
     def _globe_init(self):
         """初始化全球地图检测器。
@@ -222,18 +225,47 @@ class GlobeCamera(GlobeOperation, ZoneManager):
     def globe_in_sight(self, zone, swipe_limit=(620, 340), sight=(20, 220, 980, 620)):
         """将目标海域平移到屏幕视野范围内。
 
-        如果目标海域不在指定视野区域内，通过反复平移摄像机直到其可见。
+        如果目标海域不在指定视野区域内，通过平移摄像机直到其可见。
+        每轮先解除海域选中状态，避免详情展开时普通平移无效。
 
         Args:
             zone (str, int, Zone): 海域名称（CN/EN/JP/TW）、海域 ID 或 Zone 实例。
             swipe_limit (tuple[int, int]): 单次平移的最大像素距离限制。
             sight (tuple[int, int, int, int]): 屏幕上的有效视野区域 (x1, y1, x2, y2)。
+
+        Raises:
+            GameStuckError: 连续滑动无进展或导航超时，保存现场后交由上层恢复。
+
+        Pages:
+            in: IN_GLOBE，已通过 globe_update() 获取当前截图和摄像机坐标。
+            out: IN_GLOBE，海域详情已解除且目标位于有效视野内。
         """
         zone = self.name_to_zone(zone)
-        # logger.info(f'Globe in_sight: {zone}')
+        timeout = Timer(self.GLOBE_NAVIGATION_TIMEOUT).start()
+        progress_anchor = np.array(self.globe_camera, dtype=float)
+        stalled = 0
 
         while 1:
-            if point_in_area(self.globe2screen([zone.location])[0], area=sight):
+            pinned = self.is_zone_pinned()
+            # 最新截图已确认到达时先结束，慢速截图不应把成功误报成超时。
+            if not pinned and point_in_area(self.globe2screen([zone.location])[0], area=sight):
+                return
+
+            if timeout.reached():
+                reason = f'导航超过 {self.GLOBE_NAVIGATION_TIMEOUT} 秒'
+                break
+
+            # 详情会在滑动后出现；检测独立于操作冷却，冷却中也不能普通平移。
+            if pinned:
+                if self.handle_zone_pinned():
+                    logger.info('[大世界-地球仪] 移动前解除海域选中状态')
+                    stalled = 0
+                self.globe_update()
+                progress_anchor = np.array(self.globe_camera, dtype=float)
+                continue
+
+            if stalled >= self.GLOBE_NAVIGATION_STALL_LIMIT:
+                reason = f'连续 {stalled} 次滑动地图未移动'
                 break
 
             area = (400, 200, GLOBE_MAP_SHAPE[0] - 400, GLOBE_MAP_SHAPE[1] - 250)
@@ -242,6 +274,17 @@ class GlobeCamera(GlobeOperation, ZoneManager):
             vector = vector / self.config.OS_GLOBE_SWIPE_MULTIPLY
             swipe = tuple(np.min([np.abs(vector), swipe_limit], axis=0) * np.sign(vector))
             self.globe_swipe(swipe)
+
+            # 累计小幅移动也算进展，避免把连续有效微调误判为卡死。
+            if np.linalg.norm(np.subtract(self.globe_camera, progress_anchor)) >= self.GLOBE_NAVIGATION_MIN_PROGRESS:
+                progress_anchor = np.array(self.globe_camera, dtype=float)
+                stalled = 0
+            else:
+                stalled += 1
+
+        self.device.save_screenshot(genre='opsi_globe_navigation', interval=0)
+        logger.warning(f'[大世界-地球仪] 无法把海域 {zone.zone_id} 移入视野：{reason}，已保存现场')
+        raise GameStuckError(f'地球仪导航失败：{zone}，{reason}')
 
     def get_globe_pinned_zone(self):
         """获取当前固定的海域对象。

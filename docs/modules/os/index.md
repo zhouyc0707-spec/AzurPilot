@@ -154,6 +154,8 @@ flowchart BT
 - `Zone`：zone_id、侵蚀等级 hazard_level、四服名称、区域方位、是否港口/碧蓝港口。
 - `ZoneManager` 提供 `zones`（全部海域表）、`camera_to_zone`、`name_to_zone`（任意服名称均可查）、`zone_nearest_azur_port`。
 - `GlobeCamera.globe_update()` 保证进入球面视图并加载 `GlobeDetection`（模板匹配 + 单应性定位相机在全球地图上的位置），`globe_focus_to(zone)` 拖动球面对准目标区，`zone_type_select` 按类型顺序择优进入。
+- `globe_in_sight()` 每轮移动前先检测海域选中详情。详情可见时只执行既有解除手势并刷新截图、定位；解除操作处于冷却时仍等待新截图，不继续普通地图滑动。确认详情消失后才判断目标是否进入视野并计算下一步向量，适用于海域切换及要塞查找，不改变模板阈值、走位倍率或目标海域规则。
+- 导航循环设 30 秒检查时限，解除详情不重新计时；沿用子调用及设备原有异常保护。相对最近进展位置累计移动至少 10 个全球地图坐标单位时重置无进展计数，连续 3 次普通滑动仍无进展且目标未到达时，保存 `opsi_globe_navigation` 现场并抛出 `GameStuckError`，不把导航失败当作已到达或无事件。第三次滑动后出现详情时仍先解除，目标已进入视野则正常结束。离线回归见 `tests/test_opsi_globe_navigation.py`。
 - `OSCamera._view_init()` 直接注入固定标定参数 `load_homography(storage=...)`——大世界 45° 恒定俯视使标定可硬编码，普通地图则需现场标定。
 
 ### 每日任务的未开荒海域处理
