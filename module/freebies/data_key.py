@@ -17,7 +17,7 @@ DATA_KEY = DigitCounter(OCR_DATA_KEY, letter=(255, 247, 247), threshold=64)
 class DataKey(UI):
     """作战档案数据钥匙收集器。
 
-    检测作战档案页面中的数据钥匙库存与剩余每日领取数量，自动完成收集。
+    检测作战档案页面中的数据钥匙库存与剩余存储空间，自动完成收集。
     """
 
     def _data_key_collect(self, skip_first_screenshot=True):
@@ -37,22 +37,27 @@ class DataKey(UI):
             else:
                 self.device.screenshot()
 
-            if self.appear_then_click(DATA_KEY_COLLECT, offset=(20, 20), interval=3):
-                continue
-            if self.appear(GET_ITEMS_1, offset=20, interval=3):
-                self.device.click(DATA_KEY_COLLECT)
+            if self.appear(GET_ITEMS_1, offset=20):
+                # 奖励仍可见时只处理弹窗；点击冷却不能当作已经返回档案页。
+                if self.appear(GET_ITEMS_1, offset=20, interval=3):
+                    self.device.click(DATA_KEY_COLLECT)
                 continue
             if self.handle_popup_confirm('DATA_KEY_LIMIT'):
-                # 如果当前为 29/30 说明用户不经常打档案，不必担心损失 1 把钥匙，直接领满即可
+                # 剩余空间不足本次领取量时，沿用现有确认溢出、领满背包的行为。
                 continue
             if self.appear_then_click(CAMPAIGN_MENU_GOTO_WAR_ARCHIVES, offset=(20, 20), interval=3):
                 # 偶发误退到 page_campaign_menu 时重新进入
                 continue
 
-            # 结束条件
-            if self.appear(WAR_ARCHIVES_CHECK, offset=(20, 20)) and self.appear(DATA_KEY_COLLECTED, offset=(20, 20)):
+            # 非原生截图的宽松模板阈值会混淆「领取」与「已领」，必须同时核验颜色。
+            if self.appear(WAR_ARCHIVES_CHECK, offset=(20, 20)) and self.match_template_color(
+                    DATA_KEY_COLLECTED, offset=(20, 20)):
                 logger.info('[免费福利-钥匙] 数据钥匙收集完成')
                 break
+
+            if self.match_template_color(DATA_KEY_COLLECT, offset=(20, 20), interval=3):
+                self.device.click(DATA_KEY_COLLECT)
+                continue
 
     def data_key_collect(self):
         """
@@ -64,7 +69,7 @@ class DataKey(UI):
         Pages:
             in: page_archives
         """
-        if self.appear(DATA_KEY_COLLECTED, offset=(20, 20)):
+        if self.match_template_color(DATA_KEY_COLLECTED, offset=(20, 20)):
             logger.info('[免费福利-钥匙] 数据钥匙已收集')
             return False
 

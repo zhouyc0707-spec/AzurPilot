@@ -162,7 +162,7 @@ module/
 `Freebies(ModuleBase)` 总调度按序执行四个子模块，各自检查开关后收尾统一延迟到服务器刷新：
 
 - **BattlePass**：`page_reward` 红点进入，循环领取（含 META 舰船锁定确认弹窗）。
-- **DataKey**：在作战档案页收集数据钥匙，背包满时除非 `DataKey_ForceCollect` 否则跳过。
+- **DataKey**：由 `Freebies.DataKey.Collect` 开启，在作战档案页收集数据钥匙。「领取／已领」在入口、点击和收尾三处均通过模板与颜色共同确认，避免非原生 720p 截图放宽相似度后把金色领取按钮误判成灰色已领。奖励弹窗可见时优先处理，点击冷却期间继续获取截图；确认返回档案页且为已领状态才完成。OCR 的 `remain` 为 `total-current`，表示剩余存储空间；背包满时除非 `DataKey_ForceCollect` 否则跳过，容量上限由当前画面读取，不写死旧值。离线回归见 [密钥领取状态与按钮识别](../../../tests/test_freebies_data_key.py)。
 - **MailWhite**：必须在白色主题主页进入邮件，按 `Mail_ClaimMerit/ClaimMaintenance/ClaimTradeLicense` 分三轮领取并按 `Mail_DeleteCollected` 清理。
 - **SupplyPack**：石油低于 21000 时按 `SupplyPack_DayOfWeek` 在指定服务器日购买免费周补给包。
 
