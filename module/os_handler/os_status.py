@@ -121,11 +121,15 @@ class OSStatus(UI):
         else:
             return 35000
 
-    def get_yellow_coins(self) -> int:
+    def get_yellow_coins(self, *, skip_verification_delay=False) -> int:
         """
         通过 OCR 获取当前拥有的作战补给凭证（黄币）数量。
 
         采用连续两次稳定比对校验，若超时未能获取则降级使用缓存的最近有效值。
+
+        Args:
+            skip_verification_delay (bool): 已确认进入明石商店时复用截图循环节奏，
+                省去额外固定等待；仍需连续两张实际截图读数一致。
 
         Returns:
             int: 黄币数量。
@@ -135,16 +139,19 @@ class OSStatus(UI):
         last_valid_value = None
         
         for _ in self.loop():
-            # 结束
-            if self.appear_then_click(GET_ITEMS_1, offset=True, interval=1):
-                timeout.reset()
-                continue
-            if self.appear_then_click(GET_ITEMS_2, offset=True, interval=1):
-                timeout.reset()
-                continue
-            # GET_SHIP 素材已随上游更新，需补 offset 容差，否则弹窗可能关不掉
-            if self.appear_then_click(GET_SHIP, offset=(20, 20), interval=1):
-                timeout.reset()
+            # 弹窗可见与实际点击分开判断，冷却期间不能校验遮挡下的余额。
+            popup_visible = False
+            for button, offset in ((GET_ITEMS_1, True), (GET_ITEMS_2, True), (GET_SHIP, (20, 20))):
+                if self.appear(button, offset=offset):
+                    popup_visible = True
+                    last_valid_value = None
+                    if self.appear_then_click(button, offset=offset, interval=1):
+                        timeout.reset()
+                    break
+            if popup_visible:
+                if timeout.reached():
+                    logger.warning('[大世界处理-状态] 获取黄币超时，奖励弹窗尚未关闭')
+                    break
                 continue
 
             current_value = OCR_SHOP_YELLOW_COINS.ocr(self.device.image)
@@ -155,18 +162,21 @@ class OSStatus(UI):
             if current_value == 0:
                 # 界面未完全渲染或弹窗遮挡顶部栏时 OCR 可能识别为 0
                 logger.info('[大世界处理-状态] 黄币为 0，可能是 OCR 错误或界面未加载')
+                last_valid_value = None
                 continue
             else:
                 # 验证识别稳定性：连续两次识别相同才确认
                 if last_valid_value is None:
                     last_valid_value = current_value
-                    self.device.sleep(0.2)  # 短暂等待后再次验证
+                    if not skip_verification_delay:
+                        self.device.sleep(0.2)
                 elif last_valid_value == current_value:
                     yellow_coins = current_value
                     break
                 else:
                     last_valid_value = current_value
-                    self.device.sleep(0.2)
+                    if not skip_verification_delay:
+                        self.device.sleep(0.2)
         
         # 如果最终仍未获取到有效数值，使用上次缓存的值（线程安全）
         observed = yellow_coins > 0
@@ -202,7 +212,10 @@ class OSStatus(UI):
         """
         同时获取大世界黄币与紫币数量，并保存历史快照数据。
         """
-        self._shop_yellow_coins = self.get_yellow_coins()
+        if isinstance(getattr(self, '_akashi_shop_session', None), dict):
+            self._shop_yellow_coins = self.get_yellow_coins(skip_verification_delay=True)
+        else:
+            self._shop_yellow_coins = self.get_yellow_coins()
         self._shop_purple_coins = self.get_purple_coins()
         logger.info(f'[大世界处理-状态] 黄币: {self._shop_yellow_coins}, 紫币: {self._shop_purple_coins}')
 

@@ -845,6 +845,98 @@ class Cl1Database:
             }
             self._save_stats_in_connection(conn, instance, month, data)
 
+    def _try_append_coin_snapshot(self, conn, instance, month, name, snapshot):
+        """规范原生序列只追加一条；复杂历史仍交由完整快照路径处理。
+
+        快路径不改写其他统计族，也不跨调用缓存余额。兼容树必须由原路径
+        完整校验；月份首条双方凭证记录也保留原来的月初残留判断。
+        """
+        from module.persistence.snapshots import FAMILIES, MONTH_FIELDS, save_row
+        from module.persistence.values import read_value
+
+        month_row = conn.execute(
+            'SELECT field_mask FROM cl1_months WHERE instance=? AND month=?',
+            (instance, month),
+        ).fetchone()
+        if month_row is None:
+            return False
+        typed_values = conn.execute(
+            'SELECT id FROM typed_value_sets WHERE instance=? AND month=?',
+            (instance, month),
+        ).fetchall()
+        if typed_values:
+            compat_fields = conn.execute(
+                'SELECT name, mode, value_set_id FROM cl1_compat_fields WHERE instance=? AND month=?',
+                (instance, month),
+            ).fetchall()
+            if (len(compat_fields) != 1 or compat_fields[0]['name'] != 'coins_month_start_residue'
+                    or compat_fields[0]['mode'] != 'value'):
+                return False
+            residue = compat_fields[0]
+            if {row['id'] for row in typed_values} != {residue['value_set_id']}:
+                # 其他兼容值仍由完整路径校验，不能绕过凭证族覆盖或未知字段。
+                return False
+            # 残留档案与显示序列互不覆盖；校验树而不重建，损坏仍向上报错。
+            read_value(conn, residue['value_set_id'])
+
+        table, fields = FAMILIES[name]
+        last = conn.execute(
+            f'SELECT * FROM {table} WHERE instance=? AND month=? ORDER BY ordinal DESC LIMIT 1',
+            (instance, month),
+        ).fetchone()
+        month_mask = 1 << MONTH_FIELDS.index(name)
+        if last is not None and not month_row['field_mask'] & month_mask:
+            return False
+        if name == 'coins_snapshots' and last is None:
+            # 即使月表已存在，仍可能需要将紫币的上月残留存入复核档案。
+            return False
+
+        valid_masks = (7,) if name == 'yellow_coin_snapshots' else (11, 15)
+        marks = ','.join('?' for _ in valid_masks)
+        purple_guard = " OR (field_mask & 4 <> 0 AND purple_type <> 'integer')" if name == 'coins_snapshots' else ''
+        purple_type = ", typeof(purple_coin) AS purple_type" if name == 'coins_snapshots' else ''
+        invalid = conn.execute(
+            f'''SELECT 1 FROM (
+                SELECT ts, entry_kind, field_mask, compat_value_set_id,
+                       typeof(ts) AS ts_type, typeof(source) AS source_type,
+                       typeof(yellow_coin) AS yellow_type {purple_type},
+                       LAG(ts) OVER (ORDER BY ordinal) AS previous_ts
+                FROM {table} WHERE instance=? AND month=?
+            ) WHERE entry_kind <> 'record' OR compat_value_set_id IS NOT NULL
+                OR field_mask NOT IN ({marks}) OR ts IS NULL
+                OR ts_type <> 'text' OR source_type NOT IN ('text', 'null')
+                OR yellow_type <> 'integer' {purple_guard}
+                OR previous_ts > ts LIMIT 1''',
+            (instance, month, *valid_masks),
+        ).fetchone()
+        if invalid is not None:
+            return False
+        if last is not None and snapshot['ts'] < last['ts']:
+            # 完整路径会重新按时间排序，不能在时钟回拨时改变历史顺序。
+            return False
+
+        if last is not None:
+            if name == 'yellow_coin_snapshots':
+                if last['yellow_coin'] == snapshot['yellow_coin']:
+                    return True
+            elif last['yellow_coin'] == snapshot['yellow_coins']:
+                if 'purple_coins' in snapshot:
+                    if last['field_mask'] & 4 and last['purple_coin'] == snapshot['purple_coins']:
+                        return True
+                elif not last['field_mask'] & 4:
+                    return True
+
+        ordinal = 0 if last is None else last['ordinal'] + 1
+        save_row(
+            conn, table, {'instance': instance, 'month': month, 'ordinal': ordinal},
+            snapshot, fields, {'instance': instance, 'month': month}, entry=True,
+        )
+        conn.execute(
+            'UPDATE cl1_months SET field_mask=field_mask | ? WHERE instance=? AND month=?',
+            (month_mask, instance, month),
+        )
+        return True
+
     def add_yellow_coin_snapshot(
         self, instance: str, yellow_coin: int, source: str = "dashboard"
     ):
@@ -857,14 +949,15 @@ class Cl1Database:
         """
         month = datetime.now().strftime("%Y-%m")
         with self._stats_transaction() as conn:
-            data = self._get_stats_in_connection(conn, instance, month)
             yellow_coin = self._coerce_int(yellow_coin)
-
             snapshot = {
                 "ts": datetime.now().isoformat(),
                 "yellow_coin": yellow_coin,
                 "source": source,
             }
+            if self._try_append_coin_snapshot(conn, instance, month, 'yellow_coin_snapshots', snapshot):
+                return
+            data = self._get_stats_in_connection(conn, instance, month)
 
             snapshots = data.get("yellow_coin_snapshots", [])
             if snapshots:
@@ -894,7 +987,6 @@ class Cl1Database:
         with self._stats_transaction() as conn:
             # 补齐必须先于本次读取。
             self.ensure_coins_history(instance, conn)
-            data = self._get_stats_in_connection(conn, instance, month)
             yellow_coins = self._coerce_int(yellow_coins)
             purple_coins = self._coerce_int(purple_coins) if purple_coins is not None else None
 
@@ -905,6 +997,9 @@ class Cl1Database:
             }
             if purple_coins is not None:
                 snapshot["purple_coins"] = purple_coins
+            if self._try_append_coin_snapshot(conn, instance, month, 'coins_snapshots', snapshot):
+                return
+            data = self._get_stats_in_connection(conn, instance, month)
 
             snapshots = data.get("coins_snapshots", [])
             if not snapshots and purple_coins is not None:

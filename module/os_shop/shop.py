@@ -12,6 +12,8 @@
 本模块整合了 PortShop 和 AkashiShop 两个子模块的功能，
 通过统一的购买执行接口处理大世界中的所有商店交互。
 """
+from time import perf_counter
+
 from module.base.timer import Timer
 from module.combat.assets import GET_ITEMS_1
 from module.config.utils import get_os_reset_remain
@@ -421,11 +423,18 @@ class OSShop(PortShop, AkashiShop):
                              skip_first_screenshot=True)
             return
 
-        self.ui_click(grid, appear_button=self.is_in_map, check_button=PORT_SUPPLY_CHECK,
-                      additional=self.handle_story_skip, skip_first_screenshot=True)
-        self.os_shop_buy(select_func=self.os_shop_get_item_to_buy_in_akashi)
-        self.ui_back(appear_button=PORT_SUPPLY_CHECK, check_button=self.is_in_map, skip_first_screenshot=True)
-        self._akashi_handled = True
+        started = perf_counter()
+        try:
+            self.ui_click(grid, appear_button=self.is_in_map, check_button=PORT_SUPPLY_CHECK,
+                          additional=self.handle_story_skip, skip_first_screenshot=True)
+            # 缓存仅属于已确认进入的这家商店，正常结束和异常退出都必须清理。
+            self._akashi_shop_session = {}
+            self.os_shop_buy(select_func=self.os_shop_get_item_to_buy_in_akashi)
+            self.ui_back(appear_button=PORT_SUPPLY_CHECK, check_button=self.is_in_map, skip_first_screenshot=True)
+            self._akashi_handled = True
+        finally:
+            self._akashi_shop_session = None
+            logger.info(f'[大世界-明石] 本次商店处理耗时 {perf_counter() - started:.2f} 秒')
 
     def get_currency_coins(self, item):
         """获取可用于购买的货币数量。
