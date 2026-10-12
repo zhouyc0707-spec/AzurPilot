@@ -352,6 +352,8 @@ class OSMapOperation(MapOrderHandler, MissionHandler, PortHandler, StorageHandle
         """
         从隐秘海域、深渊海域或要塞中退出。
 
+        确认回到来源海域后清除特殊海域的明石标记，避免跨图误跳过商店。
+
         Args:
             drop (DropImage, optional): 收集退出海域时出现的结算与领奖弹窗。
 
@@ -363,14 +365,13 @@ class OSMapOperation(MapOrderHandler, MissionHandler, PortHandler, StorageHandle
         confirm_timer = Timer(1, count=2)
         changed = False
         for _ in self.loop():
-            # 结束条件
-            if changed and self.is_in_map():
+            # 特殊海域也会匹配地图按钮，先排除仍显示退出入口的旧地图。
+            if self.appear(MAP_EXIT, offset=(20, 20), similarity=0.75):
+                confirm_timer.reset()
+            elif changed and self.is_in_map():
                 if confirm_timer.reached():
                     break
             else:
-                confirm_timer.reset()
-            # 如果 MAP_EXIT 仍显示，说明尚未退出此海域
-            if self.appear(MAP_EXIT, offset=(20, 20), similarity=0.75):
                 confirm_timer.reset()
 
             # 点击
@@ -391,4 +392,5 @@ class OSMapOperation(MapOrderHandler, MissionHandler, PortHandler, StorageHandle
                 changed = True
                 continue
 
+        self._akashi_handled = False
         self.zone_init()

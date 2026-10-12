@@ -465,6 +465,9 @@ class GlobeOperation(ActionPointHandler):
     def globe_enter(self, zone):
         """从全球地图进入指定海域。
 
+        本次点击入口并确认进入地图后，清除上一海域的明石处理标记。
+        已在地图中的无操作返回保留标记，不影响同图恢复的去重。
+
         Args:
             zone (Zone): 要进入的海域。
 
@@ -485,6 +488,8 @@ class GlobeOperation(ActionPointHandler):
             # End
             if self.is_in_map():
                 if click_count > 0:
+                    # 相同海域编号的不同坐标也属于新地图，以实际进入为边界。
+                    self._akashi_handled = False
                     time.sleep(1)
                 break
 

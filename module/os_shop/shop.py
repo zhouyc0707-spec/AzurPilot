@@ -44,7 +44,7 @@ class OSShop(PortShop, AkashiShop):
         _shop_purple_coins (int): 当前紫币余额（由 os_shop_get_coins 设置）。
     """
 
-    # 本次战役是否已处理过明石商店（避免强制移动等后续环节重复进入商店）
+    # 当前海域本轮搜索是否处理过明石；新地图进入、特殊地图退出及新计划作战时重置。
     _akashi_handled = False
 
     def os_shop_buy_execute(self, button, skip_first_screenshot=True) -> bool:
@@ -404,6 +404,7 @@ class OSShop(PortShop, AkashiShop):
         """处理明石商店购买。
 
         点击明石所在的网格进入商店，执行购买后返回地图。
+        同图补扫或换队保持去重，实际进入新海域时允许重新处理。
 
         Args:
             grid (Button): 明石所在的网格位置。
@@ -413,7 +414,7 @@ class OSShop(PortShop, AkashiShop):
             out: is_in_map
         """
         if self._akashi_handled:
-            logger.info("[大世界-明石] 本次战役已处理过明石，跳过重复进入商店")
+            logger.info("[大世界-明石] 当前海域本轮搜索已处理过明石，跳过重复进入商店")
             # 若明石商店已经弹出，关闭它，避免移动等待流程重复检测到商店而卡住
             if self.appear(PORT_SUPPLY_CHECK, offset=(20, 20)):
                 self.ui_back(appear_button=PORT_SUPPLY_CHECK, check_button=self.is_in_map,
