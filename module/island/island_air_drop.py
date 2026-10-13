@@ -17,6 +17,22 @@ AIR_DROP_RECEIVE = Button(
 )
 
 
+def is_daily_supply_reward(image):
+    """在归一化截图中同时确认补给奖励标题与空白关闭提示。
+
+    仅在固定奖励区域严格匹配，不随非原生分辨率降低阈值；背景岛屿
+    图标或一处文字单独出现，不能证明当前画面可以点击关闭。
+    """
+    if image is None or image.shape[:2] != (720, 1280):
+        return False
+    return (
+        TEMPLATE_AIR_DROP_REWARD_TITLE.match(
+            image[160:240, 490:795], similarity=0.9, direct_match=True)
+        and TEMPLATE_AIR_DROP_REWARD_CLOSE.match(
+            image[545:595, 550:730], similarity=0.9, direct_match=True)
+    )
+
+
 class IslandAirDrop(Island):
     """岛屿空投日常任务执行器。"""
 
@@ -41,6 +57,14 @@ class IslandAirDrop(Island):
         last_steal_time = self.config.IslandAirDrop_LastSteal
         next_steal_time = now + timedelta(hours=5)
         last_attempt_today = today + timedelta(hours=23)  # 服务器当日 23:00
+        # 用户停止任务时可能仍停在补给奖励页；先关闭已明确识别的现场，
+        # 再走正常每日检查，不能把残留弹窗单独当作本日任务已完成。
+        self.device.screenshot()
+        if is_daily_supply_reward(self.device.image):
+            self.island_air_drop()
+            if self.is_in_friend_island() and not self.exit_friend_island():
+                self.device.save_screenshot(genre='island_air_drop_unknown', interval=0)
+                raise GameStuckError('岛屿补给：残留奖励处理后未能返回本岛，已保存现场')
         if last_steal_time < today:
             self.goto_postmanage()
             if self.appear_then_click(MY_AIR_DROP_ALREADY):
@@ -273,7 +297,9 @@ class IslandAirDrop(Island):
         click = Timer(2)
         for _ in self.loop(skip_first=False, timeout=Timer(self.AIR_DROP_TIMEOUT)):
             # 奖励可能覆盖背景分享按钮，先关闭已识别奖励，不能提前结束留住弹窗。
-            if self.appear(GET_ITEMS_ISLAND, offset=(20, 20)) or self.appear(ISLAND_GET, offset=30):
+            if (is_daily_supply_reward(self.device.image)
+                    or self.appear(GET_ITEMS_ISLAND, offset=(20, 20))
+                    or self.appear(ISLAND_GET, offset=30)):
                 reward_seen = True
                 ready.clear()
                 if click.reached():

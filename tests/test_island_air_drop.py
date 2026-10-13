@@ -48,6 +48,8 @@ class IslandAirDropStateTests(unittest.TestCase):
         )
         self.enterContext(patch('module.base.timer.time', side_effect=lambda: self.monotonic))
         self.enterContext(patch('module.island.island_air_drop.logger'))
+        self.enterContext(patch('module.island.island_air_drop.is_daily_supply_reward',
+                                side_effect=lambda image: image.reward == 'DAILY_SUPPLY'))
 
     def screenshot(self):
         try:
@@ -208,6 +210,47 @@ class IslandAirDropStateTests(unittest.TestCase):
         self.assertEqual([name for name, _, _ in self.clicks], ['ISLAND_CLICK_SAFE_AREA'])
         self.assertEqual(self.island.device.screenshot.call_count, 4)
         self.island.air_drop_action_ocr.ocr.assert_not_called()
+
+    def test_today_supply_reward_is_closed_before_background_share(self):
+        result = self.run_frames([
+            AirDropFrame('今日补给奖励', scene=True, share=True, reward='DAILY_SUPPLY'),
+            AirDropFrame('冷却中仍有今日补给', scene=True, share=True, reward='DAILY_SUPPLY'),
+            AirDropFrame('奖励关闭后分享入口', scene=True, share=True),
+        ])
+        self.assertTrue(result)
+        self.assertEqual([name for name, _, _ in self.clicks], ['ISLAND_CLICK_SAFE_AREA'])
+        self.assertEqual(self.island.device.screenshot.call_count, 3)
+        self.island.air_drop_action_ocr.ocr.assert_not_called()
+        self.assert_no_share_click()
+
+    def test_today_supply_reward_respects_receive_cooldown_then_confirms_scene(self):
+        result = self.run_frames([
+            AirDropFrame('接收入口', scene=True, action='接收补给'),
+            *(AirDropFrame(f'今日补给奖励{index}', scene=True, reward='DAILY_SUPPLY', elapsed=0.4)
+              for index in range(6)),
+            *(AirDropFrame(f'恢复场景{index}', scene=True, elapsed=0.5)
+              for index in range(3)),
+        ])
+        self.assertTrue(result)
+        self.assertEqual([name for name, _, _ in self.clicks],
+                         ['AIR_DROP_RECEIVE', 'ISLAND_CLICK_SAFE_AREA'])
+        self.assertGreaterEqual(self.clicks[1][2] - self.clicks[0][2], 2)
+        self.assert_no_share_click()
+
+    def test_today_supply_reward_cannot_confirm_finish_while_still_visible(self):
+        result_frames = [
+            AirDropFrame('今日补给始终未关闭', scene=True, share=True, reward='DAILY_SUPPLY', elapsed=1)
+            for _ in range(20)
+        ]
+        with self.assertRaises(GameStuckError):
+            self.run_frames(result_frames)
+        self.assertTrue(self.clicks)
+        self.assertEqual({name for name, _, _ in self.clicks}, {'ISLAND_CLICK_SAFE_AREA'})
+        for before, after in zip(self.clicks, self.clicks[1:]):
+            self.assertGreaterEqual(after[2] - before[2], 2)
+        self.island.air_drop_action_ocr.ocr.assert_not_called()
+        self.island.device.save_screenshot.assert_called_once_with(
+            genre='island_air_drop_unknown', interval=0)
 
     def test_receive_to_reward_obeys_click_interval_then_confirms_normal_scene(self):
         result = self.run_frames([
@@ -375,16 +418,20 @@ class IslandAirDropScheduleTests(unittest.TestCase):
             IslandAirDrop_VisitOtherIsland=False,
             task_delay=Mock(),
         )
-        self.island.device = SimpleNamespace(sleep=Mock(), save_screenshot=Mock())
+        self.island.device = SimpleNamespace(image=None, screenshot=Mock(), sleep=Mock(), save_screenshot=Mock())
         self.island.goto_postmanage = Mock()
         self.island.goto_management = Mock()
         self.island.ui_goto = Mock()
         self.island.appear_then_click = Mock(return_value=True)
         self.island.island_walk_route = Mock()
         self.island.island_air_drop = Mock()
+        self.island.is_in_friend_island = Mock(return_value=False)
+        self.island.exit_friend_island = Mock(return_value=True)
         self.enterContext(patch('module.island.island_air_drop.current_time', return_value=self.now))
         self.enterContext(patch('module.island.island_air_drop.get_server_last_update', return_value=self.today))
         self.enterContext(patch('module.island.island_air_drop.logger'))
+        self.reward_match = self.enterContext(patch(
+            'module.island.island_air_drop.is_daily_supply_reward', return_value=False))
 
     def assert_successful_daily_schedule(self):
         self.assertEqual(self.island.config.IslandAirDrop_LastSteal, self.now)
@@ -398,6 +445,62 @@ class IslandAirDropScheduleTests(unittest.TestCase):
         self.island.island_air_drop.assert_called_once_with()
         self.island.island_walk_route.assert_called_once_with('AirDropSelf')
         self.assert_successful_daily_schedule()
+
+    def test_starting_on_supply_reward_closes_it_before_normal_daily_check(self):
+        self.reward_match.return_value = True
+        self.island.island_air_drop.return_value = True
+        events = Mock()
+        events.attach_mock(self.island.device.screenshot, 'screenshot')
+        events.attach_mock(self.island.island_air_drop, 'collect')
+        events.attach_mock(self.island.goto_postmanage, 'postmanage')
+        self.island.run()
+        self.assertEqual(events.mock_calls[:3], [call.screenshot(), call.collect(), call.postmanage()])
+        self.assertEqual(self.island.island_air_drop.call_count, 2)
+        self.assert_successful_daily_schedule()
+
+    def test_starting_reward_does_not_skip_failed_daily_check_or_rewrite_date(self):
+        self.reward_match.return_value = True
+        self.island.island_air_drop.side_effect = [True, False, False]
+        self.island.run()
+        self.assertEqual(self.island.config.IslandAirDrop_LastSteal, self.old_last_steal)
+        self.assertEqual(self.island.island_air_drop.call_count, 3)
+        self.island.config.task_delay.assert_called_once_with(target=self.now + timedelta(minutes=5))
+
+    def test_starting_reward_timeout_preserves_date_without_navigation_or_schedule(self):
+        self.reward_match.return_value = True
+        self.island.island_air_drop.side_effect = GameStuckError('测试奖励未关闭')
+        with self.assertRaises(GameStuckError):
+            self.island.run()
+        self.assertEqual(self.island.config.IslandAirDrop_LastSteal, self.old_last_steal)
+        self.island.goto_postmanage.assert_not_called()
+        self.island.ui_goto.assert_not_called()
+        self.island.exit_friend_island.assert_not_called()
+        self.island.config.task_delay.assert_not_called()
+
+    def test_starting_friend_reward_exits_friend_before_normal_daily_check(self):
+        self.reward_match.return_value = True
+        self.island.island_air_drop.return_value = True
+        self.island.is_in_friend_island.return_value = True
+        events = Mock()
+        events.attach_mock(self.island.island_air_drop, 'collect')
+        events.attach_mock(self.island.exit_friend_island, 'exit_friend')
+        events.attach_mock(self.island.goto_postmanage, 'postmanage')
+        self.island.run()
+        self.assertEqual(events.mock_calls[:3], [call.collect(), call.exit_friend(), call.postmanage()])
+        self.assert_successful_daily_schedule()
+
+    def test_starting_friend_reward_exit_failure_keeps_date_and_saves_scene(self):
+        self.reward_match.return_value = True
+        self.island.island_air_drop.return_value = True
+        self.island.is_in_friend_island.return_value = True
+        self.island.exit_friend_island.return_value = False
+        with self.assertRaises(GameStuckError):
+            self.island.run()
+        self.assertEqual(self.island.config.IslandAirDrop_LastSteal, self.old_last_steal)
+        self.island.goto_postmanage.assert_not_called()
+        self.island.config.task_delay.assert_not_called()
+        self.island.device.save_screenshot.assert_called_once_with(
+            genre='island_air_drop_unknown', interval=0)
 
     def test_own_first_attempt_missing_entry_retries_after_configured_walk(self):
         self.island.island_air_drop.side_effect = [False, True]
