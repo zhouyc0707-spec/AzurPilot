@@ -1,0 +1,70 @@
+{
+  "baseline": "39f45453c4fcc6eb8dd1dcb78f1809688ac74169",
+  "before": "fa8482219b54aa373a7159d4d04586e7147bb881",
+  "upstream": "93844113db12758d4b14898fa9cb7759b4fd967e",
+  "custom_files": 738,
+  "upstream_files": 89,
+  "overlap_files": [
+    "alas.py",
+    "config/template.json",
+    "docs/modules/combat.md",
+    "docs/modules/entry/alas.md",
+    "docs/modules/game/misc.md",
+    "docs/modules/os/auxiliary.md",
+    "module/combat/auto_search_combat.py",
+    "module/combat/combat.py",
+    "module/config/argument/args.json",
+    "module/config/argument/argument.yaml",
+    "module/config/argument/task.yaml",
+    "module/config/config.py",
+    "module/config/config_generated.py",
+    "module/config/i18n/en-US.json",
+    "module/config/i18n/ja-JP.json",
+    "module/config/i18n/zh-CN.json",
+    "module/config/i18n/zh-MIAO.json",
+    "module/config/i18n/zh-TW.json",
+    "module/ui/assets.py",
+    "module/ui/page.py"
+  ],
+  "nonoverlap_files": 718,
+  "nonoverlap_identical_code_and_assets": 717,
+  "expected_document_updates": [
+    "定制化修改清单.md"
+  ],
+  "unexpected_nonoverlap_changes": [],
+  "local_json_fields": {
+    "module/config/argument/args.json": {
+      "local_changes": 117,
+      "preserved": 117
+    },
+    "config/template.json": {
+      "local_changes": 36,
+      "preserved": 36
+    },
+    "module/config/i18n/zh-CN.json": {
+      "local_changes": 187,
+      "preserved": 187
+    },
+    "module/config/i18n/zh-MIAO.json": {
+      "local_changes": 187,
+      "preserved": 187
+    },
+    "module/config/i18n/en-US.json": {
+      "local_changes": 187,
+      "preserved": 187
+    },
+    "module/config/i18n/ja-JP.json": {
+      "local_changes": 187,
+      "preserved": 187
+    },
+    "module/config/i18n/zh-TW.json": {
+      "local_changes": 187,
+      "preserved": 187
+    }
+  },
+  "changed_local_json_fields": [],
+  "inventory_reference_count": 199,
+  "missing_inventory_references": [],
+  "python_file_count": 2598,
+  "python_syntax_errors": []
+}

@@ -130,6 +130,8 @@ flowchart TD
 
 `UI` 继承 `InfoHandler`，其 `ui_additional()` 是导航/登录循环的统一兜底：按「大世界弹窗 → 通用确认/紧急委托 → 主界面弹窗（`ui_page_main_popups`）→ 剧情跳过 → 游戏提示 → 后宅/指挥喵/准备界面撤退 → 登录相关」的固定优先级逐个尝试，任一返回 `True` 即消费一次循环。`ui_get_current_page()` 与 `ui_goto()` 在识别不到已知页面或需要处理遮挡弹窗时都会调用它。新增「任意页面都可能出现」的弹窗时挂进这条链；只属于特定页面的则留在该任务的循环里。
 
+紧急委托的 `GET_MISSION` 会匹配战败后无可用舰队弹窗的蓝色「确定」。`handle_urgent_commission()` 必须先排除 `FLEET_UNAVAILABLE` 正文并返回 `False`，由战败结算流程确认弹窗、记录结果并等待游戏自动换队；不能仅靠共享按钮推断弹窗身份。详见 [战败与结果记账](defeat-handling.md)。
+
 ### 6.3 登录与重启
 
 `_handle_app_login()` 是单一状态循环：截图 → 检测 `LOGIN_CHECK`（点击并标记登录成功）→ 依次处理安卓无响应、公告、维护、更新、国服协议、回归玩家、通用弹窗、主界面弹窗 → 直到 `is_in_main()` 持续确认（`confirm_timer`）后退出。`handle_app_login()` 在外层把截图间隔放宽到 1 秒，并用 `Restart.LoginWaitTimeout`（跨任务读取，默认 30 秒、上限 3600）覆盖卡死检测阈值，避免慢启动的后台模拟器被误判卡死。

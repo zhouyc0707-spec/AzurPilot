@@ -967,9 +967,17 @@ class AzurLaneConfig(ConfigUpdater, ManualConfig, GeneratedConfig, ConfigWatcher
     def DEVICE_SCREENSHOT_METHOD(self):
         return self.Emulator_ScreenshotMethod
 
+    @DEVICE_SCREENSHOT_METHOD.setter
+    def DEVICE_SCREENSHOT_METHOD(self, value):
+        self.override(Emulator_ScreenshotMethod=value)
+
     @property
     def DEVICE_CONTROL_METHOD(self):
         return self.Emulator_ControlMethod
+
+    @DEVICE_CONTROL_METHOD.setter
+    def DEVICE_CONTROL_METHOD(self, value):
+        self.override(Emulator_ControlMethod=value)
 
     @property
     def FLEET_1(self):

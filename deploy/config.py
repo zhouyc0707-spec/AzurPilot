@@ -9,13 +9,11 @@ from deploy.utils import *
 
 
 GIT_OVER_CDN_REPOSITORY = 'git://git.pull/AzurPilot'
-CNB_REPOSITORY = 'https://cnb.cool/AzurPilot/AzurPilot'
-GITCODE_REPOSITORY = 'https://gitcode.com/ddl2/AzurLaneAutoScript'
 GIT_OVER_CDN_FALLBACK_REPOSITORIES = [
-    CNB_REPOSITORY,
-    GITCODE_REPOSITORY,
+    'https://cnb.cool/AzurPilot/AzurPilot',
+    'https://gitcode.com/ddl2/AzurPilot',
 ]
-GIT_OVER_CDN_FALLBACK_REPOSITORY = GITCODE_REPOSITORY
+GIT_OVER_CDN_FALLBACK_REPOSITORY = GIT_OVER_CDN_FALLBACK_REPOSITORIES[1]
 
 
 def choose_fallback_repository() -> str:
@@ -163,9 +161,9 @@ class DeployConfig(DeployConfigTransaction, ConfigModel):
         if self.Repository in ['cn', GIT_OVER_CDN_REPOSITORY]:
             super().__setattr__('Repository', choose_fallback_repository())
         if self.Repository in ['cnb']:
-            super().__setattr__('Repository', CNB_REPOSITORY)
+            super().__setattr__('Repository', GIT_OVER_CDN_FALLBACK_REPOSITORIES[0])
         if self.Repository in ['gitcode']:
-            super().__setattr__('Repository', GITCODE_REPOSITORY)
+            super().__setattr__('Repository', GIT_OVER_CDN_FALLBACK_REPOSITORIES[1])
 
     def _redirect_github_repository(self):
         """为官方 GitHub 源一次性选择适合当前网络的更新镜像。"""

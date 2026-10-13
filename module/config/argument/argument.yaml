@@ -640,7 +640,7 @@ YukikazeTaskManager:
       > OpsiAshBeacon
       > OpsiDaily > OpsiShop > OpsiVoucher > EventShop
       > OpsiAbyssal > OpsiStronghold > OpsiObscure > OpsiArchive
-      > Daily > Hard > OpsiAshBeacon > OpsiAshAssist > OpsiMonthBoss
+      > Daily > LimitChallenge > Hard > OpsiAshBeacon > OpsiAshAssist > OpsiMonthBoss
       > Sos > EventSp > EventA > EventB > EventC > EventD
       > RaidDaily > CoalitionSp > WarArchives > MaritimeEscort
       > IslandJuuEatery > IslandJuuCoffee > IslandGrill > IslandTeahouse > IslandRestaurant
@@ -1461,6 +1461,26 @@ Daily:
   EmergencyModuleDevelopmentFleet:
     value: 1
     option: [1, 2, 3, 4, 5, 6]
+LimitChallenge:
+  TargetLevel:
+    value: easy
+    option: [easy, normal, hard]
+  Month:
+    type: stored
+    value: 0
+    display: hide
+  CompletedLevel:
+    type: stored
+    value: 0
+    display: hide
+  AttemptedLevel:
+    type: stored
+    value: 0
+    display: hide
+  Failed:
+    type: stored
+    value: false
+    display: hide
 Hard:
   HardStage: 11-4
   HardFleet:
@@ -2603,6 +2623,7 @@ Benchmark:
         phone_cloud_without_adb,
         android_phone,
         android_phone_vmos,
+        azurpilot_android,
       ]
   TestScene:
     value: screenshot_click

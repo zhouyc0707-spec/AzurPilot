@@ -57,6 +57,7 @@ S 经验结算由 `Combat.handle_exp_info()` 保留确定按钮兜底点击，�
 module/combat/
 ├── combat.py               # Combat 主类：三阶段战斗流程编排、画面识别（暂停/退出皮肤遍历）
 ├── auto_search_combat.py   # AutoSearchCombat：自律寻敌战斗流程与战败撤退处理
+├── result.py               # CombatResult：单场评价、战败和额外心情去重
 ├── combat_auto.py          # CombatAuto：自动/手动模式检测与切换
 ├── combat_manual.py        # CombatManual：手动模式预设走位与武器释放
 ├── emotion.py              # Emotion / FleetEmotion：情绪模型（被所有模块共用）
@@ -74,6 +75,7 @@ tests/test_submarine_advanced.py   # 潜艇进阶规则单测
 | --- | --- |
 | `combat.py` | `Combat` 主类：`combat()` 三阶段编排、`combat_appear()`/`is_combat_loading()`/`is_combat_executing()` 画面识别、暂停与退出按钮的多皮肤遍历 |
 | `auto_search_combat.py` | 自律寻敌下的战斗执行、资源监控（石油/物资）、沉船判定与战败撤退/换队 |
+| `result.py` | 每场重置的结果上下文；区分评价、确定战败与已经执行的额外心情扣减 |
 | `emotion.py` / `emotion_state.py` | 情绪的恢复批次模型，被 `ModuleBase.emotion` 提供给全仓使用 |
 | `hp_balancer.py` | 6 个 HP 条的颜色识别、按权重修正、战前拖拽换位 |
 | `level.py` | 「LV.XX」OCR（去前缀、去遮罩、去蓝底）与 `LV_TRIGGERED`/`LV32_TRIGGERED` |
@@ -92,6 +94,7 @@ tests/test_submarine_advanced.py   # 潜艇进阶规则单测
 | `Combat.combat_appear()` | 检测是否进入战斗画面，地图行走循环轮询的「进入战斗」信号 |
 | `Combat.map_offensive()` | 手动地图模式下从点击「出击」按钮到战斗加载的过渡循环 |
 | `AutoSearchCombat.auto_search_combat()` | 自律寻敌模式下单场战斗（加载 → 执行 → 结算） |
+| `Combat.handle_combat_defeat()` / `combat_result_record()` | C/D 共用战败画面处理、单场记账与任务恢复回调 |
 | `Combat.emotion`（`ModuleBase` 的 `cached_property`） | 情绪模型入口，任何模块都可 `self.emotion` 访问 |
 | `SubmarineAdvancedConfig` | 进阶潜艇规则的解析与规划（被 `module/map/submarine.py` 使用） |
 
@@ -207,11 +210,13 @@ flowchart TD
 
 - `auto_search_moving()`：等待期间监视石油/物资 OCR（触发 `auto_search_oil/coin_limit_triggered`）与舰队等级，处理退役、低情绪弹窗；自动搜索菜单出现则抛 `CampaignEnd`。
 - `map_offensive_auto_search()`：处理提示或退役后恢复自律，等待战斗加载。每轮先确认奖励菜单或已直接返回关卡；关卡已结束时抛 `CampaignEnd`，交回原有结算、掉落记录和继续／停止流程。`handle_retirement()` 返回已操作也可能只是关闭游戏提示，不能据此假定一定会进入下一场战斗。
-- `auto_search_combat_execute()`：加载期处理弹窗；进入战斗后先扣基础情绪，然后与手动模式类似的循环（潜艇/自动切换/弹窗），但**不点战斗评价**——自律寻敌会自动过渡结算，脚本只识别评价等级用于情绪记账（非 S 评价记沉船）。D 评价和结算超时只转交结算阶段，须见到 `OPTS_INFO_D` 才确认战败，避免转场误识别引发撤退。
-- `handle_auto_search_shipwreck()`：统一识别和关闭 `OPTS_INFO_D`，在点击前记录本场战败和待处理状态；同场提示重复出现只计一次战败、最多扣一次沉船心情。执行阶段、结算阶段和紧急委托的经验结算覆写共用此入口，识别不受点击冷却影响。
-- `auto_search_combat_status()`：先确认沉船，再处理经验结算及委托、剧情、奖励等弹窗，撤退等待期间也保持这些处理器可用。战败策略由 `Campaign_DefeatWithdraw` 决定：`withdraw_continue` 每次战败撤退后继续任务；`switch_fleet` 允许切另一队恢复自律，无可用舰队或切换超时则撤退；`withdraw_stop` 每次战败都撤退，连续 3 次战败后确认退出关卡再抛 `ScriptEnd('DefeatWithdraw=withdraw_stop')`，由运行器禁用当前任务。
+- `auto_search_combat_execute()`：加载期处理弹窗；进入战斗后先扣基础情绪，再观察结果。S/A/B 记录到本场 `CombatResult`；C/D 字母和结算超时只转交结算阶段，红色 DEFEAT 画面（沿用资源名 `OPTS_INFO_D`）或无可用舰队正文才确认战败，避免转场误识别引发撤退。
+- `handle_combat_defeat()`：普通、自动搜索、共斗和联盟共用 C/D 战败画面的识别与关闭。记录不受点击冷却影响；同场重复画面、评价页和经验页最多触发一次额外心情扣减。恢复由 `combat_defeat_recovery()` 按任务决定，联盟自行推进活动流程。
+- `auto_search_combat_status()`：优先处理共用战败画面和 `FLEET_UNAVAILABLE` 正文，再推进经验、委托、剧情和奖励。`withdraw_continue` 每次战败撤退后继续任务；`switch_fleet` 必须同时确认本场失效弹窗、游戏已自动换到另一队的 `FLEET_NUM_1/2` 及接替队心情预检通过，才能恢复自律，无弹窗或等待自动换队超时则撤退；`withdraw_stop` 每次战败撤退，连续 3 次后确认回到选关页再抛 `ScriptEnd('DefeatWithdraw=withdraw_stop')`，由运行器禁用当前任务。
 
-撤退待处理时不会点击 `AUTO_SEARCH_MAP_OPTION_OFF` 重新出击；若游戏自行恢复自律，则关闭 `AUTO_SEARCH_MAP_OPTION_ON` 后继续等撤退按钮。直接回到自动搜索菜单时先退出，回到选关页才完成战败收尾。正常战斗结束会清零连续战败计数，战败后的换队或自律恢复不会清零。
+无可用舰队弹窗表示战败队前排或后排失效，游戏将自动换队。确认正文后继续截图，不点击手动切换或舰队撤离按钮。没有该弹窗时三种策略均直接撤退：游戏会按道中/Boss 职责选择仍有效的原队，手动换队再开自律可能派出受损原队。换队目标按本场画面舰队编号计算，一队或二队担任道中均适用，不按反转后的角色编号计算。
+
+游戏战败时已停止自律，撤退路径不点击自律开关，直接处理弹窗和地图撤退；`AUTO_SEARCH_MAP_OPTION_ON/OFF` 的文字模板会同时命中关闭状态，不能仅凭模板尝试“关闭”自律。仅上述换队条件齐备时可以点击 `AUTO_SEARCH_MAP_OPTION_OFF` 恢复；保存实际接替队编号，下一帧即使直接进入加载也能结束恢复、让下一场正确记账。`auto_search_watch_fleet()` 暂时读不到编号时保留上次正向确认，不默认成一队。直接回到自动搜索菜单时先退出，回到选关页才完成战败收尾。正常结束会清零连续战败计数，战败后的换队不清零。流程、心情策略及实机验收场景见 [战败与结果记账](defeat-handling.md)。
 
 与手动战斗的关键差异：没有 `combat_preparation`（游戏不开准备页），没有血量平衡与手动走位，情绪扣减点从「暂停按钮出现」提前到「战斗加载完成」，战败分支与撤退决策远比手动模式复杂。
 
@@ -224,12 +229,18 @@ check_reduce(battle)  ← 进战役前：按 Fleet_FleetOrder 拆分双方战斗
    ↓
 wait(fleet_index)  ← combat_preparation 内：阻塞 sleep(60) 直到恢复到阈值（含本场扣减）
    ↓
-reduce(fleet_index)  ← 进入战斗后：扣 2 点（双倍经验书 4 点）；沉船另扣 10（可被 Emotion_IgnoreShipwreck 无视）
+reduce(fleet_index)  ← 进入战斗后：扣基础 2 点（双倍经验书 4 点）
+   ↓
+combat_result_record()  ← 已识别 A/B 或确定 C/D 战败：本场最多额外扣 10，S 豁免
    ↓
 record()  ← 与 update 成对：同一计算时刻的 Value + 完整 Record + RecoveryState 原子保存
 ```
 
 公海舰队（`PublicEmotion_Enable` 且当前任务在 `PublicEmotion_Tasks` 列表）把上述过程收敛到一份共享情绪上。每次更新都读取最新共享存档，跨任务不能缓存旧的相位状态。计算模式下若仍出现红脸弹窗，`handle_combat_low_emotion()`（处理器层）会退出关卡，将对应舰队心情基准重建为 0，并按当前地图的心情消耗计算恢复时间、延后任务后自动重试；无需等待服务器刷新或人工重填校准值。
+
+自动换队后原待命队即将参与战斗，恢复自律前调用 `Emotion.check_fleet(fleet_index)` 检查该画面编号对应账本的下一场基础消耗。忽略模式跳过，公共模式检查共享账本；检查不等待、不扣减。心情不足延后任务，未校准沿用人工接管，均先退出地图再上抛，不能开战后才发现接替队账本不可用。
+
+额外 10 点是普通任务的保守估计：A 评价还包含慢速胜利，无法只从评价区分是否沉船，仍按 A/B 统一扣减。共斗沉船与联盟沉船通过 `combat_shipwreck_emotion=False` 明确豁免；正常联盟多队整关只扣一次基础心情，但各内部战斗分别观察额外扣减。`Emotion.Mode=ignore` 不记账，`Emotion.IgnoreShipwreck` 仅豁免额外扣减。
 
 ## 7. 调用关系
 
@@ -398,7 +409,8 @@ stateDiagram-v2
 - **进阶潜艇绝不盲点**：`advanced_call` 必须看到 `SUBMARINE_READY` 才点、见 `SUBMARINE_CALLED` 才扣弹；点击重试不得重复扣减。旧模式（`boss_only` 等）没有宽限期语义，勿混用。
 - **潜艇寻路会污染全图 cost**：地图层为潜艇寻路后必须还原水面舰队寻路（`find_path_initial()`），这个配对不能拆。
 - **掉落记录与点击节奏耦合**：`save_get_items` 时 `battle_status_click_interval = 7`，结算画面会被 `appear(interval=7)` 压住不点，给掉落截图留窗口；调整结算逻辑时不要移除这个机制。
-- **沉船提示必须先记账再关闭**：`OPTS_INFO_D` 不能由经验结算覆写直接吞掉。自律寻敌统一调用 `handle_auto_search_shipwreck()`，保留撤退状态、单场去重和连续战败计数；不要只恢复 D 评价即撤退的旧逻辑，转场可能误匹配 D 模板。
+- **战败画面必须先记账再关闭**：`OPTS_INFO_D` 是 C/D 共用红色 DEFEAT 画面，不是无可用舰队弹窗。统一调用 `handle_combat_defeat()`；无可用舰队用 `FLEET_UNAVAILABLE` 正文识别。不能用共享「确定」按钮推断弹窗身份，也不能只凭 C/D 字母或超时确认失败。
+- **每场结果重置与心情去重**：`combat()` / `auto_search_combat_execute()` 重置 `CombatResult`。基础消耗和非 S 额外消耗分开，联盟多队后续战斗不扣基础心情也必须观察结果；沉船任务只覆写政策，不复制整套执行循环。
 - **`hp_balance` 与舰队锁定互斥**：`Campaign_UseFleetLock=true` 时游戏禁止在准备页拖动舰船，`hp_balance()` 直接返回 False，属预期行为。
 
 ## 17. 已知限制
@@ -407,7 +419,8 @@ stateDiagram-v2
 - 手动模式并非真正操控战斗：只有三个预设走位（居中/左下/左上长按）与武器释放，高难图的精细操作无法表达。
 - `hp_balance` 在舰队锁定关卡不可用；HP/等级识别依赖默认战斗界面的布局，非默认皮肤/缩放可能导致读数异常（代码对 EN/JP 服务器有独立网格）。
 - 进阶潜艇规则不支持自律寻敌地图，且移动依赖地图寻路可达性，不可达时静默放弃本次出击（有单测覆盖）。
-- 战斗评价 S/A/B/C 的动画过渡帧可能短暂误匹配 D 评价模板，自动搜索侧以 `OPTS_INFO_D` 弹窗作为沉船的确认性标志绕开，该判据依赖游戏弹窗行为。
+- C/D 字母颜色会误匹配动画过渡帧；确定战败依赖红色 DEFEAT 画面或无可用舰队正文。未识别到等级的通用结算按钮不推断 S 评价，也不凭未知画面生成心情事件。
+- `FLEET_UNAVAILABLE` 正文素材取自 CN 的 1280×720 截图；其他语言的本地化正文仍需对应截图验收。
 
 ## 18. 示例
 
@@ -444,10 +457,10 @@ if plan is not None:
 
 ## 19. 调试方法
 
-- 自律寻敌战败回归：`uv run python -m unittest tests.test_auto_search_defeat`。使用内存画面状态和虚拟时钟，覆盖紧急委托结算链、两种撤退策略、三次战败禁用任务、切换舰队、重复提示、点击冷却及误匹配 D 评价，不连接模拟器或保存用户配置。
+- 战败与评价回归：`uv run python -m unittest tests.test_auto_search_defeat tests.test_combat_results tests.test_emotion_recovery`。真实截图帧调用正式识别器，符号帧模拟进出页面；覆盖三种策略、游戏自动换队、无弹窗直接撤退、两种舰队顺序与心情归属、接替队预检、快速加载、三次战败停止、冷却、共斗/联盟沉船、联盟多轮，以及公共心情、双倍书和无视模式的真实内存账本。不连接模拟器或保存用户配置。
 - 日志按阶段打标：`[战斗-准备]`、`[战斗-执行]`、`[战斗-结算]`、`[战斗-结束]`（`logger.hr` 分隔），血量为 `[HP]`/`[血量]` 行，情绪为 `[情绪-*]`，潜艇为 `[地图-潜艇]` 与 `潜艇剩余弹药`。
 - 战斗画面识别异常时先看 `logger.attr('战斗UI', pause)` 输出的按钮名——皮肤没匹配上是战斗卡死的最常见原因。
-- 情绪问题先查三件事：`Emotion_*Value/Record` 是否被外部改过、`Control` 与 `Recover` 组合是否合法、`[情绪-Bug]` 累计扣减是否触发。
+- 情绪问题先核对 `Value/Record/RecoveryState`、恢复条件和每场基础/额外消耗；累计扣减不作为客户端故障证据。
 - 进阶潜艇规则可先跑 `uv run python -m unittest tests.test_submarine_advanced`；非法 YAML 会在初始化时抛 `ScriptError` 并指明字段。
 - 截图频率变化有独立日志（`[设备-截图] 截图间隔设置为 …s`），战斗卡顿优先确认是否停留在 `combat` 间隔。
 - 识别改动优先用已有截图离线验证；未实测需明确说明。
@@ -455,6 +468,7 @@ if plan is not None:
 ## 20. 相关模块
 
 - [战役执行](campaign.md) —— 战斗的主要调用方，两种战斗形态的任务循环
+- [战败与结果记账](defeat-handling.md) —— 共用失败画面、弹窗身份、恢复策略与心情边界
 - [地图系统](map.md) —— 走位、敌舰选择、进阶潜艇的地图侧接入
 - [处理器层](handler.md) —— 弹窗族、低情绪红脸、伏击、自律寻敌处理器
 - [退役与装备](game/retire-equipment.md) —— `Retirement` 的完整退役/强化流程

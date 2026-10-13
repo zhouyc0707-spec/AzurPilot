@@ -5,7 +5,7 @@ import subprocess
 import time
 from typing import Optional
 
-from deploy.Windows.config import CNB_REPOSITORY, GITCODE_REPOSITORY, DeployConfig, ExecutionError
+from deploy.Windows.config import GIT_OVER_CDN_FALLBACK_REPOSITORIES, DeployConfig, ExecutionError
 from deploy.Windows.logger import Progress, logger
 from deploy.Windows.utils import cached_property
 from deploy.git_over_cdn.client import GitOverCdnClient
@@ -13,14 +13,13 @@ from deploy.git_over_cdn.endpoints import CLOUDFLARE_UPDATE_URLS, FALLBACK_UPDAT
 
 
 def peer_fallback_repository(url: str) -> Optional[str]:
-    """若当前 URL 为 CNB 或 GitCode 国内镜像，获取同级的备用镜像 URL 用于分流容灾。"""
+    """若当前 URL 为备选国内镜像，获取列表中的同级备用镜像 URL 用于分流容灾。"""
     if not url:
         return None
     cleaned = url.strip().rstrip('/').removesuffix('.git')
-    if cleaned == CNB_REPOSITORY.rstrip('/'):
-        return GITCODE_REPOSITORY
-    if cleaned == GITCODE_REPOSITORY.rstrip('/'):
-        return CNB_REPOSITORY
+    for index, repo in enumerate(GIT_OVER_CDN_FALLBACK_REPOSITORIES):
+        if cleaned == repo.rstrip('/'):
+            return GIT_OVER_CDN_FALLBACK_REPOSITORIES[(index + 1) % len(GIT_OVER_CDN_FALLBACK_REPOSITORIES)]
     return None
 
 

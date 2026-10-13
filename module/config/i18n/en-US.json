@@ -206,6 +206,10 @@
       "name": "Daily Missions",
       "help": ""
     },
+    "LimitChallenge": {
+      "name": "Limit Challenge",
+      "help": "Challenge each difficulty at most once per month, in order up to the target. A defeat defers the task until next month. Configure the dedicated fleet in the game first. Currently uses CN recognition assets."
+    },
     "Hard": {
       "name": "Main Campaign - Hard Mode",
       "help": ""
@@ -3688,6 +3692,35 @@
       "6": "6"
     }
   },
+  "LimitChallenge": {
+    "_info": {
+      "name": "Limit Challenge",
+      "help": "Challenge each difficulty at most once per month, in order up to the target. A defeat defers the task until next month. Configure the dedicated fleet in the game first. Currently uses CN recognition assets."
+    },
+    "TargetLevel": {
+      "name": "Target difficulty",
+      "help": "Easy → Normal → Hard. Clear and collect the previous reward to unlock the next difficulty. S/A/B count as a clear; C/D count as defeat. Uses the dedicated in-game fleet without consuming oil or morale.",
+      "easy": "Easy",
+      "normal": "Normal",
+      "hard": "Hard"
+    },
+    "Month": {
+      "name": "Progress month",
+      "help": ""
+    },
+    "CompletedLevel": {
+      "name": "Cleared difficulty",
+      "help": ""
+    },
+    "AttemptedLevel": {
+      "name": "Attempted difficulty",
+      "help": ""
+    },
+    "Failed": {
+      "name": "Defeated this month",
+      "help": ""
+    }
+  },
   "Hard": {
     "_info": {
       "name": "Hard mode",
@@ -6977,7 +7010,8 @@
       "plone_cloud_with_adb": "Cloud mobile phone with public network ADB",
       "phone_cloud_without_adb": "Cloud mobile phone without public network ADB",
       "android_phone": "Android real phone",
-      "android_phone_vmos": "Android real machine VMOS virtual machine"
+      "android_phone_vmos": "Android real machine VMOS virtual machine",
+      "azurpilot_android": "azurpilot_android"
     },
     "TestScene": {
       "name": "Test scene",

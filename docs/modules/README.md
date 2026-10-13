@@ -39,6 +39,7 @@
 | 文档 | 主题 |
 | --- | --- |
 | [combat.md](combat.md) | 战斗系统：战斗循环、结算、阵容 |
+| [defeat-handling.md](defeat-handling.md) | 战败与结果记账：C/D 共用画面、自动换队、撤退策略与心情政策 |
 | [map.md](map.md) | 地图系统与检测：网格感知、透视、寻路 |
 | [campaign.md](campaign.md) | 战役执行：关卡选择、进图、任务入口聚合 |
 

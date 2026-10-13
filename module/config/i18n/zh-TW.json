@@ -206,6 +206,10 @@
       "name": "每日任務",
       "help": ""
     },
+    "LimitChallenge": {
+      "name": "限界挑戰",
+      "help": "每月依序挑戰至目標難度，每個難度最多出擊一次；戰敗後等待下個月。請先在遊戲內配置限界挑戰艦隊。目前使用國服辨識資源。"
+    },
     "Hard": {
       "name": "主線-困難圖",
       "help": ""
@@ -3688,6 +3692,35 @@
       "6": "6"
     }
   },
+  "LimitChallenge": {
+    "_info": {
+      "name": "限界挑戰",
+      "help": "每月依序挑戰至目標難度，每個難度最多出擊一次；戰敗後等待下個月。請先在遊戲內配置限界挑戰艦隊。目前使用國服辨識資源。"
+    },
+    "TargetLevel": {
+      "name": "目標難度",
+      "help": "窺探 → 審視 → 洞察，前一級通關領獎後才會挑戰下一級。S/A/B 為通關，C/D 為失敗。不消耗石油或心情，使用遊戲內的限界挑戰艦隊。",
+      "easy": "窺探",
+      "normal": "審視",
+      "hard": "洞察"
+    },
+    "Month": {
+      "name": "進度月份",
+      "help": ""
+    },
+    "CompletedLevel": {
+      "name": "已通關難度",
+      "help": ""
+    },
+    "AttemptedLevel": {
+      "name": "已嘗試難度",
+      "help": ""
+    },
+    "Failed": {
+      "name": "本月挑戰失敗",
+      "help": ""
+    }
+  },
   "Hard": {
     "_info": {
       "name": "困難圖",
@@ -6977,7 +7010,8 @@
       "plone_cloud_with_adb": "雲手機 有公網ADB",
       "phone_cloud_without_adb": "雲手機 無公網ADB",
       "android_phone": "安卓真機",
-      "android_phone_vmos": "安卓真機VMOS虛擬機器"
+      "android_phone_vmos": "安卓真機VMOS虛擬機器",
+      "azurpilot_android": "azurpilot_android"
     },
     "TestScene": {
       "name": "測試場景",

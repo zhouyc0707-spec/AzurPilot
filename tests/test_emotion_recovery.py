@@ -103,6 +103,44 @@ class EmotionIntegrationTests(unittest.TestCase):
         self.assertIn(config.Emotion_Fleet1RecoveryState['version'], (1, 2))
         self.assertEqual(70, config.Emotion_Fleet2Value)
 
+    def test_handoff_precheck_validates_standby_without_consuming_emotion(self):
+        _, config, emotion = self.setup_tracker()
+        config.Emotion_Fleet2RecoveryState = None
+        emotion.check_fleet(2)
+        self.assertIsNotNone(config.Emotion_Fleet2RecoveryState)
+        self.assertEqual((70, 70), (config.Emotion_Fleet1Value, config.Emotion_Fleet2Value))
+
+    def test_handoff_precheck_rejects_invalid_successor(self):
+        _, config, emotion = self.setup_tracker()
+        config.Emotion_Fleet2Value = None
+        config.Emotion_Fleet2RecoveryState = None
+        with self.assertRaises(RequestHumanTakeover):
+            emotion.check_fleet(2)
+        self.assertIsNone(config.Emotion_Fleet2Value)
+        self.assertEqual(config.Emotion_Fleet1Value, 70)
+
+    def test_handoff_precheck_delays_low_successor(self):
+        clock, config, emotion = self.setup_tracker()
+        config.Emotion_Fleet2Value = 0
+        config.Emotion_Fleet2RecoveryState = production.EmotionRecoveryState.calibrate(
+            0, clock.now(), 'dormitory_floor_2', True, False).export()
+        with self.assertRaises(ScriptEnd):
+            emotion.check_fleet(2)
+        self.assertEqual((70, 0), (config.Emotion_Fleet1Value, config.Emotion_Fleet2Value))
+        self.assertGreater(config.fields['Main.Scheduler.NextRun'], clock.now())
+
+    def test_handoff_precheck_respects_public_and_ignore_modes(self):
+        _, config, emotion = self.setup_tracker(public=True)
+        config.Emotion_Fleet2Value = None
+        config.Emotion_Fleet2RecoveryState = None
+        emotion.check_fleet(2)
+        self.assertEqual(config.PublicEmotion_FleetValue, 70)
+        for mode in ('ignore', 'calculate_ignore'):
+            with self.subTest(mode=mode):
+                config.Emotion_Mode = mode
+                emotion.check_fleet(2)
+                self.assertEqual(config.PublicEmotion_FleetValue, 70)
+
     def test_broken_recovery_state_is_rebuilt_conservatively(self):
         _, config, emotion = self.setup_tracker()
         # 版本无效的存档不可信：按当前心情值重建，三件套回到一致。

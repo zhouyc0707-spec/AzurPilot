@@ -24,7 +24,6 @@ import numpy as np
 
 from module.combat.emotion_state import (DIC_RECOVER, DIC_RECOVER_MAX, OATH_RECOVER,
                                         ONSEN_RECOVER, EmotionRecoveryState)
-from module.config.config import AzurLaneConfig
 from module.config.time_source import now as current_time
 from module.exception import ScriptEnd, ScriptError, RequestHumanTakeover
 from module.logger import logger
@@ -478,6 +477,26 @@ class Emotion:
             logger.info('[情绪-延迟] 延迟当前任务以防止未来的情绪控制问题')
             self.config.task_delay(target=recovered)
             raise ScriptEnd('[情绪-延迟] 情绪控制')
+
+    def check_fleet(self, fleet_index):
+        """自律恢复前检查实际接替舰队，不按原编队的待命设置跳过校准。
+
+        检查下一场的基础消耗，不等待、不扣减心情。心情不足沿用任务延迟，
+        账本不可用沿用人工接管异常，由调用方退出地图后再上抛。
+
+        Args:
+            fleet_index (int): 接替舰队的画面编号（1 或 2）。
+        """
+        if not self.is_calculate:
+            return
+        self.update()
+        self.record()
+        self.show()
+        fleet = self.public_fleet if self.using_public else self.fleets[fleet_index - 1]
+        recovered = fleet.get_recovered(self.reduce_per_battle)
+        if recovered > current_time():
+            self.config.task_delay(target=recovered)
+            raise ScriptEnd('[情绪-延迟] 接替舰队情绪控制')
 
     def wait(self, fleet_index):
         """等待指定舰队的情绪恢复到控制阈值。应在进入任何战斗之前调用。

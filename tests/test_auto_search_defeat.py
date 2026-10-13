@@ -15,12 +15,14 @@ from module.combat.assets import (
     BATTLE_STATUS_D, EXP_INFO_A, EXP_INFO_B, EXP_INFO_C, EXP_INFO_D, EXP_INFO_S, OPTS_INFO_D,
 )
 from module.combat.auto_search_combat import AutoSearchCombat
-from module.exception import CampaignEnd, GameStuckError, ScriptEnd
+from module.exception import CampaignEnd, GameStuckError, RequestHumanTakeover, ScriptEnd
 from module.handler.assets import (
     AUTO_SEARCH_MAP_OPTION_OFF, AUTO_SEARCH_MAP_OPTION_ON, AUTO_SEARCH_MENU_EXIT, GET_MISSION,
-    POPUP_CANCEL, POPUP_CONFIRM,
+    POPUP_CANCEL, POPUP_CONFIRM, FLEET_UNAVAILABLE,
 )
-from module.map.assets import FLEET_SWITCH_CONFIRM, FLEET_WITHDRAW, FLEET_WITHDRAW_BOSS, SWITCH_OVER, WITHDRAW
+from module.map.assets import (
+    FLEET_NUM_1, FLEET_NUM_2, FLEET_WITHDRAW, SWITCH_OVER, WITHDRAW,
+)
 
 
 def screen(*buttons):
@@ -70,18 +72,19 @@ class ScreenReplay:
         campaign = object.__new__(cls)
         campaign.config = SimpleNamespace(
             Campaign_DefeatWithdraw=policy, Campaign_Mode='normal',
+            FLEET_2=True, Fleet_FleetOrder='fleet1_all_fleet2_standby',
             Submarine_Fleet=0, Fleet_Fleet1Mode='combat_auto', Fleet_Fleet2Mode='combat_auto',
             BUTTON_OFFSET=(30, 30), MAP_IS_ONE_TIME_STAGE=False, modified={})
         campaign.device = self.device
         campaign.emotion = Mock(is_calculate=True)
         campaign.map_is_auto_search = True
-        campaign.fleet_alive_multiple = True
         campaign.interval_timer = {}
         campaign._defeat_count = 0
         campaign._hot_fix_check_wait = Timer(6)
         campaign._auto_search_in_stage_timer = Timer(3, count=6)
         campaign.appear = Mock(side_effect=self.appear)
         campaign.is_combat_executing = Mock(side_effect=lambda: 'COMBAT' in self.device.image)
+        campaign.is_combat_loading = Mock(side_effect=lambda: 'LOADING' in self.device.image)
         campaign.is_in_stage = Mock(side_effect=lambda: 'STAGE' in self.device.image)
         campaign.is_in_auto_search_menu = Mock(
             side_effect=lambda: AUTO_SEARCH_MENU_EXIT.name in self.device.image)
@@ -156,22 +159,22 @@ class AutoSearchDefeatTests(unittest.TestCase):
                 replay = ScreenReplay([screen(OPTS_INFO_D)])
                 campaign = replay.make_campaign()
                 campaign.map_is_auto_search = auto
-                campaign._auto_search_emotion_reduce = True
+                campaign.combat_result_reset(emotion_reduce=True)
                 with patch('module.base.timer.time', side_effect=lambda: replay.time):
                     self.assertTrue(campaign.handle_exp_info())
                 self.assertEqual(replay.clicks, [OPTS_INFO_D.name])
                 self.assertEqual(campaign._defeat_count, int(auto))
                 self.assertEqual(campaign._withdraw, auto)
-                self.assertEqual(campaign.emotion.reduce.call_count, int(auto))
+                self.assertEqual(campaign.emotion.reduce.call_count, 1)
 
     def test_shipwreck_is_recorded_even_while_click_is_on_cooldown(self):
         replay = ScreenReplay([screen(OPTS_INFO_D)])
         campaign = replay.make_campaign()
         with patch('module.base.timer.time', side_effect=lambda: replay.time):
             campaign.interval_reset(OPTS_INFO_D, interval=2)
-            self.assertFalse(campaign.handle_auto_search_shipwreck())
+            self.assertFalse(campaign.handle_combat_defeat())
         self.assertTrue(campaign._withdraw)
-        self.assertTrue(campaign._auto_search_defeated)
+        self.assertTrue(campaign.combat_result.defeated)
         self.assertEqual(campaign._defeat_count, 1)
         self.assertEqual(replay.clicks, [])
 
@@ -216,7 +219,7 @@ class AutoSearchDefeatTests(unittest.TestCase):
         campaign.emotion.reduce.assert_called_once_with(1)
         self.assertNotIn(WITHDRAW.name, replay.clicks)
 
-    def test_running_auto_search_cannot_cancel_pending_retreat(self):
+    def test_matching_on_template_cannot_toggle_or_cancel_pending_retreat(self):
         for policy in ('withdraw_continue', 'withdraw_stop'):
             with self.subTest(policy=policy):
                 replay = ScreenReplay(retreat_frames(
@@ -227,7 +230,7 @@ class AutoSearchDefeatTests(unittest.TestCase):
                 expected = ScriptEnd if policy == 'withdraw_stop' else CampaignEnd
                 with self.assertRaises(expected):
                     replay.run()
-                self.assertIn(AUTO_SEARCH_MAP_OPTION_ON.name, replay.clicks)
+                self.assertNotIn(AUTO_SEARCH_MAP_OPTION_ON.name, replay.clicks)
                 self.assertIn(WITHDRAW.name, replay.clicks)
                 self.assertNotIn(AUTO_SEARCH_MAP_OPTION_OFF.name, replay.clicks)
                 self.assertEqual(campaign._defeat_count, 3 if policy == 'withdraw_stop' else 2)
@@ -271,66 +274,66 @@ class AutoSearchDefeatTests(unittest.TestCase):
                 self.assertFalse(campaign._withdraw)
 
     def test_switch_policy_resumes_only_when_requested(self):
-        for handoff in ('confirm', 'automatic'):
+        for handoff in ('stopped', 'running'):
             with self.subTest(handoff=handoff):
-                frames = [screen('COMBAT'), screen(EXP_INFO_D), screen(OPTS_INFO_D), screen(GET_MISSION)]
-                if handoff == 'confirm':
-                    frames.extend([screen(FLEET_SWITCH_CONFIRM, POPUP_CANCEL, POPUP_CONFIRM),
-                                   screen(AUTO_SEARCH_MAP_OPTION_OFF)])
-                replay = ScreenReplay([*frames, screen(AUTO_SEARCH_MAP_OPTION_ON)])
+                frames = [screen('COMBAT'), screen(EXP_INFO_D), screen(OPTS_INFO_D), screen(GET_MISSION),
+                          screen(FLEET_UNAVAILABLE, GET_MISSION)]
+                if handoff == 'stopped':
+                    frames.append(screen(AUTO_SEARCH_MAP_OPTION_OFF, FLEET_NUM_2))
+                replay = ScreenReplay([*frames, screen(AUTO_SEARCH_MAP_OPTION_ON, FLEET_NUM_2)])
                 campaign = replay.make_campaign(policy='switch_fleet')
                 campaign._defeat_count = 2
                 del campaign.handle_popup_confirm
                 replay.run()
-                if handoff == 'confirm':
-                    self.assertIn(FLEET_SWITCH_CONFIRM.name, replay.clicks)
+                self.assertIn(FLEET_UNAVAILABLE.name, replay.clicks)
+                if handoff == 'stopped':
                     self.assertIn(AUTO_SEARCH_MAP_OPTION_OFF.name, replay.clicks)
                 self.assertNotIn(WITHDRAW.name, replay.clicks)
-                self.assertFalse(campaign.fleet_alive_multiple)
+                self.assertNotIn(SWITCH_OVER.name, replay.clicks)
+                campaign.emotion.check_fleet.assert_called_once_with(2)
                 self.assertFalse(campaign._withdraw)
                 self.assertEqual(campaign._defeat_count, 2)
 
     def test_switch_policy_retires_when_only_one_fleet_survives(self):
         replay = ScreenReplay(retreat_frames(screen('COMBAT'), screen(EXP_INFO_D), screen(OPTS_INFO_D)))
         campaign = replay.make_campaign(policy='switch_fleet')
-        campaign.fleet_alive_multiple = False
+        campaign.config.FLEET_2 = False
         with self.assertRaises(CampaignEnd):
             replay.run()
         self.assertIn(WITHDRAW.name, replay.clicks)
         self.assertNotIn(AUTO_SEARCH_MAP_OPTION_OFF.name, replay.clicks)
 
-    def test_alternate_switch_flow_clicks_switch_once_and_handles_commission(self):
+    def test_automatic_handoff_ignores_manual_switch_controls_and_handles_commission(self):
         replay = ScreenReplay([
-            screen('COMBAT'), screen(EXP_INFO_D), screen(OPTS_INFO_D), *[screen(WITHDRAW)] * 4,
-            screen(SWITCH_OVER), screen(SWITCH_OVER), screen(GET_MISSION), screen(FLEET_WITHDRAW),
-            screen(AUTO_SEARCH_MAP_OPTION_OFF), screen(AUTO_SEARCH_MAP_OPTION_ON)])
+            screen('COMBAT'), screen(EXP_INFO_D), screen(OPTS_INFO_D), screen(FLEET_UNAVAILABLE),
+            *[screen(WITHDRAW, FLEET_NUM_1, SWITCH_OVER, FLEET_WITHDRAW)] * 5, screen(GET_MISSION),
+            screen(AUTO_SEARCH_MAP_OPTION_OFF, FLEET_NUM_2),
+            screen(AUTO_SEARCH_MAP_OPTION_ON, FLEET_NUM_2)])
         campaign = replay.make_campaign(policy='switch_fleet')
         replay.run()
-        self.assertEqual(replay.clicks.count(SWITCH_OVER.name), 1)
+        self.assertNotIn(SWITCH_OVER.name, replay.clicks)
         self.assertIn(GET_MISSION.name, replay.clicks)
-        self.assertIn(FLEET_WITHDRAW.name, replay.clicks)
+        self.assertNotIn(FLEET_WITHDRAW.name, replay.clicks)
         self.assertIn(AUTO_SEARCH_MAP_OPTION_OFF.name, replay.clicks)
         self.assertNotIn(WITHDRAW.name, replay.clicks)
         self.assertFalse(campaign._withdraw)
 
     def test_failed_switch_falls_back_to_retreat_without_restarting(self):
-        for failure in ('boss', 'timeout'):
+        for failure in ('no_popup', 'timeout'):
             with self.subTest(failure=failure):
                 prefix = [screen('COMBAT'), screen(EXP_INFO_D), screen(OPTS_INFO_D)]
-                if failure == 'boss':
-                    prefix.append(screen(FLEET_WITHDRAW_BOSS, POPUP_CANCEL, POPUP_CONFIRM))
-                else:
-                    prefix.extend([*[screen(WITHDRAW)] * 4, *[screen()] * 22])
+                if failure == 'timeout':
+                    prefix.extend([screen(FLEET_UNAVAILABLE), *[screen(WITHDRAW, FLEET_NUM_1)] * 25])
                 replay = ScreenReplay(retreat_frames(*prefix, screen(AUTO_SEARCH_MAP_OPTION_ON)))
                 campaign = replay.make_campaign(policy='switch_fleet')
                 del campaign.handle_popup_confirm
                 with self.assertRaises(CampaignEnd):
                     replay.run()
                 self.assertIn(WITHDRAW.name, replay.clicks)
-                self.assertIn(AUTO_SEARCH_MAP_OPTION_ON.name, replay.clicks)
+                self.assertNotIn(AUTO_SEARCH_MAP_OPTION_ON.name, replay.clicks)
                 self.assertNotIn(AUTO_SEARCH_MAP_OPTION_OFF.name, replay.clicks)
                 self.assertNotIn('POPUP_CONFIRM_combat_status', replay.clicks)
-                self.assertFalse(campaign.fleet_alive_multiple)
+                self.assertNotIn(SWITCH_OVER.name, replay.clicks)
 
     def test_victory_between_defeats_resets_consecutive_count(self):
         loss = retreat_frames(screen('COMBAT'), screen(EXP_INFO_D), screen(OPTS_INFO_D))
@@ -400,6 +403,132 @@ class AutoSearchDefeatTests(unittest.TestCase):
         self.assertFalse(runner.config.Scheduler_Enable)
         self.assertEqual(campaign._defeat_count, 3)
         self.assertTrue(campaign.is_in_stage())
+
+
+class FleetHandoffTests(unittest.TestCase):
+    def test_main_loop_charges_actual_successor_in_both_fleet_orders(self):
+        orders = ((1, 'fleet1_all_fleet2_standby'), (2, 'fleet1_standby_fleet2_all'),
+                  (1, 'fleet1_mob_fleet2_boss'), (2, 'fleet1_boss_fleet2_mob'))
+        for first, order in orders:
+            for resume_state in ('MAP', 'LOADING', 'COMBAT'):
+                with self.subTest(order=order, resume_state=resume_state):
+                    original = FLEET_NUM_1 if first == 1 else FLEET_NUM_2
+                    target = FLEET_NUM_2 if first == 1 else FLEET_NUM_1
+                    last = screen(target, AUTO_SEARCH_MAP_OPTION_ON) if resume_state == 'MAP' else screen(resume_state)
+                    replay = ScreenReplay([
+                        screen(original, AUTO_SEARCH_MAP_OPTION_ON), screen('COMBAT'),
+                        screen(OPTS_INFO_D), screen(FLEET_UNAVAILABLE),
+                        screen(target, AUTO_SEARCH_MAP_OPTION_OFF), last])
+                    campaign = replay.make_campaign(policy='switch_fleet')
+                    campaign.config.Fleet_FleetOrder = order
+                    campaign.fleet_show_index = first
+                    campaign.battle_count = 0
+                    campaign._map_battle = 2
+                    campaign.auto_search_watch_oil = Mock(return_value=True)
+                    campaign.auto_search_watch_coin = Mock(return_value=True)
+                    campaign.handle_map_cat_attack = Mock(return_value=False)
+                    campaign.lv_get = Mock()
+                    with patch('module.base.timer.time', side_effect=lambda: replay.time):
+                        campaign.auto_search_execute_a_battle()
+                        self.assertEqual(campaign.fleet_show_index, 3 - first)
+                        replay.load([last, screen('COMBAT'), screen(EXP_INFO_S),
+                                     screen(target, AUTO_SEARCH_MAP_OPTION_ON)])
+                        campaign.auto_search_execute_a_battle()
+                    self.assertEqual(campaign.emotion.reduce.call_args_list,
+                                     [call(first), call(first, shipwreck=True), call(3 - first)])
+                    campaign.emotion.check_fleet.assert_called_once_with(3 - first)
+                    self.assertFalse(campaign.combat_result.fleet_unavailable)
+                    self.assertEqual(campaign.battle_count, 2)
+
+    def test_transition_without_number_preserves_last_confirmed_fleet(self):
+        replay = ScreenReplay([screen()])
+        campaign = replay.make_campaign()
+        campaign.fleet_show_index = 2
+        campaign.fleet_current_index = 2
+        campaign.lv_get = Mock()
+        self.assertFalse(campaign.auto_search_watch_fleet())
+        self.assertEqual(campaign.fleet_show_index, 2)
+        campaign.lv_get.assert_not_called()
+        replay.device.image = screen(FLEET_NUM_1)
+        self.assertTrue(campaign.auto_search_watch_fleet())
+        self.assertEqual(campaign.fleet_show_index, 1)
+
+    def test_usable_defeated_fleet_retires_even_if_other_number_is_visible(self):
+        for cls in (AutoSearchCombat, GemsCampaignOverride):
+            for displayed in (FLEET_NUM_1, FLEET_NUM_2):
+                with self.subTest(cls=cls.__name__, displayed=displayed.name):
+                    replay = ScreenReplay(retreat_frames(
+                        screen('COMBAT'), screen(OPTS_INFO_D), screen(EXP_INFO_D),
+                        screen(displayed, SWITCH_OVER, AUTO_SEARCH_MAP_OPTION_OFF)))
+                    campaign = replay.make_campaign(cls, 'switch_fleet')
+                    with self.assertRaises(CampaignEnd):
+                        replay.run()
+                    self.assertIn(WITHDRAW.name, replay.clicks)
+                    self.assertNotIn(SWITCH_OVER.name, replay.clicks)
+                    self.assertNotIn(FLEET_WITHDRAW.name, replay.clicks)
+                    self.assertNotIn(AUTO_SEARCH_MAP_OPTION_OFF.name, replay.clicks)
+                    self.assertNotIn(AUTO_SEARCH_MAP_OPTION_ON.name, replay.clicks)
+                    campaign.emotion.check_fleet.assert_not_called()
+
+    def test_handoff_resumes_only_after_unavailable_and_current_target(self):
+        replay = ScreenReplay([
+            screen('COMBAT'), screen(OPTS_INFO_D), screen(FLEET_UNAVAILABLE),
+            screen(FLEET_NUM_2), screen(FLEET_NUM_1, AUTO_SEARCH_MAP_OPTION_OFF, SWITCH_OVER),
+            screen(FLEET_NUM_2, AUTO_SEARCH_MAP_OPTION_OFF),
+            screen(FLEET_NUM_2, AUTO_SEARCH_MAP_OPTION_ON)])
+        campaign = replay.make_campaign(policy='switch_fleet')
+        replay.run()
+        self.assertEqual([i for i, name in replay.click_frames if name == AUTO_SEARCH_MAP_OPTION_OFF.name], [5])
+        self.assertNotIn(SWITCH_OVER.name, replay.clicks)
+        self.assertNotIn(FLEET_WITHDRAW.name, replay.clicks)
+        self.assertTrue(campaign.combat_result.fleet_unavailable)
+        campaign.emotion.check_fleet.assert_called_once_with(2)
+
+    def test_successor_precheck_failure_retires_before_reraising(self):
+        for error in (RequestHumanTakeover('接替舰队未校准'), ScriptEnd('接替舰队心情不足')):
+            with self.subTest(error=type(error).__name__):
+                replay = ScreenReplay(retreat_frames(
+                    screen('COMBAT'), screen(OPTS_INFO_D), screen(FLEET_UNAVAILABLE),
+                    screen(FLEET_NUM_2, AUTO_SEARCH_MAP_OPTION_OFF)))
+                campaign = replay.make_campaign(policy='switch_fleet')
+                campaign.emotion.check_fleet.side_effect = error
+                with self.assertRaises(type(error)) as caught:
+                    replay.run()
+                self.assertIs(caught.exception, error)
+                self.assertTrue(campaign.is_in_stage())
+                self.assertIn(WITHDRAW.name, replay.clicks)
+                self.assertNotIn(AUTO_SEARCH_MAP_OPTION_OFF.name, replay.clicks)
+                self.assertNotIn(AUTO_SEARCH_MAP_OPTION_ON.name, replay.clicks)
+                campaign.emotion.check_fleet.assert_called_once_with(2)
+
+    def test_execute_phase_unavailable_evidence_resets_before_next_battle(self):
+        replay = ScreenReplay([
+            screen('COMBAT'), screen(FLEET_UNAVAILABLE), screen(FLEET_UNAVAILABLE),
+            screen(FLEET_NUM_2, AUTO_SEARCH_MAP_OPTION_OFF), screen(FLEET_NUM_2, AUTO_SEARCH_MAP_OPTION_ON)])
+        campaign = replay.make_campaign(policy='switch_fleet')
+        replay.run()
+        self.assertTrue(campaign.combat_result.fleet_unavailable)
+        prior_clicks = len(replay.clicks)
+        replay.load(retreat_frames(screen('COMBAT'), screen(OPTS_INFO_D),
+                                   screen(FLEET_NUM_1, AUTO_SEARCH_MAP_OPTION_OFF, SWITCH_OVER)))
+        with self.assertRaises(CampaignEnd):
+            replay.run(fleet_index=2)
+        self.assertFalse(campaign.combat_result.fleet_unavailable)
+        self.assertNotIn(AUTO_SEARCH_MAP_OPTION_OFF.name, replay.clicks[prior_clicks:])
+        self.assertNotIn(SWITCH_OVER.name, replay.clicks[prior_clicks:])
+
+    def test_automatic_handoff_timeout_retires_without_manual_switch(self):
+        replay = ScreenReplay(retreat_frames(
+            screen('COMBAT'), screen(OPTS_INFO_D), screen(FLEET_UNAVAILABLE),
+            *[screen(WITHDRAW, SWITCH_OVER, FLEET_NUM_1, AUTO_SEARCH_MAP_OPTION_OFF)] * 26))
+        campaign = replay.make_campaign(policy='switch_fleet')
+        with self.assertRaises(CampaignEnd):
+            replay.run()
+        self.assertIn(WITHDRAW.name, replay.clicks)
+        self.assertNotIn(SWITCH_OVER.name, replay.clicks)
+        self.assertNotIn(AUTO_SEARCH_MAP_OPTION_OFF.name, replay.clicks)
+        self.assertTrue(campaign.combat_result.fleet_unavailable)
+        campaign.emotion.check_fleet.assert_not_called()
 
 
 if __name__ == '__main__':

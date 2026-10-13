@@ -73,6 +73,7 @@
     "page": "setting",
     "tasks": [
       "Daily",
+      "LimitChallenge",
       "Hard",
       "Exercise",
       "ShopFrequent",
