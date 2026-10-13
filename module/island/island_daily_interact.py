@@ -77,15 +77,19 @@ class IslandDailyInteract(Island):
         )
 
         logger.hr('JUU快递', level=2)
-        if not self._detect_development_plan_template_task(
+        task_state = self._detect_development_plan_template_task(
                 task_template=TEMPLATE_JUU_EXPRESS_TASK_ICON,
                 tab_button=DEVELOPMENT_PLAN_DAILY_TAB,
                 tab_check=DEVELOPMENT_PLAN_DAILY_TAB_CHECK,
                 tab_label='每日计划',
-                label='JUU速运'):
-            logger.info('[岛屿-每日周任务] 未检测到或已完成 JUU 速运任务，跳过')
+                label='JUU速运')
+        if task_state is None:
+            logger.warning('[岛屿-每日周任务] 未确认 JUU 速运检查页面，保留任务并短期重试')
             self._back_to_island_phone_from_development_plan()
-            return True
+            return False
+        if task_state is False:
+            logger.info('[岛屿-每日周任务] 未检测到或已完成 JUU 速运任务，跳过')
+            return self._back_to_island_phone_from_development_plan()
         if not self._back_to_island_phone_from_development_plan():
             return False
 
@@ -120,15 +124,19 @@ class IslandDailyInteract(Island):
         )
 
         logger.hr('商业配送', level=2)
-        if not self._detect_development_plan_template_task(
+        task_state = self._detect_development_plan_template_task(
                 task_template=TEMPLATE_BUSINESS_DELIVERY_TASK_ICON,
                 tab_button=DEVELOPMENT_PLAN_DAILY_TAB,
                 tab_check=DEVELOPMENT_PLAN_DAILY_TAB_CHECK,
                 tab_label='每日计划',
-                label='商区外送服务'):
-            logger.info('[岛屿-每日周任务] 未检测到或已完成商区外送服务任务，跳过')
+                label='商区外送服务')
+        if task_state is None:
+            logger.warning('[岛屿-每日周任务] 未确认商区外送检查页面，保留任务并短期重试')
             self._back_to_island_phone_from_development_plan()
-            return True
+            return False
+        if task_state is False:
+            logger.info('[岛屿-每日周任务] 未检测到或已完成商区外送服务任务，跳过')
+            return self._back_to_island_phone_from_development_plan()
         if not self._back_to_island_phone_from_development_plan():
             return False
 
@@ -167,15 +175,21 @@ class IslandDailyInteract(Island):
         logger.hr('每周拍照', level=2)
         completed = True
         while 1:
-            if not self._start_development_plan_template_task(
+            task_state = self._start_development_plan_template_task(
                     task_template=TEMPLATE_WEEKLY_PHOTO_TASK_ICON,
                     task_check=WEEKLY_PHOTO_TASK_CHECK,
                     tab_button=DEVELOPMENT_PLAN_WEEKLY_TAB,
                     tab_check=DEVELOPMENT_PLAN_WEEKLY_TAB_CHECK,
                     tab_label='每周计划',
-                    label='每周照相任务'):
-                logger.info('[岛屿-每日周任务] 未检测到或已完成每周照相任务，结束循环')
+                    label='每周照相任务')
+            if task_state is None:
+                logger.warning('[岛屿-每日周任务] 每周照相页面或启动未确认，保留任务并短期重试')
                 self._back_to_island_phone_from_development_plan()
+                completed = False
+                break
+            if task_state is False:
+                logger.info('[岛屿-每日周任务] 未检测到或已完成每周照相任务，结束循环')
+                completed = self._back_to_island_phone_from_development_plan() and completed
                 break
 
             if not self._run_weekly_photo_once():
@@ -402,22 +416,21 @@ class IslandDailyInteract(Island):
             label: 日志名称。
 
         Returns:
-            bool: 是否需要继续执行任务流程。
+            bool | None: True 已启动，False 在已确认页签上无任务，None 为页面或启动失败。
         """
         if not self._enter_development_plan():
-            return False
+            return None
 
         if not self._switch_development_plan_tab(tab_button=tab_button, tab_check=tab_check, label=tab_label):
-            return False
+            return None
 
-        self.device.screenshot()
-        task_button = self._match_development_plan_task_template(task_template)
-        if task_button is None:
-            return False
+        task_state, task_button = self._read_development_plan_task_template(task_template, tab_check, label)
+        if task_state is not True:
+            return task_state
 
         logger.info(f'[岛屿-每日周任务] 检测到{label}，点击任务图标')
         self.device.click(task_button)
-        for _ in self.loop(timeout=8):
+        for _ in self.loop(timeout=8, skip_first=False):
             if self._island_reward_visible():
                 self._handle_island_reward_once()
                 continue
@@ -426,7 +439,7 @@ class IslandDailyInteract(Island):
                 return True
 
         logger.warning(f'[岛屿-每日周任务] {label}确认按钮等待超时')
-        return False
+        return None
 
     def _detect_development_plan_template_task(self, task_template, tab_button, tab_check, tab_label, label):
         """
@@ -440,20 +453,54 @@ class IslandDailyInteract(Island):
             label: 日志名称。
 
         Returns:
-            bool: 是否检测到目标任务图标。
+            bool | None: True 有任务，False 在已确认页签上无任务，None 为页面检查失败。
         """
         if not self._enter_development_plan():
-            return False
+            return None
 
         if not self._switch_development_plan_tab(tab_button=tab_button, tab_check=tab_check, label=tab_label):
-            return False
+            return None
 
-        self.device.screenshot()
-        if self._match_development_plan_task_template(task_template) is None:
-            return False
+        task_state, _ = self._read_development_plan_task_template(task_template, tab_check, label)
+        if task_state is not True:
+            return task_state
 
         logger.info(f'[岛屿-每日周任务] 检测到{label}任务图标')
         return True
+
+    def _read_development_plan_task_template(self, task_template, tab_check, label):
+        """用新帧确认页签和任务列表稳定，区分任务不存在与页面未知。
+
+        Returns:
+            tuple[bool | None, Button | None]: 状态及已确认的图标；未知页面返回 (None, None)。
+
+        Pages:
+            in: 开发计划目标页签
+            out: 同一页签，或超时后的当前页面
+        """
+        stable = Timer(0.5, count=2)
+        candidate = None
+        for _ in self.loop(timeout=8, skip_first=False):
+            if self._island_reward_visible():
+                self._handle_island_reward_once()
+                stable.clear()
+                candidate = None
+                continue
+            if self.appear(ISLAND_DEVELOPMENT_PLAN_CHECK) and self.appear(tab_check):
+                button = self._match_development_plan_task_template(task_template)
+                state = button is not None
+                current = (state, tuple(button.area) if state else None)
+                if current != candidate:
+                    stable.clear()
+                    candidate = current
+                stable.start()
+                if stable.reached():
+                    return state, button
+            else:
+                stable.clear()
+                candidate = None
+        logger.warning(f'[岛屿-每日周任务] 未确认{label}任务列表稳定，保留短期重试')
+        return None, None
 
     def _switch_development_plan_tab(self, tab_button, tab_check, label):
         """切换到开发计划目标页签，并确认页签已激活。"""

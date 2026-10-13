@@ -1548,21 +1548,22 @@ class Island(SelectCharacter):
     def island_walk_switch_restaurant(self):
         """规则里 `switch` 步骤：切换到啾咖啡餐厅并等待岛内可操作。
 
-        交谈入口出现时岛屿主页面标识也可能可见，不能把切换前的场景当作完成。
-        至少发起一次交谈，入口仍可见时限频补点；后续持续截图确认岛内状态稳定。
+        “进入啾咖啡”入口出现时岛屿主页面标识也可能可见，不能把门外当作完成。
+        同时确认门图标、完整文字与原色，排除下方“前往基地”；真实点击入店后，
+        入口仍可见时限频补点，后续持续截图确认岛内状态稳定。
 
         Pages:
             page_island
         """
-        from module.island_daily_interact.assets import ROUTE_TWO_OPTION_COMPLETE
-
         clicked = False
         stable = Timer(1, count=2)
-        self.interval_clear(ROUTE_TWO_OPTION_COMPLETE)
+        self.interval_clear(ISLAND_JUU_CAFE_ENTER)
         for _ in self.loop(timeout=12, skip_first=False):
-            if self.appear(ROUTE_TWO_OPTION_COMPLETE):
+            # 原色与完整入口模板共同确认；点击冷却不代表入口已消失。
+            if self.match_template_color(ISLAND_JUU_CAFE_ENTER, offset=(20, 20), similarity=0.9):
                 stable.clear()
-                if self.appear_then_click(ROUTE_TWO_OPTION_COMPLETE, interval=3):
+                if self.appear_then_click(ISLAND_JUU_CAFE_ENTER, offset=(20, 20), interval=3,
+                                          similarity=0.9):
                     clicked = True
                 continue
             if clicked and self.appear(ISLAND_CHECK):
