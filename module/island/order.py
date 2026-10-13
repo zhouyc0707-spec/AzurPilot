@@ -17,7 +17,7 @@ from module.island.data import DIC_ISLAND_ITEM, DIC_ISLAND_SEASON_ORDER
 from module.island.island_daily_order import IslandDailyOrder
 from module.island.order_detail import get_order_detail_signature, order_detail_changed, same_order_detail
 from module.island.order_ocr import OrderDigitCounter, validate_requirements
-from module.island.order_selection import get_selected_order_position
+from module.island.order_selection import find_selected_order_positions
 from module.island.order_stock import get_menu_reserve_items, get_order_effective_stock, menu_reservations_known
 from module.island.planner_report import invalidate_planner_stocks, record_planner_stocks
 from module.island.utils import get_active_island_activity_ids, load_hard_floor_items, normalize_item_keys
@@ -250,14 +250,16 @@ class IslandOrder(IslandDailyOrder):
                     self.device.click(button)
                     retry.reset()
                 continue
-            selected_position = get_selected_order_position(
+            selected_positions = find_selected_order_positions(
                 self.device.image, positions, allow_right_occlusion=page_ready and detail,
-                allow_dialogue_occlusion=page_ready and detail)
+                allow_dialogue_occlusion=page_ready and detail,
+                allow_portrait_occlusion=server.server == 'cn' and page_ready and detail and after is not None)
+            selected_position = selected_positions[0] if len(selected_positions) == 1 else None
             selected = selected_position is not None and np.linalg.norm(np.subtract(selected_position, target)) <= 12
             other_selected = selected_position is not None and not selected
             changed = after is not None and (empty_before or order_detail_changed(before, after))
-            # 详情实际切换可独立确认遮挡订单；明确选中其他订单时仍拒绝旧详情。
-            confirmed = selected or (changed and not other_selected)
+            # 详情切换可确认遮挡订单；另一单或多个选中候选均不能由文字变化旁路。
+            confirmed = len(selected_positions) <= 1 and (selected or (changed and not other_selected))
             if confirmed and page_ready and (cooldown or detail):
                 if after is not None and not same_order_detail(candidate, after):
                     stable.clear()
@@ -266,6 +268,8 @@ class IslandOrder(IslandDailyOrder):
                 if stable.reached():
                     if not selected:
                         logger.info('[岛屿-订单] 右侧委托人/货物已切换并稳定，确认目标订单')
+                    elif not changed:
+                        logger.info('[岛屿-订单] 已确认目标选中及详情稳定，无需等待文字切换')
                     return 'cooldown' if cooldown else 'detail'
             else:
                 stable.clear()

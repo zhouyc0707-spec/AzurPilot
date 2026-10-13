@@ -17,6 +17,8 @@ CENTER_TOLERANCE = 6
 VERTICAL_SPACING_VARIANTS = (0, 1)
 HORIZONTAL_SPACING_VARIANTS = (-1, 0)
 RIGHT_OVERLAY_LEFT = 832
+# 国服左下立绘可挡住底部订单的左下角，只在已校准的小范围内允许这一个角缺失。
+PORTRAIT_OCCLUSION_AREA = (0, 520, 177, 720)
 
 
 def _white_mask(image):
@@ -83,7 +85,8 @@ def _dialogue_corner_matches(patch, index, left, top, dialogue_bounds):
     return False
 
 
-def _has_selection_corners(mask, position, *, allow_right_occlusion=False, dialogue_bounds=None):
+def _has_selection_corners(mask, position, *, allow_right_occlusion=False, dialogue_bounds=None,
+                           allow_portrait_occlusion=False):
     """共享位移与整体尺寸版本，只在已确认的叠层区域内处理遮挡。"""
     x, y = position
     height, width = mask.shape
@@ -104,6 +107,13 @@ def _has_selection_corners(mask, position, *, allow_right_occlusion=False, dialo
                         matches = [True] + [_corner_matches(corners[index][2], index) for index in (1, 2, 3)]
                         if all(matches):
                             return True
+                        if allow_portrait_occlusion and matches[1] and matches[3]:
+                            left, top, _ = corners[2]
+                            x1, y1, x2, y2 = PORTRAIT_OCCLUSION_AREA
+                            if (x1 <= left and left + CORNER_SIZE <= x2
+                                    and y1 <= top and top + CORNER_SIZE <= y2):
+                                # 其余三个完整 L 必须共用同一几何，不与右侧或对白豁免叠加。
+                                return True
                         # 被遮挡时无法观测宽度，最靠左的103px版本也须完整位于叠层内。
                         if allow_right_occlusion and matches[2] and all(
                                 corners[index][0] - horizontal_extra + min(HORIZONTAL_SPACING_VARIANTS)
@@ -129,8 +139,9 @@ def _unique_positions(positions):
     return result
 
 
-def get_selected_order_position(image, positions, *, allow_right_occlusion=False, allow_dialogue_occlusion=False):
-    """返回唯一具备选中角标证据的圆心，任一可见角证据不足返回 None。
+def find_selected_order_positions(image, positions, *, allow_right_occlusion=False,
+                                 allow_dialogue_occlusion=False, allow_portrait_occlusion=False):
+    """返回具备选中角标证据的圆心，调用方须拒绝多个候选的歧义。
 
     Args:
         image (np.ndarray): 当前 RGB 游戏截图，尺寸必须为 1280×720。
@@ -141,15 +152,17 @@ def get_selected_order_position(image, positions, *, allow_right_occlusion=False
             左侧角对仍须完整匹配；不能根据被遮住的角猜测宽度。
         allow_dialogue_occlusion (bool): 调用方已在当前帧正向确认订单页、需求与对应交付按钮时
             才可启用。另须识别对白框实际边界、完整上角对和框外下角白臂，不能按固定高度放行。
+        allow_portrait_occlusion (bool): 仅国服完整需求页及有效委托人／货物文字签名可启用。
+            仅允许已校准左下立绘区域内的左下角缺失，另三个角须完整匹配。
 
     Returns:
-        tuple[int, int] | None: 唯一选中的订单圆心；可见角缺失、多个选中或未知画面为 None。
+        list[tuple[int, int]]: 所有正向确认的选中候选；未知画面或无证据返回空列表。
     """
     if not isinstance(image, np.ndarray) or image.shape != (720, 1280, 3):
-        return None
+        return []
     candidates = _unique_positions(positions)
     if not candidates:
-        return None
+        return []
     mask = _white_mask(image)
     dialogue_bounds = None
     if allow_dialogue_occlusion:
@@ -157,13 +170,24 @@ def get_selected_order_position(image, positions, *, allow_right_occlusion=False
         dialogue_bounds = get_order_dialogue_bounds(image)
     selected = [position for position in candidates
                 if _has_selection_corners(mask, position, allow_right_occlusion=allow_right_occlusion,
-                                          dialogue_bounds=dialogue_bounds)]
+                                          dialogue_bounds=dialogue_bounds,
+                                          allow_portrait_occlusion=allow_portrait_occlusion)]
+    return selected
+
+
+def get_selected_order_position(image, positions, *, allow_right_occlusion=False,
+                                allow_dialogue_occlusion=False, allow_portrait_occlusion=False):
+    """返回唯一选中的圆心；多个候选或证据不足均返回 None。"""
+    selected = find_selected_order_positions(
+        image, positions, allow_right_occlusion=allow_right_occlusion,
+        allow_dialogue_occlusion=allow_dialogue_occlusion, allow_portrait_occlusion=allow_portrait_occlusion)
     return selected[0] if len(selected) == 1 else None
 
 
 def is_order_selected(image, target_position, positions, *, allow_right_occlusion=False,
-                      allow_dialogue_occlusion=False):
+                      allow_dialogue_occlusion=False, allow_portrait_occlusion=False):
     """目标圆心必须与画面中唯一的选中标记关联；遮挡选项的前置条件同上。"""
     selected = get_selected_order_position(image, positions, allow_right_occlusion=allow_right_occlusion,
-                                          allow_dialogue_occlusion=allow_dialogue_occlusion)
+                                          allow_dialogue_occlusion=allow_dialogue_occlusion,
+                                          allow_portrait_occlusion=allow_portrait_occlusion)
     return selected is not None and np.linalg.norm(np.subtract(selected, target_position)) <= 12
