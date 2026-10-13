@@ -11,7 +11,7 @@ from module.combat.assets import *
 from module.exception import CampaignEnd, GameTooManyClickError
 from module.handler.assets import POPUP_CANCEL, POPUP_CONFIRM, STORY_SKIP_3
 from module.logger import logger
-from module.os.assets import GLOBE_GOTO_MAP
+from module.os.assets import GLOBE_GOTO_MAP, MAP_GOTO_GLOBE_FOG
 from module.os_handler.assets import *
 from module.os_handler.enemy_searching import EnemySearchingHandler
 from module.statistics.azurstats import DropImage
@@ -293,9 +293,17 @@ class MapEventHandler(EnemySearchingHandler):
             bool: 当前地图是否已清除。
         """
         confirm_timer = Timer(1.2, count=3).start()
+        command = getattr(getattr(self.config, 'task', None), 'command', None)
+        fast_return = (command == 'OpsiHazard1Leveling'
+                       or getattr(self.config, '_bind_task_override', None) == 'OpsiHazard1Leveling')
+        reward_clicked = False
         cleared = False
         for _ in self.loop():
-            if self.appear(AUTO_SEARCH_REWARD, offset=(50, 50), interval=2):
+            # 奖励仍透出地图按钮时不能结束；点击冷却只限制操作，不限制遮罩检测。
+            if self.appear(AUTO_SEARCH_REWARD, offset=(50, 50)):
+                if not self.appear(AUTO_SEARCH_REWARD, offset=(50, 50), interval=2):
+                    confirm_timer.reset()
+                    continue
                 if drop:
                     if self.ensure_no_info_bar():
                         cleared = True
@@ -305,6 +313,7 @@ class MapEventHandler(EnemySearchingHandler):
                     # 不记录掉落时只检查当前截图中的清除提示，直接确认奖励。
                     cleared = True
                 self.device.click(AUTO_SEARCH_REWARD)
+                reward_clicked = True
                 self.interval_reset([
                     AUTO_SEARCH_REWARD,
                     AUTO_SEARCH_OS_MAP_OPTION_ON,
@@ -316,22 +325,31 @@ class MapEventHandler(EnemySearchingHandler):
             if self.handle_map_event():
                 confirm_timer.reset()
                 continue
-            if self.appear_then_click(GLOBE_GOTO_MAP, offset=(20, 20), interval=2):
+            if self.appear(GLOBE_GOTO_MAP, offset=(20, 20)):
                 # 有时点击 AUTO_SEARCH_REWARD 后会意外进入地球仪地图
                 # 因为重复点击或点击到地图外部区域
+                self.appear_then_click(GLOBE_GOTO_MAP, offset=(20, 20), interval=2)
                 confirm_timer.reset()
                 continue
             # 不知为何进入了仓库，直接退出
             # 等效于 is_in_storage，但此处无法继承 StorageHandler
             # STORAGE_CHECK 是重复名称，这里是 os_handler/STORAGE_CHECK，不是 handler/STORAGE_CHECK
-            if self.appear(STORAGE_CHECK, offset=(20, 20), interval=5):
-                logger.info(f'{STORAGE_CHECK} -> {BACK_ARROW}')
-                self.device.click(BACK_ARROW)
+            if self.appear(STORAGE_CHECK, offset=(20, 20)):
+                if self.appear(STORAGE_CHECK, offset=(20, 20), interval=5):
+                    logger.info(f'{STORAGE_CHECK} -> {BACK_ARROW}')
+                    self.device.click(BACK_ARROW)
                 confirm_timer.reset()
                 continue
 
             # 结束
             if self.is_in_map():
+                # 点击后由 continue 获取新截图；地图图案及原色已恢复时，侵蚀一
+                # 可立即进入雷达预检。只有亮度匹配或未知状态仍走原稳定确认。
+                if fast_return and reward_clicked and (
+                        self.match_template_color(IN_MAP, offset=(200, 5))
+                        or self.match_template_color(MAP_GOTO_GLOBE_FOG, offset=(5, 5))):
+                    logger.info('[大世界-侵蚀1练级] 关闭奖励后已确认地图，立即开始事件检索')
+                    break
                 if confirm_timer.reached():
                     break
             else:
