@@ -1,6 +1,6 @@
 """岛屿空投任务模块。
 
-处理岛屿每日空投领取逻辑，按实际按钮文字与奖励状态确认领取。
+处理岛屿每日空投领取逻辑，按日常补给入口文字与奖励状态确认领取。
 管理好友空投冷却时间（5小时）与每日重置边界，保留走位及补滑配置。
 """
 from module.island.island import *
@@ -258,7 +258,7 @@ class IslandAirDrop(Island):
         self.device.click_record_clear()
 
     def island_air_drop(self):
-        """识别接收补给并确认结果，分享剩余补给只作为结束状态。
+        """识别日常补给入口并确认结果，分享剩余补给只作为结束状态。
 
         Returns:
             bool: 已观察到分享状态或领取奖励并回到场景返回 True；
@@ -301,9 +301,12 @@ class IslandAirDrop(Island):
                 if action == '分享剩余补给':
                     logger.info('[岛屿-每日补给] 已识别分享剩余补给，停止领取')
                     return True
-                if action == '接收补给':
+                # 自己岛屿的领取入口实际显示「日常补给」，保留已核实的
+                # 「接收补给」文字兼容；只接受此交互区域中的完整名称。
+                if action in ('日常补给', '接收补给'):
                     ready.clear()
                     if click.reached():
+                        logger.info(f'[岛屿-每日补给] 已识别{action}，点击补给入口')
                         self.device.click(AIR_DROP_RECEIVE)
                         click.reset()
                     continue

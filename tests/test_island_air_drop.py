@@ -113,6 +113,46 @@ class IslandAirDropStateTests(unittest.TestCase):
         self.assertEqual([name for name, _, _ in self.clicks], [AIR_DROP_RECEIVE.name])
         self.assert_no_share_click()
 
+    def test_daily_supply_entry_is_clicked_before_reward_and_share(self):
+        result = self.run_frames([
+            AirDropFrame('日常补给入口', scene=True, action='日常补给'),
+            AirDropFrame('入口点击后转场一', scene=True, action='日常补给'),
+            AirDropFrame('入口点击后转场二', scene=True, action='日常补给'),
+            AirDropFrame('领取奖励', scene=True, reward='ISLAND_GET', elapsed=2.1),
+            AirDropFrame('领取后分享入口', scene=True, action='分享剩余补给'),
+        ])
+        self.assertTrue(result)
+        self.assertEqual([name for name, _, _ in self.clicks],
+                         ['AIR_DROP_RECEIVE', 'ISLAND_CLICK_SAFE_AREA'])
+        self.assert_no_share_click()
+
+    def test_daily_supply_entry_on_friend_island_uses_same_guarded_click(self):
+        result = self.run_frames([
+            AirDropFrame('好友日常补给入口', friend=True, action='日常补给'),
+            AirDropFrame('好友领取后分享入口', friend=True, share=True),
+        ])
+        self.assertTrue(result)
+        self.assertEqual([name for name, _, _ in self.clicks], ['AIR_DROP_RECEIVE'])
+        self.assert_no_share_click()
+
+    def test_daily_supply_text_ignores_whitespace_and_keeps_click_cooldown(self):
+        result = self.run_frames([
+            *(AirDropFrame(f'日常补给仍可见{index}', scene=True, action=' 日 常\n补 给 ')
+              for index in range(5)),
+            AirDropFrame('分享状态', scene=True, share=True),
+        ])
+        self.assertTrue(result)
+        self.assertEqual([name for name, _, _ in self.clicks], ['AIR_DROP_RECEIVE'])
+
+    def test_daily_supply_text_outside_confirmed_scene_is_not_clicked(self):
+        result = self.run_frames([
+            AirDropFrame('未知页面上的相同文字', action='日常补给'),
+            *(AirDropFrame(f'恢复无入口场景{index}', scene=True, elapsed=0.5)
+              for index in range(3)),
+        ])
+        self.assertFalse(result)
+        self.island.device.click.assert_not_called()
+
     def test_receive_text_ignores_ocr_whitespace(self):
         result = self.run_frames([
             AirDropFrame('接收入口', scene=True, action=' 接 收\n补 给 '),
@@ -122,7 +162,8 @@ class IslandAirDropStateTests(unittest.TestCase):
         self.assertEqual([name for name, _, _ in self.clicks], ['AIR_DROP_RECEIVE'])
 
     def test_similar_or_incomplete_action_text_never_triggers_receive(self):
-        for text in ('接受补给', '接收补', '接收补给分享', '分享剩余补', '', None):
+        for text in ('接受补给', '接收补', '接收补给分享', '日常补', '每日补给',
+                     '日常补给分享', '分享剩余补', '', None):
             with self.subTest(text=text):
                 self.island.device.click.reset_mock()
                 result = self.run_frames([
