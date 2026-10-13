@@ -136,23 +136,7 @@ class IslandRancher(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
         if self.appear(ISLAND_SHOPPING_CHECK, offset=(1, 1)):
             self.set_buy_number(target)
 
-        for _ in self.loop(timeout=15, skip_first=False):
-            if self.appear(ISLAND_MILL_CHECK, offset=1):
-                break
-            if self.appear_then_click(ISLAND_SHOP_CONFIRM, interval=2):
-                # 只在检测到确认按钮且距上次点击 ≥2s 时补点，点击后由下一轮重新
-                # 截图复检，避免旧的“睡 0.5s 再盲点一次”落到已经切换过去的页面上
-                continue
-            if self.appear(ISLAND_SHOP_GET, offset=(1, 1)):
-                self.device.click(ISLAND_SHOP_CONFIRM)
-                continue
-        else:
-            logger.warning(f"[岛屿-牧场] 确认磨坊加工超时: {self._item_cn(mill_item)}")
-            return False
-
-        if self.appear(ISLAND_SHOP_GET, offset=(1, 1)):
-            self.device.click(ISLAND_SHOP_CONFIRM)
-        return True
+        return self.confirm_island_shop_purchase(ISLAND_MILL_CHECK, self._item_cn(mill_item))
 
     def check_feed_needs(self, target_quantity=50):
         """检查牧场饲料库存缺口。
@@ -328,6 +312,12 @@ class IslandRancher(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
         """
         self.interval_clear([ISLAND_MILL_BACK, SELECT_UI_BACK, POST_CLOSE])
         for _ in self.loop(timeout=20, skip_first=False):
+            if self.appear(ISLAND_SHOP_GET, offset=(1, 1)):
+                self.handle_island_shop_reward_popup()
+                continue
+            if self.appear(ISLAND_GET, offset=30):
+                self.handle_island_reward_popup()
+                continue
             if (
                     self.ui_page_appear(page_island_postmanage)
                     and not self.appear(ISLAND_SELECT_PRODUCT_CHECK, offset=1)
@@ -349,9 +339,6 @@ class IslandRancher(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
                 continue
             if self.appear(ISLAND_POST_CHECK, offset=1) or self.appear(ISLAND_POST_VACANT_CHECK, offset=1):
                 self.device.click(POST_CLOSE)
-                continue
-            if self.appear(ISLAND_SHOP_GET, offset=(1, 1)):
-                self.device.click(ISLAND_SHOP_CONFIRM)
                 continue
 
         logger.warning("[岛屿-牧场] 磨坊加工后返回岗位管理页超时")
@@ -398,26 +385,40 @@ class IslandRancher(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
             logger.info(f"[岛屿-牧场] 牧场岗位{post_id}未开放，无法通过派遣详情进入磨坊")
             return False
         add_opened = False
+        collection_pending = False
+        collection_requested = False
+        collection_ready = Timer(0.5, count=2)
         for _ in self.loop(timeout=30, skip_first=False):
             if self.appear(ERROR1, offset=30):
                 self.device.click(POST_CLOSE)
                 self.island_error = True
                 return False
+            if self.appear(ISLAND_GET, offset=1):
+                self.handle_island_reward_popup(offset=1)
+                collection_pending = True
+                collection_ready.clear()
+                continue
+            if self.appear(POST_GET, offset=(50, 0)):
+                if self.appear_then_click(POST_GET, offset=(50, 0), interval=2):
+                    if not collection_requested:
+                        self.interval_clear(ISLAND_POST_SAFE_AREA)
+                    collection_requested = True
+                    collection_pending = True
+                collection_ready.clear()
+                continue
+            if collection_pending:
+                if not self._post_collection_ready():
+                    collection_ready.clear()
+                    continue
+                collection_ready.start()
+                if not collection_ready.reached():
+                    continue
+                collection_pending = False
             if self.appear(ISLAND_WORKING):
                 logger.info(f"[岛屿-牧场] 牧场岗位{post_id}正在工作，无法通过派遣详情进入磨坊")
                 self.device.click(POST_CLOSE)
                 return False
-            if self.appear(ISLAND_GET, offset=1):
-                self.device.click(ISLAND_POST_SAFE_AREA)
-                continue
-            if self.appear_then_click(POST_GET, offset=(50, 0)):
-                self.device.sleep(0.3)
-                self.device.click(ISLAND_POST_SAFE_AREA)
-                self.device.sleep(0.3)
-                self.device.click(ISLAND_POST_SAFE_AREA)
-                self.device.sleep(0.3)
-                continue
-            if self.appear_then_click(POST_ADD):
+            if self.appear_then_click(POST_ADD, interval=2):
                 add_opened = True
                 continue
             in_vacant_post = self.appear(ISLAND_POST_VACANT_CHECK, offset=1)
@@ -460,6 +461,9 @@ class IslandRancher(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
             bool: 操作是否成功。
         """
         add_opened = False
+        collection_pending = False
+        collection_requested = False
+        collection_ready = Timer(0.5, count=2)
         self.ranch_last_finish_time = None
         for _ in self.loop(timeout=40, skip_first=False):
             if self.appear(ERROR1, offset=30):
@@ -467,16 +471,27 @@ class IslandRancher(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
                 self.island_error = True
                 return False
             if self.appear(ISLAND_GET, offset=1):
-                self.device.click(ISLAND_POST_SAFE_AREA)
+                self.handle_island_reward_popup(offset=1)
+                collection_pending = True
+                collection_ready.clear()
                 continue
-            if self.appear_then_click(POST_GET, offset=(50, 0)):
-                self.device.sleep(0.3)
-                self.device.click(ISLAND_POST_SAFE_AREA)
-                self.device.sleep(0.3)
-                self.device.click(ISLAND_POST_SAFE_AREA)
-                self.device.sleep(0.3)
+            if self.appear(POST_GET, offset=(50, 0)):
+                if self.appear_then_click(POST_GET, offset=(50, 0), interval=2):
+                    if not collection_requested:
+                        self.interval_clear(ISLAND_POST_SAFE_AREA)
+                    collection_requested = True
+                    collection_pending = True
+                collection_ready.clear()
                 continue
-            if self.appear_then_click(POST_ADD):
+            if collection_pending:
+                if not self._post_collection_ready():
+                    collection_ready.clear()
+                    continue
+                collection_ready.start()
+                if not collection_ready.reached():
+                    continue
+                collection_pending = False
+            if self.appear_then_click(POST_ADD, interval=2):
                 add_opened = True
                 continue
             in_vacant_post = self.appear(ISLAND_POST_VACANT_CHECK, offset=1)
@@ -518,8 +533,8 @@ class IslandRancher(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
             ):
                 logger.info(f"[岛屿-牧场] 牧场岗位{post_id}没有可追加位置，按已满岗位处理")
                 self.ranch_last_finish_time = self.ranch_ocr_finish_time(post_id)
-                self.device.click(POST_CLOSE)
-                return True
+                self.appear_then_click(POST_CLOSE, interval=2)
+                continue
             if (
                     self.appear(ISLAND_POST_CHECK, offset=1)
                     and not self.appear(POST_GET, offset=(50, 0))
@@ -529,8 +544,8 @@ class IslandRancher(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
             ):
                 logger.info(f"[岛屿-牧场] 牧场岗位{post_id}没有可追加位置，跳过现有岗位槽位")
                 self.ranch_last_finish_time = self.ranch_ocr_finish_time(post_id)
-                self.device.click(POST_CLOSE)
-                return True
+                self.appear_then_click(POST_CLOSE, interval=2)
+                continue
             if (
                     self.appear(ISLAND_POSTMANAGE_CHECK, offset=1)
                     and not self.is_post_detail_visible()
@@ -801,7 +816,7 @@ class IslandRancher(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
                     raise GameStuckError(f'{pid} 计划巡检未能打开岗位')
                 for _ in self.loop(timeout=Timer(20), skip_first=False):
                     if self.appear(ISLAND_GET, offset=1):
-                        self.device.click(ISLAND_POST_SAFE_AREA)
+                        self.handle_island_reward_popup(offset=1)
                         continue
                     if self.appear_then_click(POST_GET, offset=(50, 0), interval=2):
                         # 可收取阶段产物时队列仍可能工作；收取后用新截图复检实际剩余时间。

@@ -30,7 +30,8 @@ from module.combat.assets import GET_ITEMS_1, GET_ITEMS_2, GET_SHIP
 from module.exception import (GameNotRunningError, GamePageUnknownError,
                               RequestHumanTakeover)
 from module.exercise.assets import EXERCISE_PREPARATION
-from module.handler.assets import (AUTO_SEARCH_MENU_EXIT, BATTLE_PASS_NEW_SEASON, BATTLE_PASS_NOTICE, GAME_TIPS,
+from module.handler.assets import (AUTO_SEARCH_MENU_EXIT, BATTLE_PASS_NEW_SEASON, BATTLE_PASS_NOTICE,
+                                   GAME_TIPS, GAME_TIPS3, GAME_TIPS4,
                                    LOGIN_ANNOUNCE, LOGIN_ANNOUNCE_2, LOGIN_CHECK, LOGIN_RETURN_SIGN,
                                    MAINTENANCE_ANNOUNCE, MONTHLY_PASS_NOTICE)
 from module.handler.info_handler import InfoHandler
@@ -43,7 +44,7 @@ from module.os_handler.assets import (AUTO_SEARCH_REWARD, EXCHANGE_CHECK, RESET_
 from module.raid.assets import *
 from module.ui.assets import *
 from module.ui.page import (Page, page_academy, page_campaign, page_event, page_island,
-                            page_island_management, page_main, page_main_white, page_sp)
+                            page_island_management, page_island_phone, page_main, page_main_white, page_sp)
 from module.ui_white.assets import *
 
 
@@ -103,8 +104,25 @@ class UI(InfoHandler):
             in: page_island 或进入岛屿的转场画面。
             out: 当前页面，仅识别，不操作。
         """
-        # 英文服的主页检查资源就是右上角入口，图案与中文服不同。
-        entry_button = ISLAND_CHECK if getattr(self.config, 'SERVER', 'cn') == 'en' else ISLAND_GOTO_MANAGEMENT
+        return UI.ui_island_entry_ready(self, confirm_timer, ISLAND_GOTO_MANAGEMENT)
+
+    def ui_island_entry_ready(self, confirm_timer, entry_button):
+        """确认岛屿页及当前导航入口在连续新截图中就绪。
+
+        Args:
+            confirm_timer (Timer): 本次导航持有的连续可见计时器。
+            entry_button (Button): 当前链接的管理或手机入口资源。
+
+        Returns:
+            bool: 页面和入口的图案、颜色连续可见后返回 True。
+
+        Pages:
+            in: page_island 或进入岛屿的转场画面。
+            out: 当前页面，仅识别，不操作。
+        """
+        # 英文服的两个链接点击同一右上角入口，本服主页资源包含真实图案。
+        if getattr(self.config, 'SERVER', 'cn') == 'en':
+            entry_button = ISLAND_CHECK
         if (self.appear(ISLAND_CHECK, offset=(20, 20))
                 and self.match_template_color(entry_button, offset=(20, 20))):
             confirm_timer.start()
@@ -375,11 +393,11 @@ class UI(InfoHandler):
                 if page.parent is None or page.check_button is None:
                     continue
                 # 先确认入口稳定，再消耗页面点击间隔，避免加载期间空等五秒。
-                if page == page_island and page.parent == page_island_management:
+                if page == page_island and page.parent in (page_island_management, page_island_phone):
                     if not self.appear(page.check_button, offset=offset):
                         island_entry_confirm.clear()
                         continue
-                    if not self.ui_island_management_entry_ready(island_entry_confirm):
+                    if not self.ui_island_entry_ready(island_entry_confirm, page.links[page.parent]):
                         continue
                 if self.appear(page.check_button, offset=offset, interval=5):
                     logger.info(f'[UI] 页面切换: {page} -> {page.parent}')
@@ -727,9 +745,12 @@ class UI(InfoHandler):
         # 游戏提示
         # 度假村的活动委托提示
         # 2025.05.29 进入船坞时出现的皮肤功能提示
-        if self.appear(GAME_TIPS, offset=(30, 30), interval=2):
-            logger.info(f'[UI-额外] {GAME_TIPS} -> {GOTO_MAIN}')
-            self.device.click(GOTO_MAIN)
+        # 提示模板在高清缩放后可能命中主页元素，须核验确认按钮背景。
+        # 复用提示处理器关闭当前弹窗，不从未知画面盲点 HOME 坐标。
+        if self.handle_game_tips():
+            # 同一提示可能同时匹配多个版本，统一冷却防止转场时换模板补点。
+            for tips_button in (GAME_TIPS, GAME_TIPS3, GAME_TIPS4):
+                self.interval_reset(tips_button, interval=2)
             return True
 
         # 后宅弹窗

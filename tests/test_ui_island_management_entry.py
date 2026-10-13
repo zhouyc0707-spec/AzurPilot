@@ -8,7 +8,8 @@ import module.ui.ui as ui_module
 from module.base.button import Button
 from module.base.timer import Timer
 from module.exception import GameStuckError
-from module.ui.page import Page, page_island, page_island_management
+from module.ui.assets import ISLAND_GOTO_ISLAND_PHONE, ISLAND_PHONE_CHECK
+from module.ui.page import Page, page_island, page_island_management, page_island_phone
 from module.ui.ui import UI
 from tests.test_island_goto_management import (
     FakeClock,
@@ -31,6 +32,7 @@ class IslandManagementNavigationTest(unittest.TestCase):
         self.pages_patch = patch.object(Page, 'all_pages', {
             page_island.name: page_island,
             page_island_management.name: page_island_management,
+            page_island_phone.name: page_island_phone,
         })
         self.pages_patch.start()
 
@@ -40,6 +42,8 @@ class IslandManagementNavigationTest(unittest.TestCase):
         self.time_patch.stop()
         ISLAND_CHECK.clear_offset()
         ISLAND_GOTO_MANAGEMENT.clear_offset()
+        ISLAND_GOTO_ISLAND_PHONE.clear_offset()
+        ISLAND_PHONE_CHECK.clear_offset()
 
     def make_ui(self, timeline, screenshot_cost=0.4):
         device = FakeDevice(self.clock, timeline, screenshot_cost=screenshot_cost)
@@ -212,6 +216,74 @@ class IslandManagementNavigationTest(unittest.TestCase):
                 self.assertTrue(handled)
                 self.assertEqual(len(device.clicks), 1)
                 self.assertGreaterEqual(device.clicks[0][0], 2.4)
+
+    def test_phone_navigation_waits_for_ready_without_consuming_cooldown(self):
+        phone_entry = build_frame(ISLAND_CHECK, ISLAND_GOTO_ISLAND_PHONE)
+        phone_page = build_frame(ISLAND_PHONE_CHECK)
+        ui, device = self.make_ui(lambda t: phone_entry if t < 1.6 else phone_page)
+
+        ui.ui_goto(page_island_phone, get_ship=False)
+
+        self.assertEqual(device.clicks, [(1.2, 'ISLAND_GOTO_ISLAND_PHONE')])
+        self.assertEqual(device.screenshot_count, 4)
+
+    def test_phone_missing_entry_retains_timeout_recovery(self):
+        ui, device = self.make_ui(lambda t: LOADING_PAGE)
+
+        with self.assertRaises(GameStuckError):
+            ui.ui_goto(page_island_phone, get_ship=False, recover_unknown=False)
+
+        self.assertEqual(device.clicks, [])
+        self.assertGreaterEqual(self.clock.now - device.t0, 30.0)
+
+    def test_phone_flash_or_popup_restarts_confirmation(self):
+        phone_entry = build_frame(ISLAND_CHECK, ISLAND_GOTO_ISLAND_PHONE)
+        phone_page = build_frame(ISLAND_PHONE_CHECK)
+
+        def timeline(t):
+            if t < 0.5:
+                return phone_entry
+            if t < 2.0:
+                return LOADING_PAGE
+            if t < 3.6:
+                return phone_entry
+            return phone_page
+
+        ui, device = self.make_ui(timeline)
+        ui.ui_goto(page_island_phone, get_ship=False)
+        self.assertEqual(len(device.clicks), 1)
+        self.assertGreater(device.clicks[0][0], 3.0)
+
+    def test_phone_ready_timer_is_not_reused_between_navigation_calls(self):
+        phone_entry = build_frame(ISLAND_CHECK, ISLAND_GOTO_ISLAND_PHONE)
+        phone_page = build_frame(ISLAND_PHONE_CHECK)
+        ui, device = self.make_ui(lambda t: phone_entry if t < 1.6 else phone_page)
+        ui.ui_goto(page_island_phone, get_ship=False)
+        self.assertEqual(len(device.clicks), 1)
+
+        second_origin = self.clock.now
+        device.t0 = second_origin
+        device.timeline = lambda t: phone_entry if t < 1.6 else phone_page
+        device.image = phone_entry
+        ui.ui_goto(page_island_phone, get_ship=False)
+        self.assertEqual(device.clicks[1], (1.2, 'ISLAND_GOTO_ISLAND_PHONE'))
+
+    def test_english_phone_uses_real_english_entry_resource(self):
+        english_entry = Button(
+            area=ISLAND_CHECK.raw_area['en'], color=ISLAND_CHECK.raw_color['en'],
+            button=ISLAND_CHECK.raw_button['en'], file=ISLAND_CHECK.raw_file['en'],
+            name='ISLAND_CHECK',
+        )
+        english_page = build_frame(english_entry)
+        phone_page = build_frame(ISLAND_PHONE_CHECK)
+        ui, device = self.make_ui(lambda t: english_page if t < 1.6 else phone_page)
+        ui.config.SERVER = 'en'
+
+        with patch.object(ui_module, 'ISLAND_CHECK', english_entry), patch.object(
+                page_island, 'check_button', english_entry):
+            ui.ui_goto(page_island_phone, get_ship=False)
+
+        self.assertEqual(device.clicks, [(1.2, 'ISLAND_GOTO_ISLAND_PHONE')])
 
 
 if __name__ == '__main__':

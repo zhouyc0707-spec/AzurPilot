@@ -343,23 +343,31 @@ class IslandBusiness(Island):
         if not fallback_product:
             logger.warning(f"[岛屿-经营] 备用商品 '{self._item_cn(fallback_name)}' 未找到，无法替换")
             return False
+        if fallback_product['name'] == seasonal_product_name:
+            logger.info(f"[岛屿-经营] 备用餐品与当前季节餐品相同，保留 {seasonal_info['display']} 原菜单")
+            return False
 
         logger.info(f"[岛屿-经营] 季节商品 '{seasonal_info['display']}' 库存不足 ({count} < {self.seasonal_threshold})，"
                      f"替换为 '{self._item_cn(fallback_name)}'")
 
-        # 在 active_products 中替换
+        # 备用餐品已经在菜单中时保留其原位置，只移除缺货季节项。
+        # 同一餐品只能选择一次，重复点击会有取消勾选的风险。
+        fallback_already_selected = fallback_product['name'] in selected_names
         new_products = []
         replaced = False
         for p in selected_products:
             if p['name'] == seasonal_product_name and not replaced:
-                new_products.append(fallback_product)
+                if not fallback_already_selected:
+                    new_products.append(fallback_product)
                 replaced = True
             else:
                 new_products.append(p)
 
         if replaced:
-            self.active_products[shop_name] = new_products
+            self.active_products[shop_name] = self._unique_business_products(new_products)
             self._sync_planned_shop_menu(shop_name)
+            if fallback_already_selected:
+                logger.info(f"[岛屿-经营] 备用餐品 {self._item_cn(fallback_name)} 已在菜单中，保留原位置且不重复选择")
             logger.info(f"[岛屿-经营] {shop_name}商品已替换: {self._item_cn(seasonal_product_name)} → {self._item_cn(fallback_name)}")
             return True
 
@@ -829,6 +837,17 @@ class IslandBusiness(Island):
             return self.season_config.get_seasonal_items(module_key)
         return []
 
+    @staticmethod
+    def _unique_business_products(products):
+        """按餐品名称保序去重，保留首次配置对应的识别资源。"""
+        unique = []
+        seen = set()
+        for product in products:
+            if product['name'] not in seen:
+                seen.add(product['name'])
+                unique.append(product)
+        return unique
+
     def _load_shop_configs(self):
         """优先加载规划菜单；未生成时保留手工餐品，均按季节过滤。"""
         self.active_products = {}
@@ -840,10 +859,10 @@ class IslandBusiness(Island):
             module_key = self.SHOP_SEASON_MAP.get(shop_name, '')
             planned = get_planned_menu(self.config, SHOP_TO_RESTAURANT[int(ck)], self.season_config.season)
             if planned is not None:
-                self.active_products[shop_name] = [
+                self.active_products[shop_name] = self._unique_business_products([
                     product for name in planned for product in self.shop_products[shop_name]
                     if product['name'] == name
-                ]
+                ])
                 if not planned:
                     self._planned_disabled_shops.add(shop_name)
                     logger.info(f"[岛屿-经营] {shop_name}: 规划菜单为空，本轮仅领取已有收益")
@@ -872,13 +891,14 @@ class IslandBusiness(Island):
                             products.append(p)
                             break
             if products:
-                self.active_products[shop_name] = products
-                logger.info(f"[岛屿-经营] {shop_name}: 配置 {len(products)} 餐品")
+                self.active_products[shop_name] = self._unique_business_products(products)
+                logger.info(f"[岛屿-经营] {shop_name}: 配置 {len(self.active_products[shop_name])} 餐品")
 
     def _sync_planned_shop_menu(self, shop_name):
         """将季节备选和加成替换的结果同步给订单保护及生产补货。"""
         shop = next((shop for shop in self.shops if shop['name'] == shop_name), None)
         if shop is not None:
+            self.active_products[shop_name] = self._unique_business_products(self.active_products.get(shop_name, []))
             sync_active_menu(self.config, SHOP_TO_RESTAURANT[int(shop['config_key'])],
                              [product['name'] for product in self.active_products.get(shop_name, [])])
 
@@ -2080,7 +2100,8 @@ class IslandBusiness(Island):
 
     def _select_business_product(self, shop_name=None):
         # 优先使用配置的产品列表，否则使用全部
-        products = self.active_products.get(shop_name, self.shop_products.get(shop_name, []))
+        products = self._unique_business_products(
+            self.active_products.get(shop_name, self.shop_products.get(shop_name, [])))
         if not products:
             return
         # 等待界面稳定

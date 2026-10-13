@@ -753,15 +753,15 @@ class Island(SelectCharacter):
             bool: 关闭成功返回 True，超时返回 False。
         """
         for _ in self.loop(timeout=15, skip_first=False):
+            if self.appear(ISLAND_GET, offset=30):
+                self.handle_island_reward_popup()
+                continue
             if self.ui_page_appear(page_island_postmanage) and not self.is_post_detail_visible():
                 return True
             if self.is_character_filter_visible():
                 # 角色筛选弹窗盖住整屏，下面这些模板全都认不出它；不收拾就会空转
                 # 到超时，画面不变还会升级成设备级卡死并重启游戏。
                 self.close_character_filter()
-                continue
-            if self.appear(ISLAND_GET, offset=30):
-                self.device.click(ISLAND_POST_SAFE_AREA)
                 continue
             if self.is_post_detail_visible():
                 self.device.click(POST_CLOSE)
@@ -790,32 +790,81 @@ class Island(SelectCharacter):
         Returns:
             bool: 收取并关闭成功返回 True，超时返回 False。
         """
+        return self._collect_post(close=True)
+
+    def handle_island_reward_popup(self, click_button=ISLAND_POST_SAFE_AREA,
+                                   button=ISLAND_GET, offset=30, interval=2):
+        """奖励仍可见且关闭冷却结束时，点击一次安全区域。
+
+        调用方先用不带冷却的检测阻止奖励遮挡时穿透到背景页；此方法只在
+        实际点击后返回 True。不同奖励模板共用安全区冷却，避免交替补点。
+        """
+        if not self.appear(button, offset=offset):
+            return False
+        timer = self.get_interval_timer(click_button, interval=interval, renew=True)
+        if not timer.reached():
+            return False
+        self.device.click(click_button)
+        timer.reset()
+        return True
+
+    def _post_collection_ready(self):
+        """确认当前画面已出现可继续操作的岗位状态。"""
+        return (
+            self.appear(ISLAND_POST_VACANT_CHECK, offset=1)
+            or self.appear(ISLAND_POST_SELECT, offset=1)
+            or self.appear(POST_ADD, offset=1)
+            or self.appear(ISLAND_WORKING, offset=1)
+            or (self.ui_page_appear(page_island_postmanage) and not self.is_post_detail_visible())
+        )
+
+    def _collect_post(self, close):
+        """用新截图收取岗位产物，按已恢复的岗位状态关闭或停留。
+
+        Pages:
+            in: 岗位详情或岗位管理页
+            out: 岗位管理页（close）或已收取的岗位详情
+        """
+        ready = Timer(0.5, count=2)
+        collection_requested = False
         for _ in self.loop(timeout=20, skip_first=False):
-            if self.ui_page_appear(page_island_postmanage) and not self.is_post_detail_visible():
-                return True
+            if self.appear(ISLAND_GET, offset=30):
+                self.handle_island_reward_popup()
+                ready.clear()
+                continue
             if self.is_character_filter_visible():
                 # 同 post_close：先收拾掉筛选弹窗，别让循环空转到设备级卡死。
                 self.close_character_filter()
+                ready.clear()
                 continue
             if self.appear(ERROR1, offset=30):
                 self.device.click(POST_CLOSE)
                 self.island_error = True
+                ready.clear()
                 continue
-            if self.appear(ISLAND_GET, offset=30):
-                self.device.click(ISLAND_POST_SAFE_AREA)
-                self.device.sleep(0.5)
+            if self.appear(POST_GET, offset=(50, 0)):
+                if self.appear_then_click(POST_GET, offset=(50, 0), interval=2):
+                    if not collection_requested:
+                        self.interval_clear(ISLAND_POST_SAFE_AREA)
+                    collection_requested = True
+                ready.clear()
                 continue
-            if self.appear_then_click(POST_GET, offset=(50, 0)):
-                self.device.sleep(0.5)
-                self.device.click(ISLAND_POST_SAFE_AREA)
-                self.device.sleep(0.5)
-                self.device.click(ISLAND_POST_SAFE_AREA)
-                self.device.sleep(0.5)
+            in_list = self.ui_page_appear(page_island_postmanage) and not self.is_post_detail_visible()
+            if in_list:
+                ready.start()
+                if ready.reached():
+                    return True
                 continue
-            if self.is_post_detail_visible() and not self.appear(POST_GET, offset=(50, 0)):
-                self.device.click(POST_CLOSE)
+            if self._post_collection_ready():
+                ready.start()
+                if not ready.reached():
+                    continue
+                if not close:
+                    return True
+                self.appear_then_click(POST_CLOSE, interval=2)
                 continue
-        logger.warning("[岛屿] 收取并关闭岗位详情超时")
+            ready.clear()
+        logger.warning("[岛屿] 收取岗位产物后确认状态超时")
         return False
 
     def post_get_stay(self):
@@ -824,26 +873,7 @@ class Island(SelectCharacter):
         Returns:
             bool: 收取成功返回 True，超时返回 False。
         """
-        for _ in self.loop(timeout=20, skip_first=False):
-            if self.appear(ERROR1, offset=30):
-                self.device.click(POST_CLOSE)
-                self.island_error = True
-                continue
-            if self.appear(ISLAND_GET, offset=30):
-                self.device.click(ISLAND_POST_SAFE_AREA)
-                self.device.sleep(0.5)
-                continue
-            if self.appear_then_click(POST_GET, offset=(50, 0)):
-                self.device.sleep(0.5)
-                self.device.click(ISLAND_POST_SAFE_AREA)
-                self.device.sleep(0.5)
-                self.device.click(ISLAND_POST_SAFE_AREA)
-                self.device.sleep(0.5)
-                continue
-            if (self.is_post_detail_visible() or self.ui_page_appear(page_island_postmanage)):
-                return True
-        logger.warning("[岛屿] 收取当前岗位产物超时")
-        return False
+        return self._collect_post(close=False)
 
     def post_get_and_add(self, product_selection, product_selection_check):
         """收取产物并追加派遣生产。
@@ -855,22 +885,36 @@ class Island(SelectCharacter):
         Returns:
             bool: 成功追加派遣返回 True，失败或超时返回 False。
         """
+        collection_pending = False
+        collection_requested = False
+        ready = Timer(0.5, count=2)
         for _ in self.loop(timeout=30, skip_first=False):
             if self.appear(ERROR1,offset=30):
                 self.device.click(POST_CLOSE)
                 self.island_error = True
                 return False
             if self.appear(ISLAND_GET,offset=1):
-                self.device.click(ISLAND_POST_SAFE_AREA)
+                self.handle_island_reward_popup(offset=1)
+                collection_pending = True
+                ready.clear()
                 continue
-            if self.appear_then_click(POST_ADD,offset=1):
+            if self.appear(POST_GET, offset=(50, 0)):
+                if self.appear_then_click(POST_GET, offset=(50, 0), interval=2):
+                    if not collection_requested:
+                        self.interval_clear(ISLAND_POST_SAFE_AREA)
+                    collection_requested = True
+                    collection_pending = True
+                ready.clear()
                 continue
-            if self.appear_then_click(POST_GET,offset=(50,0)):
-                self.device.sleep(0.5)
-                self.device.click(ISLAND_POST_SAFE_AREA)
-                self.device.sleep(0.5)
-                self.device.click(ISLAND_POST_SAFE_AREA)
-                self.device.sleep(0.5)
+            if collection_pending:
+                if not self._post_collection_ready():
+                    ready.clear()
+                    continue
+                ready.start()
+                if not ready.reached():
+                    continue
+                collection_pending = False
+            if self.appear_then_click(POST_ADD, offset=1, interval=2):
                 continue
             if self.appear_then_click(ISLAND_POST_SELECT,offset=1):
                 self.device.sleep(0.5)
@@ -901,8 +945,8 @@ class Island(SelectCharacter):
                     and not self.appear(POST_ADD)
                     and not self.appear(ISLAND_POST_SELECT, offset=30)
             ):
-                self.device.click(POST_CLOSE)
-                return True
+                self.appear_then_click(POST_CLOSE, interval=2)
+                continue
             if (
                     self.ui_page_appear(page_island_postmanage)
                     and not self.is_post_detail_visible()
@@ -932,7 +976,7 @@ class Island(SelectCharacter):
                 self.close_character_filter()
                 continue
             if self.appear(ISLAND_GET, offset=30):
-                self.device.click(ISLAND_POST_SAFE_AREA)
+                self.handle_island_reward_popup()
                 continue
             if self.appear(ISLAND_SELECT_PRODUCT_CHECK, offset=1):
                 self.device.click(SELECT_UI_BACK)
@@ -1603,29 +1647,37 @@ class Island(SelectCharacter):
         for index in range(add_one_clicks):
             self.device.click(add_one_buttons[index % len(add_one_buttons)])
 
-    def switch_shop_tab(self, tab_check, tab_button):
+    def switch_shop_tab(self, tab_check, tab_button, shop_check=None):
         """切换岛屿商店内的页签。
 
         Args:
             tab_check (Button): 目标页签激活状态的判定按钮。
             tab_button (Button): 目标页签的点击按钮。
+            shop_check (Button, optional): 商店就绪标识。
 
         Returns:
             bool: 切换成功返回 True，超时返回 False。
         """
         click_count = 0
+        ready = Timer(0.3, count=2)
         self.interval_clear([tab_button])
         for _ in self.loop(timeout=8, skip_first=False):
             if self.appear(tab_check, offset=1, threshold=30):
                 if click_count:
                     logger.info(f"[岛屿] 商店页签检测成功: {tab_check}，点击 {click_count} 次")
                 return True
-            if self.appear(tab_button, threshold=30):
+            # 转场时页签可能先画出来，再挂上点击事件；连续确认商店及入口后才操作。
+            if ((shop_check is None or self.appear(shop_check, offset=1))
+                    and self.appear(tab_button, threshold=30)):
+                ready.start()
+                if not ready.reached():
+                    continue
+                if not self.appear_then_click(tab_button, interval=2, threshold=30):
+                    continue
                 click_count += 1
                 logger.info(f"[岛屿] 商店页签检测失败，点击页签: {tab_button} -> {tab_check}，第 {click_count} 次")
-                self.device.click(tab_button)
-                self.device.sleep(1)
                 continue
+            ready.clear()
 
         logger.warning(f"[岛屿] 切换商店页签超时: tab={tab_button}, check={tab_check}, clicked={click_count}")
         return False
@@ -1647,7 +1699,7 @@ class Island(SelectCharacter):
         """
         quantity = max(1, int(quantity))
         if tab_check is not None and tab_button is not None:
-            if not self.switch_shop_tab(tab_check, tab_button):
+            if not self.switch_shop_tab(tab_check, tab_button, shop_check=shop_check):
                 return False
 
         if item_name:
@@ -1667,30 +1719,50 @@ class Island(SelectCharacter):
         if self.appear(ISLAND_SHOPPING_CHECK, offset=(1, 1)):
             self.set_buy_number(quantity)
 
-        for _ in self.loop(timeout=15, skip_first=False):
-            shop_visible = self.appear(shop_check, offset=1)
-            shopping_shown = self.appear(ISLAND_SHOPPING_CHECK, offset=(1, 1))
-            if shop_visible and not shopping_shown:
-                break
-            if self.appear_then_click(ISLAND_SHOP_CONFIRM, interval=1):
-                # 点击确认后立即复检：弹窗或确认按钮消失都视为购买完成，退出避免重复点击
-                self.device.sleep(0.5)
-                self.device.screenshot()
-                if not self.appear(ISLAND_SHOP_CONFIRM) or not self.appear(ISLAND_SHOPPING_CHECK, offset=(1, 1)):
-                    break
-                continue
-            # 使用模板检测判断“购买成功”弹窗，商店页大面积浅色背景的平均颜色与弹窗资源接近，
-            # 纯颜色检测会误判并要求反复点击确认按钮。
-            if self.appear(ISLAND_SHOP_GET, offset=(1, 1)):
-                self.device.click(ISLAND_SHOP_CONFIRM)
-                continue
-        else:
-            logger.warning(f"[岛屿] 确认购买超时: {item_name or item_button}")
-            return False
+        return self.confirm_island_shop_purchase(shop_check, item_name or item_button)
 
-        if self.appear(ISLAND_SHOP_GET, offset=(1, 1)):
+    def handle_island_shop_reward_popup(self):
+        """本帧购买成功弹窗仍可见时，按共享冷却关闭一次。"""
+        if self.appear(ISLAND_SHOP_GET, offset=(1, 1), interval=2):
             self.device.click(ISLAND_SHOP_CONFIRM)
-        return True
+            return True
+        return False
+
+    def confirm_island_shop_purchase(self, shop_check, context):
+        """确认付款、关闭成功弹窗，并正向确认已返回商店。
+
+        Pages:
+            in: 岛屿商店购买或磨坊加工数量弹窗
+            out: 对应商店/磨坊页
+        """
+        success_seen = False
+        payment_clicked = False
+        returned = Timer(0.5, count=2)
+        for _ in self.loop(timeout=15, skip_first=False):
+            # 成功弹窗优先于背景商店和共用确认按钮；冷却期间也必须继续截图。
+            if self.appear(ISLAND_SHOP_GET, offset=(1, 1)):
+                success_seen = True
+                self.handle_island_shop_reward_popup()
+                returned.clear()
+                continue
+            if self.appear(ISLAND_SHOPPING_CHECK, offset=(1, 1)):
+                # 已正向看到成功框后，数量页即使暂时重绘也不能再次付款。
+                if not success_seen and self.appear_then_click(ISLAND_SHOP_CONFIRM, interval=2):
+                    if not payment_clicked:
+                        self.interval_clear(ISLAND_SHOP_GET)
+                    payment_clicked = True
+                returned.clear()
+                continue
+            # 截图通道可能没有采到短暂的成功框；已实际确认付款后，仍以连续
+            # 新帧的商店状态确认恢复，不能把按钮或弹窗消失单独当作成功。
+            if (success_seen or payment_clicked) and self.appear(shop_check, offset=1):
+                returned.start()
+                if returned.reached():
+                    return True
+                continue
+            returned.clear()
+        logger.warning(f"[岛屿] 确认购买并返回商店超时: {context}")
+        return False
 
     def goto_shop_from_select_product(self, shop_check, tab_check=None, tab_button=None):
         """从岗位产品选择页跳转到补充材料的商店页签。
@@ -1704,41 +1776,46 @@ class Island(SelectCharacter):
             bool: 跳转成功返回 True，超时返回 False。
         """
         self.interval_clear([ISLAND_SELECT_GOTO_BUY_SEED, ISLAND_SELECT_SEED])
+        if tab_button is not None:
+            self.interval_clear(tab_button)
         tab_click_count = 0
+        shop_ready = Timer(0.3, count=2)
         for _ in self.loop(timeout=20, skip_first=False):
             in_select_product = self.appear(ISLAND_SELECT_PRODUCT_CHECK, offset=1)
             in_shop = self.appear(shop_check)
             in_tab = tab_check is not None and self.appear(tab_check, threshold=30)
             goto_buy = self.appear(ISLAND_SELECT_GOTO_BUY_SEED)
 
-            if not in_select_product and tab_check is not None and in_tab:
+            if not in_select_product and in_shop and tab_check is not None and in_tab:
                 if tab_click_count:
                     logger.info(f"[岛屿] 补货商店页签检测成功: {tab_check}，点击 {tab_click_count} 次")
                 return True
             if not in_select_product and tab_button is not None and in_shop:
+                shop_ready.start()
+                if not shop_ready.reached():
+                    continue
+                if not self.appear_then_click(tab_button, threshold=30, interval=2):
+                    continue
                 tab_click_count += 1
                 logger.info(
                     f"[岛屿] 补货商店页签检测失败，点击页签: {tab_button} -> {tab_check}，第 {tab_click_count} 次"
                 )
-                self.device.click(tab_button)
-                self.device.sleep(1)
                 continue
             if not in_select_product and tab_check is None and in_shop:
                 return True
+            shop_ready.clear()
 
             if goto_buy:
-                self.device.click(ISLAND_SELECT_GOTO_BUY_SEED)
+                self.appear_then_click(ISLAND_SELECT_GOTO_BUY_SEED, interval=2)
                 continue
 
             if in_select_product:
-                self.device.click(ISLAND_SELECT_SEED)
-                self.device.sleep(0.3)
-                self.device.screenshot()
-                if self.appear(ISLAND_SELECT_GOTO_BUY_SEED):
-                    self.device.click(ISLAND_SELECT_GOTO_BUY_SEED)
-                    continue
-                self.device.click(ISLAND_SELECT_GOTO_BUY_SEED)
-                self.device.sleep(0.5)
+                # 材料卡片随选品变化，不能拿某一种种子图标判断所有种苗；岗位
+                # 选品页已确认时才按固定卡片位置打开提示，下一帧检测真正购买入口。
+                seed_timer = self.get_interval_timer(ISLAND_SELECT_SEED, interval=2, renew=True)
+                if seed_timer.reached():
+                    self.device.click(ISLAND_SELECT_SEED)
+                    seed_timer.reset()
                 continue
 
         logger.warning("[岛屿] 从岗位产品选择页进入补货商店超时")
@@ -1973,13 +2050,13 @@ class Island(SelectCharacter):
         """
         self.interval_clear([back_button])
         for _ in self.loop(timeout=15, skip_first=False):
+            if self.appear(ISLAND_SHOP_GET, offset=(1, 1)):
+                self.handle_island_shop_reward_popup()
+                continue
             if self.appear(ISLAND_SELECT_PRODUCT_CHECK, offset=1):
                 return True
             if self.appear(ISLAND_POST_CHECK, offset=1) or self.appear(ISLAND_POST_VACANT_CHECK, offset=1):
                 return True
-            if self.appear(ISLAND_SHOP_GET, offset=(1, 1)):
-                self.device.click(ISLAND_SHOP_CONFIRM)
-                continue
             if self.appear_then_click(back_button, offset=(20, 20), interval=1):
                 continue
 

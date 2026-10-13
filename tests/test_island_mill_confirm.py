@@ -12,7 +12,7 @@ import numpy as np
 import module.base.timer as timer_module
 from module.base.timer import Timer
 from module.base.utils import load_image
-from module.island.assets import ISLAND_SHOP_CONFIRM
+from module.island.assets import ISLAND_SHOP_CONFIRM, ISLAND_SHOP_GET
 from module.island.island_rancher import (
     ISLAND_MILL_CHECK,
     ISLAND_SHOPPING_CHECK,
@@ -31,6 +31,8 @@ def build_frame(*assets):
 
 # 磨坊加工数量弹窗（含确认按钮）
 BUY_POPUP_FRAME = build_frame(ISLAND_SHOPPING_CHECK, ISLAND_SHOP_CONFIRM)
+# 加工成功仍需一次合法确认关闭；它和付款确认属于不同阶段。
+SUCCESS_FRAME = build_frame(ISLAND_SHOP_GET, ISLAND_SHOP_CONFIRM, ISLAND_MILL_CHECK)
 # 已回到磨坊页面
 MILL_FRAME = build_frame(ISLAND_MILL_CHECK)
 
@@ -78,6 +80,8 @@ class StubRancher:
     appear = IslandRancher.appear
     appear_then_click = IslandRancher.appear_then_click
     process_mill_item = IslandRancher.process_mill_item
+    confirm_island_shop_purchase = IslandRancher.confirm_island_shop_purchase
+    handle_island_shop_reward_popup = IslandRancher.handle_island_shop_reward_popup
 
     def __init__(self, device):
         self.device = device
@@ -127,14 +131,14 @@ class MillConfirmTest(unittest.TestCase):
         result = stub.process_mill_item("wheat_flour", quantity=5)
         return result, device, stub
 
-    def test_confirm_clicks_once_without_blind_retry(self):
-        """确认一次后回到磨坊页面：不得再盲点一次确认按钮。"""
-        timeline = lambda t: BUY_POPUP_FRAME if t < 1.2 else MILL_FRAME
+    def test_each_confirmation_stage_clicks_once_without_blind_retry(self):
+        """付款和成功弹窗各点一次，返回磨坊后不得再盲点确认。"""
+        timeline = lambda t: BUY_POPUP_FRAME if t < 1.2 else SUCCESS_FRAME if t < 2.4 else MILL_FRAME
 
         result, device, stub = self.run_mill(timeline)
 
         self.assertTrue(result)
-        self.assertEqual([name for _, name in device.clicks], ["ISLAND_SHOP_CONFIRM"])
+        self.assertEqual([name for _, name in device.clicks], ["ISLAND_SHOP_CONFIRM", "ISLAND_SHOP_CONFIRM"])
         self.assertEqual(stub.buy_numbers, [5])
 
     def test_confirm_retry_keeps_interval(self):

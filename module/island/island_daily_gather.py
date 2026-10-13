@@ -280,14 +280,7 @@ class IslandDailyGather(Island):
         plus_button = plus_buttons[index]
         worker_list = worker_list or []
 
-        # 点击"+"按钮，若页面动画或点击未生效则重试，避免无限等待。
-        for attempt in range(3):
-            logger.info(f"[岛屿-每日采集] 点击第{index + 1}个+按钮")
-            self.device.click(plus_button)
-            if self._wait_for_character_select(timeout=6):
-                break
-            logger.warning(f"[岛屿-每日采集] 第{index + 1}个槽位角色选择界面未出现，重试 {attempt + 1}/3")
-        else:
+        if not self._open_gather_character_select(plus_button, index):
             logger.warning(f"[岛屿-每日采集] 第{index + 1}个槽位无法打开角色选择界面")
             return False
 
@@ -317,6 +310,51 @@ class IslandDailyGather(Island):
             return False
         logger.info(f"[岛屿-每日采集] 第{index + 1}个槽位角色选择完成")
         return True
+
+    def _open_gather_character_select(self, plus_button, index):
+        """采集派遣页和目标加号稳定可见后打开角色页。
+
+        角色确认后页面仍可能转场，不能仅凭上一页消失就点击下一个槽位。
+        点击未生效时保留有限重试，未知画面不消耗点击次数。
+
+        Args:
+            plus_button (Button): 目标槽位的加号资源。
+            index (int): 槽位下标。
+
+        Returns:
+            bool: 正向识别到角色选择页返回 True；超时或三次点击失败返回 False。
+
+        Pages:
+            in: 采集派遣页或角色确认后的转场
+            out: 角色选择页或原页面
+        """
+        ready_timer = Timer(0.4, count=1)
+        retry_timer = Timer(3)
+        clicks = 0
+        for _ in self.loop(timeout=18, skip_first=False):
+            if self.appear(ISLAND_SELECT_CHARACTER_CHECK, offset=1):
+                logger.info("[岛屿-每日采集] 角色选择界面已出现")
+                return True
+
+            # 采集页签仍可透过转场或弹窗露出；必须同时确认加号的图案与原色。
+            ready = self.appear(ISLAND_GATHER_COLLECT_CHECK, offset=30) and self.match_template_color(
+                plus_button, offset=10, similarity=0.85, threshold=15,
+            )
+            if not ready:
+                ready_timer.clear()
+                continue
+            ready_timer.start()
+            if not ready_timer.reached() or not retry_timer.reached():
+                continue
+            if clicks >= 3:
+                return False
+            logger.info(f"[岛屿-每日采集] 点击第{index + 1}个+按钮，第{clicks + 1}次")
+            self.device.click(plus_button)
+            clicks += 1
+            ready_timer.clear()
+            retry_timer.reset()
+
+        return False
 
     def _wait_for_character_select(self, timeout=8):
         """等待角色选择界面出现。

@@ -685,7 +685,8 @@ class Combat(Level, HPBalancer, Retirement, SubmarineCall, CombatAuto, CombatMan
         self.device.click_record_clear()
         battle_status = False
         exp_info = False  # 用于处理游戏白屏 bug
-        for _ in self.loop():
+        # 执行阶段可能刚点击评价或奖励，旧截图不能再作为结算阶段的首帧。
+        for _ in self.loop(skip_first=False):
 
             # 检测预期结束状态
             if isinstance(expected_end, str):

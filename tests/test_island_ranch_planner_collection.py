@@ -66,6 +66,7 @@ class RanchPlannerCollectionTests(unittest.TestCase):
         self.history = []
         self.configs = [(f'ISLAND_RANCH_POST{i}', f'time_ranch{i}') for i in range(1, 5)]
         self.task = IslandRancher.__new__(IslandRancher)
+        self.task.interval_timer = {}
         self.task.config = MemoryConfig(**{f'{CONFIG_PREFIX}.PlanFingerprint': 'valid',
                                           f'{CONFIG_PREFIX}.PlannerTargets': '{"2605":1000}'})
         for field in ('ChickenFilter', 'PigFilter', 'RancherFilter', 'WoolWorkerFilter'):
