@@ -138,13 +138,10 @@ class Camera(MapOperation):
         if not hasattr(self, 'view'):
             self.view = View(self.config, grid_class=self.grid_class)
 
-    def _update_view(self, wait_info_bar=True):
+    def _update_view(self):
         """更新当前屏幕图像到视图中并执行透视检测。
 
         处理各种可能导致透视检测失败的弹窗、信息栏和异常界面。
-
-        Args:
-            wait_info_bar (bool): 信息栏妨碍识别时是否等待其消失。
 
         Returns:
             bool: 视图更新与透视检测是否成功。
@@ -165,8 +162,6 @@ class Camera(MapOperation):
             self.view.load(self.device.image)
         except MapDetectionError as e:
             if self.info_bar_count():
-                if not wait_info_bar:
-                    return False
                 logger.warning('[地图-摄像机] 信息栏导致透视错误')
                 self.handle_info_bar()
                 return False
@@ -301,7 +296,7 @@ class Camera(MapOperation):
         self.predict()
         return True
 
-    def update(self, camera=True, wait_swipe=False, allow_error=False, wait_info_bar=True):
+    def update(self, camera=True, wait_swipe=False, allow_error=False):
         """更新地图图像及相机位置与透视数据。
 
         封装底层检测并带防抖与错误重试机制。
@@ -310,11 +305,6 @@ class Camera(MapOperation):
             camera (bool, optional): 是否更新相机位置与透视数据。默认为 True。
             wait_swipe (bool, optional): 是否等待滑动动画结束并到达格子中心。默认为 False。
             allow_error (bool, optional): 遇到检测错误时是否直接退出而不抛出异常。默认为 False。
-            wait_info_bar (bool, optional): 信息栏妨碍识别时是否等待其消失。默认为 True。
-
-        Returns:
-            bool | None: 禁止等待且信息栏妨碍识别时返回 False，不更新相机及格子数据；
-                正常识别保持原返回值。
         """
         error_confirm = Timer(5, count=10).start()
         swipe_wait_timeout = Timer(0.35, count=1).start()
@@ -357,11 +347,8 @@ class Camera(MapOperation):
 
             # 更新视图及透视
             try:
-                success = self._update_view(wait_info_bar=wait_info_bar)
+                success = self._update_view()
                 if not success:
-                    if not wait_info_bar and self.info_bar_count():
-                        # 当前视野快速检查交给完整扫图恢复，不能预测失败或陈旧的视图。
-                        return False
                     continue
                 logger.attr('视图中心偏移', self.view.center_offset)
                 if wait_swipe and not swipe_wait_timeout.reached() and success:

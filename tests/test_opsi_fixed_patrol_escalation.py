@@ -599,7 +599,7 @@ class RescanOnceStub(MarkStub):
     def handle_info_bar(self):
         pass
 
-    def update(self, **kwargs):
+    def update(self):
         pass
 
     def map_rescan_current(self, drop=None):
