@@ -163,7 +163,7 @@ flowchart TD
 2. **认证判定**：`Session.authorized = 本机直连 or 密码为空`。本机判定由 `is_local_client` 完成：来源地址、Host 头、Origin 三者都必须是 `127.0.0.1/::1/localhost`，且未命中远程访问隧道标记头 `x-azurpilot-remote-access`（隧道流量同样来自回环，靠标记头区分）。
 3. **登录退避**：`auth.login` 用 `secrets.compare_digest` 比对；失败按来源 IP 记数，锁定 `min(60, 次数×2)` 秒。
 4. **业务执行**：除 `auth.login` 与 `events.subscribe` 外，所有方法经 `asyncio.to_thread` 在工作线程执行（阻塞 IO 不阻塞事件循环），`Semaphore(8)` 限制全局并发。
-5. **订阅推送**：`producer` 以各 topic 间隔（overview 1s、instances 2s、emulator 1s）采样缓存状态，序列化指纹与上次相同则跳过。`emulator` 含服务器当前时间，供设置页每秒更新倒计时；它不访问模拟器。日志与截图都不轮询：worker 日志队列每接收一条日志就通过 `log_hub` 唤醒 `log_producer`，截图继续由 `preview` hub 唤醒。用户切换实例时，旧订阅尚未完成的结果按对象身份比对丢弃。
+5. **订阅推送**：`producer` 以各 topic 间隔（overview 1s、instances 2s、emulator 1s）采样缓存状态，序列化指纹与上次相同则跳过。`emulator` 含服务器当前时间，供设置页每秒更新倒计时；它不访问模拟器。日志、截图与任务通知都不轮询：worker 日志队列每接收一条日志就通过 `log_hub` 唤醒 `log_producer`，截图由 `preview` hub 唤醒，任务通知由 `notify_hub` 唤醒独立的 `notification_producer`。快照循环跳过这些推送主题，避免复用前一主题的采样动作。用户切换实例时，旧订阅尚未完成的结果按对象身份比对丢弃；通知是全局一次性事件，不按当前实例过滤。
 6. **发送**：所有出站消息经单条发送队列；事件按实际发送顺序获得单调递增 `seq`。`send_json` 带 10 秒超时，写死循环即断开。
 
 ## 7. 调用关系
@@ -414,6 +414,8 @@ ws.send_json({'v':1,'type':'request','id':'2','method':'events.subscribe',
 
 - **健康检查**：`GET /healthz` 应返回 `{'status': 'ok', 'protocolVersion': 1}`；`GET /` 返回 503 说明前端未构建（在 `frontend/` 执行 `npm ci && npm run build`）。
 - **启动器通道**：`launcher_api.py` 实现 `/api/launcher/{status,startup,stream,report,trusted-login}` 与 `/launcher-login`，全部限定本机回环，非本机一律 403（控制台的启动器卡片读同一组端点，远端访问时即显示「只能在本机 WebUI 中设置」）。`launcher_routes.py` 组装这六条端点与本地通知扩展 `/api/notify`、`/api/notify_stream`，`create_app` 只注册一次并放在 SPA 兜底之前。可信登录种子页为 React 的 `azurpilot.access-password` 与 PyWebIO 的 `password` 写入同一凭据；密码中的 `<` 转义后再嵌入脚本，避免提前闭合脚本块。
+- **任务通知通道**：`notify_api.py` 统一处理 `/api/notify`（POST）与 `/api/notify_stream`（SSE），旧 `launcher_routes.api_notify`、`api_notify_stream` 和通知队列读取入口指向同一实现。两个路径均只允许本机，POST 还要求 `application/json` 和对象请求体。收到后将原报文及附加字段放入启动器队列（上限 100，满时丢弃最旧），另以 `instance/title/content` 三字段经 `notify_hub` 广播给已授权并订阅 `notifications` 的 WS 会话。路径和 SSE 报文兼容旧启动器；会话退出时退订广播，未订阅或断线期间不重放历史通知。
+- **浏览器通知与订阅**：前端 Notification API 依浏览器权限显示原生通知；首条通知到达后，等用户下一次点击页面才申请权限，获准后补发该条。通知 hook 位于 App 顶层，覆盖新旧主题和交易页，不随总览缓存页的显示／隐藏重复挂载。协议允许七个主题：`instances`、`overview`、`logs`、`preview`、`emulator`、`stock`、`notifications`；其中 `instances`、`notifications` 是全局主题，其他主题仍须有效实例。所有页面订阅通知，模拟器主题仍仅在实例系统设置页订阅。
 - **单测夹具**：`create_app(root=临时目录, password='...', manage_runtime=False, mount_mcp=False)` 是标准隔离模式，见 `tests/test_api.py` 的 `fixture()`。相关模块：`tests.test_api`（协议/认证/配置事务）、`tests.test_api_lifecycle`（真实 Manager 生命周期）、`tests.test_api_mcp_integration`（MCP 挂载与关闭顺序）、`tests.test_frontend_static`（MIME 与 SPA 回退）。
 - **契约差异**：前端类型对不上时先跑 `uv run python -m dev_tools.export_api_schema` 看 diff，再查是不是手改了生成物。
 - **日志**：业务异常在服务日志中带 `WebSocket API 执行失败` 标题（含完整堆栈）；订阅异常有 `订阅数据读取失败`。客户端只会看到无堆栈的 `INTERNAL_ERROR`。

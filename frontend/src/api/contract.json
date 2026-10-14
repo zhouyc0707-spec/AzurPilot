@@ -3006,11 +3006,12 @@
                 "logs",
                 "preview",
                 "emulator",
-                "stock"
+                "stock",
+                "notifications"
               ],
               "type": "string"
             },
-            "maxItems": 6,
+            "maxItems": 7,
             "title": "Topics",
             "type": "array"
           }

@@ -527,8 +527,11 @@ def extract_ship_data(lua_repo: str) -> dict:
     for path in skin_files:
         for skin in parse_lua_ship_blocks(str(path)).values():
             if skin.get('skin_type') == 2 and isinstance(skin.get('name'), str):
+                ship_group = skin.get('ship_group')
+                if not ship_group:
+                    continue
                 name = resolve_ship_name(skin['name'], cn_codes, 'cn')
-                retrofit_names.setdefault(skin['ship_group'], set()).add(name)
+                retrofit_names.setdefault(ship_group, set()).add(name)
 
     # ---- 6) 构建 english_name → ship_id 映射（用于 II 型舰检测） ----
     en_name_index: dict[str, list[int]] = {}

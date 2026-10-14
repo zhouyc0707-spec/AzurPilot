@@ -1,0 +1,182 @@
+{
+  "baseline": "93844113db12758d4b14898fa9cb7759b4fd967e",
+  "before": "60db6e903eea3152f1f287f4c45e78a7563cb480",
+  "upstream": "57c94a14af2148b2b885ed88cdb08c0536f042e0",
+  "verification_boundary": "仅公开 Git 源码、资源及生成产物；未读取实例配置、凭据、数据库或操作游戏",
+  "custom_files": 757,
+  "upstream_files": 31,
+  "overlap_files": [
+    "config/template.json",
+    "docs/modules/game/misc.md",
+    "docs/modules/webui/api.md",
+    "docs/modules/webui/index.md",
+    "docs/modules/webui/mind-calculator.md",
+    "frontend/src/api/contract.json",
+    "frontend/src/api/generated.ts",
+    "frontend/src/app/App.tsx",
+    "module/api/app.py",
+    "module/api/protocol.py",
+    "module/api/socket.py",
+    "module/config/argument/args.json",
+    "module/config/argument/argument.yaml",
+    "module/config/config_generated.py",
+    "module/config/i18n/en-US.json",
+    "module/config/i18n/ja-JP.json",
+    "module/config/i18n/zh-CN.json",
+    "module/config/i18n/zh-MIAO.json",
+    "module/config/i18n/zh-TW.json"
+  ],
+  "nonoverlap_files": 738,
+  "nonoverlap_identical_code_and_assets": 735,
+  "expected_document_updates": [
+    "定制化修改清单.md"
+  ],
+  "unexpected_nonoverlap_changes": [],
+  "line_ending_policy": "文本仅规范化 CRLF/LF，二进制逐字节比较",
+  "expected_nonoverlap_semantic_fusions": [
+    "frontend/e2e/stock-overview-navigation.spec.ts",
+    "module/api/launcher_routes.py"
+  ],
+  "launcher_semantic_fusion": {
+    "file": "module/api/launcher_routes.py",
+    "preserved_alias_count": 11,
+    "preserved_wrapper_count": 3,
+    "raw_notification_extra_fields": true,
+    "failures": []
+  },
+  "overview_test_semantic_fusion": {
+    "file": "frontend/e2e/stock-overview-navigation.spec.ts",
+    "allowed_subscription_assertion_updates": 2,
+    "remaining_test_text_identical": true,
+    "failures": []
+  },
+  "local_json_fields": {
+    "assets/stats/opsi_item_names.json": {
+      "local_changes": 6,
+      "preserved_exact": 6,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    },
+    "assets/stats/opsi_template_sources.json": {
+      "local_changes": 1,
+      "preserved_exact": 1,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    },
+    "config/template.json": {
+      "local_changes": 36,
+      "preserved_exact": 36,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    },
+    "docs/merges/2026-10-11-third-custom-preservation.json": {
+      "local_changes": 30,
+      "preserved_exact": 30,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    },
+    "docs/merges/2026-10-13-custom-preservation.json": {
+      "local_changes": 29,
+      "preserved_exact": 29,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    },
+    "frontend/src/api/contract.json": {
+      "local_changes": 99,
+      "preserved_exact": 97,
+      "preserved_with_allowed_fusion": 2,
+      "failed": 0
+    },
+    "module/config/argument/args.json": {
+      "local_changes": 117,
+      "preserved_exact": 117,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    },
+    "module/config/i18n/en-US.json": {
+      "local_changes": 187,
+      "preserved_exact": 187,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    },
+    "module/config/i18n/ja-JP.json": {
+      "local_changes": 187,
+      "preserved_exact": 187,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    },
+    "module/config/i18n/zh-CN.json": {
+      "local_changes": 187,
+      "preserved_exact": 187,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    },
+    "module/config/i18n/zh-MIAO.json": {
+      "local_changes": 187,
+      "preserved_exact": 187,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    },
+    "module/config/i18n/zh-TW.json": {
+      "local_changes": 187,
+      "preserved_exact": 187,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    },
+    "tests/fixtures/mind_level_complete_rows.json": {
+      "local_changes": 1,
+      "preserved_exact": 1,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    }
+  },
+  "local_yaml_fields": {
+    "module/config/argument/argument.yaml": {
+      "local_changes": 94,
+      "preserved_exact": 94,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    },
+    "module/config/argument/gui.yaml": {
+      "local_changes": 60,
+      "preserved_exact": 60,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    },
+    "module/config/argument/task.yaml": {
+      "local_changes": 1,
+      "preserved_exact": 1,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    }
+  },
+  "changed_local_semantic_fields": [],
+  "allowed_semantic_fusions": [
+    {
+      "file": "frontend/src/api/contract.json",
+      "path": "methods.events.subscribe.params.properties.topics.items.enum",
+      "reason": "保留 emulator 并合入 notifications 七主题并集"
+    },
+    {
+      "file": "frontend/src/api/contract.json",
+      "path": "methods.events.subscribe.params.properties.topics.maxItems",
+      "reason": "七主题并集将 maxItems 从 6 扩为 7"
+    }
+  ],
+  "inventory_reference_count": 201,
+  "missing_inventory_references": [],
+  "key_entry_count": 32,
+  "key_entry_failures": [],
+  "python_file_count": 2605,
+  "tracked_python_files": 2604,
+  "included_new_public_python_files": [
+    "tests/test_ship_data_extractor.py"
+  ],
+  "python_syntax_errors": [],
+  "parameter_template_translation_summary": {
+    "files": 7,
+    "local_changes": 1088,
+    "preserved_exact": 1088
+  },
+  "passed": true
+}

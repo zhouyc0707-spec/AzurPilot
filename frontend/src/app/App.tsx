@@ -35,6 +35,7 @@ import { usePageMotion } from './pageMotion'
 import { useGlassPointerLight } from './pointerLight'
 import { recordDevLogoClick } from './devMode'
 import { useDevOverride } from './devOverride'
+import { useSystemNotifications } from './systemNotifications'
 import { usesLegacyLayout, usesLegacyShell, showsRightRail } from './theme'
 import { cycleTabSize, readLastPath, readTabSize, readTopbarMode, setTopbarMode, subscribeTabSize, subscribeTopbarMode, writeLastPath } from './topbarPrefs'
 import { INSTANCE_NAME_PATTERN } from './instanceName'
@@ -148,6 +149,7 @@ export function App() {
   const announcement = useAnnouncement()
   usePageMotion()
   useGlassPointerLight()
+  useSystemNotifications()
   const current = instances.find(item => item.name === instance)
   const base = instance ? `/i/${instance}` : ''
   const taskMatch = location.pathname.match(/\/task\/([^/]+)/)
@@ -197,7 +199,9 @@ export function App() {
   useEffect(() => { setMobileOpen(false); setRailOpen(false) }, [location.pathname])
   useEffect(() => {
     if (connection !== 'ready') return
-    const topics: Array<'instances' | 'overview' | 'logs' | 'preview' | 'emulator' | 'stock'> = instance ? stockExchange ? ['instances', 'stock'] : ['instances', 'overview', 'logs'] : ['instances']
+    const topics: Array<'instances' | 'overview' | 'logs' | 'preview' | 'emulator' | 'stock' | 'notifications'> = instance ? stockExchange ? ['instances', 'stock'] : ['instances', 'overview', 'logs'] : ['instances']
+    // 通知跨实例推送；模拟器状态仍只在系统配置页订阅。
+    topics.push('notifications')
     if (instance && !stockExchange && previewEnabled) topics.push('preview')
     if (instance && showEmulatorStatus) topics.push('emulator')
     void api.request('events.subscribe', {instance: instance ?? null, topics}).catch(error => notify(error.message, true))

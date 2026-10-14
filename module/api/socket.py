@@ -164,6 +164,8 @@ class Session:
         self.preview_pending = None
         self.stock_changed = asyncio.Event()
         self.stock_update = {}
+        self.notification_changed = asyncio.Event()
+        self.notification_pending: list[dict] = []
 
     async def enqueue(self, message: dict):
         """将消息放入发送队列，遇到慢客户端时主动断开连接以实现背压保护。
@@ -218,8 +220,9 @@ class Session:
         logs = asyncio.create_task(self.log_producer())
         preview = asyncio.create_task(self.preview_producer())
         stock = asyncio.create_task(self.stock_producer())
+        notifications = asyncio.create_task(self.notification_producer())
         await self.event('session', {'authRequired': not self.authorized, 'protocolVersion': 1})
-        tasks = [writer, producer, reader, logs, preview, stock]
+        tasks = [writer, producer, reader, logs, preview, stock, notifications]
         try:
             done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
             for task in done:
@@ -275,7 +278,7 @@ class Session:
                     raise ApiError('UNAUTHORIZED', '请先登录')
                 elif request.method == 'events.subscribe':
                     subscription = SubscribeParams.model_validate(request.params)
-                    if any(topic != 'instances' for topic in subscription.topics):
+                    if any(topic not in ('instances', 'notifications') for topic in subscription.topics):
                         self.gateway.router.configs.path(subscription.instance)
                     self.subscription = subscription
                     self.cache.clear()
@@ -320,7 +323,7 @@ class Session:
             runtime = self.gateway.router.runtime
             for topic in subscription.topics:
                 try:
-                    if topic in ('logs', 'preview', 'stock'):
+                    if topic in ('logs', 'preview', 'stock', 'notifications'):
                         continue
                     if (now := time.monotonic()) - self.topic_seen.get(topic, 0) < TOPIC_INTERVAL.get(topic, 2):
                         continue
@@ -495,5 +498,35 @@ class Session:
                     continue
                 frame = hub.get(subscription.instance)
                 await self.event('preview', frame)
+        finally:
+            hub.unsubscribe(changed)
+
+    async def notification_producer(self):
+        """任务通知生产者协程。
+
+        通知是一次性消息，跨实例推送、不按当前工作区过滤；未订阅时不缓存，
+        错过即错过，符合「送达正在看 WebUI 的用户」的定位。
+        """
+        from module.runtime.notify_hub import hub
+        loop = asyncio.get_running_loop()
+
+        def changed(notification):
+            if not loop.is_closed():
+                def wake():
+                    self.notification_pending.append(notification)
+                    self.notification_changed.set()
+                with contextlib.suppress(RuntimeError):
+                    loop.call_soon_threadsafe(wake)
+
+        hub.subscribe(changed)
+        try:
+            while True:
+                await self.notification_changed.wait()
+                self.notification_changed.clear()
+                pending, self.notification_pending = self.notification_pending, []
+                if not self.authorized or 'notifications' not in self.subscription.topics:
+                    continue
+                for notification in pending:
+                    await self.event('notifications', notification)
         finally:
             hub.unsubscribe(changed)

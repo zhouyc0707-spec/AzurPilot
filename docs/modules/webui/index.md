@@ -151,7 +151,7 @@ flowchart TB
 两条主线贯穿日常运行：
 
 - **请求路径**：浏览器 `client.ts` 发送 request → `Session.reader` 校验信封（认证、限流、去重）→ `asyncio.to_thread` 调用 `Router.dispatch` → 委托 ConfigService / RuntimeService → 响应原路返回。写操作在 Router 注册表中显式标记，DEMO 模式统一拒绝。
-- **事件路径**：`Session.producer` 约每 2 秒采样已订阅主题（instances / overview / logs），内容指纹变化才推送；preview 主题不轮询，worker 每产生一帧经 preview hub 推送一次。
+- **事件路径**：`Session.producer` 按主题间隔采样实例、总览与模拟器快照，内容指纹变化才推送；日志、preview 与 notifications 由各自 hub 唤醒独立生产者，不轮询。任务通知跨实例广播，只送给已授权且订阅该主题的会话。
 
 ## 7. 调用关系
 
@@ -374,7 +374,7 @@ v1 只允许兼容性新增；删除方法或更改语义需要新版本路径�
 - **无跨连接事件重放**：重连后重新认证并重建订阅，服务不提供历史事件重放；日志靠游标增量，落后过多元数据会触发 reset。
 - **配额是硬限制**：32 个并发连接、单连接 30 请求/秒、单请求 1 MiB、单连接近 128 个请求 ID 去重——超限是拒绝而非排队。
 - **直连模式无热重载**：`EnableReload=false` 时没有监督器与重启通道，更新器拒绝执行需要重载的更新。
-- **迁移遗留未清理**：`module/webui/webui_prefs.py`（及 `config/webui_prefs.json`）在当前活跃代码中没有调用方——消费方随旧版总览面板功能移除。启动器命令通道（`module/runtime/launcher.py`、`launcher_trust.py`）由 `module/api/launcher_api.py` 实现，`launcher_routes.py` 将其与 `/api/notify`、`/api/notify_stream` 一起接入 `create_app`；`notify_webui` 的通知仍由这组本地保留的 HTTP/SSE 扩展交给启动器。
+- **迁移遗留未清理**：`module/webui/webui_prefs.py`（及 `config/webui_prefs.json`）在当前活跃代码中没有调用方——消费方随旧版总览面板功能移除。启动器命令通道由 `module/api/launcher_api.py` 实现，通知通道由 `module/api/notify_api.py` 实现；`launcher_routes.py` 保留旧导入入口，将两组端点一次性注册在 SPA 兜底前。通知保留原报文供启动器 SSE 消费，并经 `notify_hub` 和 WS `notifications` 主题给浏览器显示原生通知。
 - **预览是被动快照**：API 不主动截图；worker 未运行或未产生新帧时保持最后画面或空。
 
 ## 18. 示例
