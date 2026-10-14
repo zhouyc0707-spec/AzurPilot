@@ -1,11 +1,13 @@
 """当前视野免等待信息栏、完整扫图等待与识别失败隔离；不连接设备。"""
 
 import unittest
+from contextlib import nullcontext
 from types import SimpleNamespace
 from unittest.mock import Mock, call, patch
 
 from module.exception import MapDetectionError
 from module.map.camera import Camera
+from module.map.map_grids import SelectedGrids
 from module.os.map import OSMap
 from module.os.map_base import OSCampaignMap
 
@@ -122,6 +124,135 @@ class TestCameraInfoBarPolicy(unittest.TestCase):
         self.assertEqual(runner.device.screenshot.call_count, 2)
         runner.handle_info_bar.assert_not_called()
         runner._update_view_data.assert_called_once_with()
+
+
+class RadarQuestionView:
+    """提供真实雷达坐标转换所需的局部舰队和目标格子。"""
+
+    def __init__(self, events):
+        self.events = events
+        self.fleet = SimpleNamespace(location=(5, 4))
+        self.target = SimpleNamespace(
+            location=(4, 4), is_scanning_device=False, is_logging_tower=False,
+        )
+        self.load = Mock(side_effect=lambda image: events.append(('load', image)))
+        self.predict = Mock(side_effect=lambda: events.append(('predict',)))
+        self.show = Mock(side_effect=lambda: events.append(('show',)))
+        self.select = Mock(side_effect=self.select_fleet)
+
+    def select_fleet(self, **kwargs):
+        self.events.append(('select', kwargs))
+        return SelectedGrids([self.fleet])
+
+    def __getitem__(self, location):
+        location = tuple(location)
+        self.events.append(('convert', location))
+        if location != self.target.location:
+            raise KeyError(location)
+        return self.target
+
+
+class TestRadarQuestionInfoBarPolicy(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(patch('module.os.map.logger'))
+        self.enterContext(patch('module.os.camera.logger'))
+
+    @staticmethod
+    def make_question_runner(question=(-1, 0), walk_result=('akashi',)):
+        """保留 clear_question、update_os 和坐标转换的真实实现。"""
+        runner = OSMap.__new__(OSMap)
+        events = []
+        frame = object()
+        runner.device = SimpleNamespace(
+            image=frame,
+            screenshot=Mock(side_effect=AssertionError('近距离问号必须复用当前截图')),
+            click=Mock(side_effect=lambda grid: events.append(('click', grid))),
+        )
+        runner.config = SimpleNamespace(temporary=Mock(side_effect=lambda **kwargs: nullcontext()))
+        runner.zone = SimpleNamespace(is_port=False)
+        runner.view = RadarQuestionView(events)
+        runner.radar = SimpleNamespace(
+            predict_question=Mock(side_effect=lambda image, **kwargs: events.append(('radar', image)) or question),
+        )
+        runner.handle_info_bar = Mock(side_effect=AssertionError('近距离问号不应等待提示条'))
+        runner._os_camera_recover_to_fleet = Mock(side_effect=AssertionError('舰队位置有效，不应重新对焦'))
+        runner.wait_until_walk_stable = Mock(
+            side_effect=lambda **kwargs: events.append(('walk', kwargs)) or walk_result,
+        )
+        runner._solved_map_event = set()
+        runner._question_unreachable = False
+        return runner, events, frame
+
+    def test_question_reuses_same_frame_and_clicks_before_original_walk_confirmation(self):
+        runner, events, frame = self.make_question_runner()
+
+        self.assertTrue(runner.clear_question(drop='离线问号掉落'))
+
+        runner.radar.predict_question.assert_called_once_with(frame, in_port=False)
+        runner.view.load.assert_called_once_with(frame)
+        runner.view.predict.assert_called_once_with()
+        runner.view.select.assert_has_calls([call(is_current_fleet=True), call(is_current_fleet=True)])
+        phases = [entry[0] for entry in events]
+        self.assertEqual(phases[:4], ['radar', 'load', 'predict', 'show'])
+        self.assertLess(phases.index('convert'), phases.index('click'))
+        self.assertLess(phases.index('click'), phases.index('walk'))
+        runner.device.click.assert_called_once_with(runner.view.target)
+        runner.wait_until_walk_stable.assert_called_once()
+        walk_kwargs = runner.wait_until_walk_stable.call_args.kwargs
+        self.assertEqual(walk_kwargs['drop'], '离线问号掉落')
+        self.assertIs(walk_kwargs['walk_out_of_step'], False)
+        self.assertEqual(walk_kwargs['confirm_timer'].limit, 3)
+        self.assertEqual(walk_kwargs['confirm_timer'].count, 4)
+        runner.config.temporary.assert_called_once_with(
+            STORY_ALLOW_SKIP=False, OS_SIREN_DEVICE_USAGE='use_until_destroyed',
+        )
+        self.assertEqual(runner._solved_map_event, {'is_akashi'})
+        self.assertFalse(runner._question_unreachable)
+        runner.handle_info_bar.assert_not_called()
+        runner.device.screenshot.assert_not_called()
+
+    def test_no_question_never_initializes_view_or_clicks(self):
+        runner, events, frame = self.make_question_runner(question=None)
+
+        self.assertFalse(runner.clear_question())
+
+        self.assertEqual(events, [('radar', frame)])
+        runner.view.load.assert_not_called()
+        runner.view.predict.assert_not_called()
+        runner.device.click.assert_not_called()
+        runner.wait_until_walk_stable.assert_not_called()
+        runner.handle_info_bar.assert_not_called()
+        runner.device.screenshot.assert_not_called()
+        self.assertEqual(runner._solved_map_event, set())
+        self.assertFalse(runner._question_unreachable)
+
+    def test_three_failed_walks_keep_unreachable_flag_and_bounded_attempts(self):
+        runner, events, frame = self.make_question_runner(walk_result=())
+
+        self.assertFalse(runner.clear_question(drop='离线失败掉落'))
+
+        self.assertTrue(runner._question_unreachable)
+        self.assertEqual(runner._solved_map_event, set())
+        self.assertEqual(runner.radar.predict_question.call_count, 3)
+        self.assertEqual(runner.view.load.call_count, 3)
+        self.assertEqual(runner.device.click.call_count, 3)
+        self.assertEqual(runner.wait_until_walk_stable.call_count, 3)
+        for invocation in runner.view.load.call_args_list:
+            self.assertIs(invocation.args[0], frame)
+        self.assertEqual([entry[1] for entry in events if entry[0] == 'convert'], [(4, 4)] * 3)
+        runner.handle_info_bar.assert_not_called()
+        runner.device.screenshot.assert_not_called()
+
+    def test_generic_event_keeps_original_success_mark_after_fast_click(self):
+        runner, _, _ = self.make_question_runner(walk_result=('event',))
+
+        self.assertTrue(runner.clear_question())
+
+        self.assertEqual(runner._solved_map_event, {'is_logging_tower'})
+        self.assertFalse(runner._question_unreachable)
+        runner.device.click.assert_called_once_with(runner.view.target)
+        runner.wait_until_walk_stable.assert_called_once()
+        runner.handle_info_bar.assert_not_called()
 
 
 class TestOSMapScanInfoBarPolicy(unittest.TestCase):

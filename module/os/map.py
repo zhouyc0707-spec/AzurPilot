@@ -1287,6 +1287,7 @@ class OSMap(OSFleet, Map, GlobeCamera, StorageHandler, StrategicSearchHandler):
         """
         清理雷达上近距离（以及上方 3 格内）的问号。
         最多尝试 3 次，避免在双舰队机关上循环尝试。
+        复用雷达识别的当前截图换算点击坐标，不等待信息提示条消失。
 
         Args:
             drop: 掉落记录对象。
@@ -1305,8 +1306,7 @@ class OSMap(OSFleet, Map, GlobeCamera, StorageHandler, StrategicSearchHandler):
                 return False
 
             logger.info(f"[大世界-搜索] 在 {grid} 找到问号")
-            self.handle_info_bar()
-
+            # 雷达问号与本地格子必须基于同一画面，近距离处理无需等待提示条。
             self.update_os()
             self.view.predict()
             self.view.show()
