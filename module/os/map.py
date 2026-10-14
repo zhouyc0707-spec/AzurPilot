@@ -1935,6 +1935,7 @@ class OSMap(OSFleet, Map, GlobeCamera, StorageHandler, StrategicSearchHandler):
         Raises:
             MapDetectionError: 识别或摄像机定位失败，交由上层保存现场并恢复；
                 失败不能作为“全图没有事件”的依据。
+                仅检查当前视野时，信息栏妨碍识别也按失败处理。
         """
         result = False
         # 新一轮重扫重新给每个事件一次机会，清掉上一轮的“到不了”记录
@@ -1943,14 +1944,19 @@ class OSMap(OSFleet, Map, GlobeCamera, StorageHandler, StrategicSearchHandler):
         # 先尝试当前摄像机
         logger.hr("重新扫描当前地图", level=2)
         self.map_data_init(map_=None)
-        self.handle_info_bar()
-        self.update()
-        if self.map_rescan_current(drop=drop):
+        # 当前视野先直接识别；提示条确实妨碍识别时，交给完整扫图等待后重新定位。
+        if self.update(wait_info_bar=False) is False:
+            if rescan_mode != "full":
+                raise MapDetectionError('信息栏妨碍当前地图识别，不能确认当前视野无事件')
+            logger.info('[大世界-扫描] 信息栏妨碍当前视野识别，转入完整地图扫描')
+        elif self.map_rescan_current(drop=drop):
             logger.info("[大世界-扫描] 地图重新扫描一次结束, 结果=True")
             return True
 
         if rescan_mode == "full":
             logger.hr("完全重新扫描地图", level=2)
+            # 全图扫描依赖准确的边缘定位，进入前才等待提示条消失。
+            self.handle_info_bar()
             self.map_init(map_=None)
             queue = self.map.camera_data
             scan_count = len(queue)
