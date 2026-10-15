@@ -158,6 +158,11 @@ class CalculatorTests(unittest.TestCase):
             self.assertEqual(data['11']['retrofit_names'], ['舰名.改'])
             self.assertTrue(data['11']['is_child'])
             self.assertNotIn('retrofit_names', data['900001'])
+            (root / 'sharecfg/ship_skin_template.lua').rename(root / 'sharecfgdata/ship_skin_template.lua')
+            with patch('sys.stdout', io.StringIO()):
+                data = extract_ship_data(directory)
+            self.assertEqual(data['11']['retrofit_names'], ['舰名.改'])
+            self.assertNotIn('retrofit_names', data['900001'])
 
     def test_collaboration_catalog_has_original_rarity_without_frame_guessing(self):
         for name in ('帕特莉夏·阿贝尔海姆', 'DEAD MASTER', '雪泉', '雫', '穗香', '环', '八舞耶俱矢·八舞夕弦'):
@@ -179,6 +184,29 @@ class CalculatorTests(unittest.TestCase):
         rows = highest_ships([ship('约克城'), ship('约克城II'), ship('皇家方舟'), ship('皇家方舟·META')])
         self.assertEqual(len(rows), 4)
         self.assertEqual(calculate(rows)['included'], 4)
+
+    def test_review_positions_survive_unknown_levels_and_same_name_merge(self):
+        rows = [ship('拉菲', 100), ship('拉菲', 0, review=True), ship('拉菲', 120, review=True),
+                ship('重复误读', review=True), ship('重复误读', review=True)]
+        self.assertEqual(highest_ships(rows), rows)
+        result = calculate(rows)
+        self.assertEqual(result['included'], 1)
+        self.assertEqual(result['review'], 4)
+        self.assertTrue(all(row['mind'] == 0 for row in result['ships'][1:]))
+
+    def test_unconfirmed_special_ship_is_visible_for_review_and_never_billed(self):
+        row = calculate([ship('泛用型布里', 0, review=True)])['ships'][0]
+        self.assertEqual(row['status'], 'review')
+        self.assertTrue(row['automatic_excluded'])
+        self.assertEqual(row['mind'], 0)
+
+    def test_upload_rejects_local_level_failure_without_importing_partial_list(self):
+        image = Image.open(Path(__file__).parent / 'fixtures/mind_dock_fleet_priority.png').convert('RGB')
+        cards = [Card(93, 76, 0, ship('拉菲', 0, review=True), 4, False),
+                 Card(258, 76, 1, ship('卡辛', 100), 6, True)]
+        with patch('module.runtime.mind_recognition.recognize_cards', return_value=cards):
+            with self.assertRaisesRegex(ValueError, '第 1 行第 1 列.*未导入零等级'):
+                recognize(image, '局部识别失败.png')
 
     def test_rows_follow_scrolled_level_headers(self):
         ocr = Mock()
@@ -221,7 +249,7 @@ class RecognitionTests(unittest.TestCase):
         ocr.ocr_for_single_lines.side_effect = lambda regions: [''] * len(regions)
         cards = recognize_cards(Image.fromarray(pixels), name_ocr=ocr, level_ocr=ocr)
         self.assertEqual(len(cards), 1)
-        self.assertIn('未识别舰船', cards[0].ship['name'])
+        self.assertIn('舰名未读到', cards[0].ship['name'])
         self.assertTrue(cards[0].ship['review'])
         self.assertEqual(cards[0].ship['level'], 0)
 
@@ -264,8 +292,10 @@ class RecognitionTests(unittest.TestCase):
         merger.add(Image.fromarray(second), [Card(93, 76, 0, ship('拉菲', 101), 6, True),
                                              Card(93, 303, 0, ship('拉菲', 100), 6, True)])
         self.assertEqual(len(merger.slots), 3)
-        self.assertEqual(merger.ships()[0]['level'], 101)
-        self.assertIn('跨屏读数不一致', merger.ships()[0]['source'])
+        reviewed = next(row for row in merger.ships() if row['review'])
+        self.assertEqual(reviewed['level'], 101)
+        self.assertIn('跨屏读数不一致', reviewed['source'])
+        self.assertTrue(any(row['level'] == 100 and not row['review'] for row in merger.ships()))
         # 相同截图是零位移，重试截图不增加卡片。
         merger.add(Image.fromarray(second), [Card(93, 76, 0, ship('拉菲', 101), 6, True)])
         self.assertEqual(len(merger.slots), 3)
@@ -287,7 +317,8 @@ class RecognitionTests(unittest.TestCase):
         self.assertEqual(merger.offset, 681)
         self.assertEqual(len(merger.slots), 6)
 
-    def scan_frames(self, offsets, *, bottom_offset):
+    def scan_frames(self, offsets, *, bottom_offset, damaged=False, later_conflict=False, cross_conflict=False,
+                    strict_levels=True):
         from module.retire.mind_scan import MindCalculatorScan
         from types import SimpleNamespace
         class ImmediateTimer:
@@ -303,7 +334,10 @@ class RecognitionTests(unittest.TestCase):
         by_offset = dict(zip(sorted(set(offsets)), images))
         frames = iter(offsets)
         scanner = MindCalculatorScan.__new__(MindCalculatorScan)
-        scanner.config = SimpleNamespace(Emulator_ControlMethod='MaaTouch')
+        scanner.require_reliable_levels = strict_levels
+        scanner.config = SimpleNamespace(Emulator_ControlMethod='MaaTouch', config_name='testpilot')
+        from module.runtime.mind_recognition import ScanPolicy
+        scanner._policy = ScanPolicy(90, 115, sorted_desc=True)
         scanner.device = Mock()
         position = [0]
         def screenshot():
@@ -317,11 +351,57 @@ class RecognitionTests(unittest.TestCase):
         captured = []
         def recognize(*args, **kwargs):
             captured.append(position[0])
-            return [Card(93, y, 0, ship(f'拉菲{y}', level=100), 6, True) for y in (76, 303, 530)]
-        with patch('module.retire.mind_scan.Timer', ImmediateTimer), patch('module.retire.mind_scan.DOCK_SCROLL', scrollbar), \
+            if damaged or cross_conflict:
+                value = 110 if cross_conflict and position[0] == 681 else 100 if cross_conflict else 88
+                cards = [Card(93 + col * 165, y, col, ship(f'舰船{round((y - 76 + position[0]) / 227)}-{col}', level=value), 6, True)
+                         for y in (76, 303, 530) for col in range(7)]
+                if damaged and position[0] == 0:
+                    cards[0].ship.update(name='未识别舰船', level=0, review=True)
+                    cards[0].level_reliable = False
+                if later_conflict and position[0] == 681:
+                    cards[0].ship['level'] = 87
+                return cards
+            # 同一实际卡位在底部重叠时必须有相同身份，不能让伪名字冲突被同名合并掩盖。
+            return [Card(93, y, 0, ship(f'拉菲{round((y - 76 + position[0]) / 227) % 3}', level=100), 6, True)
+                    for y in (76, 303, 530)]
+        with tempfile.TemporaryDirectory() as temp, patch('module.retire.mind_scan.logger.log_file', str(Path(temp) / 'testpilot.txt')), \
+                patch('module.retire.mind_scan.Timer', ImmediateTimer), patch('module.retire.mind_scan.DOCK_SCROLL', scrollbar), \
                 patch('module.retire.mind_scan.recognize_cards', side_effect=recognize):
             result = scanner._scan_pages(Mock(), Mock())
+            scanner._test_saved_frames = {str(path): np.array(Image.open(path)) for path in Path(temp).rglob('*.png')}
         return scanner, captured, result
+
+    def test_shared_review_mode_keeps_unknown_level_to_real_bottom(self):
+        scanner, captured, result = self.scan_frames(
+            [0] * 6 + [227, 227, 454, 454, 681, 681, 908, 908], bottom_offset=908, damaged=True,
+            strict_levels=False)
+        self.assertEqual(captured, [0, 0, 0, 681, 908])
+        self.assertFalse(scanner._policy.sort_valid)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]['name'], '未识别舰船')
+        self.assertEqual(result[0]['level'], 0)
+        self.assertTrue(result[0]['review'])
+
+    def test_disabling_early_stop_still_checks_new_page_sort_conflicts(self):
+        scanner, captured, result = self.scan_frames(
+            [0] * 6 + [227, 227, 454, 454] + [681] * 6 + [908, 908],
+            bottom_offset=908, damaged=True, later_conflict=True, strict_levels=False)
+        self.assertEqual(captured, [0, 0, 0, 681, 681, 681, 908])
+        self.assertFalse(scanner._policy.sort_valid)
+        self.assertEqual(len(result), 3)
+        self.assertTrue(all(row['review'] for row in result))
+        self.assertEqual([row['level'] for row in result], [0, 87, 88])
+
+    def test_cross_page_sort_review_references_the_frame_containing_each_card(self):
+        scanner, captured, result = self.scan_frames(
+            [0, 0, 227, 227, 454, 454] + [681] * 6 + [908, 908, 1135, 1135, 1362, 1362],
+            bottom_offset=1362, cross_conflict=True)
+        self.assertEqual(captured, [0, 681, 681, 681, 1362])
+        reviewed = [row for row in result if row['review']]
+        self.assertEqual([row['name'] for row in reviewed], ['舰船2-6', '舰船3-0'])
+        for row, offset in zip(reviewed, [0, 681]):
+            path = row['source'].split('；原帧：')[1].split('；')[0]
+            np.testing.assert_array_equal(scanner._test_saved_frames[path], self.scroll_frames([offset])[0])
 
     def test_scan_moves_three_rows_and_waits_for_motion_to_settle(self):
         scanner, captured, result = self.scan_frames([0, 0, 100, 227, 227, 454, 454, 681, 681], bottom_offset=681)
@@ -371,6 +451,20 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, 'CONFLICT')
         self.configs.create('other')
         self.assertEqual(self.service.report('other')['ships'], [])
+
+    def test_unknown_level_review_survives_save_reload_and_all_exports(self):
+        rows = [ship('拉菲', 100), ship('拉菲', 0, review=True, source='第 2 页第 3 列等级未确认')]
+        report = self.service.save('testpilot', self.service.report('testpilot')['revision'], rows)
+        self.assertEqual(report['review'], 1)
+        self.assertEqual(report['included'], 1)
+        self.assertEqual(self.service.report('testpilot')['ships'][1]['level'], 0)
+        for format in ('json', 'csv', 'xlsx'):
+            file = self.service.export('testpilot', format)
+            imported = import_ships(file['filename'], file['content'])
+            self.assertEqual(len(imported), 2)
+            self.assertTrue(imported[1]['review'])
+            self.assertEqual(imported[1]['level'], 0)
+            self.assertEqual(calculate(imported)['review'], 1)
 
     def test_manual_original_rarity_survives_save_reload_and_export(self):
         rows = [ship('皇家财富号', base_rarity='SR'), ship('拉菲.改', 105)]
@@ -491,6 +585,7 @@ class ServiceTests(unittest.TestCase):
                     scrollbar.total = 565
                     scrollbar.match_color.return_value = np.arange(565) < 25
                     scrollbar.at_top.return_value = True
+                    scanner._prune_scan_evidence = Mock()
                     def collect(*args):
                         self.service.save('testpilot', self.service.report('testpilot')['revision'],
                                           [ship('用户的新数据')] if changed else [])
@@ -499,8 +594,10 @@ class ServiceTests(unittest.TestCase):
                     if changed:
                         with self.assertRaises(RequestHumanTakeover):
                             scanner.run()
+                        scanner._prune_scan_evidence.assert_not_called()
                     else:
                         scanner.run()
+                        scanner._prune_scan_evidence.assert_called_once_with()
                     rows = self.service.report('testpilot')['ships']
                     self.assertEqual(rows[0]['name'], '用户的新数据' if changed else '拉菲')
 

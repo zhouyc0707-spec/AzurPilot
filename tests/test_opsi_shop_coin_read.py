@@ -261,9 +261,10 @@ class TestShopCoinRead(CoinReadFixture):
                 self.reader.config.task.command = command
                 self.reader.get_yellow_coins = Mock(return_value=100000)
                 self.reader.get_purple_coins = Mock(return_value=300)
-                self.db.add_coins_snapshot.reset_mock()
+                self.reader._paired_purple_read = (300, True)
+                self.db.async_add_coins_snapshot.reset_mock()
                 self.reader.os_shop_get_coins()
-                self.db.add_coins_snapshot.assert_called_once_with('coin_read_fixture', 100000, 300, source=source)
+                self.db.async_add_coins_snapshot.assert_called_once_with('coin_read_fixture', 100000, 300, source=source)
 
     def test_port_purple_read_keeps_separate_ocr_and_observation(self):
         self.reader.appear.side_effect = lambda button: button is OS_SHOP_CHECK

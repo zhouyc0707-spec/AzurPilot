@@ -14,6 +14,7 @@ from module.logger import logger
 from module.os.assets import GLOBE_GOTO_MAP, MAP_GOTO_GLOBE_FOG
 from module.os_handler.assets import *
 from module.os_handler.enemy_searching import EnemySearchingHandler
+from module.os_handler.resource_state import reset_resource_caches
 from module.statistics.azurstats import DropImage
 from module.ui.assets import BACK_ARROW
 from module.ui.switch import Switch
@@ -236,6 +237,7 @@ class MapEventHandler(EnemySearchingHandler):
                 self._story_timeout.reset()
 
                 # 重启应用
+                reset_resource_caches(self)
                 self.device.app_stop()
                 self.device.app_start()
 

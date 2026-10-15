@@ -79,14 +79,18 @@ function render(path: string, props: {defaultOpenKey?: string; isDesktop?: boole
 }
 
 describe('TaskNav 导航组件', () => {
-  it.each(['legacy-light', 'light'] as Theme[])('在 %s 主题中将计算器与舰队信息并列放在舰队管理', theme => {
-    const html = render('/i/default/task/MindCalculator', {defaultOpenKey: 'FleetManagement'}, theme)
+  it.each((['legacy-light', 'light'] as Theme[]).flatMap(theme =>
+    ['MindCalculator', 'FleetTechnology'].map(task => [theme, task] as const)))('在 %s 主题的 %s 页保持舰队管理入口及分组高亮', (theme, task) => {
+    const html = render(`/i/default/task/${task}`, {defaultOpenKey: 'FleetManagement'}, theme)
     expect(html).toContain('舰队管理')
     expect(html).toContain('task-group-button expanded active')
     expect(html).toContain('href="/i/default/task/FleetInfo"')
     expect(html).toContain('href="/i/default/task/MindCalculator"')
+    expect(html).toContain('href="/i/default/task/FleetTechnology"')
     expect(html).toContain('心智单元计算器')
+    expect(html).toContain('舰队科技')
     expect(html).not.toContain('Task.MindCalculator.name')
+    expect(html).not.toContain('Task.FleetTechnology.name')
   })
 
   it('渲染一级分组按钮，未展开时不下发具体任务', () => {

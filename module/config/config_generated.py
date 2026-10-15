@@ -379,6 +379,8 @@ class GeneratedConfig:
     # 配置组 `Emotion`
     Emotion_Mode = 'calculate'  # calculate, ignore, calculate_ignore
     Emotion_IgnoreShipwreck = False
+    Emotion_MinReserve = 0
+    Emotion_RecoveryWait = None
     Emotion_Fleet1Value = 119
     Emotion_Fleet1Record = datetime.datetime(2020, 1, 1, 0, 0)
     Emotion_Fleet1RecoveryState = None
@@ -664,6 +666,7 @@ class GeneratedConfig:
     Gacha_UseTicket = True
     Gacha_TicketAmount = 1  # 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
     Gacha_ClearTicket = True
+    Gacha_ClearTicketTime = '09:30'
     Gacha_UseDrill = False
 
     # 配置组 `BattlePass`
@@ -738,6 +741,7 @@ class GeneratedConfig:
     # 配置组 `OpsiGeneral`
     OpsiGeneral_UseLogger = True
     OpsiGeneral_BuyActionPointLimit = 0  # 0, 1, 2, 3, 4, 5
+    OpsiGeneral_ActionPointCheckInterval = 0
     OpsiGeneral_OilLimit = 1000
     OpsiGeneral_RepairThreshold = 0.4
     OpsiGeneral_UseRepairPack = False
@@ -1203,8 +1207,14 @@ class GeneratedConfig:
 
     # 配置组 `MindCalculator`
     MindCalculator_MinLevel = 95
-    MindCalculator_MaxLevel = 120
+    MindCalculator_MaxLevel = 125
     MindCalculator_Result = {}
+    MindCalculator_FleetTechRecord = {}
+
+    # 配置组 `FleetTech`
+    FleetTech_MinLevel = 95
+    FleetTech_MaxLevel = 125
+    FleetTech_Record = {}
 
     # 配置组 `FleetInfo`
     FleetInfo_Result = {}

@@ -51,6 +51,14 @@ function validateField(path, value) {
 export function createMockState({ empty = false } = {}) {
   const instances = new Map()
   const mindShips = new Map()
+  const fleetRecords = new Map()
+  function fleetPython(action, params) {
+    const fields = get(params.instance).values.FleetTechScan.FleetTech
+    const output = mindPython(`tech.${action}`, {...params, ships: mindShips.get(params.instance) ?? [],
+      record: fleetRecords.get(params.instance) ?? {}, min_level: fields.MinLevel, max_level: fields.MaxLevel})
+    if (['patch', 'syncMind'].includes(action)) fleetRecords.set(params.instance, output.record)
+    return output.result
+  }
   function mindPython(action, params) {
     const run = spawnSync('uv', ['run', '--no-sync', 'python', '-X', 'utf8', '-m', 'dev_tools.mind_calculator_mock'], {
       cwd: fileURLToPath(new URL('../../', import.meta.url)), input: JSON.stringify({action, ...params}),
@@ -58,7 +66,7 @@ export function createMockState({ empty = false } = {}) {
     })
     if (run.error || run.status) fail('INTERNAL_ERROR', '计算器模拟服务运行失败')
     const result = JSON.parse(run.stdout)
-    if (result.error) fail('INVALID_PARAMS', result.error)
+    if (result.error) fail(result.code ?? 'INVALID_PARAMS', result.error)
     return result
   }
   const stock = createStockProxy(name=>{const r=get(name).values.Dashboard.ActionPoint;return r?.Total!=null&&r.Record?{instance:name,actionPoints:r.Total,observedAt:Math.floor(new Date(r.Record.replace(' ','T')+'Z').getTime()/1000)}:null})
@@ -523,6 +531,10 @@ export function createMockState({ empty = false } = {}) {
         }
       }
       case 'mind.catalog': return mindPython('catalog', params)
+      case 'fleetTech.catalog': return fleetPython('catalog', params)
+      case 'fleetTech.report': return fleetPython('report', params)
+      case 'fleetTech.patch': return fleetPython('patch', params)
+      case 'fleetTech.syncMind': return fleetPython('syncMind', params)
       case 'mind.calculate': return mindPython('calculate', params)
       case 'mind.report': {
         const range = get(name).values.MindCalculatorScan.MindCalculator

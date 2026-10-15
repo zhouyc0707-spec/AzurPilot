@@ -1545,6 +1545,19 @@
         "type": "checkbox",
         "value": false
       },
+      "MinReserve": {
+        "type": "input",
+        "value": 0,
+        "validate": [
+          0,
+          150
+        ]
+      },
+      "RecoveryWait": {
+        "type": "stored",
+        "value": null,
+        "display": "hide"
+      },
       "Fleet1Value": {
         "type": "input",
         "value": 119,
@@ -2002,6 +2015,19 @@
         "type": "checkbox",
         "value": false
       },
+      "MinReserve": {
+        "type": "input",
+        "value": 0,
+        "validate": [
+          0,
+          150
+        ]
+      },
+      "RecoveryWait": {
+        "type": "stored",
+        "value": null,
+        "display": "hide"
+      },
       "Fleet1Value": {
         "type": "input",
         "value": 119,
@@ -2458,6 +2484,19 @@
       "IgnoreShipwreck": {
         "type": "checkbox",
         "value": false
+      },
+      "MinReserve": {
+        "type": "input",
+        "value": 0,
+        "validate": [
+          0,
+          150
+        ]
+      },
+      "RecoveryWait": {
+        "type": "stored",
+        "value": null,
+        "display": "hide"
       },
       "Fleet1Value": {
         "type": "input",
@@ -3082,6 +3121,19 @@
         "type": "checkbox",
         "value": false
       },
+      "MinReserve": {
+        "type": "input",
+        "value": 0,
+        "validate": [
+          0,
+          150
+        ]
+      },
+      "RecoveryWait": {
+        "type": "stored",
+        "value": null,
+        "display": "hide"
+      },
       "Fleet1Value": {
         "type": "input",
         "value": 119,
@@ -3677,6 +3729,19 @@
         "type": "checkbox",
         "value": false
       },
+      "MinReserve": {
+        "type": "input",
+        "value": 0,
+        "validate": [
+          0,
+          150
+        ]
+      },
+      "RecoveryWait": {
+        "type": "stored",
+        "value": null,
+        "display": "hide"
+      },
       "Fleet1Value": {
         "type": "input",
         "value": 119,
@@ -4228,6 +4293,19 @@
         "type": "checkbox",
         "value": false
       },
+      "MinReserve": {
+        "type": "input",
+        "value": 0,
+        "validate": [
+          0,
+          150
+        ]
+      },
+      "RecoveryWait": {
+        "type": "stored",
+        "value": null,
+        "display": "hide"
+      },
       "Fleet1Value": {
         "type": "input",
         "value": 119,
@@ -4729,6 +4807,19 @@
       "IgnoreShipwreck": {
         "type": "checkbox",
         "value": false
+      },
+      "MinReserve": {
+        "type": "input",
+        "value": 0,
+        "validate": [
+          0,
+          150
+        ]
+      },
+      "RecoveryWait": {
+        "type": "stored",
+        "value": null,
+        "display": "hide"
       },
       "Fleet1Value": {
         "type": "input",
@@ -5235,6 +5326,19 @@
         "type": "checkbox",
         "value": false
       },
+      "MinReserve": {
+        "type": "input",
+        "value": 0,
+        "validate": [
+          0,
+          150
+        ]
+      },
+      "RecoveryWait": {
+        "type": "stored",
+        "value": null,
+        "display": "hide"
+      },
       "Fleet1Value": {
         "type": "input",
         "value": 119,
@@ -5739,6 +5843,19 @@
         "type": "checkbox",
         "value": false
       },
+      "MinReserve": {
+        "type": "input",
+        "value": 0,
+        "validate": [
+          0,
+          150
+        ]
+      },
+      "RecoveryWait": {
+        "type": "stored",
+        "value": null,
+        "display": "hide"
+      },
       "Fleet1Value": {
         "type": "input",
         "value": 119,
@@ -6089,6 +6206,19 @@
       "IgnoreShipwreck": {
         "type": "checkbox",
         "value": false
+      },
+      "MinReserve": {
+        "type": "input",
+        "value": 0,
+        "validate": [
+          0,
+          150
+        ]
+      },
+      "RecoveryWait": {
+        "type": "stored",
+        "value": null,
+        "display": "hide"
       },
       "Fleet1Value": {
         "type": "input",
@@ -6539,6 +6669,19 @@
         "type": "checkbox",
         "value": false
       },
+      "MinReserve": {
+        "type": "input",
+        "value": 0,
+        "validate": [
+          0,
+          150
+        ]
+      },
+      "RecoveryWait": {
+        "type": "stored",
+        "value": null,
+        "display": "hide"
+      },
       "Fleet1Value": {
         "type": "input",
         "value": 119,
@@ -6759,6 +6902,19 @@
       "IgnoreShipwreck": {
         "type": "checkbox",
         "value": false
+      },
+      "MinReserve": {
+        "type": "input",
+        "value": 0,
+        "validate": [
+          0,
+          150
+        ]
+      },
+      "RecoveryWait": {
+        "type": "stored",
+        "value": null,
+        "display": "hide"
       },
       "Fleet1Value": {
         "type": "input",
@@ -7079,6 +7235,19 @@
       "IgnoreShipwreck": {
         "type": "checkbox",
         "value": false
+      },
+      "MinReserve": {
+        "type": "input",
+        "value": 0,
+        "validate": [
+          0,
+          150
+        ]
+      },
+      "RecoveryWait": {
+        "type": "stored",
+        "value": null,
+        "display": "hide"
       },
       "Fleet1Value": {
         "type": "input",
@@ -7405,6 +7574,19 @@
       "IgnoreShipwreck": {
         "type": "checkbox",
         "value": false
+      },
+      "MinReserve": {
+        "type": "input",
+        "value": 0,
+        "validate": [
+          0,
+          150
+        ]
+      },
+      "RecoveryWait": {
+        "type": "stored",
+        "value": null,
+        "display": "hide"
       },
       "Fleet1Value": {
         "type": "input",
@@ -8315,6 +8497,19 @@
         "type": "checkbox",
         "value": false
       },
+      "MinReserve": {
+        "type": "input",
+        "value": 0,
+        "validate": [
+          0,
+          150
+        ]
+      },
+      "RecoveryWait": {
+        "type": "stored",
+        "value": null,
+        "display": "hide"
+      },
       "Fleet1Value": {
         "type": "input",
         "value": 119,
@@ -8837,6 +9032,19 @@
       "IgnoreShipwreck": {
         "type": "checkbox",
         "value": false
+      },
+      "MinReserve": {
+        "type": "input",
+        "value": 0,
+        "validate": [
+          0,
+          150
+        ]
+      },
+      "RecoveryWait": {
+        "type": "stored",
+        "value": null,
+        "display": "hide"
       },
       "Fleet1Value": {
         "type": "input",
@@ -9361,6 +9569,19 @@
         "type": "checkbox",
         "value": false
       },
+      "MinReserve": {
+        "type": "input",
+        "value": 0,
+        "validate": [
+          0,
+          150
+        ]
+      },
+      "RecoveryWait": {
+        "type": "stored",
+        "value": null,
+        "display": "hide"
+      },
       "Fleet1Value": {
         "type": "input",
         "value": 119,
@@ -9883,6 +10104,19 @@
       "IgnoreShipwreck": {
         "type": "checkbox",
         "value": false
+      },
+      "MinReserve": {
+        "type": "input",
+        "value": 0,
+        "validate": [
+          0,
+          150
+        ]
+      },
+      "RecoveryWait": {
+        "type": "stored",
+        "value": null,
+        "display": "hide"
       },
       "Fleet1Value": {
         "type": "input",
@@ -10407,6 +10641,19 @@
         "type": "checkbox",
         "value": false
       },
+      "MinReserve": {
+        "type": "input",
+        "value": 0,
+        "validate": [
+          0,
+          150
+        ]
+      },
+      "RecoveryWait": {
+        "type": "stored",
+        "value": null,
+        "display": "hide"
+      },
       "Fleet1Value": {
         "type": "input",
         "value": 119,
@@ -10920,6 +11167,19 @@
         "type": "checkbox",
         "value": false
       },
+      "MinReserve": {
+        "type": "input",
+        "value": 0,
+        "validate": [
+          0,
+          150
+        ]
+      },
+      "RecoveryWait": {
+        "type": "stored",
+        "value": null,
+        "display": "hide"
+      },
       "Fleet1Value": {
         "type": "input",
         "value": 119,
@@ -11262,6 +11522,19 @@
         "type": "checkbox",
         "value": false
       },
+      "MinReserve": {
+        "type": "input",
+        "value": 0,
+        "validate": [
+          0,
+          150
+        ]
+      },
+      "RecoveryWait": {
+        "type": "stored",
+        "value": null,
+        "display": "hide"
+      },
       "Fleet1Value": {
         "type": "input",
         "value": 119,
@@ -11578,6 +11851,19 @@
       "IgnoreShipwreck": {
         "type": "checkbox",
         "value": false
+      },
+      "MinReserve": {
+        "type": "input",
+        "value": 0,
+        "validate": [
+          0,
+          150
+        ]
+      },
+      "RecoveryWait": {
+        "type": "stored",
+        "value": null,
+        "display": "hide"
       },
       "Fleet1Value": {
         "type": "input",
@@ -14086,6 +14372,12 @@
         "type": "checkbox",
         "value": true
       },
+      "ClearTicketTime": {
+        "type": "input",
+        "value": "09:30",
+        "valuetype": "str",
+        "validate": "^([01]?[0-9]|2[0-3]):[0-5][0-9]$"
+      },
       "UseDrill": {
         "type": "checkbox",
         "value": false
@@ -14381,6 +14673,12 @@
           4,
           5
         ]
+      },
+      "ActionPointCheckInterval": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": "^\\d+$"
       },
       "OilLimit": {
         "type": "input",
@@ -20386,10 +20684,42 @@
       },
       "MaxLevel": {
         "type": "input",
-        "value": 120,
+        "value": 125,
         "validate": "^[1-9][0-9]?$|^1[01][0-9]$|^12[0-5]$"
       },
       "Result": {
+        "type": "stored",
+        "value": {},
+        "display": "hide"
+      },
+      "FleetTechRecord": {
+        "type": "stored",
+        "value": {},
+        "display": "hide"
+      }
+    },
+    "Storage": {
+      "Storage": {
+        "type": "storage",
+        "value": {},
+        "valuetype": "ignore",
+        "display": "disabled"
+      }
+    }
+  },
+  "FleetTechScan": {
+    "FleetTech": {
+      "MinLevel": {
+        "type": "input",
+        "value": 95,
+        "validate": "^[1-9][0-9]?$|^1[01][0-9]$|^12[0-5]$"
+      },
+      "MaxLevel": {
+        "type": "input",
+        "value": 125,
+        "validate": "^[1-9][0-9]?$|^1[01][0-9]$|^12[0-5]$"
+      },
+      "Record": {
         "type": "stored",
         "value": {},
         "display": "hide"

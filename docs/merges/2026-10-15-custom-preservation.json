@@ -1,0 +1,194 @@
+{
+  "baseline": "57c94a14af2148b2b885ed88cdb08c0536f042e0",
+  "before": "55c3dad305a7a524bf59fdb4b1fa040ec3a69515",
+  "upstream": "13536d116aba32149cd16288793fa79b33c573b8",
+  "custom_files": 768,
+  "upstream_files": 132,
+  "overlap_files": [
+    "alas.py",
+    "config/template.json",
+    "docs/modules/combat.md",
+    "docs/modules/game/misc.md",
+    "docs/modules/os/auxiliary.md",
+    "docs/modules/os/index.md",
+    "docs/modules/webui/frontend.md",
+    "docs/modules/webui/index.md",
+    "docs/modules/webui/mind-calculator.md",
+    "frontend/mock/state.mjs",
+    "frontend/src/api/contract.json",
+    "frontend/src/api/generated.ts",
+    "frontend/src/api/types.ts",
+    "frontend/src/app/App.tsx",
+    "frontend/src/i18n.ts",
+    "frontend/src/main.tsx",
+    "module/api/protocol.py",
+    "module/api/router.py",
+    "module/config/argument/args.json",
+    "module/config/argument/argument.yaml",
+    "module/config/argument/task.yaml",
+    "module/config/config_generated.py",
+    "module/config/i18n/en-US.json",
+    "module/config/i18n/ja-JP.json",
+    "module/config/i18n/zh-CN.json",
+    "module/config/i18n/zh-MIAO.json",
+    "module/config/i18n/zh-TW.json",
+    "module/log_res/log_res.py",
+    "module/os/fleet.py",
+    "module/os/map.py",
+    "module/os/tasks/hazard_leveling.py",
+    "module/os/tasks/meowfficer_farming.py",
+    "module/os/tasks/scheduling.py",
+    "module/os_handler/action_point.py",
+    "module/os_handler/map_event.py",
+    "module/os_handler/os_status.py",
+    "module/retire/mind_scan.py",
+    "module/runtime/mind_recognition.py",
+    "module/statistics/cl1_database.py",
+    "module/statistics/item.py",
+    "module/statistics/resource_stats.py",
+    "tests/test_api.py",
+    "tests/test_mind_calculator.py",
+    "tests/test_mind_scan.py"
+  ],
+  "nonoverlap_files": 724,
+  "nonoverlap_identical": 718,
+  "expected_nonoverlap_changes": {
+    "frontend/src/components/TaskNav.test.tsx": "保留原导航断言并增加新旧主题科技入口及分组高亮",
+    "tests/test_action_point_oil_purchase.py": "购买后次数复核夹具模拟真实递减，原周界及月末断言保留并增加跨周购买",
+    "tests/test_coins_snapshot_append.py": "保留原追加写入断言，新增紫币为零／跨月承接、观测时间及损坏拒绝回归",
+    "tests/test_opsi_map_scan_coverage.py": "新增用户刚撤销的两处提示条等待顺序回归，不删除覆盖及坐标保护",
+    "tests/test_opsi_shop_coin_read.py": "适配上游快路径异步快照入口，仍断言真实双币余额与来源",
+    "定制化修改清单.md": "同步本次上游基线、共有能力及保留政策"
+  },
+  "unexpected_nonoverlap_changes": [],
+  "local_json_fields": {
+    "assets/stats/opsi_item_names.json": {
+      "local_changes": 6,
+      "preserved_exact": 6,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    },
+    "assets/stats/opsi_template_sources.json": {
+      "local_changes": 1,
+      "preserved_exact": 1,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    },
+    "config/template.json": {
+      "local_changes": 36,
+      "preserved_exact": 36,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    },
+    "docs/merges/2026-10-11-third-custom-preservation.json": {
+      "local_changes": 30,
+      "preserved_exact": 30,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    },
+    "docs/merges/2026-10-13-custom-preservation.json": {
+      "local_changes": 29,
+      "preserved_exact": 29,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    },
+    "docs/merges/2026-10-14-custom-preservation.json": {
+      "local_changes": 100,
+      "preserved_exact": 100,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    },
+    "frontend/src/api/contract.json": {
+      "local_changes": 99,
+      "preserved_exact": 99,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    },
+    "module/config/argument/args.json": {
+      "local_changes": 117,
+      "preserved_exact": 117,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    },
+    "module/config/i18n/en-US.json": {
+      "local_changes": 187,
+      "preserved_exact": 187,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    },
+    "module/config/i18n/ja-JP.json": {
+      "local_changes": 187,
+      "preserved_exact": 187,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    },
+    "module/config/i18n/zh-CN.json": {
+      "local_changes": 187,
+      "preserved_exact": 187,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    },
+    "module/config/i18n/zh-MIAO.json": {
+      "local_changes": 187,
+      "preserved_exact": 187,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    },
+    "module/config/i18n/zh-TW.json": {
+      "local_changes": 187,
+      "preserved_exact": 187,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    },
+    "tests/fixtures/mind_level_complete_rows.json": {
+      "local_changes": 1,
+      "preserved_exact": 1,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    }
+  },
+  "local_yaml_fields": {
+    "module/config/argument/argument.yaml": {
+      "local_changes": 94,
+      "preserved_exact": 94,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    },
+    "module/config/argument/gui.yaml": {
+      "local_changes": 60,
+      "preserved_exact": 60,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    },
+    "module/config/argument/task.yaml": {
+      "local_changes": 1,
+      "preserved_exact": 1,
+      "preserved_with_allowed_fusion": 0,
+      "failed": 0
+    }
+  },
+  "changed_custom_fields": [],
+  "custom_definitions_in_overlap": 37,
+  "missing_custom_definitions": [],
+  "key_entry_count": 32,
+  "key_entry_failures": [],
+  "launcher_compatibility": {
+    "file": "module/api/launcher_routes.py",
+    "preserved_alias_count": 11,
+    "preserved_wrapper_count": 3,
+    "raw_notification_extra_fields": true,
+    "failures": []
+  },
+  "python_file_count": 2617,
+  "tracked_python_files": 2617,
+  "included_new_public_python_files": [],
+  "python_syntax_errors": [],
+  "inventory_reference_count": 209,
+  "missing_inventory_references": [],
+  "camera_matches_revert_baseline": true,
+  "reverted_waits_retained": {
+    "clear_question": true,
+    "map_rescan_once": true
+  },
+  "passed": true
+}

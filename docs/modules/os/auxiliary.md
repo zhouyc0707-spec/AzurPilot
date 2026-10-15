@@ -36,6 +36,7 @@
 ```
 module/os_handler/    # 约 3000 行，12 个功能文件 + assets
 ├── action_point.py   # 行动力面板全套（读/买/限/溢出）
+├── resource_state.py # 任务上下文、库存版本与运行期缓存失效
 ├── map_event.py      # MapEventHandler：地图事件、舰队锁开关、自动搜索收尾
 ├── storage.py        # StorageHandler：大世界仓库（隐秘坐标/修理/日志仪）
 ├── os_status.py      # OSStatus：黄币/紫币 OCR 与任务上下文判断
@@ -193,6 +194,12 @@ OpsiAshBeacon.run() → META 页攻击 → MetaReward 领奖 → task_delay(serv
 
 ## 8. 数据流
 
+石油购买缓存按实例与服务器周记录实际已购数，配置上限增减不重置实际次数；已达上限或月末封锁直接跳过石油选项，无效计数不当作买满。实际剩余 `0/5` 仍须连续两帧确认，并将本周耗尽标记保存到本实例共享配置，切任务或重启后同周仍跳过购买；周重置后自动失效。月末仅在最后一个自然周跨月时禁购当月部分，月末为周日且整周都在当月时不禁购。检查间隔仅限制侵蚀一、智能调度和短猫常规完整面板读取，从成功完整读取以单调时钟计时，跳过不续期；间隔内识别地图当前值并复用有效箱子库存，库存变化、无法确认奖励、识别失败与必要补给仍刷新。初始化及原地重启恢复清除缓存，下次重新读取。
+
+侵蚀一与短猫的事件检索通过 `wait_until_walk_stable(allow_event_finish=True)` 在商店正常退出、最终领奖、档案领取或战斗处理完成后，用新截图确认地图及计划作战入口并快速收尾。后续选项会撤销旧完成标记，意外页面恢复仍要求重新定位；下一轮保留任务收尾、EMP、修理和计划作战选项检查。近距离清除问号、当前视野重扫之前的提示条等待继续保留；上述优化只缩短事件已完成后的镜头稳定收尾，不绕过地图识别的提示条保护。
+
+历史快照固定采样时间、月份与来源后后台写入；业务观察、收支对账及配置合并仍在主线程执行。分段性能日志为 `[大世界-货币耗时]` 与 `[大世界-行动力耗时]`。黄币的页面、库存版本及数字区域完全一致时才允许复用；奖励弹窗可见但处于点击冷却时仍禁止读取或复用背景余额。凭证快照保留全部原始历史及月初残留档案，已知紫币在后台同一事务补齐，规范数据继续使用单条追加路径。
+
 ```
 行动力面板截图 → OCR(当前/总/购买次数) → ActionPointLimit 或放行
 货架截图 → ItemGrid(名称/价格/数量) → Selector 过滤 → 购买点击 → 货币 OCR 校验
@@ -206,6 +213,7 @@ META 页截图 → MetaState 状态机 → 攻击/领奖循环
 | 配置 | 说明 |
 | --- | --- |
 | `OpsiGeneral.BuyActionPointLimit` 等行动力参数 | 决定 `action_point_buy` 的行为 |
+| `OpsiGeneral.ActionPointCheckInterval` | 非负整数分钟，默认 0；仅侵蚀一、智能调度和短猫常规完整面板检查使用 |
 | `OpsiAshBeacon.*`（Enable/AttackMode/EnsureFullyCollected） | 信标任务开关与触发条件 |
 | `OpsiMeowfficerFarming.OpsiShopFilter` 等货架策略 | 经 `Selector` 生效 |
 | `OpsiSimulator.OpsiSimulatorParameters.*` | 模拟器参数（仅模拟器读取） |

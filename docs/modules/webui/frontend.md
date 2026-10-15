@@ -6,7 +6,7 @@
 
 [资源管理](resource-management.md) 在所有主题均位于「资源统计」内的「资源趋势」旁边，路径为 `/i/:instance/statistics?view=management`；旧 `/resources` 链接统一自动跳转，不再保留一级资源管理入口。旧版独立统计页顶部提供「资源趋势／资源管理」切换，「资源趋势」继续使用本地整页统计；总览内嵌统计不显示切换条、不跟随外层 `view` 参数。切换主题后保留当前资源管理视图。由 `pages/ResourceManagement.tsx` 与 `resources/` 提供 ECharts 桑基图、库存与收支明细。图节点支持资源与任务筛选，明细支持分页和完整区间 CSV 导出；原调度的石油自动控制使用现有配置事务接口保存。五种语言、窄屏和空数据状态均沿用控制台组件与主题。
 
-所有主题在「舰队管理」下并列放置「舰队信息」与 [心智单元计算器](mind-calculator.md)，不再保留一级心智入口。计算器路径为 `/i/:instance/task/MindCalculator`，旧 `/mind-calculator` 链接统一自动跳转。沿用 `components/taskNavItems.ts` 的 WebUI 页面导航机制，同时覆盖侧栏树、悬浮菜单及顶栏任务跳转，不注册新的游戏任务。「舰队信息」由 `pages/FleetInfoPage.tsx` 提供舰队卡片和扫描开关，调用 `tasks.run(FleetScan)`，只在该扫描运行时调用 `scheduler.stop`；其他任务运行、更新或连接不可用时禁用。启动前等待配置队列保存，扫描运行期间及结束后重读舰队信息；浏览页面不启动游戏，也不修改实例自启设置。
+所有主题在「舰队管理」下并列放置「舰队信息」、[心智单元计算器](mind-calculator.md) 与 [舰队科技](fleet-technology.md)，不再保留一级心智入口。计算器路径为 `/i/:instance/task/MindCalculator`，旧 `/mind-calculator` 链接统一自动跳转；舰队科技路径为 `/i/:instance/task/FleetTechnology`。这两个独立页面沿用 `components/taskNavItems.ts` 的 WebUI 导航机制，同时覆盖侧栏树、悬浮菜单及顶栏任务跳转，页面本身不注册为游戏任务，并隐藏任务右栏。舰队科技只在用户启动扫描时运行独立工具 `FleetTechScan`，人工编辑和心智清单同步只更新当前实例记录。「舰队信息」由 `pages/FleetInfoPage.tsx` 提供舰队卡片和扫描开关，调用 `tasks.run(FleetScan)`，只在该扫描运行时调用 `scheduler.stop`；其他任务运行、更新或连接不可用时禁用。启动前等待配置队列保存，扫描运行期间及结束后重读舰队信息；浏览页面不启动游戏，也不修改实例自启设置。
 
 [心智单元计算器](mind-calculator.md) 的新旧入口共用舰船清单、待核对状态、导入导出与费用计算。该页隐藏任务右栏；自动船坞扫描属于独立游戏工具，仅支持国服且要求当前实例已停止，其余计算和文件处理无需操作游戏。
 
@@ -129,6 +129,8 @@ Node.js >= 22.12（推荐 24），首次准备用 `npm ci --prefix frontend`。
 - 类型报错疑似与后端契约不一致时，先重跑 `dev_tools.export_api_schema`，再排查是否有人手改了生成产物。
 
 ## 20. 相关模块
+
+- [舰队科技列表](fleet-technology.md) —— Lua 目录、累计扫描证据、人工校正和阵营加成。
 
 - [WebUI 总览](index.md)
 - [API 服务](api.md) —— 协议、认证与路由，前端所有业务通信的对端

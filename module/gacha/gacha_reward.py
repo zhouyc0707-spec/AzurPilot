@@ -6,7 +6,7 @@
 # 包括多级建造页面的导航、资源消耗预计算、提交建造订单以及自动化收菜和队列清理逻辑。
 
 import re
-from datetime import date, timezone
+from datetime import date, datetime, timezone
 
 import module.config.server as server
 from module.base.runtime_params import (
@@ -361,7 +361,7 @@ class RewardGacha(GachaUI, Retirement, CampaignStatus):
         return None
 
     def _handle_clear_ticket(self):
-        """在已确认的活动末日分批清券，准备失败时交给上层恢复。
+        """在已确认的活动末日按配置时间分批清券，准备失败时交给上层恢复。
 
         Returns:
             bool: 已完成清券返回 True，未满足清券条件返回 False。
@@ -369,10 +369,14 @@ class RewardGacha(GachaUI, Retirement, CampaignStatus):
         Pages:
             in: page_build（活动卡池）
             out: page_build（活动卡池）
+
+        Raises:
+            TaskEnd: 未到清券时间时延后并结束本次建造任务。
         """
         if not self.config.Gacha_UseTicket or not self.config.Gacha_ClearTicket or self.build_ticket_count <= 0:
             return False
-        today = current_time(timezone(server_timezone())).date()
+        server_now = current_time(timezone(server_timezone()))
+        today = server_now.date()
         result = self._get_event_deadline(today=today)
         if result is None:
             logger.warning('[建造-卡池] 无法获得当前卡池结束时间')
@@ -380,6 +384,15 @@ class RewardGacha(GachaUI, Retirement, CampaignStatus):
         logger.attr('活动结束日期', result)
         if result != today:
             return False
+
+        clear_time = datetime.strptime(self.config.Gacha_ClearTicketTime, '%H:%M').time()
+        clear_at = server_now.replace(hour=clear_time.hour, minute=clear_time.minute, second=0, microsecond=0)
+        logger.attr('清完建造券时间', clear_at)
+        if server_now < clear_at:
+            logger.info('[建造-清券] 未到清券时间，推迟本次建造任务')
+            # 调度器使用本地无时区时间；结束任务以免被每日刷新调度覆盖。
+            self.config.task_delay(target=clear_at.astimezone().replace(tzinfo=None))
+            self.config.task_stop()
 
         logger.hr('清理活动建造券')
         while self.build_ticket_count > 0:

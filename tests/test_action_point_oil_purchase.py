@@ -49,7 +49,12 @@ class TestActionPointOilPurchase(unittest.TestCase):
         runner._action_point_box = [20000, 0, 0, 3]
         runner.action_point_set_button = Mock(return_value=True)
         runner.action_point_get_buy_remain = Mock(return_value=0)
-        runner.action_point_use = Mock()
+        def use_oil():
+            remain = runner.action_point_get_buy_remain.return_value
+            if type(remain) is int and remain > 0:
+                runner.action_point_get_buy_remain.return_value = remain - 1
+
+        runner.action_point_use = Mock(side_effect=use_oil)
         return runner
 
     def read_counts(self, readings):
@@ -76,7 +81,7 @@ class TestActionPointOilPurchase(unittest.TestCase):
         other_instance = self.make_runner(self.make_config('another'))
         other_instance.action_point_get_buy_remain.return_value = 5
         self.assertTrue(other_instance.action_point_buy())
-        other_instance.action_point_get_buy_remain.assert_called_once()
+        self.assertEqual(other_instance.action_point_get_buy_remain.call_count, 2)
         other_instance.action_point_use.assert_called_once()
 
     def test_week_reset_expires_record_at_monday_midnight(self):
@@ -87,7 +92,7 @@ class TestActionPointOilPurchase(unittest.TestCase):
         self.now = datetime(2026, 10, 5)
         self.runner.action_point_get_buy_remain.return_value = 5
         self.assertTrue(self.runner.action_point_buy())
-        self.runner.action_point_get_buy_remain.assert_called_once()
+        self.assertEqual(self.runner.action_point_get_buy_remain.call_count, 2)
 
     def test_week_reset_uses_server_time_for_jp_and_en(self):
         cases = (
@@ -135,6 +140,18 @@ class TestActionPointOilPurchase(unittest.TestCase):
         self.runner.action_point_get_buy_remain.side_effect = None
         self.runner.action_point_get_buy_remain.return_value = 5
         self.assertTrue(self.runner.action_point_buy())
+
+    def test_purchase_crossing_week_does_not_save_old_zero_to_new_week(self):
+        self.now = datetime(2026, 10, 11, 23, 59, 59)
+        self.runner.action_point_get_buy_remain.side_effect = [1, 0]
+
+        def cross_reset():
+            self.now = datetime(2026, 10, 12)
+
+        self.runner.action_point_use.side_effect = cross_reset
+        self.assertTrue(self.runner.action_point_buy())
+        self.assertNotIn(OIL_PURCHASE_EXHAUSTED_WEEK_PATH, self.config.modified)
+        self.assertNotIn('_ap_purchase_count', self.runner.__dict__)
 
     def test_invalid_stored_record_does_not_block_purchases(self):
         for invalid in (None, {}, 0, 'cn:broken-date', 'cn:2099-01-01'):
@@ -236,12 +253,13 @@ class TestActionPointOilPurchase(unittest.TestCase):
         for day in range(22, 29):
             with self.subTest(day=day):
                 self.now = datetime(2027, 2, day)
+                self.runner.action_point_get_buy_remain.return_value = 5
                 self.runner.action_point_set_button.reset_mock()
                 self.runner.action_point_get_buy_remain.reset_mock()
                 self.runner.action_point_use.reset_mock()
                 self.assertTrue(self.runner.action_point_buy())
                 self.runner.action_point_set_button.assert_called_once_with(0)
-                self.runner.action_point_get_buy_remain.assert_called_once()
+                self.assertEqual(self.runner.action_point_get_buy_remain.call_count, 2)
                 self.runner.action_point_use.assert_called_once()
                 self.assertEqual(self.config.modified, {})
 

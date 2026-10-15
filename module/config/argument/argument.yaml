@@ -861,6 +861,13 @@ Emotion:
     value: calculate
     option: [calculate, ignore, calculate_ignore]
   IgnoreShipwreck: false
+  MinReserve:
+    value: 0
+    validate: [0, 150]
+  RecoveryWait:
+    type: stored
+    value: null
+    display: hide
   Fleet1Value:
     value: 119
     validate: [0, 150]
@@ -1397,6 +1404,10 @@ Gacha:
     value: 1
     option: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
   ClearTicket: true
+  ClearTicketTime:
+    value: "09:30"
+    valuetype: str
+    validate: '^([01]?[0-9]|2[0-3]):[0-5][0-9]$'
   UseDrill: false
 BattlePass:
   Collect: true
@@ -1519,6 +1530,10 @@ OpsiGeneral:
   BuyActionPointLimit:
     value: 0
     option: [0, 1, 2, 3, 4, 5]
+  ActionPointCheckInterval:
+    value: 0
+    valuetype: int
+    validate: ^\d+$
   OilLimit: 1000
   RepairThreshold: 0.4
   UseRepairPack: false
@@ -2557,9 +2572,25 @@ MindCalculator:
     value: 95
     validate: "^[1-9][0-9]?$|^1[01][0-9]$|^12[0-5]$"
   MaxLevel:
-    value: 120
+    value: 125
     validate: "^[1-9][0-9]?$|^1[01][0-9]$|^12[0-5]$"
   Result:
+    type: stored
+    value: {}
+    display: hide
+  FleetTechRecord:
+    type: stored
+    value: {}
+    display: hide
+
+FleetTech:
+  MinLevel:
+    value: 95
+    validate: "^[1-9][0-9]?$|^1[01][0-9]$|^12[0-5]$"
+  MaxLevel:
+    value: 125
+    validate: "^[1-9][0-9]?$|^1[01][0-9]$|^12[0-5]$"
+  Record:
     type: stored
     value: {}
     display: hide

@@ -4,6 +4,7 @@
 
 import type {Catalog, ProgramSaved, ProgramSimulation, ProgramValidation, RuntimeProgramState} from '../scheduler/types'
 import type {MindCalculation, MindCatalog, MindReport, MindShip} from '../mind/types'
+import type {Catalog as FleetTechCatalog, Report as FleetTechReport} from '../fleet-tech/types'
 
 export type Scalar = string | number | boolean | null
 export type Value = Scalar | Value[] | {[key: string]: Value}
@@ -200,6 +201,10 @@ export interface BackgroundGalleryEntry {
 export interface Results {
   'emulator.status': EmulatorStatus
   'mind.catalog': MindCatalog
+  'fleetTech.catalog': FleetTechCatalog
+  'fleetTech.report': FleetTechReport
+  'fleetTech.patch': FleetTechReport
+  'fleetTech.syncMind': FleetTechReport
   'mind.report': MindReport
   'mind.calculate': MindCalculation
   'mind.save': MindReport

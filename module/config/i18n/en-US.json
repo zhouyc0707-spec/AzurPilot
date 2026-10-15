@@ -406,6 +406,10 @@
       "name": "Cognitive chip dock scan",
       "help": "Scan a CN dock at 1280×720 and review results in the cognitive chip calculator. Keeps old data until completion; resets dock filters."
     },
+    "FleetTechScan": {
+      "name": "Fleet technology scan",
+      "help": "Record ship identities and levels independently of cognitive chip exclusions."
+    },
     "Daemon": {
       "name": "Semi-Auto Click",
       "help": ""
@@ -2137,6 +2141,14 @@
       "name": "Ignore shipwreck morale penalty",
       "help": "When enabled, the extra 10 morale penalty for sinking ships in battle (non-S rating) is no longer counted. Only effective when the morale mode includes \"Calculate morale consumption\"."
     },
+    "MinReserve": {
+      "name": "Minimum morale reserve",
+      "help": "0 disables this setting; range: 0–150. Applies only to modes that calculate morale consumption. When morale cannot cover the next sortie while staying above the control threshold, delay the task until morale recovers to this value. After recovery, keep running with the original control threshold. For example, reserve 150 with threshold 30 waits for 150 when the next sortie cannot maintain 30. The reserve is capped at the current recovery maximum; a higher sortie requirement takes precedence."
+    },
+    "RecoveryWait": {
+      "name": "Morale reserve recovery state",
+      "help": ""
+    },
     "Fleet1Value": {
       "name": "Fleet 1 morale value",
       "help": "Pause sorties, confirm recovery settings, then enter the lowest measured fleet morale (an integer from 0 to 150). Saving establishes a new baseline immediately. The value and timestamp must describe the same observed state; recheck if recovery occurs while entering it. Displays an estimate; sortie decisions use the conservative lower bound. Even if the value is unchanged, clear and re-enter it, then press Enter; also save in the TUI. Reliable complete readings from existing fleet scans can narrow recovery timing uncertainty without extra screenshots or waits. Accuracy is unchanged when no valid observations are available."
@@ -3472,7 +3484,11 @@
     },
     "ClearTicket": {
       "name": "Use all permits on the last event day",
-      "help": "Requires single build permits to be enabled. Event date recognition currently supports CN only. Use all permits in batches on the event end date. With more than 10 permits, force Quick Finishers for intermediate batches; the final batch follows the Quick Finisher setting. Still complete the daily build minimum afterward."
+      "help": "Requires single build permits to be enabled. Event date recognition currently supports CN only. Use all permits in batches on the event end date once the configured time is reached. With more than 10 permits, force Quick Finishers for intermediate batches; the final batch follows the Quick Finisher setting. Still complete the daily build minimum afterward."
+    },
+    "ClearTicketTime": {
+      "name": "Time to use all build permits",
+      "help": "Enter a time in the game server's time zone (HH:MM), default 09:30. Requires single build permits and last-day permit clearing to be enabled. Before this time on the last event day, postpone the build task until the configured time."
     },
     "UseDrill": {
       "name": "Use quick finisher to complete build",
@@ -3857,6 +3873,10 @@
       "3": "3 times (4000 Oil, 400 AP)",
       "4": "4 times (6000 Oil, 600 AP)",
       "5": "5 times (10000 Oil, 1000 AP)"
+    },
+    "ActionPointCheckInterval": {
+      "name": "Routine AP check interval (minutes)",
+      "help": "0 disables the interval. Applies only to corrosion 1 leveling, smart scheduling and meowfficer farming. Time is measured from the last successful full AP panel read; only current AP is read from the map during the interval. Replenishment, inventory changes and recognition failures force a full check. Purchases and box use are always confirmed."
     },
     "OilLimit": {
       "name": "When buying AP, keep X oil",
@@ -6894,6 +6914,28 @@
     "Result": {
       "name": "Ship scan results",
       "help": "Stores ships, levels and review states per instance."
+    },
+    "FleetTechRecord": {
+      "name": "Fleet technology records",
+      "help": "Stores cumulative scan evidence, manual overrides and faction technology levels per instance."
+    }
+  },
+  "FleetTech": {
+    "_info": {
+      "name": "Technology scan",
+      "help": "Defaults to 95–125. Only a complete unfiltered 1–125 scan can confirm absence."
+    },
+    "MinLevel": {
+      "name": "Minimum level",
+      "help": "Inclusive; preserve existing records outside the range."
+    },
+    "MaxLevel": {
+      "name": "Maximum level",
+      "help": "Inclusive, up to level 125."
+    },
+    "Record": {
+      "name": "Fleet technology records",
+      "help": "Store groups, manual corrections, level toggle history and scan coverage per instance."
     }
   },
   "FleetInfo": {

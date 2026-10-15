@@ -1013,11 +1013,12 @@ class OpsiScheduling(SmartExploreMixin, CoinTaskMixin, OSMap):
         ):
             return func(*args, **kwargs)
 
-    def _get_scheduling_action_point(self, *, keep_open=False):
+    def _get_scheduling_action_point(self, *, keep_open=False, allow_cached=False):
         """读取智能调度决策所需的行动力。
 
         Args:
             keep_open (bool): 决策期间保留面板，确定子任务后合并开工补充。
+            allow_cached (bool): 仅常规调度允许按用户间隔复用库存，月末等强制读取不复用。
 
         Returns:
             tuple[int, int]: (总行动力, 当前真实行动力)。
@@ -1027,6 +1028,11 @@ class OpsiScheduling(SmartExploreMixin, CoinTaskMixin, OSMap):
             out: keep_open=True 时为 ACTION_POINT_USE，否则为 page_os。
         """
         self._close_scheduling_action_point()
+        if allow_cached:
+            cached = self.action_point_cached_read()
+            if cached is not None:
+                self.check_and_notify_action_point_threshold()
+                return cached
         self.action_point_enter()
         self.action_point_safe_get()
         if keep_open:
@@ -1269,7 +1275,7 @@ class OpsiScheduling(SmartExploreMixin, CoinTaskMixin, OSMap):
 
         yellow_coins = self.get_yellow_coins()
         try:
-            total_ap, current_ap = self._get_scheduling_action_point(keep_open=True)
+            total_ap, current_ap = self._get_scheduling_action_point(keep_open=True, allow_cached=True)
             return self._run_smart_scheduling_decision(yellow_coins, total_ap, current_ap)
         except (GameStuckError, GameTooManyClickError, RequestHumanTakeover):
             # 已进入设备恢复流程，不再追加界面操作干扰原异常。

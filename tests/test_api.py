@@ -37,6 +37,34 @@ class ConfigApiTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.configs = ConfigService(fixture(self.temp.name))
 
+    def test_gacha_clear_ticket_time_fills_default_for_old_configs(self):
+        from module.config.config_updater import ConfigUpdater
+
+        path = self.configs.path('testpilot')
+        data = self.configs.read_json(path)
+        data['Gacha']['Gacha'].pop('ClearTicketTime')
+        path.write_text(json.dumps(data), encoding='utf-8')
+        before = path.read_bytes()
+        values = self.configs.get('testpilot')['values']
+        self.assertEqual('09:30', values['Gacha']['Gacha']['ClearTicketTime'])
+        migrated = ConfigUpdater().config_update(data)
+        self.assertEqual('09:30', migrated['Gacha']['Gacha']['ClearTicketTime'])
+        self.assertEqual(before, path.read_bytes())
+
+    def test_gacha_clear_ticket_time_validates_and_persists(self):
+        field = 'Gacha.Gacha.ClearTicketTime'
+        for value in ['00:00', '9:30', '09:30', '11:45', '23:59']:
+            with self.subTest(value=value):
+                result = self.configs.patch('testpilot', None, [ConfigChange(path=field, value=value)])
+                self.assertEqual(value, result['values']['Gacha']['Gacha']['ClearTicketTime'])
+                saved = self.configs.read_json(self.configs.path('testpilot'))
+                self.assertEqual(value, saved['Gacha']['Gacha']['ClearTicketTime'])
+        before = self.configs.path('testpilot').read_bytes()
+        for value in ['', '24:00', '09:60', '-1:30', '9:3', '09:30:00', 930, None, False]:
+            with self.subTest(value=value), self.assertRaises(ApiError):
+                self.configs.patch('testpilot', None, [ConfigChange(path=field, value=value)])
+        self.assertEqual(before, self.configs.path('testpilot').read_bytes())
+
     def test_read_does_not_write_or_expose_unrelated_json(self):
         path = self.configs.path('testpilot')
         before = path.stat().st_mtime_ns

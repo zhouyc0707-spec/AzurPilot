@@ -60,6 +60,36 @@ class TestOSMapScanCoverage(unittest.TestCase):
         runner.map_rescan_current = Mock(return_value=False)
         return runner
 
+    def test_current_scan_keeps_tip_wait_before_view_detection(self):
+        runner = self.make_scan_runner()
+        order = []
+        runner.handle_info_bar.side_effect = lambda: order.append('tip')
+        runner.update.side_effect = lambda: order.append('view')
+        runner.map_rescan_current.return_value = True
+        self.assertTrue(runner.map_rescan_once())
+        self.assertEqual(order, ['tip', 'view'])
+        runner.map_init.assert_not_called()
+
+    def test_nearby_question_keeps_tip_wait_before_coordinate_detection(self):
+        runner = OSMap.__new__(OSMap)
+        runner.device = Mock()
+        runner.zone = SimpleNamespace(is_port=False)
+        runner.radar = SimpleNamespace(predict_question=Mock(return_value=(-1, 0)))
+        runner.view = Mock()
+        runner.view.select.return_value.count = 1
+        order = []
+        runner.handle_info_bar = Mock(side_effect=lambda: order.append('tip'))
+        runner.update_os = Mock(side_effect=lambda: order.append('view'))
+        runner.convert_radar_to_local = Mock(return_value=SimpleNamespace())
+        runner._should_skip_siren_research = Mock(return_value=False)
+        runner._solved_map_event = set()
+        runner.config = SimpleNamespace(temporary=lambda **kwargs: nullcontext())
+        runner.wait_until_walk_stable = Mock(return_value='akashi')
+        self.assertTrue(OSMap.clear_question(runner))
+        self.assertEqual(order, ['tip', 'view'])
+        runner.device.click.assert_called_once()
+        self.assertEqual(runner._solved_map_event, {'is_akashi'})
+
     def test_unchanged_grid_phase_does_not_end_before_real_horizontal_edge(self):
         """先有纵边，连续移动多格相位仍相同，必须等到真实横边出现。"""
         runner = self.make_edge_runner()
@@ -276,7 +306,7 @@ class TestOSMapScanCoverage(unittest.TestCase):
         runner._meow_record_akashi_if_solved.assert_not_called()
         runner.config.check_task_switch.assert_not_called()
         runner._meow_ap_check.assert_called_once_with(0, False)
-        runner.action_point_set.assert_called_once_with(cost=120, keep_current_ap=True, check_rest_ap=True)
+        runner.action_point_set.assert_called_once_with(cost=120, keep_current_ap=True, check_rest_ap=True, routine=True)
 
 
 if __name__ == '__main__':

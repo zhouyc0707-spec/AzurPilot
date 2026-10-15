@@ -24,4 +24,9 @@ describe('截图批量导入的舰船身份合并', () => {
     expect(highestShips(rows, catalog)).toEqual(rows)
     expect(highestShips([ship('错误', 0)], catalog)).toEqual([])
   })
+  it('保留等级未知及同名的独立核对卡位，不覆盖已确认舰船', () => {
+    const rows = [ship('卡辛'), {...ship('卡辛', 0), review: true}, {...ship('卡辛', 120), review: true},
+      {...ship('读错名称'), review: true}, {...ship('读错名称'), review: true}]
+    expect(highestShips(rows, catalog)).toEqual(rows)
+  })
 })

@@ -96,6 +96,47 @@ class TestCoinSnapshotAppend(unittest.TestCase):
         self.assertEqual(stats['meow_round_times'], self.seed['meow_round_times'])
         self.assertEqual(stats['battle_count'], 321)
 
+    def test_background_purple_carry_keeps_zero_and_native_append(self):
+        self.seed['coins_snapshots'] = [self.coin(1000, 12), self.coin(950, 0)]
+        self.db.save_stats(INSTANCE, MONTH, self.seed)
+        originals = self.rows('coin_snapshots')
+        with self.no_month_rewrite():
+            self.db.add_coins_snapshot(INSTANCE, 900, carry_purple=True, source='hazard1')
+        self.assertEqual(originals, self.rows('coin_snapshots')[:2])
+        point = self.db.get_stats(INSTANCE, MONTH)['coins_snapshots'][-1]
+        self.assertEqual(point['purple_coins'], 0)
+        self.assertEqual(point['source'], 'hazard1')
+
+    def test_purple_carry_uses_previous_month_when_current_has_no_known_purple(self):
+        self.db.save_stats(INSTANCE, '2026-09', {'coins_snapshots': [
+            self.coin(2000, 13, '2026-09-30T23:59:00'),
+        ]})
+        self.seed['coins_snapshots'] = [self.coin(1000, None)]
+        self.db.save_stats(INSTANCE, MONTH, self.seed)
+        self.db.add_coins_snapshot(INSTANCE, 900, carry_purple=True)
+        self.assertEqual(self.db.get_stats(INSTANCE, MONTH)['coins_snapshots'][-1]['purple_coins'], 13)
+
+    def test_observation_timestamp_selects_original_month_and_keeps_all_points(self):
+        stamp = datetime(2026, 9, 30, 23, 59, 59)
+        self.db.add_coins_snapshot(INSTANCE, 500, 7, observed_at=stamp)
+        self.db.add_yellow_coin_snapshot(INSTANCE, 501, observed_at=stamp)
+        previous = self.db.get_stats(INSTANCE, '2026-09')
+        self.assertEqual(previous['coins_snapshots'][-1]['ts'], stamp.isoformat())
+        self.assertEqual(previous['yellow_coin_snapshots'][-1]['ts'], stamp.isoformat())
+        self.assertEqual(self.db.get_stats(INSTANCE, MONTH)['coins_snapshots'], self.seed['coins_snapshots'])
+
+    def test_purple_carry_preserves_compatibility_fields_and_rejects_corruption(self):
+        self.seed['private_extension'] = {'nested': [1, True, None]}
+        self.db.save_stats(INSTANCE, MONTH, self.seed)
+        self.db.add_coins_snapshot(INSTANCE, 900, carry_purple=True)
+        self.assertEqual(self.db.get_stats(INSTANCE, MONTH)['private_extension'], self.seed['private_extension'])
+        with self.db.store.transaction() as conn:
+            conn.execute('DELETE FROM typed_value_nodes WHERE parent_no IS NULL')
+        before = self.rows('coin_snapshots')
+        with self.assertRaises(ValueError):
+            self.db.add_coins_snapshot(INSTANCE, 800, carry_purple=True)
+        self.assertEqual(before, self.rows('coin_snapshots'))
+
     def test_yellow_append_preserves_original_ids_and_source(self):
         originals = self.rows('yellow_coin_snapshots')
         with self.no_month_rewrite():

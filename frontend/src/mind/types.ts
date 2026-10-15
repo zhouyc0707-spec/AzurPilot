@@ -14,10 +14,10 @@ export function highestShips(ships: MindShip[], catalog: CatalogShip[] = []): Mi
   const known = new Map(catalog.map(info => [normalize(info.name), info]))
   const output = new Map<string, MindShip>()
   for (const [index, ship] of ships.entries()) {
-    if (ship.level < 1 || ship.level > 125) continue
+    if ((ship.level < 1 || ship.level > 125) && !(ship.review && ship.level === 0)) continue
     const info = known.get(normalize(ship.name))
     const name = info && info.group !== 'META' && !normalize(ship.name).includes('meta') ? info.base_name : ship.name
-    const key = ship.name.startsWith('未识别舰船') ? `unknown:${index}` : normalize(name)
+    const key = ship.review || ship.name.startsWith('未识别舰船') ? `unknown:${index}` : normalize(name)
     const previous = output.get(key)
     const preferRetrofit = previous && previous.level === ship.level && info?.group === '改造' && known.get(normalize(previous.name))?.group !== '改造'
     if (!previous || previous.level < ship.level || preferRetrofit) output.set(key, ship)

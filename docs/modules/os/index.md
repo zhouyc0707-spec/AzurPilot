@@ -257,7 +257,8 @@ OCR：行动力面板 / 黄币 / 紫币 ──▶ 决策（智能调度状态机
 
 | 配置组 | 关键项 | 说明 |
 | --- | --- | --- |
-| `OpsiGeneral.*` | `DoRandomMapEvent`、`UseLogger`、`BuyActionPointLimit` | 随机事件、日志仪、月度购买上限等通用行为 |
+| `OpsiGeneral.*` | `DoRandomMapEvent`、`UseLogger`、`BuyActionPointLimit` | 随机事件、日志仪、每周石油购买上限等通用行为 |
+| `OpsiGeneral.ActionPointCheckInterval` | 默认 0 分钟 | 侵蚀一、智能调度和短猫常规完整面板的最小检查间隔；必要补给及其他任务保持原流程 |
 | `OpsiScheduling.*` | `Scheduler.Enable`、黄币保留、行动力保留、通知阈值 | 智能调度开关与决策参数 |
 | `OpsiHazard1Leveling.*` | `TargetZone`（0/44/22）、`MinimumActionPointReserve` | 侵蚀 1 目标海域与保留 |
 | `OpsiMeowfficerFarming.*` | `StayInZone` 等 | 耄耋相接模式 |

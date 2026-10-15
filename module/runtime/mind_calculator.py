@@ -61,11 +61,12 @@ def highest_ships(ships):
     """同基础身份取最高等级；同级优先改造舰，II 型与 META 保留独立身份。"""
     output = {}
     for index, ship in enumerate(ships):
-        if not 1 <= ship['level'] <= 125:
+        if not 1 <= ship['level'] <= 125 and not (ship.get('review') and ship['level'] == 0):
             continue
         info = find_ship(ship['name'])
         key = base_key(info) if info else normalize_name(ship['name'])
-        if ship['name'].startswith('未识别舰船'):
+        # 未确认的卡位不能按猜测身份合并，也不能覆盖已确认的最高等级。
+        if ship.get('review') or ship['name'].startswith('未识别舰船'):
             key = f'unknown:{index}'
         if key not in output or preference(output[key]) < preference(ship):
             output[key] = ship
@@ -139,10 +140,12 @@ def calculate(ships):
         name = ship['name']
         ship['automatic_excluded'] = ('兵装' in name or 'μ' in name.casefold()
                                       or ship['group'] in ('幼体', '联动', '布里'))
-        if ship['excluded'] or ship['automatic_excluded']:
+        if ship['excluded']:
             ship['status'] = 'excluded'
         elif ship['review'] or not 1 <= ship['level'] <= 125 or ship['base_rarity'] not in RARITIES:
             ship['status'] = 'review'
+        elif ship['automatic_excluded']:
+            ship['status'] = 'excluded'
         else:
             ship['status'] = 'merged'
             key = base_key(ship)

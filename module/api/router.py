@@ -64,6 +64,10 @@ class Router:
             'overview.get': Method(p.InstanceParams, lambda x: runtime.overview(x.instance)),
             'emulator.status': Method(p.InstanceParams, lambda x: runtime.emulator_status(x.instance)),
             'mind.catalog': Method(p.InstanceParams, lambda x: self.mind.catalog(x.instance)),
+            'fleetTech.catalog': Method(p.InstanceParams, lambda x: self.fleet_tech.catalog(x.instance)),
+            'fleetTech.report': Method(p.InstanceParams, lambda x: self.fleet_tech.report(x.instance)),
+            'fleetTech.syncMind': Method(p.InstanceParams, lambda x: self.fleet_tech.sync_mind(x.instance), True),
+            'fleetTech.patch': Method(p.FleetTechPatchParams, lambda x: self.fleet_tech.patch(x.instance, x.revision, x.changes, x.nations), True),
             'mind.report': Method(p.InstanceParams, lambda x: self.mind.report(x.instance)),
             'mind.calculate': Method(p.MindCalculateParams, lambda x: self.mind.calculate(x.instance, [ship.model_dump() for ship in x.ships])),
             'mind.save': Method(p.MindSaveParams, lambda x: self.mind.save(x.instance, x.revision, [ship.model_dump() for ship in x.ships]), True),
@@ -127,6 +131,11 @@ class Router:
                                                     lambda x: {'removed': background.gallery_remove(x.id)}, True),
             'background.gallery.open': Method(p.Params, lambda _: background.gallery_open(), True),
         }
+
+    @property
+    def fleet_tech(self):
+        from module.api.fleet_tech_service import FleetTechService
+        return FleetTechService(self.configs)
 
     @property
     def mind(self):
