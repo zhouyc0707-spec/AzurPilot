@@ -179,7 +179,7 @@ module/
 
 - **BattlePass**：`page_reward` 红点进入，循环领取（含 META 舰船锁定确认弹窗）。
 - **DataKey**：由 `Freebies.DataKey.Collect` 开启，在作战档案页收集数据钥匙。「领取／已领」在入口、点击和收尾三处均通过模板与颜色共同确认，避免非原生 720p 截图放宽相似度后把金色领取按钮误判成灰色已领。奖励弹窗可见时优先处理，点击冷却期间继续获取截图；确认返回档案页且为已领状态才完成。OCR 的 `remain` 为 `total-current`，表示剩余存储空间；背包满时除非 `DataKey_ForceCollect` 否则跳过，容量上限由当前画面读取，不写死旧值。离线回归见 [密钥领取状态与按钮识别](../../../tests/test_freebies_data_key.py)。
-- **MailWhite**：必须在白色主题主页进入邮件，按 `Mail_ClaimMerit/ClaimMaintenance/ClaimTradeLicense` 分三轮领取并按 `Mail_DeleteCollected` 清理。
+- **MailWhite**：从受支持的主页进入白色邮件界面，按 `Mail_ClaimMerit/ClaimMaintenance/ClaimTradeLicense` 领取并按 `Mail_DeleteCollected` 清理。进入流程以批量领取面板作为成功条件；邮件页标识与返回主页图标同时确认后，才检测并点击管理按钮。保留各服原模板，国服额外兼容当前字体的局部模板，搜索限制在原按钮附近，按实际识别位置点击；模板与启用颜色共同确认，避免点击灰色按钮。两种模板共享 3 秒冷却，冷却期间继续截图。返回主页图标不表示空邮箱；国服直接读取完整数量文本，只接受 `0/有效容量`，不使用语言不符的旧空态素材，也不把 OCR 失败转成零；其他服保留原空态模板。空状态必须在确认的邮件页连续超过 0.6 秒且至少 3 帧、期间没有可点击管理按钮，才返回。每次领取或删除前重新进入管理面板，确认已空则停止后续筛选。持续无法确认时保存到 `mail_unknown` 并抛 `GamePageUnknownError`，由现有调度恢复检查服务器并可能重启游戏，不伪报领取成功或空邮箱；截图保存失败也保留该识别异常。离线回归见[邮件进入与按钮识别](../../../tests/test_freebies_mail_white.py)。
 - **SupplyPack**：石油低于 21000 时按 `SupplyPack_DayOfWeek` 在指定服务器日购买免费周补给包。
 
 ### 小游戏（module/minigame）
