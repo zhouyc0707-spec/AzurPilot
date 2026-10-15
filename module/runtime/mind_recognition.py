@@ -610,6 +610,16 @@ class ScanPolicy:
         return ''
 
 
+class ScrollAmbiguityError(ValueError):
+    """滚动重叠未通过唯一性校验，保留分数供新帧复核和现场诊断。"""
+
+    def __init__(self, best_error, competing_error, shift):
+        super().__init__('相邻船坞截图没有明确的重叠位移，停止扫描以免漏船')
+        self.best_error = best_error
+        self.competing_error = competing_error
+        self.shift = shift
+
+
 def estimate_scroll(previous, current):
     """用重叠区域核验正负位移；没有唯一证据时终止而不猜测漏页。"""
     # 先取原有采样列再转浮点，使内层逐位移比较读取连续内存；候选和阈值不变。
@@ -633,7 +643,7 @@ def estimate_scroll(previous, current):
     best, shift = scores[0]
     other = min(score for score, candidate in scores if abs(candidate - shift) > 10)
     if best > 20 or other < best + 2:
-        raise ValueError('相邻船坞截图没有明确的重叠位移，停止扫描以免漏船')
+        raise ScrollAmbiguityError(best, other, shift)
     return shift
 
 

@@ -15,7 +15,7 @@ from module.logger import logger
 from module.retire.assets import DOCK_EMPTY
 from module.retire.dock import CARD_GRIDS, DOCK_SCROLL, Dock
 from module.runtime.mind_calculator import RESULT_PATH, calculate, revision
-from module.runtime.mind_recognition import ScanMerger, ScanPolicy, grid_rows, recognize_cards
+from module.runtime.mind_recognition import ScrollAmbiguityError, ScanMerger, ScanPolicy, grid_rows, recognize_cards
 from module.ui.page import page_dock
 
 
@@ -153,6 +153,23 @@ class MindCalculatorScan(Dock):
         except (OSError, ValueError) as exc:
             logger.warning(f'旧扫描诊断清理失败，已保留扫描结果：{exc}')
 
+    def _save_scroll_evidence(self, merger, image, error, attempt):
+        """只在配准失败时保存前后原帧及分数，不能将失败画面提交为新位置。"""
+        previous_path = ''
+        if merger.previous is not None:
+            previous_path = self._save_scan_evidence(Image.fromarray(merger.previous))
+        current_path = self._save_scan_evidence(image)
+        if not current_path:
+            return
+        try:
+            Path(current_path).with_suffix('.json').write_text(json.dumps(
+                dict(kind='scroll_overlap_failure', attempt=attempt, offset=merger.offset,
+                     best_error=error.best_error, competing_error=error.competing_error,
+                     candidate_shift=error.shift, previous_path=previous_path),
+                ensure_ascii=False, indent=2), encoding='utf-8')
+        except OSError as exc:
+            logger.warning(f'滚动配准诊断保存失败，继续有界复核：{exc}')
+
     def _drag_rows(self, distance):
         """一次最多拖一排行距，终点按住后释放，截图再确认实际位移。"""
         # 游戏开始滚动前会消耗一段触控距离；实机 13px 校正可能完全不动。
@@ -182,6 +199,7 @@ class MindCalculatorScan(Dock):
         target = pitch = origin_y = None
         attempts = 0
         read_attempts = 0
+        scroll_rechecks = 0
         evidence_path = ''
         evidence_frame = None
         last_page_image = None
@@ -194,6 +212,8 @@ class MindCalculatorScan(Dock):
             if waiting.reached():
                 raise MindCalculatorScanError('船坞画面 30 秒内未能稳定或页面已丢失，保留旧扫描结果')
             if page and not read_attempts and progress.reached():
+                if scroll_rechecks:
+                    raise MindCalculatorScanError('船坞滚动位移复核超时，保留旧扫描结果')
                 raise GameStuckError('船坞扫描画面没有继续滚动，尚未确认到底')
             if self.appear(page_dock.check_button):
                 pixels = self._stable_pixels(self.device.image)
@@ -209,8 +229,22 @@ class MindCalculatorScan(Dock):
                 image = Image.fromarray(self.device.image)
                 try:
                     moved = merger.advance(image)
+                except ScrollAmbiguityError as exc:
+                    scroll_rechecks += 1
+                    self._save_scroll_evidence(merger, image, exc, scroll_rechecks)
+                    logger.warning(f'[{self.scan_label}] 滚动位移待复核（{scroll_rechecks}/3）：'
+                                   f'候选 {exc.shift:+d}px，误差 {exc.best_error:.3f}，'
+                                   f'其他候选误差 {exc.competing_error:.3f}；保持位置，重新截图')
+                    if scroll_rechecks >= 3:
+                        raise MindCalculatorScanError('滚动位移三次新帧核验仍未通过，停止扫描并保留旧清单；'
+                                                      '前后现场见扫描诊断日志') from exc
+                    # advance 失败不会提交 previous/offset；不能继续拖动丢失重叠。
+                    previous = None
+                    stable.reset()
+                    continue
                 except ValueError as exc:
                     raise MindCalculatorScanError(str(exc)) from exc
+                scroll_rechecks = 0
                 if moved:
                     progress.reset()
                     # 只有已核实的位移才清除连击历史，停滞仍沿用设备检测和超时恢复。
