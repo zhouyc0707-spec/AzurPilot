@@ -108,6 +108,15 @@ class CampaignOcr(ModuleBase):
             tuple[str]: (章节名, 关卡索引)，均为小写。如 ['7', '2']、['d', '3']、['sp', '3']。
         """
         name = name.strip('-')
+        if not name:
+            return '', ''
+        if name[0].isdigit():
+            # 主线／SOS 编号必须完整，不能把 16618 拆成章节 1661 和关卡 8。
+            matched = re.fullmatch(r'([1-9][0-9]?)-([1-6])', name)
+            if matched:
+                return matched.groups()
+            logger.warning(f'[战役-OCR] 无效的数字关卡名称: {name}')
+            return '', ''
         if name == 'sp':
             return 'ex_sp', '1'
         elif name.startswith('extra') or name == 'ex':
@@ -368,12 +377,30 @@ class CampaignOcr(ModuleBase):
             result = [result]
         result = [self._campaign_ocr_result_process(res) for res in result]
 
-        chapter = [self._campaign_separate_name(res)[0] for res in result if res]
-        chapter = list(filter(('').__ne__, chapter))
-        if not chapter:
+        valid = []
+        for name, button in zip(result, buttons):
+            if not name:
+                continue
+            if name[0].isdigit() and not re.fullmatch(r'[1-9][0-9]?-[1-6]', name):
+                # 部分旧活动复制了名称拆分方法，统一入口仍需拦住非法数字名。
+                logger.warning(f'[战役-OCR] 无效的数字关卡名称: {name}')
+                continue
+            separated = self._campaign_separate_name(name)
+            if not separated or len(separated) != 2 or not separated[0]:
+                continue
+            chapter, _ = separated
+            try:
+                index = self._campaign_get_chapter_index(chapter)
+            except CampaignNameError:
+                continue
+            if not isinstance(index, int) or index <= 0:
+                continue
+            # 活动与档案继续使用各自的分离和索引规则，不另设活动前缀白名单。
+            valid.append((name, button, chapter))
+        if not valid:
             raise CampaignNameError
 
-        counter = collections.Counter(chapter)
+        counter = collections.Counter(chapter for _, _, chapter in valid)
         self.campaign_chapter = counter.most_common()[0][0]
 
         if self.campaign_chapter == 0 or self.campaign_chapter == '0':
@@ -386,13 +413,22 @@ class CampaignOcr(ModuleBase):
         # button.color: 关卡图标颜色。
         # button.button: 关卡图标区域。
         # button.name: 关卡名称，来自 OCR 结果。
-        for name, button in zip(result, buttons):
+        for name, button, _ in valid:
             button.area = button.button
             button.name = name
             self.stage_entrance[name] = button
 
         logger.attr('章节', self.campaign_chapter)
         logger.attr('关卡', ', '.join(self.stage_entrance.keys()))
+
+    def _raise_chapter_error(self, reason):
+        """保存章节识别／导航现场，保留原异常供上层有界恢复。"""
+        logger.warning(f'[战役-OCR] {reason}')
+        try:
+            self.device.save_screenshot(genre='campaign_chapter_unknown', interval=0)
+        except OSError as exc:
+            logger.warning(f'[战役-OCR] 章节现场保存失败: {exc}')
+        raise CampaignNameError(reason)
 
     def handle_get_chapter_additional(self):
         """获取章节时的额外异常处理。
@@ -428,27 +464,7 @@ class CampaignOcr(ModuleBase):
                 self.device.screenshot()
 
             if timeout.reached():
-                raise CampaignNameError
-            image = self.device.image
-            try:
-                self._get_stage_name(image)
-                break
-            except (IndexError, CampaignNameError):
-                pass
-
-            if self.handle_get_chapter_additional():
-                continue
-
-        return self._campaign_get_chapter_index(self.campaign_chapter)
-        timeout = Timer(2, count=4).start()
-        while 1:
-            if skip_first_screenshot:
-                skip_first_screenshot = False
-            else:
-                self.device.screenshot()
-
-            if timeout.reached():
-                raise CampaignNameError
+                self._raise_chapter_error('未能在识别期限内确认有效章节，停止本次章节识别')
             image = self.device.image
             try:
                 self._get_stage_name(image)

@@ -110,7 +110,7 @@ OSMapOperation
 | --- | --- |
 | `CampaignBase` | 单次出击：`run()` 进图 → `map_init` → 最多 20 场 `execute_a_battle()`；`battle_function()` 三种 `@Config.when` 变体（数据不足 / 全清 / 标准）；`AUTO_SEARCH_WITHDRAW` 支持自律寻敌中撤退 |
 | `CampaignUI` | `ensure_campaign_ui()` 把 UI 收敛到目标关卡页并设置 `ENTRANCE`；`campaign_set_chapter()` 按主线 → 20260326 → 20241219 → 普通 event → SP 的优先级尝试路由；模块级 `MODE_SWITCH_*` / `ASIDE_SWITCH_*` 开关单例 |
-| `CampaignOcr` | `campaign_match_multi()` 用通关图标模板定位所有入口，OCR 读取关卡名；`_campaign_separate_name()` 拆分章节与序号；多数票决定 `campaign_chapter` |
+| `CampaignOcr` | `campaign_match_multi()` 用通关图标模板定位所有入口，OCR 读取关卡名；`_campaign_separate_name()` 校验并拆分章节与序号，仅当前活动索引规则支持的有效条目参与多数票和入口发布 |
 | `CampaignStatus` | `get_oil()` / `get_coin()` / `get_event_pt()` OCR，写入 `LogRes` 仪表盘；JP 服数字颜色不同、PT 需要反色预处理（`PtOcr`） |
 | `CampaignEvent` | 活动结束 `_disable_tasks()`（cross_set 联动禁用 + GemsFarming 回退 2-4）、PT/时间限制、任务均衡器、`ui_goto_event/sp/coalition` 路由与活动可用性检查、突袭/活动互斥 |
 | `CampaignRun` | `handle_stage_name()` 关卡名流水线 → `load_campaign()` 动态导入 → 多轮循环与九类停止条件 |
@@ -133,6 +133,10 @@ OSMapOperation
 `map_data` 的格子符号（`module/map_detection/grid_info.py` 的 `decode()`）：`--` 海洋、`++` 陆地、`__` 潜艇点、`SP` 舰队出生点、`ME`（大小写等价）敌人、`MB` Boss、`MM` 神秘、`MA` 弹药、`MS` 塞壬。
 
 ## 6. 工作流程
+
+章节 OCR 的数字名称须为完整的 `章节-关卡`：章节为 1–99，关卡为 1–6；保留两／三位纯数字补连字符及 `I`／`1` 的既有容错，不把四五位纯数字按最后一位拆章。无效条目不进入章节投票或入口表；非数字活动名称继续由当前活动子类分离并核验索引，保留旧档案的特殊前缀与 SP／EX 映射。
+
+`campaign_ensure_chapter()` 使用稳定新帧确认当前章节，每次只点击一个已识别的前／后章按钮，再截图重读，共用 1 秒点击冷却，不按一次 OCR 差值调用 `multi_click()`。字符串目标还须确认主线／活动类型一致，旧活动显式传入的整数仍表示页面索引。仅在新帧确认同类型章节朝目标前进一步后，移除对应按钮的已生效点击记录；原地和反向不会清除连击保护，正常跨越多章也不会因累计 12 次有效切换被误拦。只有与目标的距离刷新最小值时重置 8 秒无进展计时，另有 45 秒总期限；无法确认或无法前进时保存现场并抛 `CampaignNameError`。外层恢复只在 5 秒重试预算内重新调用；不强制最少 21 轮，单次内层有进展的合法导航可以完成后直接成功返回。定向回归见 `tests.test_campaign_chapter_navigation`，活动与档案兼容另见 `tests.test_campaign_event_navigation`。
 
 ### 双层循环
 
@@ -299,7 +303,7 @@ stateDiagram-v2
 | --- | --- | --- |
 | `CampaignEnd` | 战役正常结束（胜利、撤退、情绪控制） | `CampaignBase.run()` 捕获后返回；GemsFarming 据消息文本分流换船流程 |
 | `MapEnemyMoved` | 敌人移动导致路径失效 | `execute_a_battle()` 内最多重试 10 次，`battle_count` 已推进则视为成功 |
-| `CampaignNameError` | OCR 未识别出关卡 / 模式切换时出现撤退按钮 | `ensure_campaign_ui()` 循环重试至 5 秒超时 |
+| `CampaignNameError` | OCR 未识别出有效关卡、章节导航不再接近目标或模式切换时出现撤退按钮 | 识别／导航超时保存 `campaign_chapter_unknown` 现场；内部章节导航自行检查时限，外层在 5 秒预算内重试；不把外层超时当作可中断批量点击的保障 |
 | `ScriptEnd('Campaign name error')` | 重试后仍找不到关卡 | 上抛终止任务；`CampaignABCD` 会提示改用 Event 任务解锁 |
 | `ScriptError` | 战斗函数耗尽 / 未执行任何战斗 | `Error_HandleError` 开启时撤退自保，否则上抛 |
 | `ModuleNotFoundError`（load_campaign） | 地图文件不存在（未适配或目录错误） | 记录现有文件列表后 `RequestHumanTakeover`（人工接管） |

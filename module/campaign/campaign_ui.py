@@ -120,31 +120,66 @@ class CampaignUI(MapOperation, CampaignEvent, CampaignOcr):
         """
         index = self._campaign_get_chapter_index(chapter)
         isdigit = is_digit_chapter(chapter)
+        # 旧活动显式传入整数表示页面索引，当前名称可以是 t/sp 等非数字分组。
+        index_only = isinstance(chapter, int)
+        if index <= 0 or isdigit and not 1 <= index <= 99:
+            self._raise_chapter_error(f'目标章节索引无效: {chapter}')
 
-        # 复用 ui_ensure_index 的逻辑。
         logger.hr("UI确保索引")
         retry = Timer(1, count=2)
         error_confirm = Timer(0.2, count=0)
+        reading_confirm = Timer(0.2, count=1)
+        timeout = Timer(45).start()
+        progress = Timer(8)
+        previous_read = None
+        best_distance = None
+        pending_click = None
         while 1:
             if skip_first_screenshot:
                 skip_first_screenshot = False
             else:
                 self.device.screenshot()
 
+            if timeout.reached():
+                self._raise_chapter_error(f'章节导航超时，目标 {chapter}，停止切章')
+            if progress.started() and progress.reached():
+                self._raise_chapter_error(f'章节导航八秒内未接近目标 {chapter}，停止切章')
             if self.handle_chapter_additional():
+                previous_read = None
+                reading_confirm.reset()
                 continue
 
             current = self.get_chapter_index()
             current_isdigit = is_digit_chapter(self.campaign_chapter)
+            if current <= 0 or current_isdigit and not 1 <= current <= 99:
+                self._raise_chapter_error(f'当前章节索引无效: {self.campaign_chapter} ({current})')
+
+            reading = (current, self.campaign_chapter)
+            if reading != previous_read:
+                previous_read = reading
+                reading_confirm.reset()
+                continue
+            if not reading_confirm.reached():
+                continue
 
             logger.attr("当前索引", current)
             diff = index - current
+            if pending_click is not None:
+                before, before_isdigit, direction, button = pending_click
+                if current_isdigit == before_isdigit and current == before + direction:
+                    # 只移除已由新截图确认生效的这次切章记录，原地连点保护不变。
+                    self.device.click_record_remove(button)
+                    pending_click = None
+            # 查找 D3 时可能误识别为 3-7
+            if not index_only and isdigit != current_isdigit:
+                continue
             if diff == 0:
                 break
 
-            # 查找 D3 时可能误识别为 3-7
-            if not (isdigit == current_isdigit):
-                continue
+            distance = abs(diff)
+            if best_distance is None or distance < best_distance:
+                best_distance = distance
+                progress.reset()
 
             # 14-4 可能因动画缓慢被 OCR 识别为 4-1，需要确认是否确实为 4-1
             if index >= 11 and index % 10 == current:
@@ -157,8 +192,11 @@ class CampaignUI(MapOperation, CampaignEvent, CampaignOcr):
             # 切换章节
             if retry.reached():
                 button = CHAPTER_NEXT if diff > 0 else CHAPTER_PREV
-                self.device.multi_click(button, n=abs(diff), interval=(0.2, 0.3))
-                retry.reset()
+                if self.appear_then_click(button, offset=(20, 20)):
+                    pending_click = (current, current_isdigit, 1 if diff > 0 else -1, button)
+                    retry.reset()
+                    previous_read = None
+                    reading_confirm.reset()
 
     def handle_chapter_additional(self):
         """
@@ -617,7 +655,8 @@ class CampaignUI(MapOperation, CampaignEvent, CampaignOcr):
         Raises:
             ScriptEnd: 超时或重试后仍切换失败时抛出。
         """
-        timeout = Timer(5, count=20).start()
+        # 内层识别／导航已有自身期限，不能再强制至少重试 21 轮拖长失败恢复。
+        timeout = Timer(5).start()
         while 1:
             if skip_first_screenshot:
                 skip_first_screenshot = False

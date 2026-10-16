@@ -43,20 +43,24 @@ def legacy_image():
     )
 
 
-def make_campaign(campaign_type=CrimsonCampaign, map_config=None, image='crimson.png', server='cn'):
+def make_campaign(campaign_type=CrimsonCampaign, map_config=None, image='crimson.png', server='cn', clock=None):
     if map_config is None:
         map_config = CrimsonConfig()
     if isinstance(image, str):
         image = load_image(str(FIXTURES / image))
     device = Mock(image=image)
+    if clock is not None:
+        device.screenshot.side_effect = clock.advance
     campaign = campaign_type(config=make_config(map_config, server=server), device=device)
     campaign.ui_goto_event = Mock()
+    campaign.chapter_read_frames = []
 
     def read_chapter():
         # 本测试验证模板和导航，关卡 OCR 单独用完整原图回放。
         if campaign.config.MAP_CHAPTER_SWITCH_20241219:
             assert MODE_SWITCH_20241219.get(main=campaign) == 'combat', '读关卡前须选中作战模式'
             assert ASIDE_SWITCH_20241219.get(main=campaign) == 'part1', '读 A1 前须选中上篇'
+        campaign.chapter_read_frames.append(device.screenshot.call_count)
         campaign.campaign_chapter = 'a'
         campaign.stage_entrance = {'a1': SimpleNamespace(name='a1')}
         return 1
@@ -65,17 +69,45 @@ def make_campaign(campaign_type=CrimsonCampaign, map_config=None, image='crimson
     return campaign
 
 
+class ScreenshotClock:
+    """保持真实 Timer 逻辑，每张新截图推进虚拟单调时间。"""
+
+    def __init__(self):
+        self.now = 100.0
+
+    def __call__(self):
+        return self.now
+
+    def advance(self):
+        self.now += 0.25
+
+
 class CampaignEventNavigationTests(unittest.TestCase):
+    def setUp(self):
+        self.clock = ScreenshotClock()
+        clock_patch = patch('module.base.timer.time', self.clock)
+        clock_patch.start()
+        self.addCleanup(clock_patch.stop)
+
+    def make_campaign(self, *args, **kwargs):
+        return make_campaign(*args, **kwargs, clock=self.clock)
+
+    def assert_stable_chapter_reads(self, campaign):
+        # 相同页面至少复读一次，而且每次读数都来自新的截图，不能忙读旧帧。
+        frames = campaign.chapter_read_frames
+        self.assertGreaterEqual(len(frames), 2)
+        self.assertEqual(frames, sorted(set(frames)))
+
     def test_both_screenshots_recognize_new_controls(self):
         for image in ('crimson.png', 'light.png'):
             with self.subTest(image=image):
-                campaign = make_campaign(image=image)
+                campaign = self.make_campaign(image=image)
                 self.assertEqual(MODE_SWITCH_20241219.get(main=campaign), 'combat')
                 self.assertEqual(ASIDE_SWITCH_20241219.get(main=campaign), 'part1')
                 self.assertEqual(MODE_SWITCH_1.get(main=campaign), 'unknown')
 
     def test_crimson_rerun_uses_sidebar_without_old_mode_clicks(self):
-        campaign = make_campaign()
+        campaign = self.make_campaign()
         with patch.object(MODE_SWITCH_1, 'set') as old_mode:
             self.assertTrue(campaign.ensure_campaign_ui('a1'))
         old_mode.assert_not_called()
@@ -86,7 +118,7 @@ class CampaignEventNavigationTests(unittest.TestCase):
         self.assertEqual(campaign.config.modified, {})
 
     def test_other_activity_keeps_shared_sidebar_navigation(self):
-        campaign = make_campaign(LightCampaign, LightConfig(), image='light.png')
+        campaign = self.make_campaign(LightCampaign, LightConfig(), image='light.png')
         with patch.object(MODE_SWITCH_1, 'set') as old_mode:
             self.assertTrue(campaign.ensure_campaign_ui('a1'))
         old_mode.assert_not_called()
@@ -105,7 +137,7 @@ class CampaignEventNavigationTests(unittest.TestCase):
                 image[635:715, :400] = 0
                 image = np.maximum(image, load_image(CHAPTER_20241219_EX.file))
                 image = np.maximum(image, load_image(SWITCH_20241219_STORY.file))
-                campaign = make_campaign(campaign_type, map_config, image=image)
+                campaign = self.make_campaign(campaign_type, map_config, image=image)
                 self.assertEqual(MODE_SWITCH_20241219.get(main=campaign), 'story')
                 self.assertEqual(ASIDE_SWITCH_20241219.get(main=campaign), 'ex')
                 clicks = []
@@ -123,13 +155,13 @@ class CampaignEventNavigationTests(unittest.TestCase):
                 campaign.device.click.side_effect = click
                 self.assertTrue(campaign.ensure_campaign_ui('a1'))
                 self.assertEqual(clicks, ['SWITCH_20241219_COMBAT', 'CHAPTER_20241219_PART1'])
-                campaign.get_chapter_index.assert_called_once_with()
+                self.assert_stable_chapter_reads(campaign)
                 self.assertEqual(campaign.ENTRANCE.name, 'a1')
 
     def test_original_layout_keeps_classic_navigation(self):
         for server in ('cn', 'en', 'jp', 'tw'):
             with self.subTest(server=server):
-                campaign = make_campaign(image=legacy_image(), server=server)
+                campaign = self.make_campaign(image=legacy_image(), server=server)
                 with patch.object(MODE_SWITCH_1, 'set', wraps=MODE_SWITCH_1.set) as old_mode:
                     self.assertTrue(campaign.ensure_campaign_ui('a1'))
                 old_mode.assert_called_once_with('hard', main=campaign)
@@ -140,32 +172,37 @@ class CampaignEventNavigationTests(unittest.TestCase):
     def test_new_layout_does_not_depend_on_server_name(self):
         for server in ('cn', 'en', 'jp', 'tw'):
             with self.subTest(server=server):
-                campaign = make_campaign(server=server)
+                campaign = self.make_campaign(server=server)
                 self.assertTrue(campaign.ensure_campaign_ui('a1'))
                 self.assertTrue(campaign.config.MAP_CHAPTER_SWITCH_20241219)
                 campaign.device.click.assert_not_called()
 
     def test_unknown_layout_does_not_guess_or_click(self):
-        campaign = make_campaign(image=np.zeros((720, 1280, 3), dtype=np.uint8))
+        campaign = self.make_campaign(image=np.zeros((720, 1280, 3), dtype=np.uint8))
         with self.assertRaises(CampaignNameError):
             campaign.campaign_set_chapter_20241219('a', '1')
         campaign.device.click.assert_not_called()
         self.assertTrue(campaign.config.MAP_CHAPTER_SWITCH_20241219)
 
     def test_loading_frame_retries_with_new_screenshot(self):
-        campaign = make_campaign(image=np.zeros((720, 1280, 3), dtype=np.uint8))
+        campaign = self.make_campaign(image=np.zeros((720, 1280, 3), dtype=np.uint8))
 
         def next_frame():
+            self.clock.advance()
             campaign.device.image = load_image(str(FIXTURES / 'crimson.png'))
 
         campaign.device.screenshot.side_effect = next_frame
         self.assertTrue(campaign.ensure_campaign_ui('a1'))
-        campaign.device.screenshot.assert_called_once_with()
+        self.assert_stable_chapter_reads(campaign)
+        self.assertEqual(
+            campaign.chapter_read_frames,
+            list(range(1, campaign.device.screenshot.call_count + 1)),
+        )
         campaign.device.click.assert_not_called()
         self.assertEqual(campaign.ENTRANCE.name, 'a1')
 
     def test_layout_is_rechecked_and_flags_restore_on_same_instance(self):
-        campaign = make_campaign()
+        campaign = self.make_campaign()
         for image, modern in ((load_image(str(FIXTURES / 'crimson.png')), True),
                               (legacy_image(), False),
                               (load_image(str(FIXTURES / 'crimson.png')), True)):
@@ -176,7 +213,7 @@ class CampaignEventNavigationTests(unittest.TestCase):
                 self.assertEqual(campaign.config.MAP_HAS_MODE_SWITCH, modern)
 
     def test_hard_stage_uses_map_preparation_mode(self):
-        campaign = make_campaign()
+        campaign = self.make_campaign()
         with patch.object(MODE_SWITCH_1, 'set') as old_mode:
             self.assertTrue(campaign.ensure_campaign_ui('c1'))
         old_mode.assert_not_called()
@@ -185,7 +222,7 @@ class CampaignEventNavigationTests(unittest.TestCase):
         self.assertEqual(campaign.ENTRANCE.name, 'c1')
 
     def test_sp_does_not_enable_map_preparation_mode(self):
-        campaign = make_campaign(map_config=CrimsonSpConfig())
+        campaign = self.make_campaign(map_config=CrimsonSpConfig())
         campaign.campaign_ensure_aside_20241219 = Mock()
         campaign.campaign_ensure_chapter = Mock()
         self.assertTrue(campaign.campaign_set_chapter_20241219('ex_sp', '1'))
@@ -193,7 +230,7 @@ class CampaignEventNavigationTests(unittest.TestCase):
         self.assertFalse(campaign.config.MAP_HAS_MODE_SWITCH)
 
     def test_story_enters_event_page_before_switching(self):
-        campaign = make_campaign()
+        campaign = self.make_campaign()
         trace = []
         campaign.ui_goto_event.side_effect = lambda: trace.append('event')
         campaign.campaign_ensure_mode_20241219 = Mock(side_effect=lambda mode: trace.append(mode))
