@@ -59,12 +59,7 @@ PLATFORM_SKIP = {
 # 注：曾将 module.os_simulator.simulator 列为已知失败（本地环境 numba 缺
 # _version），但该现象源于本地 .venv 损坏；在全新 `uv sync` 环境（CI）下
 # numba==0.66.0 可正常导入，故已从白名单移除，避免"过期白名单"误报。
-KNOWN_FAILURES = {
-    # 以下三个依赖生成器均已弃用，模块故意 raise 提示改用 pyproject.toml + uv.lock。
-    "deploy.headless.requirements_generator": "headless requirements 已弃用，模块故意 raise",
-    "deploy.AidLux.requirements_generator": "AidLux requirements 已弃用，模块故意 raise",
-    "deploy.docker.requirements_generator": "Docker requirements 已弃用，模块故意 raise",
-}
+KNOWN_FAILURES: dict[str, str] = {}
 
 
 def discover_modules(include_campaign: bool) -> list[str]:

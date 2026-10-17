@@ -296,7 +296,7 @@
       "parent": "工程与运维 / Engineering & Operations",
       "page_notes": [
         {
-          "content": "重点覆盖 dev_tools/export_api_schema.py、button_extract.py、coordinate_picker.py、map_extractor.py、ocr_ncnn_convert.py、requirements_updater.py 等代表性工具；同时追踪 module/config 的生成流程。按用途分类，不要为每个脚本写同等篇幅。明确 generated 文件与 source-of-truth。"
+          "content": "重点覆盖 dev_tools/export_api_schema.py、button_extract.py、coordinate_picker.py、map_extractor.py、ocr_ncnn_convert.py 等代表性工具；同时追踪 module/config 的生成流程。按用途分类，不要为每个脚本写同等篇幅。明确 generated 文件与 source-of-truth。"
         }
       ]
     },

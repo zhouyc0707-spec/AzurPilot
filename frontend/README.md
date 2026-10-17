@@ -56,12 +56,15 @@
 uv sync --frozen
 npm ci --prefix frontend
 npm run build --prefix frontend
+$env:ALAS_WEBUI = "react"
 uv run python gui.py --host 127.0.0.1 --port 22267
 ```
 
 浏览器打开 `http://127.0.0.1:22267`。不指定端口时沿用 `config/deploy.yaml` 的 `WebuiPort`，代码默认值为 25548。首次使用可从默认模板创建实例，再设置模拟器序列号、服务器及需要启用的任务。
 
-`gui.py` 会检查前端源码摘要，缺少产物或源码有变化时自动执行 `npm ci` 和构建。自动安装依赖先尝试 npmmirror（`https://registry.npmmirror.com`），安装失败或超时后使用 npm 官方源（`https://registry.npmjs.org`）重试一次，每个源的安装超时为 600 秒。源地址仅对本次命令生效，保留全局 npm 配置和完整性校验。两个源均失败时终止启动；依赖安装成功后执行一次编译，编译失败直接报告，仅在编译成功后更新源码摘要。
+界面选择以 `ALAS_WEBUI` 为准：`react` 使用 React，其他非空值（如 `legacy`）使用旧版 PyWebIO。未设置时，手动启动默认使用旧版；由启动器通过信任环境变量拉起，或带 `--electron` 参数启动时，默认使用 React。上述 PowerShell 示例显式选择 React，环境变量仅作用于当前终端及其子进程。
+
+选择 React 后，`gui.py` 会检查前端源码摘要，缺少产物或源码有变化时自动执行 `npm ci` 和构建。自动安装依赖先尝试 npmmirror（`https://registry.npmmirror.com`），安装失败或超时后使用 npm 官方源（`https://registry.npmjs.org`）重试一次，每个源的安装超时为 600 秒。源地址仅对本次命令生效，保留全局 npm 配置和完整性校验。两个源均失败时终止启动；依赖安装成功后执行一次编译，编译失败直接报告，仅在编译成功后更新源码摘要。
 
 仓库锁文件统一使用官方源地址，npm 会按本次指定的 registry 替换下载主机；CI 在安装前检查锁文件，并使用官方源验证安装。Docker 通过多阶段构建预装静态产物，并在最终镜像中保留 Node.js 24 与 npm；挂载源码或容器内自动更新后，可在启动时重新构建前端。
 
@@ -70,6 +73,7 @@ uv run python gui.py --host 127.0.0.1 --port 22267
 后端：
 
 ```powershell
+$env:ALAS_WEBUI = "react"
 uv run python gui.py --host 127.0.0.1 --port 22267
 ```
 
@@ -146,8 +150,8 @@ npm run test:e2e:mock
 
 ## 迁移边界
 
-- `gui.py` 保留原有父监督器、依赖同步、双栈监听与工作进程回收，应用入口改为 `module.api.app:create_app`。
-- 原有 `module/webui` 和 `webapp` 源码已移除。运行服务迁往 `module/runtime`，核心配置类不再引用 PyWebIO 或修改其全局类型。
+- `gui.py` 保留原有父监督器、依赖同步、双栈监听与工作进程回收；选择 React 时使用 `module.api.app:create_app`，选择旧版时使用 `module.webui.app:app`。
+- `module/webui`、`webapp` 与 PyWebIO 仍用于旧版界面及其定制，不能按迁移残留删除。两套界面共用 `module/runtime` 的运行服务；React 页面使用 `frontend/` 与 `module/api`，不依赖旧版页面的渲染流程。
 - JSON 配置、YAML 参数生成流程、现有调度器和 `/mcp` 挂载保持兼容。独立 MCP 使用迁移后的运行服务。
 - 总览右侧支持日志/截图切换。预览订阅底层实际截图，所有截图方案共用统一发布入口；每张新截图触发更新，空闲保留最后画面，不产生额外截图请求。旧日志链接重定向到总览。
 - 统计页按资源趋势、大世界趋势、大世界总结、委托收益、舰船经验、短猫掉落分类，复用旧统计源及计算口径。提供折线、K 线、时间过滤、缩放、十字游标、原始明细与 CSV 导出；旧统计 HTML/JavaScript 无需加载。

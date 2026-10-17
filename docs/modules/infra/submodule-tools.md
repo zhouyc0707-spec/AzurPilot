@@ -71,7 +71,7 @@ CI 会重新生成按钮、配置与 API 契约并检查 diff（见 [.github/wor
 - **配置实例的文件名约定**：`<配置名>-<模块名>.json` 后缀决定模块归属（`get_config_mod`），重命名配置文件会破坏绑定。
 - **生成器产物勿手改**：`assets.py`、`args.json`、`config_generated.py`、`frontend/src/api/generated.ts` 等由这里维护（约束见 [AGENTS.md](../../../AGENTS.md) 的配置与生成章节）。
 - **`import_smoke_test` 的 KNOWN_FAILURES 是双向门**：记录根因才能加入；模块修复后不移除会被判「过期白名单」失败。
-- `requirements_updater.py` 已退化为 `raise SystemExit` 占位（依赖由 pyproject/uv 管理），不要再调用或恢复它。
+- **依赖维护**：依赖统一维护在 `pyproject.toml` 与 `uv.lock`，使用 `uv sync --frozen` 安装，不再保留旧 requirements 生成脚本。
 
 ## 17. 已知限制
 

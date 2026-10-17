@@ -52,6 +52,8 @@ dev_tools/debug_tools
 /campaign/test/
 /toolkit
 PaddleOCR
+# 单次开发诊断、截图校准和提交信息等临时产物
+/.tmp/
 
 # Tests
 test/*
@@ -79,6 +81,7 @@ docs/*
 .workbuddy/
 .zcode/
 .cursor/
+# GraphFlow 工具的本地缓存（graphflow MCP 在工作目录运行时产生）
 .graphflow-cache/
 .zcodeignore
 RTK.md
@@ -228,7 +231,7 @@ console.bat
 
 # ==================== 本地个人文件（禁止上传） ====================
 # 以下均为本机专用产物，不属于脚本代码，不得提交到仓库
-# （本仓库会同步到 Gitee / GitCode 公开镜像，误传即等于公开个人数据）
+# 本机仅推送 GitHub 的 dev 分支；误传这些文件仍会公开个人数据
 
 # 本地启动器二进制
 /alas-launcher.exe
@@ -249,9 +252,6 @@ cursor-helper/**/docs/
 cursor-helper/**/rule_improvements.md
 cursor-helper/**/fix/fix_plan.md
 cursor-helper/**/review/reports/files/
-
-# GraphFlow 工具的本地缓存（graphflow MCP 在工作目录运行时产生）
-.graphflow-cache/
 
 # OCR 运行时下载到仓库根目录的模型（rapidocr 缺模型时自行下载，不入库）
 /*.onnx
