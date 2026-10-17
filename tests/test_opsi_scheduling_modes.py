@@ -34,7 +34,7 @@ class TestSmartSchedulingModes(unittest.TestCase):
 
     def run_decision(self, scheduling, yellow_coins, total_ap=500):
         with (
-            patch.object(scheduling, 'get_yellow_coins', return_value=yellow_coins),
+            patch.object(scheduling, 'get_routine_yellow_coins', return_value=yellow_coins),
             patch.object(scheduling, '_get_scheduling_action_point', return_value=(total_ap, 100)),
             patch.object(scheduling, '_reset_month_end_cleanup_first_run_if_new_month'),
             patch.object(scheduling, '_is_month_end_cleanup_active', return_value=False),

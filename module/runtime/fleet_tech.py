@@ -84,11 +84,14 @@ def merge_mind(record, ships):
     output = copy.deepcopy(record)
     observed = output.setdefault('observed', {})
     aliases = catalog()['aliases']
+    from module.runtime.mind_calculator import find_ship
     for ship in ships:
         level = ship.get('level')
         if ship.get('review') or type(level) is not int or not 1 <= level <= 125:
             continue
-        gid = aliases.get(normalize_name(ship.get('name', '')))
+        name = ship.get('name', '')
+        info = find_ship(name)
+        gid = info['group_type'] if info else aliases.get(normalize_name(name))
         if gid is None:
             continue
         key = str(gid)
@@ -120,6 +123,9 @@ def progress(record, group_type):
         level = 120
     elif not lv120 and level and level >= 120:
         level = manual.get('level_toggle', {}).get('low', 100)
+    # 仅按当前有效等级推导默认值；人工明确的满星/未满星仍优先，不回写历史。
+    if owned and full_star is None and level and level > 100:
+        full_star = True
     state = dict(group_type=group_type, owned=owned, level=level, full_star=full_star, lv120=lv120,
                  status='complete' if lv120 else 'unfinished' if owned else 'unowned',
                  manual=bool(manual), observed_level=observed, points=0)

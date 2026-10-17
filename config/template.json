@@ -2715,7 +2715,6 @@
     "OpsiGeneral": {
       "UseLogger": true,
       "BuyActionPointLimit": 0,
-      "ActionPointCheckInterval": 0,
       "OilLimit": 1000,
       "RepairThreshold": 0.4,
       "UseRepairPack": false,
@@ -2728,8 +2727,7 @@
       "LauncherPush": true,
       "IndependentPush": false,
       "OpsiOnePushConfig": "provider: null",
-      "AutoSearchTimeLimit": 5,
-      "SkipStrategicSearchCheck": false
+      "AutoSearchTimeLimit": 5
     },
     "Storage": {
       "Storage": {}
@@ -3057,9 +3055,12 @@
       "MinimumActionPointReserve": 200,
       "ExecuteFixedPatrolScan": false,
       "SkipHpCheck": false,
+      "ActionPointCheckInterval": 0,
+      "SkipStrategicSearchCheck": false,
       "Cl1Filter": "ActionPoint",
       "RecordNonCL1AP": true,
-      "RecordSeaMiles": true,
+      "RecordSeaMiles": -1,
+      "SeaMilesLastRecord": null,
       "DebugClip": false
     },
     "OpsiSirenBug": {

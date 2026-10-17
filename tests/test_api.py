@@ -532,6 +532,72 @@ class SocketApiTests(unittest.TestCase):
         manager.stop_by_user.assert_called_once_with(soft=True)
         self.assertEqual(before, path.read_bytes())
 
+    def test_dock_scan_tools_start_over_real_websocket(self):
+        """扫描按钮须经过真实任务清单校验，并传递原任务和已保存范围。"""
+        from module.runtime.process_manager import ProcessManager
+
+        manager = SimpleNamespace(alive=False, state=2, current_task=None)
+
+        def start(task, **kwargs):
+            manager.alive, manager.state, manager.current_task = True, 1, task
+
+        def stop(*, soft=False):
+            self.assertTrue(soft)
+            manager.alive, manager.state, manager.current_task = False, 2, None
+            return True
+
+        manager.start = Mock(side_effect=start)
+        manager.stop_by_user = Mock(side_effect=stop)
+        stop_event = object()
+        with patch.object(ProcessManager, 'get_manager', return_value=manager), \
+                patch.dict(ProcessManager._processes, {'testpilot': manager}, clear=True), \
+                patch.object(RuntimeService, '_record_running_now'), \
+                patch('module.runtime.updater.updater', SimpleNamespace(event=stop_event)), \
+                self.client.websocket_connect('/api/v1/ws') as ws:
+            self.login(ws)
+            for task, group in [('MindCalculatorScan', 'MindCalculator'), ('FleetTechScan', 'FleetTech')]:
+                with self.subTest(task=task):
+                    config = self.call(ws, 'config.get', {'instance': 'testpilot'})['result']
+                    patched = self.call(ws, 'config.patch', {
+                        'instance': 'testpilot', 'revision': config['revision'], 'changes': [
+                            {'path': f'{task}.{group}.MinLevel', 'value': 70},
+                            {'path': f'{task}.{group}.MaxLevel', 'value': 125},
+                        ],
+                    })
+                    self.assertTrue(patched['ok'], patched)
+                    response = self.call(ws, 'tasks.run', {'instance': 'testpilot', 'task': task})
+                    self.assertTrue(response['ok'], response)
+                    self.assertEqual('running', response['result']['status'])
+                    self.assertIn(task, [item['name'] for item in response['result']['tasks']])
+                    manager.start.assert_called_with(task, ev=stop_event)
+                    saved = json.loads((Path(self.temp.name) / 'config/testpilot.json').read_text(encoding='utf-8'))
+                    self.assertEqual((70, 125), (saved[task][group]['MinLevel'], saved[task][group]['MaxLevel']))
+                    self.assertTrue(self.call(ws, 'scheduler.stop', {'instance': 'testpilot'})['ok'])
+
+    def test_tasks_run_rejects_unregistered_tasks(self):
+        from module.runtime.process_manager import ProcessManager
+
+        manager = SimpleNamespace(alive=False, start=Mock())
+        with patch.object(ProcessManager, 'get_manager', return_value=manager), \
+                self.client.websocket_connect('/api/v1/ws') as ws:
+            self.login(ws)
+            for task in ['FleetTechnology', 'Main', 'UnknownScan']:
+                with self.subTest(task=task):
+                    response = self.call(ws, 'tasks.run', {'instance': 'testpilot', 'task': task})
+                    self.assertEqual('INVALID_PARAMS', response['error']['code'])
+            manager.start.assert_not_called()
+
+    def test_dock_scan_does_not_start_while_instance_is_running(self):
+        from module.runtime.process_manager import ProcessManager
+
+        manager = SimpleNamespace(alive=True, start=Mock())
+        with patch.object(ProcessManager, 'get_manager', return_value=manager), \
+                self.client.websocket_connect('/api/v1/ws') as ws:
+            self.login(ws)
+            response = self.call(ws, 'tasks.run', {'instance': 'testpilot', 'task': 'FleetTechScan'})
+            self.assertEqual('INSTANCE_RUNNING', response['error']['code'])
+            manager.start.assert_not_called()
+
     def test_subscribe_sends_scoped_snapshot_with_instance_identity(self):
         path = Path(self.temp.name) / 'config/testpilot.json'
         data = json.loads(path.read_text(encoding='utf-8'))

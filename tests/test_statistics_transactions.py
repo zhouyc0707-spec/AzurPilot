@@ -30,7 +30,7 @@ MUTATIONS = [
     ("increment_battle_count", ()),
     ("increment_akashi_encounter", ()),
     ("add_akashi_ap_entry", (20, 10, 2, "cl1")),
-    ("add_ap_snapshot", (100,)),
+    ("add_ap_snapshot", (100, "cl1", None, 1100)),
     ("set_last_ap_notification", (100,)),
     ("add_yellow_coin_snapshot", (500,)),
     ("add_coins_snapshot", (500, 20)),
@@ -68,7 +68,8 @@ def process_writer(path, started, finished):
         return conn
 
     with patch.object(persistence.sqlite3, "connect", side_effect=traced_connect), \
-            patch.object(database, "datetime", FixedDatetime):
+            patch.object(database, "datetime", FixedDatetime), \
+            patch.object(database, "current_time", return_value=NOW):
         db.add_coins_snapshot("test", 800, 50)
         db.add_commission_income("test", {"Cube": 2})
     finished.set()
@@ -85,6 +86,8 @@ class TestStatisticsTransactions(unittest.TestCase):
         fixed = patch.object(database, "datetime", FixedDatetime)
         fixed.start()
         self.addCleanup(fixed.stop)
+        # 委托结算还使用网络时间源；父子进程统一冻结，避免离线校时污染锁测试。
+        self.enterContext(patch.object(database, "current_time", return_value=NOW))
         self.seed()
 
     def seed(self):
@@ -196,7 +199,7 @@ class TestStatisticsTransactions(unittest.TestCase):
         )
         self.assert_serialized(
             lambda: self.db.add_yellow_coin_snapshot("test", 900),
-            lambda: self.other.add_ap_snapshot("test", 100),
+            lambda: self.other.add_ap_snapshot("test", 100, ap_total=1100),
         )
         stats = self.db.get_stats("test", MONTH)
         self.assertEqual(stats["battle_count"], 11)

@@ -9,6 +9,20 @@ export interface ScanSummary {min_level: number; max_level: number; complete: bo
 export interface ReviewShip {name: string; level: number; source: string; candidates: number[]; group_type: number | null; review: boolean}
 export interface Report {instance: string; revision: string; ships: Progress[]; nation_levels: Record<string, number | null>; bonuses: Record<string, Record<string, number>>; confirmed_points: number; completed: number; pending_star: number; min_level: number; max_level: number; last_scan: ScanSummary | null; review_ships: ReviewShip[]}
 export type Row = Ship & Progress
+export function scanRows(catalog: Catalog, scan: ScanSummary): Row[] {
+  const levels = new Map(scan.ships)
+  return catalog.ships.flatMap(ship => {
+    const level = levels.get(ship.group_type)
+    if (level === undefined) return []
+    const lv120 = level >= 120
+    const fullStar = level > 100 ? true : null
+    return [{...ship, owned: true, full_star: fullStar, lv120, level, observed_level: level,
+      status: lv120 ? 'complete' as const : 'unfinished' as const, manual: false,
+      points: ship.technology ? ship.technology.pt_get + (fullStar ? ship.technology.pt_upgrage : 0)
+        + (lv120 ? ship.technology.pt_level : 0) : 0,
+      completion_target: lv120 ? 100 : 120, acquire_level: level, acquire_lv120: lv120}]
+  })
+}
 export const shipType = (value: number) => [20, 21].includes(value) ? 1 : [22, 23, 24].includes(value) ? 22 : value
 export function matches(row: Row, filters: Record<string, string[]>, query: string, scope: string, stage: string) {
   if (scope === 'tech' && !row.technology || scope === 'none' && row.technology) return false

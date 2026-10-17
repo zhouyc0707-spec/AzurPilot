@@ -149,14 +149,14 @@ class TestActionPointCheckInterval(unittest.TestCase):
         self.handler = OperationSiren.__new__(OperationSiren)
         self.handler.config = SimpleNamespace(
             config_name='isolated', task=SimpleNamespace(command='OpsiHazard1Leveling'),
-            OpsiGeneral_ActionPointCheckInterval=10, OS_ACTION_POINT_BOX_USE=True,
+            OpsiHazard1Leveling_ActionPointCheckInterval=10, OS_ACTION_POINT_BOX_USE=True,
             OS_ACTION_POINT_PRESERVE=200,
         )
         self.handler.device = Mock(image=None)
         self.handler.appear = Mock(return_value=True)
         self.handler.handle_map_event = Mock(return_value=False)
         self.handler._ap_snapshot = ActionPointSnapshot(self.handler._action_point_identity(), 100, 0,
-                                                       (10000, 1, 2, 3))
+                                                       (10000, 1, 2, 3), 130)
         self.monotonic = patch('module.os_handler.action_point.monotonic', return_value=110)
         self.monotonic.start()
         self.addCleanup(self.monotonic.stop)
@@ -166,16 +166,21 @@ class TestActionPointCheckInterval(unittest.TestCase):
         self.reader.ocr.return_value = 130
         self.reader.last_valid = True
 
-    def test_cache_uses_current_map_value_and_does_not_extend_full_check_time(self):
+    def test_cache_skips_screenshots_and_ocr_without_extending_check_time(self):
         self.assertEqual(self.handler.action_point_cached_read(), (550, 130))
         self.assertEqual(self.handler._ap_snapshot.checked_at, 100)
-        self.reader.ocr.return_value = 125
+        self.handler.consume_cached_action_point(5)
         self.assertEqual(self.handler.action_point_cached_read(), (545, 125))
+        self.reader.ocr.assert_not_called()
+        self.handler.device.screenshot.assert_not_called()
         self.assertEqual(self.handler._ap_snapshot.checked_at, 100)
 
-    def test_interval_boundary_forces_full_check(self):
+    def test_interval_boundary_requests_background_check_without_blocking(self):
         with patch('module.os_handler.action_point.monotonic', return_value=700):
-            self.assertIsNone(self.handler.action_point_cached_read())
+            self.assertTrue(self.handler.action_point_check_due())
+            self.assertEqual(self.handler.action_point_cached_read(), (550, 130))
+        self.reader.ocr.assert_not_called()
+        self.handler.device.screenshot.assert_not_called()
 
     def test_unknown_box_count_cannot_start_full_check_interval(self):
         self.handler._action_point_current = 100
@@ -191,26 +196,28 @@ class TestActionPointCheckInterval(unittest.TestCase):
         self.reader.ocr.assert_not_called()
 
     def test_modified_interval_takes_effect_at_next_check(self):
-        self.handler.config.OpsiGeneral_ActionPointCheckInterval = 1
+        self.handler.config.OpsiHazard1Leveling_ActionPointCheckInterval = 1
         with patch('module.os_handler.action_point.monotonic', return_value=160):
-            self.assertIsNone(self.handler.action_point_cached_read())
+            self.assertTrue(self.handler.action_point_check_due())
 
     def test_file_interval_change_takes_effect_without_full_panel_reload(self):
-        self.handler.config.OpsiGeneral_ActionPointCheckInterval = 0
+        self.handler.config.OpsiHazard1Leveling_ActionPointCheckInterval = 0
         self.handler.config.bound = {}
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'isolated.json'
-            path.write_text(json.dumps({'OpsiGeneral': {'OpsiGeneral': {'ActionPointCheckInterval': 10}}}),
+            path.write_text(json.dumps({'OpsiHazard1Leveling': {'OpsiHazard1Leveling': {'ActionPointCheckInterval': 10}}}),
                             encoding='utf-8')
             with patch('module.os_handler.action_point.filepath_config', return_value=str(path)):
+                with patch('module.os_handler.action_point.monotonic', return_value=700):
+                    self.assertTrue(self.handler.action_point_check_due())
                 self.assertEqual(self.handler.action_point_cached_read(), (550, 130))
 
     def test_zero_and_other_tasks_keep_old_path(self):
-        for command, interval in (('OpsiHazard1Leveling', 0), ('OpsiAbyssal', 10),
+        for command, interval in (('OpsiAbyssal', 10),
                                   ('OpsiStronghold', 10), ('OpsiDaily', 10)):
             with self.subTest(command=command, interval=interval):
                 self.handler.config.task.command = command
-                self.handler.config.OpsiGeneral_ActionPointCheckInterval = interval
+                self.handler.config.OpsiHazard1Leveling_ActionPointCheckInterval = interval
                 self.assertIsNone(self.handler.action_point_cached_read())
         self.handler.device.screenshot.assert_not_called()
 
@@ -224,18 +231,28 @@ class TestActionPointCheckInterval(unittest.TestCase):
         self.assertEqual(self.handler.action_point_cached_read(), (130, 130))
         self.assertEqual(self.handler._action_point_total_with_box, 550)
 
-    def test_inventory_revision_and_instance_change_invalidate_snapshot(self):
-        for invalidate in (lambda: invalidate_action_point_inventory(self.handler.config),
-                           lambda: setattr(self.handler.config, 'config_name', 'other')):
-            snapshot = self.handler._ap_snapshot
-            invalidate()
-            self.assertIsNone(self.handler.action_point_cached_read())
-            self.handler._ap_snapshot = snapshot
-
-    def test_invalid_map_digit_does_not_refresh_or_use_snapshot(self):
-        self.reader.last_valid = False
+    def test_reward_inventory_increase_keeps_conservative_cache_but_instance_change_does_not(self):
+        invalidate_action_point_inventory(self.handler.config)
+        self.assertEqual(self.handler.action_point_cached_read(), (550, 130))
+        self.handler.config.config_name = 'other'
         self.assertIsNone(self.handler.action_point_cached_read())
-        self.assertNotIn('_ap_snapshot', self.handler.__dict__)
+
+    def test_unread_map_digit_cannot_affect_cached_budget(self):
+        self.reader.last_valid = False
+        self.assertEqual(self.handler.action_point_cached_read(), (550, 130))
+        self.reader.ocr.assert_not_called()
+
+    def test_zero_disables_timer_but_not_resupply(self):
+        self.handler.config.OpsiHazard1Leveling_ActionPointCheckInterval = 0
+        with patch('module.os_handler.action_point.monotonic', return_value=999999):
+            self.assertFalse(self.handler.action_point_check_due())
+            self.assertEqual(self.handler.action_point_cached_read(), (550, 130))
+        self.handler.consume_cached_action_point(31)
+        self.handler.action_point_enter = Mock()
+        self.handler.handle_action_point = Mock(return_value=True)
+        self.handler.loop = lambda **kwargs: iter(range(1))
+        self.handler.action_point_set(cost=120, routine=True, avoid_ap_overflow=True)
+        self.handler.action_point_enter.assert_called_once()
 
     def test_routine_sufficient_read_skips_panel(self):
         self.handler.action_point_enter = Mock()
@@ -243,7 +260,7 @@ class TestActionPointCheckInterval(unittest.TestCase):
         self.handler.action_point_enter.assert_not_called()
 
     def test_low_current_ap_forces_replenishment_even_before_interval(self):
-        self.reader.ocr.return_value = 36
+        self.handler.consume_cached_action_point(94)
         self.handler.action_point_enter = Mock()
         self.handler.handle_action_point = Mock(return_value=True)
         self.handler.loop = lambda **kwargs: iter(range(1))
@@ -263,6 +280,7 @@ class TestActionPointCheckInterval(unittest.TestCase):
     def test_smart_decision_cached_read_does_not_claim_open_panel(self):
         self.handler._close_scheduling_action_point = Mock()
         self.handler.check_and_notify_action_point_threshold = Mock()
+        self.handler._get_effective_cl1_ap_preserve = Mock(return_value=200)
         self.handler.action_point_enter = Mock()
         self.assertEqual(self.handler._get_scheduling_action_point(keep_open=True, allow_cached=True), (550, 130))
         self.handler.action_point_enter.assert_not_called()
@@ -433,6 +451,7 @@ class TestCurrencyReadReuse(unittest.TestCase):
         self.handler.appear = Mock(return_value=False)
         self.handler.appear_then_click = Mock(return_value=False)
         self.handler.loop = lambda **kwargs: iter(range(2))
+        self.enterContext(patch('module.os_handler.os_status.record_resources_background'))
         self.log_patch = patch('module.os_handler.os_status.LogRes')
         self.recorder = self.log_patch.start()
         self.addCleanup(self.log_patch.stop)
@@ -525,6 +544,7 @@ class TestCurrencyReadReuse(unittest.TestCase):
         self.handler.config.task.command = 'OpsiScheduling'
         self.handler.config._bind_task_override = 'OpsiMeowfficerFarming'
         self.handler.config.save = Mock()
+        self.handler.config.modified = {}
         with patch('module.os_handler.os_status.ocr_batch', return_value=[75696, 10311]), \
                 patch('module.statistics.cl1_database.db.async_add_coins_snapshot') as queued:
             self.handler.os_shop_get_coins()
@@ -576,14 +596,14 @@ class TestIntervalConfiguration(unittest.TestCase):
         args_path = Path(__file__).parents[1] / 'module/config/argument/args.json'
         service = ConfigService.__new__(ConfigService)
         service.__dict__['args'] = json.loads(args_path.read_text(encoding='utf-8'))
-        field = service.args['OpsiGeneral']['OpsiGeneral']['ActionPointCheckInterval']
+        field = service.args['OpsiHazard1Leveling']['OpsiHazard1Leveling']['ActionPointCheckInterval']
         self.assertEqual(field['value'], 0)
         for value in (0, 1, 60, 99999):
-            self.assertEqual(service.validate('OpsiGeneral.OpsiGeneral.ActionPointCheckInterval', value),
-                             ['OpsiGeneral', 'OpsiGeneral', 'ActionPointCheckInterval'])
+            self.assertEqual(service.validate('OpsiHazard1Leveling.OpsiHazard1Leveling.ActionPointCheckInterval', value),
+                             ['OpsiHazard1Leveling', 'OpsiHazard1Leveling', 'ActionPointCheckInterval'])
         for value in (-1, 0.5, True, '10'):
             with self.subTest(value=value), self.assertRaises(ApiError):
-                service.validate('OpsiGeneral.OpsiGeneral.ActionPointCheckInterval', value)
+                service.validate('OpsiHazard1Leveling.OpsiHazard1Leveling.ActionPointCheckInterval', value)
 
 
 class TestDeferredResourceHistory(unittest.TestCase):

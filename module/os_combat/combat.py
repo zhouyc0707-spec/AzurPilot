@@ -501,6 +501,7 @@ class Combat(Combat_, MapEventHandler):
         while 1:
             self.device.screenshot()
 
+            self.handle_background_coin_interrupt(drop=drop)
             if self.handle_combat_automation_confirm():
                 continue
 
@@ -531,6 +532,7 @@ class Combat(Combat_, MapEventHandler):
         while 1:
             self.device.screenshot()
 
+            self.handle_background_coin_interrupt(drop=drop)
             if battle_timer_source == 'cl1' and cl1_combat_timer.reached():
                 logger.warning('[大世界战斗] CL1 战斗超时（5 分钟限制）')
                 raise GameBugError('CL1 combat timeout')

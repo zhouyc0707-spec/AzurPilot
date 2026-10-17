@@ -12,7 +12,8 @@ from PIL import Image
 
 from module.exception import MindCalculatorScanError
 from module.retire.mind_scan import MindCalculatorScan
-from module.runtime.mind_recognition import ScanMerger, ScanPolicy, ScrollAmbiguityError, estimate_scroll
+from module.runtime.mind_recognition import (ScanMerger, ScanPolicy, ScrollAmbiguityError, ScrollMotionError,
+                                           estimate_scroll)
 from tests.test_mind_scan import cards_for_levels
 
 
@@ -45,7 +46,7 @@ class ScanHarness:
         harness = self
 
         class ObservedMerger(ScanMerger):
-            def advance(self, image):
+            def advance(self, image, **kwargs):
                 if harness.last_failure_state is not None:
                     case.assertEqual(harness.state(self), harness.last_failure_state)
                 queued = harness.outcomes.get(harness.position, [])
@@ -53,7 +54,7 @@ class ScanHarness:
                     outcome = queued.pop(0)
                     if outcome is not None:
                         raise outcome
-                result = super().advance(image)
+                result = super().advance(image, **kwargs)
                 harness.successes.append((harness.position, result, self.offset))
                 harness.accepted_captures.append((harness.position, harness.captures))
                 harness.last_failure_state = None
@@ -181,6 +182,16 @@ class ScrollRecoveryLoopTests(unittest.TestCase):
         self.assertEqual(harness.scanner.device.drag.call_count, 1)
         self.assertEqual(harness.merger.offset, 0)
 
+    def test_motion_conflicts_and_ambiguity_share_one_three_frame_budget(self):
+        harness = ScanHarness(self)
+        harness.outcomes[227] = [ambiguity(), ScrollMotionError('独立滚动证据冲突'), ambiguity()]
+        with self.assertRaisesRegex(MindCalculatorScanError, '三次新帧核验仍未通过'):
+            harness.scan()
+        self.assertEqual([item[1] for item in harness.failures], [1, 3])
+        self.assertEqual(harness.scanner.device.drag.call_count, 1)
+        self.assertEqual(harness.merger.offset, 0)
+        self.assertEqual(harness.reads, [0])
+
     def test_unstable_recheck_hits_soft_deadline_without_another_drag(self):
         harness = ScanHarness(self)
         harness.outcomes[227] = [ambiguity()]
@@ -275,6 +286,16 @@ class ScrollEvidenceTests(unittest.TestCase):
             self.assertEqual(len(scanner._scan_evidence_paths), 2)
         self.assertEqual(merger.offset, 681)
         np.testing.assert_array_equal(merger.previous, np.array(previous))
+
+    def test_shared_thumb_accepts_short_real_pixels_without_generic_length_gate(self):
+        scanner = self.make_scanner()
+        thumb = np.arange(20, 45)
+        scroll = SimpleNamespace(
+            total=565, appear=Mock(return_value=False), match_color=lambda _: np.isin(np.arange(565), thumb))
+        with patch('module.retire.mind_scan.DOCK_SCROLL', scroll):
+            np.testing.assert_array_equal(scanner._dock_scroll_thumb(), thumb)
+            self.assertFalse(scanner._dock_scroll_at_bottom(thumb))
+        scroll.appear.assert_not_called()
 
     def test_image_or_metadata_write_failure_does_not_mask_the_scroll_failure(self):
         for failure in ('image', 'metadata'):

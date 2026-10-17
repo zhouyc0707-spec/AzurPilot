@@ -1530,10 +1530,6 @@ OpsiGeneral:
   BuyActionPointLimit:
     value: 0
     option: [0, 1, 2, 3, 4, 5]
-  ActionPointCheckInterval:
-    value: 0
-    valuetype: int
-    validate: ^\d+$
   OilLimit: 1000
   RepairThreshold: 0.4
   UseRepairPack: false
@@ -1555,11 +1551,6 @@ OpsiGeneral:
   AutoSearchTimeLimit:
     value: 5
     validate: [1, 240]
-  # 计划作战滑动检查跳过：侵蚀一/短猫相接循环刷取同一海域时，打开
-  # 「计划作战」面板后不再滑动检查各选项，直接确认开始。需要面板选项
-  # 已在游戏内配置好（区域模式：重复、遭遇商人/装置：停止、自动提交：开启），
-  # 让任务正常跑过一次或手动配置一次后即可开启。
-  SkipStrategicSearchCheck: false
 OpsiAshBeacon:
   AttackMode:
     value: current
@@ -1697,13 +1688,23 @@ OpsiHazard1Leveling:
     type: checkbox
     value: false
     option: [true, false]
+  ActionPointCheckInterval:
+    value: 0
+    valuetype: int
+    validate: ^\d+$
+  # 侵蚀一和短猫复用游戏内已经确认过的计划作战选项。
+  SkipStrategicSearchCheck: false
   Cl1Filter: |-
     ActionPoint
   RecordNonCL1AP: true
   RecordSeaMiles:
-    type: checkbox
-    value: true
-    option: [true, false]
+    value: -1
+    valuetype: int
+    validate: ^(-1|\d+)$
+  SeaMilesLastRecord:
+    type: stored
+    value: null
+    display: hide
   DebugClip: false
 OpsiSirenBug:
   SirenResearch_Enable: true

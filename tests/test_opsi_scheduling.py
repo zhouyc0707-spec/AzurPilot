@@ -1021,7 +1021,7 @@ class TestHazard1FreshActionPoint(unittest.TestCase):
         runner.config = SimpleNamespace(
             OS_ACTION_POINT_PRESERVE=preserve,
             OpsiHazard1Leveling_TargetZone=0,
-            OpsiHazard1Leveling_RecordSeaMiles=False,
+            OpsiHazard1Leveling_RecordSeaMiles=-1,
             OpsiFleet_Fleet=1,
             override=Mock(),
             is_task_enabled=Mock(return_value=False),

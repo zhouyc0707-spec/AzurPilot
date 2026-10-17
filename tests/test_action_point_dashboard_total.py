@@ -33,8 +33,11 @@ class TestActionPointDashboardTotal(unittest.TestCase):
                 patch('module.os_handler.action_point.ACTION_POINT_ITEMS') as items, \
                 patch('module.os_handler.action_point.OCR_ACTION_POINT_REMAIN') as ocr:
             oil_item.predict.return_value = [SimpleNamespace(amount=oil)]
+            oil_item.amount_ocr.last_batch_validity = (True,)
             items.predict.return_value = [SimpleNamespace(amount=amount) for amount in self.box]
+            items.amount_ocr.last_batch_validity = (True, True, True)
             ocr.ocr.return_value = self.current
+            ocr.last_valid = True
             handler.action_point_update()
         return handler, log_res
 

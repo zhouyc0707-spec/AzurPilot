@@ -280,6 +280,11 @@ worker 启停:  API/MCP ──lifecycle lock──> ProcessManager.start/stop_by
        ──restart_event──> gui.py 父监督器 ──依赖同步──> 重建 WebUI ──restart_processes──> 恢复实例
 ```
 
+预览是可丢帧的被动通道。复制预览副本或后台 JPEG 编码发生 `MemoryError` 时只丢当前预览帧，
+下次截图继续尝试；不能因额外预览分配失败中止已经取得有效截图的游戏任务。
+实际截图后端、识别与保存的内存异常仍沿原任务异常路径处理，不由预览通道吞掉。
+定向回归见 `tests.test_console_runtime.RuntimeTests` 的复制/编码失败与下一帧恢复用例。
+
 ## 9. 状态模型
 
 ### worker 实例状态（ProcessManager.state → 前端四态）

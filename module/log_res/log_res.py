@@ -61,7 +61,7 @@ class LogRes:
                 if original['Value'] != value:
                     _key = _key_group + '.Value'
                     self.config.modified[_key] = value
-                    _time = datetime.now().replace(microsecond=0)
+                    _time = self.__dict__.get('_recorded_at') or datetime.now().replace(microsecond=0)
                     _key_time = _key_group + f'.Record'
                     self.config.modified[_key_time] = _time
                     if key == 'YellowCoin':
@@ -84,11 +84,12 @@ class LogRes:
                     _key = _key_group + f'.{value_name}'
                     self.config.modified[_key] = _value
                     _key_time = _key_group + f'.Record'
-                    _time = datetime.now().replace(microsecond=0)
+                    _time = self.__dict__.get('_recorded_at') or datetime.now().replace(microsecond=0)
                     self.config.modified[_key_time] = _time
                     _mod = True
                 if _mod:
-                    if key == 'ActionPoint':
+                    if (key == 'ActionPoint' and value.get('Total') is not None
+                            and self.__dict__.get('_observation_enabled', True)):
                         try:
                             from module.statistics.opsi_runtime import record_ap_snapshot
                             source = 'dashboard'
@@ -97,15 +98,11 @@ class LogRes:
                             )
                             if task:
                                 source = task
-                            # 统计口径使用始终含体力箱的总行动力，避免被 OS_ACTION_POINT_BOX_USE
-                            # 的临时关闭（如防止行动力溢出任务）污染快照
-                            ap_total = getattr(self.config, '_action_point_total_with_box', None)
-                            if ap_total is None:
-                                ap_total = value.get('Total')
+                            # Total 必须来自本次完整面板读取，不能用旧配置或缓存箱子补齐。
                             record_ap_snapshot(
                                 self.config,
                                 ap_current=value.get('Value'),
-                                ap_total=ap_total,
+                                ap_total=value['Total'],
                                 source=source,
                                 observed_at=self.__dict__.get('_recorded_at'),
                             )
@@ -121,16 +118,16 @@ class LogRes:
             logger.info('[日志资源] 仪表盘中无此资源')
             super().__setattr__(name=key, value=value)
 
-    def record(self, name, value, *, observed=True, source=None, defer_history=False):
-        """写入资源值；observed=False 仅跳过成功观测，失败读数须由调用方丢弃。
+    def record(self, name, value, *, observed=True, source=None, defer_history=False, observed_at=None):
+        """写入资源值，并以截图采样时间记录成功观测。
 
-        建造等已确认消耗的推算值可更新仪表盘而不刷新观测时间；
-        OCR 读取失败不能将回退零值作为推算值传入。
+        observed=False 仅跳过成功观测，建造等已确认消耗的推算值可更新仪表盘；
+        OCR 读取失败须由调用方丢弃，不能将回退零值作为推算值传入。
         """
         self.__dict__['_observation_enabled'] = observed
         self.__dict__['_observation_source'] = source
         self.__dict__['_defer_history'] = defer_history
-        self.__dict__['_recorded_at'] = datetime.now()
+        self.__dict__['_recorded_at'] = observed_at or datetime.now()
         try:
             setattr(self, name, value)
         finally:
@@ -152,9 +149,10 @@ class LogRes:
         from module.config.time_source import now
         task = getattr(getattr(self.config, 'task', None), 'command', None)
         source = self.__dict__.get('_observation_source') or task or 'task_observation'
-        ProgramStore(Path(filepath_config(instance)).parent).observe(instance, name, value, now().isoformat(sep=' '), source)
+        stamp = self.__dict__.get('_recorded_at') or now()
+        ProgramStore(Path(filepath_config(instance)).parent).observe(instance, name, value, stamp.isoformat(sep=' '), source)
         from module.statistics.resource_flow import observe
-        observe(self.config, name, current, source)
+        observe(self.config, name, current, source, observed_at=stamp)
 
     def _record_all_resource_snapshot(self, overrides=None):
         """读取当前所有 Dashboard 资源值并记录快照。

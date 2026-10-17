@@ -115,7 +115,7 @@ flowchart BT
 | `scheduling.py` | `OpsiScheduling(CoinTaskMixin, OSMap)` | `run_smart_scheduling` | 智能调度：黄币/AP 决策与子任务代理 |
 | `coin_task_mixin.py` | `CoinTaskMixin` | —— | 补黄币任务的公共逻辑（阈值/通知/选派/月末清理） |
 | `prevent_action_point_overflow.py` | `OpsiPreventActionPointOverflow(OpsiScheduling)` | `run_prevent_action_point_overflow` | 防行动力自然恢复溢出（每 600 秒 1 点，上限 200） |
-| `hazard_leveling.py` | `OpsiHazard1Leveling` | `os_hazard1_leveling` / `run_hazard1_leveling_once` / `os_check_leveling` | 侵蚀 1 练级（120 AP 一轮）与练度检查 |
+| `hazard_leveling.py` | `OpsiHazard1Leveling` | `os_hazard1_leveling` / `run_hazard1_leveling_once` / `os_check_leveling` | 侵蚀 1 练级（当前 AP 达到 100 即开工）与练度检查 |
 | `meowfficer_farming.py` | `OpsiMeowfficerFarming` | `run_meowfficer_farming(_once)` | 耄耋相接（指挥喵刷黄币，多种目标海域模式） |
 | `daily.py` | `OpsiDaily` | `os_daily` | 大世界日常：接任务→完成→领成就 |
 | `shop.py` | `OpsiShop` | `os_shop` / `perform_port_shop_purchase` | 港口商店扫货（购买流程供智能调度复用） |
@@ -130,6 +130,14 @@ flowchart BT
 | `cross_month.py` | `OpsiCrossMonth` | `os_cross_month(_end)` | 等到重置前 10 分钟抢清每日 |
 | `fleet_auto_change.py` | `OpsiFleetAutoChange` | `run()` | 练级队列轮换舰队 |
 | `task_context.py` | 上下文管理器 | —— | 代理任务的临时身份与延迟请求（见下） |
+
+### 侵蚀 1 海里检测间隔
+
+`OpsiHazard1Leveling.OpsiHazard1Leveling.RecordSeaMiles` 为整数天数：默认 `-1` 关闭，`0` 每轮检测，正整数表示每隔指定天数检测。未有成功记录时在下一轮立即检测；间隔从上次成功识别且返回地图的时间起计算，按完整的 24 小时计天，到期后的下一轮执行。
+
+隐藏字段 `SeaMilesLastRecord` 持久化上次成功检测时间，重启与智能调度代理共用同一任务记录。失败不更新时间，下轮仍可重试；未到期仅跳过情报页检测，行动力、货币记录及练级继续执行，海里数统计仅提交本轮实际识别值。旧布尔设置在运行器和 WebUI 读取时迁移：`true → 0`，`false → -1`，已有数字间隔保持不变。离线回归见 `tests/test_opsi_sea_miles.py`。
+
+配置界面对比：[原复选框](images/sea-miles-interval-before.png)、[天数输入框](images/sea-miles-interval-after.png)。
 
 ### 智能调度的身份机制（tasks/task_context.py）
 
@@ -162,6 +170,7 @@ flowchart BT
 
 - `OpsiDaily` 在委托进图或刷新当前委托海域时，若抛出 `OSExploreError`，取消选中海域并返回原海域，仅延期该目标海域的委托，继续执行其余每日委托。隐藏配置 `OpsiDaily.OpsiDaily.DeferredMissions` 保存海域编号和下次服务器日更时间；当天重跑跳过这些目标海域，次日刷新后重新尝试，仍无法进入就再延期。游戏内委托保持未完成，不修改整个每日任务的调度时间。
 - 延期委托仍留在游戏列表中，选择器跳过本轮已处理的延期行；领取完成奖励后重置行号，避免列表前移误跳过其他委托。延期行占满一页时滚动查找后续任务，以截图确认滚动位置；只剩延期委托且接取队列已满时结束接取循环。其余委托执行后，每日任务仍按原有逻辑收尾并 `task_delay(server_update=True)`。保留任务海域清理遇到同类进图失败时保留该海域记录并继续清理其他海域。
+- 保留任务海域（`KeepMissionZone`）完成委托后会中断自律并退出战斗，「合计获得奖励」结算有概率延迟弹出、正好落在进入任务列表或接取委托阶段；`os_mission_enter()` 与接取循环各自带 `AUTO_SEARCH_REWARD` 点击处理（与大世界其他循环同一模式，缺失时界面静止 60 秒被判卡死并强杀重启）。
 - 只捕获进图锁定/无法进入异常；行动力不足、识别异常和恢复导航失败仍走原有上层处理。档案、月度 Boss、跨月与开荒任务复用每日委托处理方法时，不获得这个延期分支。
 - 当前任务为 `OpsiDaily`、海域不是港口/安全海域/特殊海域，且两种开荒都未完成时，在初始化首次自律和任务海域自律前检查空域侦察。复用 `os_order_execute(recon_scan=True)` → `order_execute(ORDER_SCAN)` 的截图状态循环，可用按钮才点击，灰显时退出指令面板；已开荒普通海域不额外执行侦察。
 - 完成状态不依赖任务开关：每月开荒复用 `monthly_explore_complete()` 的本月 100% 判定；智能开荒读取 `OpsiScheduling.Storage.Storage.SmartExplore`，本月 `cleanup` / `done` 表示路线已完成。旧月份或缺少月份的进度不能跳过侦察检查，不改写开荒断点。
@@ -258,7 +267,7 @@ OCR：行动力面板 / 黄币 / 紫币 ──▶ 决策（智能调度状态机
 | 配置组 | 关键项 | 说明 |
 | --- | --- | --- |
 | `OpsiGeneral.*` | `DoRandomMapEvent`、`UseLogger`、`BuyActionPointLimit` | 随机事件、日志仪、每周石油购买上限等通用行为 |
-| `OpsiGeneral.ActionPointCheckInterval` | 默认 0 分钟 | 侵蚀一、智能调度和短猫常规完整面板的最小检查间隔；必要补给及其他任务保持原流程 |
+| `OpsiHazard1Leveling.ActionPointCheckInterval` | 默认 0 分钟，关闭定时读取 | 侵蚀一、智能调度和短猫的后台行动力检查间隔；补给及首次确认仍读面板 |
 | `OpsiScheduling.*` | `Scheduler.Enable`、黄币保留、行动力保留、通知阈值 | 智能调度开关与决策参数 |
 | `OpsiHazard1Leveling.*` | `TargetZone`（0/44/22）、`MinimumActionPointReserve` | 侵蚀 1 目标海域与保留 |
 | `OpsiMeowfficerFarming.*` | `StayInZone` 等 | 耄耋相接模式 |
@@ -287,7 +296,7 @@ OCR：行动力面板 / 黄币 / 紫币 ──▶ 决策（智能调度状态机
 
 ## 12. 并发与线程模型
 
-- 单线程状态循环，无自有线程；`OSSimulator`（辅助包，见[大世界辅助模块](auxiliary.md)）是唯一含后台线程的例外。
+- 游戏操作保持单线程状态循环；常规资源识别在独立后台队列执行，观察与仪表盘事务交给串行执行器。后台不能截图或点击；详情见[大世界辅助模块](auxiliary.md)。`OSSimulator` 另有独立模拟线程。
 - `OSStatus` 的 `_cache_lock`（threading.Lock）保护黄币缓存值的读写，防御未来多线程访问。
 - 与调度器的并发点在配置：代理上下文用 `_temporary_attributes` 写 `config.task` 等属性，`multi_set()` 保证批量写原子生效；防溢出开关用 `cross_set` 直接改配置文件字段，与其他进程的配置事务互斥。
 

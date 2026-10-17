@@ -64,7 +64,7 @@ class StatisticsReadingTests(unittest.TestCase):
                 return SimpleNamespace(st_mtime_ns=987654321, st_size=4096)
             return stat(path, **kwargs)
 
-        with patch.object(Path, 'stat', changed):
+        with patch.object(Path, 'stat', new=changed):
             self.assertNotEqual(get_statistics_fingerprint('inst', self.root / 'config'), original)
 
 

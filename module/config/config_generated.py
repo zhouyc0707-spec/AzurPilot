@@ -741,7 +741,6 @@ class GeneratedConfig:
     # 配置组 `OpsiGeneral`
     OpsiGeneral_UseLogger = True
     OpsiGeneral_BuyActionPointLimit = 0  # 0, 1, 2, 3, 4, 5
-    OpsiGeneral_ActionPointCheckInterval = 0
     OpsiGeneral_OilLimit = 1000
     OpsiGeneral_RepairThreshold = 0.4
     OpsiGeneral_UseRepairPack = False
@@ -755,7 +754,6 @@ class GeneratedConfig:
     OpsiGeneral_IndependentPush = False
     OpsiGeneral_OpsiOnePushConfig = 'provider: null'
     OpsiGeneral_AutoSearchTimeLimit = 5
-    OpsiGeneral_SkipStrategicSearchCheck = False
 
     # 配置组 `OpsiAshBeacon`
     OpsiAshBeacon_AttackMode = 'current'  # current, current_dossier, current_dossier_only
@@ -839,9 +837,12 @@ class GeneratedConfig:
     OpsiHazard1Leveling_MinimumActionPointReserve = 200
     OpsiHazard1Leveling_ExecuteFixedPatrolScan = False
     OpsiHazard1Leveling_SkipHpCheck = False  # True, False
+    OpsiHazard1Leveling_ActionPointCheckInterval = 0
+    OpsiHazard1Leveling_SkipStrategicSearchCheck = False
     OpsiHazard1Leveling_Cl1Filter = 'ActionPoint'
     OpsiHazard1Leveling_RecordNonCL1AP = True
-    OpsiHazard1Leveling_RecordSeaMiles = True  # True, False
+    OpsiHazard1Leveling_RecordSeaMiles = -1
+    OpsiHazard1Leveling_SeaMilesLastRecord = None
     OpsiHazard1Leveling_DebugClip = False
 
     # 配置组 `OpsiSirenBug`

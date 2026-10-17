@@ -16,6 +16,8 @@
 
 统一使用 PP-OCRv6 系列识别模型（lite/standard/pro 三档），各语言逻辑模型通过不同字典区分输出空间；旧版 AlOCR 专用模型（英文 `alocr_en_v2_6`、简中 `alocr_cn_v3`）作为 `auto` 档默认值保留。
 
+多实例资源控制：本地 ONNX Runtime（包括 ncnn 混合模式的 ONNX 检测端）默认每个 OCR 推理会话最多使用 **2 个 intra-op 线程、1 个 inter-op 线程**，以避免多实例分别按整机 CPU 核数创建线程池。启动前可以设置环境变量 `AZURPILOT_OCR_THREADS=1..16` 调整 intra-op 上限；最终不超过设备逻辑 CPU 数。修改只对新创建的模型会话生效，已有工作进程须在任务允许时重新启动才能采用新值。该限制不控制 ncnn 原生推理线程或 MuMu 虚拟机的 CPU 配额，实际效果需按实例监测。
+
 ## 2. 模块职责
 
 ### 负责
@@ -74,6 +76,8 @@ bin/ocr_models/     # 模型文件（非代码）
 | `alas.py` 的 `benchmark/ocr_benchmark` 任务 | 全量精度与速度基准 |
 
 追代码建议从 `module/ocr/ocr.py` 的 `Ocr.ocr()` 开始：它串起了预处理、后端调用与后处理全链路。
+
+大世界常规资源由 `module/os_handler/resource_read.py` 在截图副本上后台执行同帧合批。提交时复制识别器和坐标，避免 `last_valid` 与按钮偏移的跨线程竞争。主线程只轮询已完成的 Future，不等待推理；两帧货币稳定确认、采样版本校验、到期行动力检查及低黄币中断见[大世界辅助模块](os/auxiliary.md)。商店预算与实际补给决策仍同步确认。
 
 ## 5. 核心组件
 

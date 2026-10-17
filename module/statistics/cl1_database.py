@@ -633,17 +633,19 @@ class Cl1Database:
             data["akashi_ap"] = data.get("akashi_ap", 0) + amount
             self._save_stats_in_connection(conn, instance, month, data)
 
-    def add_ap_snapshot(self, instance: str, ap_current: int, source: str = "cl1", distance: int = None,
+    def add_ap_snapshot(self, instance: str, ap_current: int | None, source: str = "cl1", distance: int = None,
                         ap_total: int = None, *, observed_at: datetime = None):
-        """记录行动力快照（真实剩余体力），并计算资产
+        """记录完整总行动力及资产，或不带行动力的独立海里数。
 
         Args:
             instance: 实例名称
-            ap_current: 当前行动力剩余
+            ap_current: 当前行动力剩余；独立海里数时可为 None
             source: 数据来源标记 (cl1 / meow 等)
             distance: 海里数（可选）
-            ap_total: 总体力（含行动力箱子）
+            ap_total: 本次实测总体力（含行动力箱子），缺失时只允许记录海里数
         """
+        if ap_total is None and distance is None:
+            return
         observed_at = observed_at or datetime.now()
         month = observed_at.strftime("%Y-%m")
         with self._stats_transaction() as conn:
@@ -662,24 +664,19 @@ class Cl1Database:
                 with suppress(ValueError, TypeError, IndexError, KeyError):
                     yellow_coin = int(yellow_coin_snapshots[-1].get("yellow_coin", 0))
 
-            # 资产按可用总体力计算，包含行动力箱子。
-            ap_current = self._coerce_int(ap_current)
-            if ap_total is not None:
-                ap_total = self._coerce_int(ap_total)
-            ap_for_asset = ap_total if ap_total is not None else ap_current
-            asset = ap_for_asset * cl5_efficiency + yellow_coin
-
             snapshot = {
                 "ts": now.isoformat(),
-                "ap": ap_current,
-                "yellow_coin": yellow_coin,
-                "asset": round(asset, 2),
                 "source": source,
             }
             if distance is not None:
                 snapshot["distance"] = self._coerce_int(distance)
             if ap_total is not None:
-                snapshot["ap_total"] = ap_total
+                # 当前读数不能替代总量，独立海里数也不附带缓存行动力或资产。
+                ap_total = self._coerce_int(ap_total)
+                snapshot.update(ap_total=ap_total, yellow_coin=yellow_coin,
+                                asset=round(ap_total * cl5_efficiency + yellow_coin, 2))
+                if ap_current is not None:
+                    snapshot["ap"] = self._coerce_int(ap_current)
 
             snapshots = data.get("ap_snapshots", [])
             snapshots.append(snapshot)
@@ -1517,7 +1514,7 @@ class Cl1Database:
         )
 
     def async_add_ap_snapshot(
-        self, instance: str, ap_current: int, source: str = "cl1", distance: int = None, ap_total: int = None,
+        self, instance: str, ap_current: int | None, source: str = "cl1", distance: int = None, ap_total: int = None,
         *, observed_at: datetime = None,
     ):
         """异步添加行动力快照。"""

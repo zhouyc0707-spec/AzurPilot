@@ -17,7 +17,8 @@ import yaml
 from deploy.atomic import atomic_write
 from module.api.protocol import ApiError
 from module.combat.emotion_state import EmotionRecoveryState
-from module.config.redirect_utils.utils import meta_assist_limit_redirect
+from module.config.deep import deep_get
+from module.config.redirect_utils.utils import meta_assist_limit_redirect, sea_miles_interval_redirect
 from module.config.time_source import now as current_time
 from module.config.transaction import config_transaction
 
@@ -292,6 +293,18 @@ class ConfigService:
                                 merged[task][group]['AssistRequestLimit'] = meta_assist_limit_redirect(
                                     fields['OneHitMode'])
                             merged[task][group].pop('OneHitMode', None)
+                        if task == 'OpsiHazard1Leveling' and group == 'OpsiHazard1Leveling':
+                            if 'RecordSeaMiles' in fields:
+                                merged[task][group]['RecordSeaMiles'] = sea_miles_interval_redirect(
+                                    fields['RecordSeaMiles'])
+        # 参数移到侵蚀一设置后，首次启动运行器前的页面读取和保存也须保留旧值。
+        legacy_opsi = deep_get(data, 'OpsiGeneral.OpsiGeneral', default={})
+        current_opsi = deep_get(data, 'OpsiHazard1Leveling.OpsiHazard1Leveling', default={})
+        if isinstance(legacy_opsi, dict) and isinstance(current_opsi, dict):
+            for field in ('ActionPointCheckInterval', 'SkipStrategicSearchCheck'):
+                if current_opsi.get(field) is None and legacy_opsi.get(field) is not None:
+                    merged['OpsiHazard1Leveling']['OpsiHazard1Leveling'][field] = legacy_opsi[field]
+                merged.get('OpsiGeneral', {}).get('OpsiGeneral', {}).pop(field, None)
         from module.config.redirect_utils.shop import migrate_shop_options
 
         merged, shop_warnings = migrate_shop_options(data, merged)

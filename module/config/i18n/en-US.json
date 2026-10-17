@@ -3874,10 +3874,6 @@
       "4": "4 times (6000 Oil, 600 AP)",
       "5": "5 times (10000 Oil, 1000 AP)"
     },
-    "ActionPointCheckInterval": {
-      "name": "Routine AP check interval (minutes)",
-      "help": "0 disables the interval. Applies only to corrosion 1 leveling, smart scheduling and meowfficer farming. Time is measured from the last successful full AP panel read; only current AP is read from the map during the interval. Replenishment, inventory changes and recognition failures force a full check. Purchases and box use are always confirmed."
-    },
     "OilLimit": {
       "name": "When buying AP, keep X oil",
       "help": ""
@@ -3929,10 +3925,6 @@
     "AutoSearchTimeLimit": {
       "name": "Auto-search time limit",
       "help": "Unit: minutes. During auto search, the script will assume the game is stuck if no event is detected for this period."
-    },
-    "SkipStrategicSearchCheck": {
-      "name": "Skip plan battle option checks",
-      "help": "When looping a single zone (Corrosion 1 leveling / Meowfficer farming), open the plan battle panel and confirm directly without scroll-checking every option. The panel options must already be configured in-game (zone mode: repeat, stop on merchant/device, auto-submit missions); let the task run once normally, or configure them manually first."
     }
   },
   "OpsiAshBeacon": {
@@ -4261,6 +4253,14 @@
       "True": "Enabled",
       "False": "Disabled"
     },
+    "ActionPointCheckInterval": {
+      "name": "Routine AP check interval (minutes)",
+      "help": "0 disables scheduled checks. Read AP only for resupply, when the interval expires, or for the first confirmation after recovery. Otherwise skip screenshots and OCR. Applies to CL1, smart scheduling and Meowfficer farming."
+    },
+    "SkipStrategicSearchCheck": {
+      "name": "Skip plan battle option checks",
+      "help": "When looping a single zone (Corrosion 1 leveling / Meowfficer farming), open the plan battle panel and confirm directly without scroll-checking every option. The panel options must already be configured in-game (zone mode: repeat, stop on merchant/device, auto-submit missions); let the task run once normally, or configure them manually first."
+    },
     "Cl1Filter": {
       "name": "Akashi purchase filter",
       "help": "By default, only Action Points are purchased. If you want to also buy purple coins, set it to \"ActionPoint > PurpleCoins\""
@@ -4270,10 +4270,12 @@
       "help": "When enabled, AP acquisition data from all sources (such as Akashi shop purchases) will be recorded. When disabled, AP data will only be recorded during Corrosion 1 Leveling tasks, ignoring AP gained during other tasks or manual operations."
     },
     "RecordSeaMiles": {
-      "name": "Sea miles recording",
-      "help": "Record sea miles to statistics after each Corrosion 1 leveling cycle",
-      "True": "Enabled",
-      "False": "Disabled"
+      "name": "Sea miles check interval (days)",
+      "help": "-1: disabled (default); 0: check and record sea miles every Hazard 1 leveling round; positive integer: check once every specified number of days. The first check is immediate. The interval starts after the last successful check and survives restarts."
+    },
+    "SeaMilesLastRecord": {
+      "name": "Last sea miles check",
+      "help": "Internal timestamp of the last successful sea miles check, used to calculate the check interval."
     },
     "DebugClip": {
       "name": "Post-battle debug recording",

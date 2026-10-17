@@ -223,7 +223,8 @@ class CalculatorTests(unittest.TestCase):
         self.assertEqual(rows[5]['name'], '灵敏·META')
         self.assertEqual(rows[13]['name'], '热心.改')
         self.assertEqual(rows[13]['level'], 105)
-        self.assertTrue(all(not row['review'] for row in rows))
+        self.assertEqual([row['name'] for row in rows if row['review']], ['新月'])
+        self.assertIn('同名同舰种', rows[7]['source'])
         self.assertGreater(calculate(rows)['mind'], 0)
         self.assertEqual([row['level'] for row in rows], [125, 100, 125, 105, 125, 63, 99, 99, 117, 122, 99, 98, 105, 105,
                                                        120, 105, 105, 120, 120, 120, 120])
@@ -318,7 +319,7 @@ class RecognitionTests(unittest.TestCase):
         self.assertEqual(len(merger.slots), 6)
 
     def scan_frames(self, offsets, *, bottom_offset, damaged=False, later_conflict=False, cross_conflict=False,
-                    strict_levels=True):
+                    strict_levels=True, partial_last=False):
         from module.retire.mind_scan import MindCalculatorScan
         from types import SimpleNamespace
         class ImmediateTimer:
@@ -362,8 +363,10 @@ class RecognitionTests(unittest.TestCase):
                     cards[0].ship['level'] = 87
                 return cards
             # 同一实际卡位在底部重叠时必须有相同身份，不能让伪名字冲突被同名合并掩盖。
-            return [Card(93, y, 0, ship(f'拉菲{round((y - 76 + position[0]) / 227) % 3}', level=100), 6, True)
-                    for y in (76, 303, 530)]
+            return [Card(93 + col * 165, y, col,
+                         ship(f'拉菲{round((y - 76 + position[0]) / 227) % 3}-{col}', level=100), 6, True)
+                    for y in (76, 303, 530) for col in range(
+                        2 if partial_last and position[0] == bottom_offset and y == 530 else 7)]
         with tempfile.TemporaryDirectory() as temp, patch('module.retire.mind_scan.logger.log_file', str(Path(temp) / 'testpilot.txt')), \
                 patch('module.retire.mind_scan.Timer', ImmediateTimer), patch('module.retire.mind_scan.DOCK_SCROLL', scrollbar), \
                 patch('module.retire.mind_scan.recognize_cards', side_effect=recognize):
@@ -372,22 +375,26 @@ class RecognitionTests(unittest.TestCase):
         return scanner, captured, result
 
     def test_shared_review_mode_keeps_unknown_level_to_real_bottom(self):
+        """保留旧回归名；用户确认新策略允许科技模式在后续可靠页提前结束。"""
         scanner, captured, result = self.scan_frames(
             [0] * 6 + [227, 227, 454, 454, 681, 681, 908, 908], bottom_offset=908, damaged=True,
             strict_levels=False)
-        self.assertEqual(captured, [0, 0, 0, 681, 908])
-        self.assertFalse(scanner._policy.sort_valid)
+        self.assertEqual(captured, [0, 0, 0, 681])
+        self.assertTrue(scanner._policy.sort_valid)
+        self.assertEqual(scanner._scan_metadata, dict(reached_bottom=False, physical_count=42))
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]['name'], '未识别舰船')
         self.assertEqual(result[0]['level'], 0)
         self.assertTrue(result[0]['review'])
+        self.assertEqual(calculate(result)['mind'], 0)
 
-    def test_disabling_early_stop_still_checks_new_page_sort_conflicts(self):
+    def test_later_page_sort_conflict_still_gets_review_after_local_level_failure(self):
         scanner, captured, result = self.scan_frames(
             [0] * 6 + [227, 227, 454, 454] + [681] * 6 + [908, 908],
             bottom_offset=908, damaged=True, later_conflict=True, strict_levels=False)
         self.assertEqual(captured, [0, 0, 0, 681, 681, 681, 908])
-        self.assertFalse(scanner._policy.sort_valid)
+        self.assertTrue(scanner._policy.sort_valid)
+        self.assertEqual(scanner._scan_metadata, dict(reached_bottom=False, physical_count=49))
         self.assertEqual(len(result), 3)
         self.assertTrue(all(row['review'] for row in result))
         self.assertEqual([row['level'] for row in result], [0, 87, 88])
@@ -406,16 +413,18 @@ class RecognitionTests(unittest.TestCase):
     def test_scan_moves_three_rows_and_waits_for_motion_to_settle(self):
         scanner, captured, result = self.scan_frames([0, 0, 100, 227, 227, 454, 454, 681, 681], bottom_offset=681)
         self.assertEqual(captured, [0, 681])
-        self.assertEqual(len(result), 3)
+        self.assertEqual(len(result), 21)
+        self.assertEqual(scanner._scan_metadata, dict(reached_bottom=True, physical_count=42))
         self.assertEqual(scanner.device.drag.call_count, 3)
         self.assertTrue(all(call.kwargs['hold_duration'] == .4 for call in scanner.device.drag.call_args_list))
         scanner.device.swipe.assert_not_called()
 
     def test_scan_corrects_overshoot_before_reading_and_allows_partial_last_page(self):
         scanner, captured, result = self.scan_frames(
-            [0, 0, 240, 240, 467, 467, 690, 690, 681, 681, 908, 908], bottom_offset=908)
+            [0, 0, 240, 240, 467, 467, 690, 690, 681, 681, 908, 908], bottom_offset=908, partial_last=True)
         self.assertEqual(captured, [0, 681, 908])
-        self.assertEqual(len(result), 3)
+        self.assertEqual(len(result), 21)
+        self.assertEqual(scanner._scan_metadata, dict(reached_bottom=True, physical_count=44))
         correction = scanner.device.drag.call_args_list[3]
         self.assertGreater(correction.args[1][1], correction.args[0][1])
 

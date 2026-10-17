@@ -313,9 +313,11 @@ class OpsiMeowfficerFarming(MeowfficerTargetZoneMixin, CoinTaskMixin, OSMap):
         """
         logger.hr(f'大世界-耄耋相接（指定海域循环）, zone_id={zone.zone_id}', level=1)
         self.get_current_zone()
+        self.poll_background_resources(sample=True)
         if self.zone.zone_id != zone.zone_id or not self.is_zone_name_hidden:
             self.globe_goto(zone, types='SAFE', refresh=True)
             # 换海域会消耗行动力，开工检查必须重新读取。
+            self.invalidate_action_point_cache()
             fresh_ap = None
 
         # 智能调度代跑时决策读刚读过行动力：达到开工线时弹窗只会

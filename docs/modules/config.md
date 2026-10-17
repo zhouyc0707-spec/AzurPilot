@@ -350,6 +350,8 @@ stateDiagram-v2
 
 META 的旧 `OpsiAshBeacon.OpsiAshBeacon.OneHitMode` 开关迁移到整数 `AssistRequestLimit`（`true → 0`、`false → -1`），已有新值优先。`ConfigService.read()` 在只读合并时复用同一纯转换函数，确保运行器启动前也显示旧实例的实际策略；读取不写磁盘，后续事务保存才写入新字段。隐藏的 `AssistRequestState` 保留求援断点，不允许 WebUI 编辑。
 
+大世界的 `ActionPointCheckInterval`、`SkipStrategicSearchCheck` 从 `OpsiGeneral.OpsiGeneral` 移到 `OpsiHazard1Leveling.OpsiHazard1Leveling`。运行器与 WebUI 只读合并均保留旧值，已有新路径的显式设置优先；WebUI 不再返回旧路径，避免启动前保存其他参数时把新默认误写成用户设置。`RecordSeaMiles` 从旧开关变为天数间隔：旧 `true` 或 `[true]` 迁为 `0`（每轮），旧 `false` 或空列表迁为 `-1`（关闭），已有数字保持不变；新实例默认关闭，成功记录时间由隐藏的 `SeaMilesLastRecord` 持久化。
+
 ### 保存联动
 
 历史上 `ConfigUpdater.save_callback(key, value)` 以生成器模式返回联动写入（Emotion `Value`→`Record`；`OpsiScheduling` 与 `OpsiHazard1Leveling` 的 `OperationCoinsPreserve` 互相同步）。**截至 2026-09，旧 WebUI 移除后该方法已无调用方**：新 API 层在 `ConfigService._sync_record_time` 内等价实现了 Value→Record 刷新；黄币保留不再双向写回，智能调度两种模式均读取 `OpsiScheduling` 自身配置（`module/os/tasks/scheduling.py`）。新增保存联动应优先在 `ConfigService.patch` 的事务内实现。

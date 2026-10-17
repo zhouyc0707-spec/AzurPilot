@@ -26,6 +26,8 @@ from module.ocr.ocr import Digit, ocr_batch
 from module.combat.assets import GET_ITEMS_1, GET_ITEMS_2, GET_SHIP
 from module.os_shop.assets import OS_SHOP_CHECK, OS_SHOP_PURPLE_COINS, PORT_SUPPLY_CHECK, SHOP_PURPLE_COINS, SHOP_YELLOW_COINS
 from module.os_handler.resource_state import effective_task, resource_fast_path
+from module.os_handler.resource_read import BackgroundCoinRead, CoinReplenishRequired
+from module.os_handler.resource_write import record_resources_background, resource_observation_is_current
 from module.ui.ui import UI
 from module.log_res.log_res import LogRes
 
@@ -43,6 +45,96 @@ class OSStatus(UI):
     _shop_purple_coins = 0
     _cache_lock = threading.Lock()
     _last_yellow_coins = 0
+
+    def _background_coin_identity(self):
+        return (getattr(self.config, 'config_name', None), server.server,
+                getattr(self.config, '_opsi_coin_revision', 0))
+
+    def poll_background_resources(self, *, sample=False):
+        """无等待验收后台结果；只在已确认的地图画面提交下一张截图。"""
+        if not resource_fast_path(self.config):
+            return
+        state = self.__dict__.get('_coin_background')
+        if state is None:
+            if not sample:
+                return
+            state = self._coin_background = BackgroundCoinRead()
+        try:
+            reading = state.poll(self._background_coin_identity())
+        except Exception:
+            # 无效或失败的观察不覆盖最后一次成功读数，下个地图帧重新尝试。
+            logger.exception('[大世界-资源后台] 货币识别失败')
+            reading = None
+        if state.last_result is not None:
+            result, state.last_result = state.last_result, None
+            apply_ap = getattr(self, 'apply_background_action_point', None)
+            if (apply_ap is not None and resource_observation_is_current(
+                    self.config, 'ActionPoint', result.observed_at)):
+                apply_ap(result)
+        if reading is not None:
+            values = {}
+            if resource_observation_is_current(self.config, 'YellowCoin', reading.observed_at):
+                self._last_yellow_coins = self._shop_yellow_coins = reading.yellow
+                self._last_yellow_owner = reading.identity[:2]
+                values['YellowCoin'] = reading.yellow
+            if resource_observation_is_current(self.config, 'PurpleCoin', reading.observed_at):
+                self._shop_purple_coins = reading.purple
+                values['PurpleCoin'] = reading.purple
+            if values:
+                record_resources_background(self.config, values, observed_at=reading.observed_at)
+                logger.info(f'[大世界-资源后台] 已确认资源={values}')
+        if (state.accepted is not None and not resource_observation_is_current(
+                self.config, 'YellowCoin', state.accepted.observed_at)):
+            # 迟到低币结果既不能回退缓存，也不能触发补币中断；继续采集下一帧。
+            state.accepted = None
+            state.request()
+        ap_due = bool(sample and getattr(self, 'action_point_check_due', lambda: False)())
+        if sample and (state.wanted or ap_due) and self.is_in_map() and not self.handle_map_event():
+            readers = [OCR_SHOP_YELLOW_COINS, OCR_SHOP_PURPLE_COINS]
+            if ap_due:
+                from module.os_handler.action_point import OCR_ACTION_POINT_REMAIN_OS
+                readers.append(OCR_ACTION_POINT_REMAIN_OS)
+            state.submit(self.device.image, readers, self._background_coin_identity(),
+                         ap_epoch=self.__dict__.get('_ap_read_epoch', 0), ap_spent=self.__dict__.get('_ap_spent', 0))
+
+    def get_routine_yellow_coins(self):
+        """首次建立实时预算，此后从已有地图帧旁路采集，主流程不等 OCR。"""
+        state = self.__dict__.get('_coin_background')
+        if state is not None:
+            state.request()
+        self.poll_background_resources(sample=True)
+        state = self.__dict__.get('_coin_background')
+        if (self.__dict__.get('_last_yellow_coins', -1) >= 0 and state is not None
+                and self.__dict__.get('_last_yellow_owner') == self._background_coin_identity()[:2]):
+            return self._last_yellow_coins
+        return self.get_yellow_coins()
+
+    def background_coin_replenish_required(self):
+        """按最新保留值判断，补币任务不被自己的低黄币观察打断。"""
+        if not self.is_running_cl1_leveling:
+            return False
+        self.poll_background_resources(sample=self.is_in_map())
+        state = self.__dict__.get('_coin_background')
+        reading = state.accepted if state is not None else None
+        if reading is None or reading.identity != self._background_coin_identity():
+            return False
+        smart = getattr(self, 'is_running_smart_scheduling_task', lambda: False)()
+        preserve = (self._get_smart_scheduling_operation_coins_preserve() if smart else
+                    self.config.OpsiHazard1Leveling_OperationCoinsPreserve)
+        return reading.yellow < preserve
+
+    def handle_background_coin_interrupt(self, drop=None):
+        """后台只报告读数；主线程通过现有退出循环安全返回地图。"""
+        if not self.background_coin_replenish_required():
+            return
+        # 地图的自律 ON/OFF 外观可能同时匹配。保留低币请求，等加载/暂停
+        # 状态进入原有退出循环；事件已结束则由下一轮调度直接切换补币。
+        if self.is_in_map():
+            return
+        logger.info('[大世界-资源后台] 黄币不足，中断本轮计划作战并返回补黄币决策')
+        self.interrupt_auto_search(goto_main=False, end_task=False, drop=drop)
+        self.device.screenshot_interval_set()
+        raise CoinReplenishRequired()
 
     @property
     def is_in_task_explore(self) -> bool:
@@ -224,17 +316,25 @@ class OSStatus(UI):
         
         # 如果最终仍未获取到有效数值，使用上次缓存的值（线程安全）
         observed = yellow_coins > 0
+        if observed:
+            self._last_yellow_owner = self._background_coin_identity()[:2]
+        if observed and '_coin_background' in self.__dict__:
+            self._coin_background.accepted = None
         with self._cache_lock:
             if yellow_coins == 0:
-                logger.info(f'[大世界处理-状态] 使用缓存的黄币值: {self._last_yellow_coins}')
-                yellow_coins = self._last_yellow_coins
+                same_owner = self.__dict__.get('_last_yellow_owner') == self._background_coin_identity()[:2]
+                yellow_coins = self._last_yellow_coins if same_owner else 0
+                logger.info(f'[大世界处理-状态] 使用同实例缓存的黄币值: {yellow_coins}')
             
             # 缓存当前值用于降级
             self._last_yellow_coins = yellow_coins
         
         recognized = perf_counter()
         options = {'defer_history': True} if fast else {}
-        LogRes(self.config).record('YellowCoin', yellow_coins, observed=observed, **options)
+        if fast and observed:
+            record_resources_background(self.config, {'YellowCoin': yellow_coins})
+        else:
+            LogRes(self.config).record('YellowCoin', yellow_coins, observed=observed, **options)
         if fast and observed and isinstance(self.device.image, np.ndarray):
             self._yellow_coin_read = (
                 cache_key, crop(self.device.image, OCR_SHOP_YELLOW_COINS.buttons[0]).copy(), yellow_coins,
@@ -258,7 +358,10 @@ class OSStatus(UI):
             ocr = OCR_SHOP_PURPLE_COINS
         purple_coins = ocr.ocr(self.device.image)
         options = {'defer_history': True} if resource_fast_path(self.config) else {}
-        LogRes(self.config).record('PurpleCoin', purple_coins, observed=bool(getattr(ocr, 'last_valid', False)), **options)
+        if resource_fast_path(self.config) and bool(getattr(ocr, 'last_valid', False)):
+            record_resources_background(self.config, {'PurpleCoin': purple_coins})
+        else:
+            LogRes(self.config).record('PurpleCoin', purple_coins, observed=bool(getattr(ocr, 'last_valid', False)), **options)
         return purple_coins
 
     def os_shop_get_coins(self):
@@ -270,7 +373,8 @@ class OSStatus(UI):
         if fast:
             self._shop_yellow_coins = self.get_yellow_coins(with_purple=True)
             self._shop_purple_coins, valid = self._paired_purple_read
-            LogRes(self.config).record('PurpleCoin', self._shop_purple_coins, observed=valid, defer_history=True)
+            if valid:
+                record_resources_background(self.config, {'PurpleCoin': self._shop_purple_coins})
         elif isinstance(getattr(self, '_akashi_shop_session', None), dict):
             self._shop_yellow_coins = self.get_yellow_coins(skip_verification_delay=True)
             self._shop_purple_coins = self.get_purple_coins()
@@ -294,8 +398,9 @@ class OSStatus(UI):
                 source=source
             )
             queued = perf_counter()
-            # LogRes 已将值写入 config.modified，在此持久化
-            self.config.save()
+            # 常规资源由后台保存；同步提交与资源无关的业务配置修改。
+            if not fast or self.config.modified:
+                self.config.save()
             logger.info(f'[大世界-货币耗时] 识别与即时记录={recorded - started:.3f}s，'
                         f'历史快照提交={queued - recorded:.3f}s，配置={perf_counter() - queued:.3f}s')
         except Exception:

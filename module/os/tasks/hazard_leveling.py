@@ -25,6 +25,8 @@ from module.os.tasks.scheduling import CoinTaskMixin
 from module.statistics.opsi_runtime import record_cl1_akashi_encounter
 from module.os.sea_miles_ocr import OCR_SEA_MILES_DIGIT
 from module.os_handler.assets import MISSION_ENTER, MISSION_CHECK, MISSION_QUIT
+from module.os_handler.assets import STRATEGIC_SEARCH_MAP_OPTION_OFF
+from module.os_handler.resource_read import CoinReplenishRequired
 
 
 class OpsiHazard1Leveling(CoinTaskMixin, OSMap):
@@ -117,7 +119,12 @@ class OpsiHazard1Leveling(CoinTaskMixin, OSMap):
 
     def _cl1_run_battle(self):
         """执行侵蚀 1 战后的战略搜索与事件检索逻辑。"""
-        search_completed = self.run_strategic_search()
+        try:
+            search_completed = self.run_strategic_search()
+        except CoinReplenishRequired:
+            self._cl1_next_search_ready = False
+            self.handle_after_auto_search()
+            raise
 
         if not search_completed and search_completed is not None:
             logger.warning("[大世界-侵蚀1练级] 战略搜索返回 False，可能已被提前中断")
@@ -176,6 +183,9 @@ class OpsiHazard1Leveling(CoinTaskMixin, OSMap):
         if "is_akashi" in solved_events:
             # 明石遭遇计数归入运行时指标，任务仅报告明石事件已解决
             record_cl1_akashi_encounter(self.config)
+        self._cl1_next_search_ready = bool(solved_events) and self.is_in_map() and self.match_template_color(
+            STRATEGIC_SEARCH_MAP_OPTION_OFF, offset=(20, 20),
+        )
 
     def _cl1_handle_telemetry(self):
         """在后台异步线程中提交侵蚀 1 遥测数据指标。"""
@@ -217,7 +227,10 @@ class OpsiHazard1Leveling(CoinTaskMixin, OSMap):
         logger.hr("大世界-侵蚀1练级", level=1)
 
         while True:
-            self.run_hazard1_leveling_once()
+            try:
+                self.run_hazard1_leveling_once()
+            except CoinReplenishRequired:
+                self._cl1_resource_check(self._last_yellow_coins)
             self.config.check_task_switch()
 
     def run_hazard1_leveling_once(self, ap_preserve=None, fresh_ap=None):
@@ -257,9 +270,12 @@ class OpsiHazard1Leveling(CoinTaskMixin, OSMap):
             fresh_ap, cost=120, avoid_ap_overflow=True,
         )
 
+        # 已完成事件、EMP/修理后确认的同一海域不再重复 OCR；其他入口仍实时定位。
+        continue_ready = self.__dict__.pop('_cl1_next_search_ready', False) and self.is_in_map()
         # 获取当前区域
         try:
-            self.get_current_zone()
+            if not continue_ready:
+                self.get_current_zone()
         except MapDetectionError as e:
             logger.error("[大世界-侵蚀1练级] OS地图区域识别失败，请确保游戏已进入OS海域地图界面")
             logger.error(f"[大世界-侵蚀1练级] OCR识别错误: {e}")
@@ -272,7 +288,7 @@ class OpsiHazard1Leveling(CoinTaskMixin, OSMap):
         # 读数再关掉，复用它跳过；不足 100 时仍需弹窗开箱/购买。
         if self.action_point_reusable(fresh_ap, cost=120, avoid_ap_overflow=True):
             _fresh_total, _fresh_current = fresh_ap
-            logger.info(
+            logger.debug(
                 f'[大世界-侵蚀1练级] 复用刚读到的行动力'
                 f'(当前={_fresh_current}, 总={_fresh_total})，跳过行动点弹窗'
             )
@@ -283,7 +299,7 @@ class OpsiHazard1Leveling(CoinTaskMixin, OSMap):
             )
 
         if not self.is_running_smart_scheduling_task():
-            yellow_coins = self.get_yellow_coins()
+            yellow_coins = self.get_routine_yellow_coins()
             self._cl1_resource_check(yellow_coins)
             self.check_and_notify_action_point_threshold()
             self._cl1_ap_check()
@@ -297,12 +313,13 @@ class OpsiHazard1Leveling(CoinTaskMixin, OSMap):
             self.globe_goto(self.name_to_zone(22), types="SAFE", refresh=True)
         self.fleet_set(self.config.OpsiFleet_Fleet)
 
-        # ===== 海里数记录（可开关）=====
+        # ===== 海里数记录（按配置的天数间隔检测）=====
         sea_miles = None
-        if self.config.OpsiHazard1Leveling_RecordSeaMiles:
+        if self._sea_miles_record_due():
             try:
                 sea_miles = self.detect_and_record_sea_miles()
                 if sea_miles is not None:
+                    self.config.OpsiHazard1Leveling_SeaMilesLastRecord = current_time().replace(microsecond=0)
                     logger.info(f"[大世界-侵蚀1练级] 海里数检测完成: {sea_miles}")
                 else:
                     logger.warning("[大世界-侵蚀1练级] 海里数检测失败，但不影响后续流程")
@@ -320,28 +337,28 @@ class OpsiHazard1Leveling(CoinTaskMixin, OSMap):
 
     def os_check_leveling(self):
         """检查大世界阵容练级进度。"""
-        logger.hr("大世界-侵蚀1练级检查", level=1)
-        logger.attr("大世界危险海域上次运行", self.config.OpsiCheckLeveling_LastRun)
-        
         check_interval = self.config.OpsiCheckLeveling_CheckInterval
         if not isinstance(check_interval, int) or check_interval < 1:
             check_interval = 24
             logger.warning("[大世界-侵蚀1练级] 检测间隔无效，使用默认值 24 小时")
         
         time_run = self.config.OpsiCheckLeveling_LastRun + timedelta(hours=check_interval)
-        logger.info(f"[大世界-侵蚀1练级] 练级检查下次运行时间: {time_run}")
         if current_time().replace(microsecond=0) < time_run:
-            logger.info("[大世界-侵蚀1练级] 未到运行时间，跳过")
+            logger.debug(f"[大世界-侵蚀1练级] 练级检查未到期，下次运行: {time_run}")
             return
         target_level = self.config.OpsiCheckLeveling_TargetLevel
         if not isinstance(target_level, int) or target_level < 0 or target_level > 125:
             logger.error(f"[大世界-侵蚀1练级] 目标等级无效: {target_level}，必须是 0 到 125 之间的整数")
             raise ScriptError(f"Invalid opsi ship target level: {target_level}")
         if target_level == 0:
-            logger.info("[大世界-侵蚀1练级] 目标等级为 0，跳过")
+            logger.debug("[大世界-侵蚀1练级] 目标等级为 0，跳过")
             return
 
+        logger.hr("大世界-侵蚀1练级检查", level=1)
+        logger.attr("大世界危险海域上次运行", self.config.OpsiCheckLeveling_LastRun)
+
         # 到期的练度检查需要进入舰队界面，不能带着决策面板导航。
+        self._cl1_next_search_ready = False
         self._close_scheduling_action_point()
         logger.attr("[大世界-侵蚀1练级] 待检查舰队", self.config.OpsiFleet_Fleet)
         
@@ -851,33 +868,40 @@ class OpsiHazard1Leveling(CoinTaskMixin, OSMap):
                 self.delay_opsi_active_task(server_update=True, task='OpsiHazard1Leveling')
                 self.config.task_stop()
 
+    def _sea_miles_record_due(self):
+        """关闭时跳过，按上次成功检测时间判断是否已满指定天数。"""
+        interval = self.config.OpsiHazard1Leveling_RecordSeaMiles
+        if interval < 0:
+            return False
+        if interval == 0:
+            return True
+        last_record = self.config.OpsiHazard1Leveling_SeaMilesLastRecord
+        return last_record is None or (current_time() - last_record).days >= interval
+
     def _record_ap_and_coins(self, sea_miles=None):
-        """记录体力和货币到仪表盘数据库（始终执行）。
+        """记录货币及独立海里数；行动力实测由完整面板读取入口记录。
 
         Args:
             sea_miles (int | None): 海里数，由 `detect_and_record_sea_miles` 识别传入。
         """
         try:
-            if self._action_point_current > 0:
+            if sea_miles is not None:
                 from module.statistics.opsi_runtime import record_ap_snapshot
                 record_ap_snapshot(
                     config=self.config,
-                    ap_current=self._action_point_current,
-                    # 统计口径使用始终含体力箱的总行动力，避免防溢出上下文关闭开箱后丢箱
-                    ap_total=getattr(self, '_action_point_total_with_box', self._action_point_total),
-                    source='hazard1',
+                    ap_current=None,
+                    source='sea_miles',
                     distance=sea_miles,
                 )
 
             logger.info("[大世界-侵蚀1练级] 读取当前货币")
-            yellow_coins = self.get_yellow_coins(reuse=True)
+            yellow_coins = self.get_routine_yellow_coins()
             from module.statistics.cl1_database import db as cl1_db
             instance_name = getattr(self.config, 'config_name', 'default')
             # 读取历史紫币只为图表连续，由后台在同一统计事务内完成。
             cl1_db.async_add_coins_snapshot(
                 instance_name, yellow_coins, source='hazard1', carry_purple=True,
             )
-            self.config.save()
         except Exception as e:
             logger.error(f"[大世界-侵蚀1练级] 体力/货币记录异常: {e}")
 

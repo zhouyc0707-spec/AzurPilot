@@ -37,6 +37,7 @@ class TestSchedulingActionPointPanel(unittest.TestCase):
         self.runner.check_and_notify_action_point_threshold = Mock()
         self.runner.is_running_prevent_action_point_overflow_task = Mock(return_value=False)
         self.runner.get_yellow_coins = Mock(return_value=145321)
+        self.runner.get_routine_yellow_coins = Mock(return_value=145321)
         self.now = datetime(2026, 10, 3, 23)
         for name, value in (
             ('current_time', self.now), ('get_server_next_update', self.now + timedelta(hours=1)),
@@ -111,7 +112,7 @@ class TestSchedulingActionPointPanel(unittest.TestCase):
     def test_cl1_entry_reuses_replenished_read_without_reopening_panel(self):
         fresh_ap = self.runner._get_scheduling_action_point(keep_open=True)
         self.runner.config.OpsiHazard1Leveling_TargetZone = 0
-        self.runner.config.OpsiHazard1Leveling_RecordSeaMiles = False
+        self.runner.config.OpsiHazard1Leveling_RecordSeaMiles = -1
         self.runner.config.OpsiFleet_Fleet = 1
         self.runner.config.override = Mock()
         self.runner.zone = SimpleNamespace(zone_id=22, hazard_level=1)

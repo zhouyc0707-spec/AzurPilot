@@ -60,6 +60,8 @@ from module.os_handler.assets import (
 )
 from module.os_handler.storage import StorageHandler, RepairResult
 from module.os_handler.resource_state import reset_resource_caches
+from module.os_handler.resource_read import CoinReplenishRequired
+from module.os_handler.action_point import ACTION_POINTS_COST
 from module.os_handler.strategic import StrategicSearchHandler
 from module.statistics.opsi_runtime import (
     finish_meow_search_timer,
@@ -862,6 +864,8 @@ class OSMap(OSFleet, Map, GlobeCamera, StorageHandler, StrategicSearchHandler):
         self._auto_search_battle_count += 1
         logger.attr("战斗计数", self._auto_search_battle_count)
         if getattr(self, "is_running_cl1_leveling", False):
+            if self._auto_search_battle_count % 2 == 1:
+                self.consume_cached_action_point(5)
             try:
                 self._cl1_auto_search_battle_count += 1
                 logger.attr("CL1战斗计数", self._cl1_auto_search_battle_count)
@@ -874,6 +878,12 @@ class OSMap(OSFleet, Map, GlobeCamera, StorageHandler, StrategicSearchHandler):
                 )
             except Exception:
                 logger.debug("Failed to update cl1 battle counter", exc_info=True)
+
+        if self.config.task.command == 'OpsiMeowfficerFarming' and '_ap_snapshot' in self.__dict__:
+            hazard = self.zone.hazard_level
+            battles_per_round = 3 if hazard in (4, 5, 6) else 2
+            if (self._auto_search_battle_count - 1) % battles_per_round == 0:
+                self.consume_cached_action_point(ACTION_POINTS_COST.get(hazard, 40))
 
         # 耄耋相接任务数据收集
         if getattr(self, "_meow_searching_active", False) and getattr(
@@ -1035,6 +1045,7 @@ class OSMap(OSFleet, Map, GlobeCamera, StorageHandler, StrategicSearchHandler):
             if not unlock_checked and unlock_check_timer.reached():
                 logger.critical("[大世界] 当前海域未解锁自律，请先完成剧情任务。")
                 raise RequestHumanTakeover
+            self.handle_background_coin_interrupt(drop=drop)
             if self.is_in_map():
                 self.device.stuck_record_clear()
                 if not success:
@@ -1516,6 +1527,7 @@ class OSMap(OSFleet, Map, GlobeCamera, StorageHandler, StrategicSearchHandler):
                 else:
                     self.map_rescan_once(rescan_mode="full", drop=drop)
             except (
+                CoinReplenishRequired,
                 TaskEnd,
                 GameStuckError,
                 GameTooManyClickError,
@@ -1661,6 +1673,7 @@ class OSMap(OSFleet, Map, GlobeCamera, StorageHandler, StrategicSearchHandler):
                 self.hp_get()
                 return True
             except (
+                CoinReplenishRequired,
                 TaskEnd,
                 GameStuckError,
                 GameTooManyClickError,

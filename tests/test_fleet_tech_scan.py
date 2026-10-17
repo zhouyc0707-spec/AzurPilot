@@ -34,6 +34,20 @@ def merge(record, ships, **extra):
 
 
 class FleetTechRecordTests(unittest.TestCase):
+    def test_latest_snapshot_replaces_smaller_and_empty_results_without_erasing_manual_history(self):
+        record = merge({}, [observed(10102, 125), observed(10103, 120)])
+        record['manual'] = {'10103': {'owned': True, 'level': 125, 'lv120': True}}
+        before = copy.deepcopy(record['manual'])
+        reduced = merge(record, [observed(10102, 100)])
+        self.assertEqual(reduced['last_scan']['ships'], [(10102, 100)])
+        self.assertEqual(reduced['current']['10102'], 125)
+        self.assertEqual(reduced['manual'], before)
+        empty = merge(reduced, [])
+        self.assertEqual(empty['last_scan']['ships'], [])
+        self.assertEqual(empty['last_scan']['matched_count'], 0)
+        self.assertEqual(empty['current'], reduced['current'])
+        self.assertEqual(empty['manual'], before)
+
     def test_mind_cost_exclusions_do_not_filter_explicit_technology_import(self):
         from module.api.mind_calculator_service import MindCalculatorService
         with tempfile.TemporaryDirectory() as directory:

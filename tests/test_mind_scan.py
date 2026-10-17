@@ -539,9 +539,14 @@ class LevelRetryTests(unittest.TestCase):
 
     @staticmethod
     def current_card(reliable):
-        return [Card(752, 304, 4, dict(name='小信浓', level=110 if reliable else 0,
-                                     rarity='SSR', source='', review=not reliable),
-                     6 if reliable else 4, reliable)]
+        # 末页仍须从首列连续加载；前四张可靠副本只补齐布局，待核对目标保持第五列。
+        cards = [Card(93 + col * 165, 304, col,
+                      dict(name='小信浓', level=110, rarity='SSR', source='', review=False), 6, True)
+                 for col in range(5)]
+        cards[-1] = Card(752, 304, 4, dict(name='小信浓', level=110 if reliable else 0,
+                                        rarity='SSR', source='', review=not reliable),
+                        6 if reliable else 4, reliable)
+        return cards
 
     def test_two_failed_reads_then_third_recovery_keeps_the_ship(self):
         scanner = self.scanner()
@@ -601,8 +606,9 @@ class ScreenshotTests(unittest.TestCase):
         # 名单、等级和基础稀有度已确认的原始结果直接计费，无需修改核对字段。
         selected = [c.ship for c in self.cards if 90 <= c.ship['level'] <= 115]
         report = calculate(selected)
-        self.assertTrue(all(not ship['review'] for ship in selected))
-        self.assertEqual(report['included'], len(selected) - 1)
+        self.assertEqual([ship['name'] for ship in selected if ship['review']], ['新月'])
+        self.assertEqual(report['review'], 1)
+        self.assertEqual(report['included'], len(selected) - 2)
         self.assertEqual(report['excluded'], 1)  # 帕特莉夏为联动舰，保存但不计费。
         self.assertGreater(report['mind'], 0)
 

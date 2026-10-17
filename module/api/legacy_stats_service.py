@@ -100,6 +100,9 @@ def _ap_panel(instance):
     now = datetime.now()
     ap_rows = get_ap_timeline(now.year, now.month, instance)
     coin_rows = get_coins_timeline(now.year, now.month, instance)
+    # 与新版实测口径一致；海里数仍读取完整原始序列，不能补造总行动力。
+    measured_ap_rows = [row for row in ap_rows if row.get('ap_total') is not None
+                        and row.get('source') != 'hazard1_estimate']
 
     def points(rows, key, transform=None, fallback_key=None, extra_key=None):
         result = []
@@ -129,13 +132,13 @@ def _ap_panel(instance):
     return {
         'series': [
             {'key': 'ap', 'label': '体力',
-             'points': points(ap_rows, 'ap_total', fallback_key='ap', extra_key='ap_now')},
+             'points': points(measured_ap_rows, 'ap_total', extra_key='ap_now')},
             {'key': 'yellow_coins', 'label': '黄币', 'points': points(coin_rows, 'yellow_coins')},
             # 旧界面只在紫币大于 0 时才画（未进入大世界时恒为 0，画出来是一条贴底的直线）
             {'key': 'purple_coins', 'label': '紫币',
              'points': points(coin_rows, 'purple_coins', lambda value: value > 0)},
             {'key': 'distance', 'label': '海里数', 'points': points(ap_rows, 'distance')},
-            {'key': 'asset', 'label': '资产', 'points': points(ap_rows, 'asset')},
+            {'key': 'asset', 'label': '资产', 'points': points(measured_ap_rows, 'asset')},
         ],
     }
 

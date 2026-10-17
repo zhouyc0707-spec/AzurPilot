@@ -68,7 +68,7 @@ AzurPilot 在执行任务时天然经过大量战斗结算与资源画面。这�
 - 侵蚀 1 遥测提交（`Cl1DataSubmitter` → `ApiClient`）
 - 日报运行时事件采集、周期去重、LLM 文案生成与推送
 - 资源快照记录（`resource_stats`）与资源变动入口（`LogRes`）
-- 掉落截图按保留天数清理，过期后删除或备份到 `bak/`（`drop_cleanup`）
+- 掉落截图按保留天数清理，过期后删除或备份到 `bak/`（`drop_cleanup`，后台线程执行）
 - 大世界运行期统计事件的统一落库入口（`opsi_runtime`）
 - 大世界统计的原生存储与旧加密数据只读迁移（`module.persistence`）
 
@@ -340,6 +340,8 @@ flowchart TD
 
 ## 9. 状态模型
 
+行动力与行动力资产曲线只使用明确包含 `ap_total` 的完整实测快照。`LogRes` 收到仅含 `Value` 的地图读数时仍更新仪表盘和库存观察，但不写总行动力快照，也不从旧配置、缓存箱子或当前值补齐总量；面板箱子识别失败同样不能声称读到总量。海里数通过独立的距离快照保存，短猫收尾由完整面板读取入口记录行动力，不再附加缓存快照。新版统计、旧版 React 的 `legacy_stats_service._ap_panel()` 和 PyWebIO 的 `app_stat_action_point` 均排除既有缺少总量或来源为 `hazard1_estimate` 的行动力和资产点，保留其海里数及原始存储；明确实测为零或小于 200 的总量仍正常显示。回归入口为 `tests/test_opsi_ap_statistics.py`。
+
 日报周期是本层唯一显式的状态机（`daily_summary_periods.status`）：
 
 ```mermaid
@@ -420,7 +422,7 @@ stateDiagram-v2
 | `config/azurpilot.db` | 日报任务事件、周期状态、采集缺口 | 任务前后、战斗结束、日报流程 | `cleanup()` 保留 35 天 |
 | `config/azurpilot.db` 的 `farming_aggregates` | 全局/实例 farming 汇总 | 显式刷新或实例缓存缺失重算 | 事务更新六等级，读取不刷新时间 |
 | `config/azurpilot.db` 的六张 `ship_exp_*` 表 | 战斗耗时、每日经验及升级进度 | 显式保存或业务更新 | 样本 100 条 / 日统计 30 天 |
-| `screenshots/<genre>/`、`log/commission_rewards/<instance>/<月份>/` | 掉落与委托截图 | commit / 委托结算 | `DropRecord_RetentionDays` 天数清理（节流 1 小时），过期后按 `DropRecord_BackUpMethod` 删除 / 拷贝备份 / 压缩备份到 `bak/` |
+| `screenshots/<genre>/`、`log/commission_rewards/<instance>/<月份>/` | 掉落与委托截图 | commit / 委托结算 | `DropRecord_RetentionDays` 天数清理（节流 1 小时、后台线程执行），过期后按 `DropRecord_BackUpMethod` 删除 / 拷贝备份 / 压缩备份到 `bak/` |
 
 首次迁移可读取旧位置 `log/cl1/cl1_data.db`，保留旧库、JSON、CSV 和 `.bak`。后续只访问总库。每日备份使用 SQLite 备份接口保存总库，并按专用保护机制备份安全数据库、注册信息与密钥材料。
 
@@ -454,7 +456,7 @@ stateDiagram-v2
 正常运行使用总库；旧源、旧解码工具及回退格式边界遵循[普通业务数据存储](persistence.md)，不启动旧目录的原地迁移。
 
 - **`ItemGrid` 是被多处共享的单例状态**（`get_items.ITEM_GROUP` 是模块级实例）：`GetItemsStatistics`、`CampaignBonusStatistics`、`azur_stats.GetItems`、商店与仓库都改它的 `grids/item_class/similarity`。新增使用方时必须在使用前完整设置这些属性，如同 `_stats_get_items_load` 所做的那样，否则会带着上一场景的网格布局去匹配。数量侧同理：`amount_area` / `amount_area_rules` / `amount_ocr` / `amount_max` 都是按场景设置的，`azur_stats.GetItems` 会把前三个一起设好。
-- **删除是不可逆的**：`drop_cleanup` 只处理文件名匹配 `^\d{13}(_.+)?\.png$` 的文件，配置异常时按 0 处理（不清理）；`bak/` 内的备份不参与扫描（拷贝备份保留原修改时间，只看时间会被反复处理），压缩或拷贝失败时保留原文件。改清理逻辑时保持这些保守默认。
+- **删除是不可逆的**：`drop_cleanup` 只处理文件名匹配 `^\d{13}(_.+)?\.png$` 的文件，配置异常时按 0 处理（不清理）；`bak/` 内的备份不参与扫描（拷贝备份保留原修改时间，只看时间会被反复处理），压缩或拷贝失败时保留原文件。改清理逻辑时保持这些保守默认。清理入口 `cleanup_drop_screenshots_if_due()` 节流通过后交给后台线程执行并恒返回 0——积压时压缩备份耗时以分钟计（曾阻塞游戏主循环 2.5 分钟）；需要同步验证清理行为时直接调用 `cleanup_drop_screenshots()`。
 - **日报的 `period_key` 含服务器与时区信息**，改动 `get_daily_summary_window` 的窗口语义会让已存在库里的 period_key 失配，导致重复推送。
 - **数量识别先用真实切片回归**：`amount_digits` 的字形阈值、粘连拆分与 `remove_small_fragments` 的 OCR 兜底均需覆盖原生数字；不要把 OCR 旧输出作为真值，也不要凭删首位或末位修正超限值。回归包含重复数字、五位凭证、纸角和粗体图纸数字。
 - **遥测提交只发聚合指标**（battle_count/明石次数 + MD5 前缀 instance_id），不要往 `calculate_metrics` 里加可识别个人的字段。
@@ -502,7 +504,7 @@ record_siren_research_device(self)          # opsi_runtime 内部决定来源与
 
 - 日志前缀：`[统计-物品]`（识别修正）、`[统计-资源]`、`[统计-经验]`、`[统计-大世界]`（运行期事件）、`[统计-解密]`（显式旧解码工具）、`[日报]`（日报全链路）、`[掉落记录]`（清理）、`[基础-API]`（遥测提交）。`logger.attr('CL1单轮耗时', ...)` 等属性行适合 grep 单轮耗时。
 - 本地调试服务：`ALAS_DEBUG_SERVER=1` 启动调度器后，`module/debug/commission_debug.py` 可以不开游戏注入伪造委托收益并触发推送，验证统计口径与推送链路。
-- 测试：`tests/test_statistics_amount_digits.py` / `test_item_amount_area.py`（真实数量切片、严格上限、裁剪边界与单格失败保留其余物品）、`tests/test_statistics_transactions.py`（CL1 事务与并发）、`tests/test_daily_summary*.py`（日报窗口与聚合）、`tests/test_drop_cleanup.py`（清理与 `AzurStats.new` 节流）、`tests/test_archive.py`（删除/拷贝/压缩三种过期处理方式）、`tests/test_commission_settlement.py`、`tests/test_research_stats.py` / `test_research_drop.py` / `test_research_drop_repair.py`（科研口径、角标识别与记录订正）。
+- 测试：`tests/test_statistics_amount_digits.py` / `test_item_amount_area.py`（真实数量切片、严格上限、裁剪边界与单格失败保留其余物品）、`tests/test_statistics_transactions.py`（CL1 事务与并发）、`tests/test_daily_summary*.py`（日报窗口与聚合）、`tests/test_drop_cleanup.py`（清理、后台线程执行与 `AzurStats.new` 节流）、`tests/test_archive.py`（删除/拷贝/压缩三种过期处理方式）、`tests/test_commission_settlement.py`、`tests/test_research_stats.py` / `test_research_drop.py` / `test_research_drop_repair.py`（科研口径、角标识别与记录订正）。
 - 数据核查入口：使用 `uv run python -m dev_tools.business_storage --config-dir ./config check` 检查总库；farming 汇总查询 `farming_aggregates`。科研记录里出现「当前 `assets/stats/research_items/` 与名称表都没有的模板名」基本就是模板改名残留，用 `dev_tools/research_drop_repair.py` 拿原截图重放订正。
 - 未识别物品：检查 `screenshots/unknown_items/` 下的红框标注图，补模板后重跑 `DropStatistics.extract_template`。
 

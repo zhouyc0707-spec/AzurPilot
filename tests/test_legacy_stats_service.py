@@ -226,8 +226,10 @@ class ApPanelTests(unittest.TestCase):
             panel = _ap_panel('alas')
         series = {item['key']: item for item in panel['series']}
         self.assertEqual(list(series), ['ap', 'yellow_coins', 'purple_coins', 'distance', 'asset'])
-        # ap_total 缺失时回落到 ap 字段
-        self.assertEqual([point['value'] for point in series['ap']['points']], [100, 120])
+        # 当前行动力不是完整总量；保留它的海里数，但不画总行动力或资产。
+        self.assertEqual([point['value'] for point in series['ap']['points']], [100])
+        self.assertEqual([point['value'] for point in series['asset']['points']], [900])
+        self.assertEqual([point['value'] for point in series['distance']['points']], [12, 15])
         # 紫币只保留大于 0 的点
         self.assertEqual([point['value'] for point in series['purple_coins']['points']], [3])
         self.assertEqual(len(series['yellow_coins']['points']), 2)
@@ -241,8 +243,8 @@ class ApPanelTests(unittest.TestCase):
         def timeline(year, month, instance):
             calls.append((year, month))
             if (year, month) == (previous.year, previous.month):
-                return [{'ts': f'{previous:%Y-%m}-15 10:00:00', 'ap': 999}]
-            return [{'ts': f'{now:%Y-%m}-02 10:00:00', 'ap': 100}]
+                return [{'ts': f'{previous:%Y-%m}-15 10:00:00', 'ap_total': 999}]
+            return [{'ts': f'{now:%Y-%m}-02 10:00:00', 'ap_total': 100}]
 
         with patch('module.statistics.opsi_month.get_ap_timeline', timeline), \
                 patch('module.statistics.opsi_month.get_coins_timeline', lambda year, month, instance: []):

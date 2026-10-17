@@ -82,6 +82,10 @@ def finish_battle_timer(config: Any, source: str | None) -> float | None:
 
 def refresh_action_point(main: Any) -> bool:
     """刷新大世界行动力缓存。"""
+    from module.os_handler.resource_state import resource_fast_path
+    if resource_fast_path(main.config):
+        # 常规统计不得为了补一条曲线触发行动力检查或将估计值写成实测值。
+        return False
     if hasattr(main, "get_current_ap"):
         main.get_current_ap()
         return True
@@ -92,9 +96,11 @@ def refresh_action_point(main: Any) -> bool:
     return True
 
 
-def record_ap_snapshot(config: Any, ap_current: int, source: str, distance: int = None, ap_total: int = None,
+def record_ap_snapshot(config: Any, ap_current: int | None, source: str, distance: int = None, ap_total: int = None,
                        *, observed_at: datetime = None) -> None:
-    """按来源记录行动力快照。"""
+    """记录含箱总行动力或独立海里数；仅当前行动力不生成统计。"""
+    if ap_total is None and distance is None:
+        return
     try:
         from module.statistics.cl1_database import db as cl1_db
 
@@ -227,20 +233,10 @@ def finish_meow_search_timer(
 ) -> float | None:
     """按完成的海域搜索记录耄耋相接单轮耗时。"""
     try:
+        # 完整面板读数由 LogRes 记录；这里不能从缓存补造一条总量快照。
         refresh_action_point(main)
     except Exception:
         logger.debug("[统计-大世界] 获取结束行动力失败")
-    else:
-        try:
-            record_ap_snapshot(
-                main.config,
-                ap_current=main._action_point_current,
-                # 统计口径使用始终含体力箱的总行动力
-                ap_total=getattr(main, '_action_point_total_with_box', main._action_point_total),
-                source="meow",
-            )
-        except Exception:
-            logger.debug("记录耄耋相接行动力快照失败", exc_info=True)
 
     duration = time.time() - search_started_at
     hazard_level = meow_hazard_level_from_runtime(main)

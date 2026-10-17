@@ -30,15 +30,17 @@ def invalidate_coin_cache(config):
 
 def reset_resource_caches(handler):
     """初始化或应用内恢复后，旧面板、购买次数与货币画面均须重新确认。"""
-    for name in ('_ap_snapshot', '_ap_purchase_count', '_yellow_coin_read', '_paired_purple_read'):
+    for name in ('_ap_snapshot', '_ap_purchase_count', '_yellow_coin_read', '_paired_purple_read',
+                 '_coin_background', '_cl1_next_search_ready', '_last_yellow_coins', '_last_yellow_owner'):
         handler.__dict__.pop(name, None)
 
 
 @dataclass(frozen=True)
 class ActionPointSnapshot:
-    """仅完整面板成功读取时更新的箱子库存与单调计时。"""
+    """面板确认的箱子库存、当前行动力下界及最近实测的单调计时。"""
 
     identity: tuple
     checked_at: float
     inventory_revision: int
     boxes: tuple
+    current: int = 0

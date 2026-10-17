@@ -149,6 +149,9 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
         """解析行动力快照并按时间排序。"""
         raw_points = []
         for pt in timeline:
+            # 独立海里数与旧当前值不代表总库存，不能回落成零或估计总量。
+            if pt.get("ap_total") is None or pt.get("source") == "hazard1_estimate":
+                continue
             ts_raw = pt.get("ts", "")
             try:
                 dt = datetime.fromisoformat(ts_raw)
@@ -159,7 +162,7 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
                     "dt": dt,
                     # ap_total 为含全部体力箱的总行动力（图表主序列），
                     # ap_now 为当前行动力（不含体力箱），仅用于数值展示。
-                    "ap": int(pt.get("ap_total", pt.get("ap", 0))),
+                    "ap": int(pt["ap_total"]),
                     "ap_now": int(pt.get("ap", 0)),
                     "source": pt.get("source", "-"),
                 }
