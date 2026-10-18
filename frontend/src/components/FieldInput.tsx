@@ -7,6 +7,7 @@ import type { Value } from '../api/types'
 import { lazy, Suspense } from 'react'
 import { AutoTextarea } from './AutoTextarea'
 import { useApp } from '../app/context'
+import { taskPriorityText, translatedTaskPriority } from '../config/taskPriorityText'
 
 const YamlEditor = lazy(() => import('./YamlEditor').then(module => ({default: module.YamlEditor})))
 
@@ -16,7 +17,7 @@ interface Props {
   preserveText?: boolean; invalid?: boolean; resubmitOnEdit?: boolean
 }
 export function FieldInput({id, value, onChange, type, options, disabled, label, mode, translateOption, preserveText, invalid, resubmitOnEdit}: Props) {
-  const {ui} = useApp()
+  const {ui, t} = useApp()
   const accessibility = {'aria-label': label, 'aria-invalid': invalid || undefined, 'aria-describedby': invalid ? `${id}-status` : undefined}
   // 只读时间沿用旧界面的原始文本，保留秒、小数秒和历史格式。
   if (type === 'datetime' && disabled) return <input id={id} aria-label={label} readOnly value={String(value ?? '').replace('T', ' ')} />
@@ -36,7 +37,8 @@ export function FieldInput({id, value, onChange, type, options, disabled, label,
       {options.map(option => <option value={JSON.stringify(option)} key={JSON.stringify(option)}>{translateOption?.(option) ?? String(option)}</option>)}
     </Select>
   }
-  if (type === 'textarea' || type === 'task_priority') return <AutoTextarea id={id} value={String(value ?? '')} disabled={disabled} label={label} invalid={invalid} onChange={onChange}/>
+  if (type === 'task_priority') return <AutoTextarea id={id} value={translatedTaskPriority(String(value ?? ''), t)} disabled={disabled} label={label} invalid={invalid} onChange={next => onChange(taskPriorityText(next))}/>
+  if (type === 'textarea') return <AutoTextarea id={id} value={String(value ?? '')} disabled={disabled} label={label} invalid={invalid} onChange={onChange}/>
   // mode=text 用于语义上允许数字或文本的字段；即使旧配置当前存的是数字也必须显示文本框。
   const isNumber = mode !== 'text' && (typeof value === 'number' || ['int', 'number', 'float'].includes(type ?? ''))
   const Input = type === 'password' ? PasswordInput : 'input'

@@ -39,8 +39,7 @@ React 旧版统计的手动刷新、60 秒轮询及 `statistics`／`overview` �
 - 渲染单页应用（hash 路由）：主页、实例总览、任务配置、统计、系统设置、更新器等页面
 - WebSocket 连接管理：认证、心跳、请求关联、超时与重连（`src/api/client.ts`）
 - 配置表单展示与保存：字段保存队列、草稿恢复、重试与数值校验（`src/config/EditQueue.ts`）
-- 任务优先级字段的拖动排序与解析：`src/app/taskPriority.ts`（纯函数：解析/合并/移动）+ `src/components/TaskPriorityField.tsx`（拖拽交互），写入 `Scheduler_Scheduler_Tasks`，提交值用 `
-> ` 分隔（注释行与全角箭头已兼容归一）
+- 通用设置的任务优先级由 `FieldInput` 的 `task_priority` 专用文本框显示，每行保留英文任务标识，并以 `# 本地化任务名` 附加已有翻译；`src/config/taskPriorityText.ts` 的纯函数负责显示转换与提交清理，保存到 `General.YukikazeTaskManager.TaskPriorityAdjustment` 时仅提交英文标识，使用 `\n> ` 分隔，翻译注释不写入配置（兼容注释行与全角箭头）
 - 主题、语言、背景等浏览器侧偏好的保存与应用（localStorage / IndexedDB）
 - 日志面板在数据进入 React state 前只保留最近 1000 条，作为后端环形缓冲之外的独立防线，避免异常历史 payload 在 WebView2 中生成超大 DOM
 - 独立 mock 服务（`mock/`），无需 Python、ADB 或模拟器即可开发验证前端交互
@@ -58,11 +57,11 @@ React 旧版统计的手动刷新、60 秒轮询及 `statistics`／`overview` �
 frontend/
 ├── src/main.tsx              # 应用入口：hash 路由表、错误兜底、先加载主题再挂载
 ├── src/api/                  # client.ts 连接层；generated.ts 与 contract.json 为生成产物
-├── src/app/                  # 布局、主题系统（theme.ts 按需加载）、连接上下文、任务优先级解析（taskPriority.ts）、各类偏好
+├── src/app/                  # 布局、主题系统（theme.ts 按需加载）、连接上下文、各类偏好
 ├── src/pages/                # 页面：Home / Overview / TaskConfig / Statistics / Settings / Updater 等
 ├── src/stock/                # 茗喵证券交易终端、开户登录、身份信息与行情图表
-├── src/components/           # 可复用组件：FormControls、LogPanel、StatisticsChart、TaskPriorityField（任务优先级拖动排序）、实例切换等
-├── src/config/               # EditQueue 跨页面字段保存队列、草稿恢复、输入校验
+├── src/components/           # 可复用组件：FormControls、FieldInput（含任务优先级文本框）、LogPanel、StatisticsChart、实例切换等
+├── src/config/               # EditQueue 跨页面字段保存队列、草稿恢复、输入校验、taskPriorityText 任务优先级显示与提交清理
 ├── src/styles/               # 设计变量与界面样式（apple / forms / compact / minimal 等 css）
 ├── src/i18n.ts               # 控制台固定文案（五种语言），独立于游戏翻译 module/config/i18n
 ├── e2e/                      # Playwright 浏览器测试
