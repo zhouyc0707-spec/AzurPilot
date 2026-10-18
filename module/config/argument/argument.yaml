@@ -1614,6 +1614,7 @@ OpsiShop:
     > OrdnanceTestingReportT3 > OrdnanceTestingReportT2 > DevelopmentMaterialT2 > OrdnanceTestingReportT1
     > METARedBook > CrystallizedHeatResistantSteel > NanoceramicAlloy > NeuroplasticProstheticArm > SupercavitationGenerator
   DisableBeforeDate: 0
+  MonthEndOnly: false
 OpsiVoucher:
   Filter: |-
     LoggerAbyssal > LoggerObscure > Book > Coin > Fragment

@@ -167,7 +167,9 @@ OpsiAshBeacon.run() → META 页攻击 → MetaReward 领奖 → task_delay(serv
 
 ### 港口商店购买
 
-`os_shop` / 智能调度月末清理都调 `perform_port_shop_purchase()`：找最近友方港口 → `port_shop_enter` → `os_shop_get_items`（ItemGrid 扫描 + 滚动翻页）→ `Selector` 过滤 → 逐项 `os_shop_buy`（金额确认、黄/紫币校验）→ 退出。返回「是否买到了东西」，任务层据此决定延迟策略。
+`os_shop` / 智能调度月末清理都调 `perform_port_shop_purchase()`：找最近友方港口 → `port_shop_enter` → `os_shop_get_items`（ItemGrid 扫描 + 滚动翻页）→ `Selector` 过滤 → 逐项 `os_shop_buy`（金额确认、黄/紫币校验）→ 退出。普通购买返回「本轮货架是否非空」，任务层据此决定延迟策略。
+
+独立大世界商店任务的 `OpsiShop.MonthEndOnly` 默认关闭，位于 `DisableBeforeDate` 下方。开启后优先于原数字限日，按游戏服务器日历仅在当月最后一天购买，自动适配大小月和闰年；非末日直接延期至当月末服务器零点，不加载地图或初始化游戏。末日沿用原商品过滤、购买和购后延期；关闭后恢复原 `DisableBeforeDate` 规则（当天日期不大于该值时跳过，0 不限制）。这是独立任务的日期限制，不影响智能调度月末清理复用的购买流程、专购行动力箱或海域内明石商店。
 
 智能调度的 `OpsiScheduling.OpsiScheduling.BuyActionPoint` 默认关闭，独立于两种开荒任务；仅本月每月开荒达到 100% 或智能开荒第一轮完成后允许执行。专购通过 `perform_port_shop_purchase(action_point_only=True)` 只买全部行动力箱，正常退出港口即在 `OpsiScheduling.Storage.Storage` 的 `ActionPointPurchase` 中记录本月完成，不修改普通商店购买状态。购买中断保留断点；恢复时已无可购行动力也正常收尾。进入商店失败、购买异常或跨月不会记录完成。
 
@@ -219,6 +221,7 @@ META 页截图 → MetaState 状态机 → 攻击/领奖循环
 | `OpsiGeneral.BuyActionPointLimit` 等行动力参数 | 决定 `action_point_buy` 的行为 |
 | `OpsiHazard1Leveling.ActionPointCheckInterval` | 非负整数分钟，默认 0 关闭定时读取；侵蚀一、智能调度和短猫共用 |
 | `OpsiAshBeacon.*`（Enable/AttackMode/EnsureFullyCollected） | 信标任务开关与触发条件 |
+| `OpsiShop.MonthEndOnly / DisableBeforeDate` | 仅独立商店任务：前者默认关闭，开启仅在服务器月末最后一天购买；关闭沿用后者的数字限日 |
 | `OpsiMeowfficerFarming.OpsiShopFilter` 等货架策略 | 经 `Selector` 生效 |
 | `OpsiSimulator.OpsiSimulatorParameters.*` | 模拟器参数（仅模拟器读取） |
 | `OpsiDaemon.RepairShip/SelectEnemy` | 大世界守护使用 port/os_handler 能力的开关 |

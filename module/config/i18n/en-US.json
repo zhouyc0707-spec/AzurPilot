@@ -4061,6 +4061,10 @@
     "DisableBeforeDate": {
       "name": "Do not purchase from OpSi shop before the Xth day of each month",
       "help": "Starting from the day after the specified date, buy from Operation Siren Shop once a day.\n0 means no limit, buy every day."
+    },
+    "MonthEndOnly": {
+      "name": "Purchase only on the last day of each month",
+      "help": "When enabled, purchase only on the last day of the month according to the game server date, automatically accounting for month length and leap years. Before month end, defer this task until the last day of the current month.\nThis takes priority over the monthly purchase start date setting. When disabled, the original date rule applies.\nOnly affects this task. Smart scheduler purchases and Akashi's shop follow their existing rules."
     }
   },
   "OpsiVoucher": {

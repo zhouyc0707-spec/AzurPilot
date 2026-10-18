@@ -15176,6 +15176,10 @@
       "DisableBeforeDate": {
         "type": "input",
         "value": 0
+      },
+      "MonthEndOnly": {
+        "type": "checkbox",
+        "value": false
       }
     },
     "Storage": {

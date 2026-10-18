@@ -13,11 +13,23 @@
 from datetime import datetime, timedelta
 
 from module.config.time_source import now as current_time
-from module.config.utils import get_server_next_update, get_os_reset_remain, get_os_next_reset
+from module.config.utils import get_server_next_update, get_os_reset_remain, get_os_next_reset, get_os_next_reset_after
 from module.logger import logger
 from module.exception import GameStuckError
 from module.os.map import OSMap
 from module.os_shop.assets import OS_SHOP_CHECK
+
+
+def defer_month_end_shop(config):
+    """未到服务器当月最后一天时延期独立商店任务，不初始化游戏页面。"""
+    if not getattr(config, 'OpsiShop_MonthEndOnly', False):
+        return
+    now = current_time()
+    month_end = get_os_next_reset_after(now) - timedelta(days=1)
+    if now < month_end:
+        logger.info(f'大世界商店仅在每月最后一天购买，延迟到 {month_end}')
+        config.task_delay(target=month_end)
+        config.task_stop()
 
 
 class OpsiShop(OSMap):
@@ -31,9 +43,10 @@ class OpsiShop(OSMap):
             out: page_os, 大世界地图
         """
         logger.hr('大世界-大世界商店+', level=1)
+        defer_month_end_shop(self.config)
         today = current_time().day
         limit = self.config.OpsiShop_DisableBeforeDate
-        if today <= limit:
+        if not getattr(self.config, 'OpsiShop_MonthEndOnly', False) and today <= limit:
             logger.info(f'大世界商店+延迟运行，今日日期 {today} <= 限制日期 {limit}')
             self.config.task_delay(server_update=True)
             self.config.task_stop()

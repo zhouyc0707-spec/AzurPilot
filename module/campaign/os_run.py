@@ -126,6 +126,10 @@ class OSCampaignRun(OSMapOperation):
 
     def opsi_shop(self):
         """执行大世界港口商店购买任务。"""
+        from module.os.tasks.shop import defer_month_end_shop
+
+        # 新月末开关在地图初始化前检查，避免非购买日触发首次搜索或导航。
+        defer_month_end_shop(self.config)
         try:
             self._run_opsi_task_with_ap_overflow_guard(lambda campaign: campaign.os_shop())
         except ActionPointLimit as e:
