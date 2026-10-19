@@ -13,11 +13,9 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 
-from module.base.utils import load_image
 from module.config.config_updater import ConfigUpdater
 from module.base.async_executor import async_executor
 from module.os.operation_siren import OperationSiren
-from module.os_handler.os_status import OCR_SHOP_YELLOW_COINS
 from module.os_handler.resource_read import BackgroundCoinRead, CoinReading, CoinReplenishRequired, read_coins
 from module.os_handler.resource_state import ActionPointSnapshot, reset_resource_caches
 from module.os_handler.resource_write import record_resources_background
@@ -31,9 +29,9 @@ class BackgroundRecognitionTests(unittest.TestCase):
         self.stamp = datetime(2026, 10, 15, 19)
         self.state = BackgroundCoinRead()
 
-    def finish(self, yellow=50000, *, valid=True, identity=None, sampled_at=0):
+    def finish(self, yellow=50000, purple=100, *, valid=True, identity=None):
         future = self.state.future = Future()
-        future.set_result(CoinReading(identity or self.identity, self.stamp, yellow, valid, sampled_at=sampled_at))
+        future.set_result(CoinReading(identity or self.identity, self.stamp, yellow, purple, valid))
         return self.state.poll(self.identity)
 
     def test_pending_inference_never_waits(self):
@@ -52,20 +50,21 @@ class BackgroundRecognitionTests(unittest.TestCase):
         self.assertIsNone(self.finish(yellow=0))
         self.assertEqual(self.finish(yellow=0).yellow, 0)
 
-    def test_changed_yellow_balance_needs_two_matching_frames(self):
+    def test_both_currency_values_must_stabilize(self):
         self.assertIsNone(self.finish())
-        self.assertIsNone(self.finish(yellow=49000))
-        self.assertEqual(self.finish(yellow=49000).yellow, 49000)
+        self.assertIsNone(self.finish(purple=101))
+        self.assertIsNone(self.finish(yellow=49000, purple=101))
+        self.assertEqual(self.finish(yellow=49000, purple=101).yellow, 49000)
 
     def test_verified_round_stops_sampling_until_next_request(self):
         self.finish()
         self.finish()
         reader = SimpleNamespace(buttons=[(0, 0, 4, 4)])
         with patch('module.os_handler.resource_read._executor.submit', return_value=Future()) as submit:
-            self.state.submit(np.zeros((10, 10, 3)), [reader], self.identity)
+            self.state.submit(np.zeros((10, 10, 3)), [reader, reader], self.identity)
             submit.assert_not_called()
             self.state.request()
-            self.state.submit(np.zeros((10, 10, 3)), [reader], self.identity)
+            self.state.submit(np.zeros((10, 10, 3)), [reader, reader], self.identity)
             submit.assert_called_once()
 
     def test_transaction_revision_or_instance_change_rejects_old_frames(self):
@@ -87,42 +86,12 @@ class BackgroundRecognitionTests(unittest.TestCase):
         self.assertEqual(submit.call_args.args[2][0].buttons, (0, 0, 4, 4))
 
     def test_field_validation_is_independent_and_does_not_mutate_front_reader(self):
-        readers = [SimpleNamespace(buttons=[(0, 0, 4, 4)], last_valid=True) for _ in range(2)]
-        with patch('module.os_handler.resource_read.ocr_batch', return_value=[51000, 601]):
+        readers = [SimpleNamespace(buttons=[(0, 0, 4, 4)], last_valid=True) for _ in range(3)]
+        with patch('module.os_handler.resource_read.ocr_batch', return_value=[51000, 100, 601]):
             result = read_coins(np.zeros((10, 10, 3)), readers, self.identity, self.stamp)
         self.assertTrue(result.valid)
         self.assertIsNone(result.ap)
         self.assertEqual(readers[0].buttons, [(0, 0, 4, 4)])
-
-    def test_map_read_needs_only_the_visible_yellow_field(self):
-        reader = SimpleNamespace(buttons=[(0, 0, 4, 4)], last_valid=True)
-        with patch('module.os_handler.resource_read.ocr_batch', return_value=[97451]):
-            result = read_coins(np.zeros((10, 10, 3)), [reader], self.identity, self.stamp)
-        self.assertTrue(result.valid)
-        self.assertEqual(result.yellow, 97451)
-        self.assertIsNone(result.ap)
-
-    def test_failed_yellow_does_not_discard_a_valid_current_ap(self):
-        readers = [SimpleNamespace(buttons=[(0, 0, 4, 4)], last_valid=valid) for valid in (False, True)]
-        with patch('module.os_handler.resource_read.ocr_batch', return_value=[0, 123]):
-            result = read_coins(np.zeros((10, 10, 3)), readers, self.identity, self.stamp)
-        self.assertFalse(result.valid)
-        self.assertEqual(result.ap, 123)
-
-    def test_invalidated_pending_result_is_drained_without_enqueuing_another(self):
-        self.assertIsNone(self.finish(yellow=91760, sampled_at=1))
-        pending = self.state.future = Future()
-        with patch('module.os_handler.resource_read.monotonic', return_value=2):
-            self.state.invalidate()
-        reader = SimpleNamespace(buttons=[(0, 0, 4, 4)])
-        with patch('module.os_handler.resource_read._executor.submit') as submit:
-            self.state.submit(np.zeros((10, 10, 3)), [reader], self.identity)
-            submit.assert_not_called()
-        pending.set_result(CoinReading(self.identity, self.stamp, 91760, True, sampled_at=1))
-        self.assertIsNone(self.state.poll(self.identity))
-        self.assertIsNone(self.state.last_result)
-        self.assertIsNone(self.finish(yellow=97451, sampled_at=3))
-        self.assertEqual(self.finish(yellow=97451, sampled_at=4).yellow, 97451)
 
 
 class BackgroundRuntimeTests(unittest.TestCase):
@@ -144,99 +113,14 @@ class BackgroundRuntimeTests(unittest.TestCase):
         self.writer = self.enterContext(patch('module.os_handler.os_status.record_resources_background'))
         self.enterContext(patch('module.os_handler.action_point.record_resources_background'))
 
-    def test_changed_map_balance_is_confirmed_before_next_scheduling_decision(self):
-        self.runner.config.task.command = 'OpsiScheduling'
-        self.runner._last_yellow_coins = 91760
-        self.runner._last_yellow_owner = self.runner._background_coin_identity()[:2]
-        previous = self.runner.device.image.copy()
-        self.runner._yellow_coin_read = (
-            ('isolated', 'cn', 'map', 0),
-            previous[27:48, 1038:1128].copy(), 91760,
-        )
-        fixture = Path(__file__).parent / 'fixtures/opsi_yellow_coin_video/97451.png'
-        self.runner.device.image[27:48, 1038:1128] = load_image(str(fixture))
-        state = self.runner._coin_background
-        state.frame = previous
-        state.candidate = CoinReading(self.runner._background_coin_identity(), datetime.now(), 91760, True)
-        state.future = Future()
-        state.future.set_result(state.candidate)
-        self.runner.appear = Mock(return_value=False)
-        self.runner.appear_then_click = Mock(return_value=False)
-        self.runner.loop = lambda **kwargs: iter(range(2))
-        self.runner.is_running_prevent_action_point_overflow_task = Mock(return_value=False)
-        self.runner._get_scheduling_action_point = Mock(return_value=(1608, 8))
-        self.runner._run_smart_scheduling_decision = Mock()
-        self.runner._close_scheduling_action_point = Mock()
-        with patch.object(OCR_SHOP_YELLOW_COINS, 'ocr', return_value=97451), \
-                patch.object(OCR_SHOP_YELLOW_COINS, 'last_valid', True, create=True), \
-                patch('module.os_handler.resource_read._executor.submit', return_value=Future()):
-            self.runner.run_smart_scheduling_once()
-        self.runner._run_smart_scheduling_decision.assert_called_once_with(97451, 1608, 8)
-        self.assertEqual(self.runner._last_yellow_coins, 97451)
-        self.writer.assert_called_once_with(self.runner.config, {'YellowCoin': 97451})
-
-    def test_meow_polls_current_yellow_without_reading_or_overwriting_purple(self):
-        self.runner.config.task.command = 'OpsiMeowfficerFarming'
-        self.runner._shop_purple_coins = 31163
-        state = self.runner._coin_background
-        state.frame = self.runner.device.image
-        state.candidate = CoinReading(self.runner._background_coin_identity(), datetime.now(), 97451, True)
-        state.future = Future()
-        state.future.set_result(state.candidate)
-        self.assertFalse(self.runner.background_coin_replenish_required())
-        self.assertEqual(self.runner._last_yellow_coins, 97451)
-        self.assertEqual(self.runner._shop_purple_coins, 31163)
-        self.writer.assert_called_once_with(
-            self.runner.config, {'YellowCoin': 97451}, observed_at=state.accepted.observed_at,
-        )
-        self.runner.appear = Mock(return_value=False)
-        with patch.object(OCR_SHOP_YELLOW_COINS, 'ocr', side_effect=AssertionError('不得同步 OCR')), \
-                patch('module.os_handler.resource_read._executor.submit', return_value=Future()):
-            self.assertEqual(self.runner.get_routine_yellow_coins(), 97451)
-
-    def test_changed_digits_restart_background_sampling_after_stable_read(self):
-        state = self.runner._coin_background
-        state.frame = self.runner.device.image.copy()
-        state.accepted = CoinReading(self.runner._background_coin_identity(), datetime.now(), 91760, True)
-        state.wanted = False
-        self.runner.device.image[27:48, 1038:1128] = 255
-        self.runner.action_point_check_due = Mock(return_value=False)
-        with patch.object(state, 'submit') as submit:
-            self.runner.poll_background_resources(sample=True)
-        self.assertIsNone(state.accepted)
-        self.assertTrue(state.wanted)
-        self.assertEqual(submit.call_args.args[1], [OCR_SHOP_YELLOW_COINS])
-        self.writer.assert_not_called()
-
-    def test_pending_frame_cannot_overwrite_a_newer_synchronous_confirmation(self):
-        state = self.runner._coin_background
-        old = CoinReading(self.runner._background_coin_identity(), datetime.now(), 91760, True)
-        state.candidate = old
-        state.future = Future()
-        self.runner.appear = Mock(return_value=False)
-        self.runner.appear_then_click = Mock(return_value=False)
-        self.runner.loop = lambda **kwargs: iter(range(2))
-        with patch.object(OCR_SHOP_YELLOW_COINS, 'ocr', return_value=97451), \
-                patch.object(OCR_SHOP_YELLOW_COINS, 'last_valid', True, create=True):
-            self.assertEqual(self.runner.get_yellow_coins(), 97451)
-        state.future.set_result(old)
-        self.runner.poll_background_resources()
-        self.assertEqual(self.runner._last_yellow_coins, 97451)
-        self.writer.assert_called_once_with(self.runner.config, {'YellowCoin': 97451})
-
     def test_routine_work_continues_using_verified_value_while_ocr_is_pending(self):
         self.runner._last_yellow_coins = 52000
         self.runner._last_yellow_owner = self.runner._background_coin_identity()[:2]
         self.runner._coin_background.future = Future()
-        self.runner._yellow_coin_read = (
-            ('isolated', 'cn', 'map', 0), self.runner.device.image[27:48, 1038:1128].copy(), 52000,
-        )
-        self.runner.appear = Mock(return_value=False)
-        with patch.object(OCR_SHOP_YELLOW_COINS, 'ocr', side_effect=AssertionError('不得同步 OCR')):
-            self.assertEqual(self.runner.get_routine_yellow_coins(), 52000)
+        self.runner.get_yellow_coins = Mock(side_effect=AssertionError('不得同步 OCR'))
+        self.assertEqual(self.runner.get_routine_yellow_coins(), 52000)
         self.runner.device.screenshot.assert_not_called()
         self.runner.config.config_name = 'other'
-        self.runner.get_yellow_coins = Mock(side_effect=AssertionError('不得同步 OCR'))
         with self.assertRaisesRegex(AssertionError, '不得同步'):
             self.runner.get_routine_yellow_coins()
 
@@ -250,15 +134,15 @@ class BackgroundRuntimeTests(unittest.TestCase):
         self.runner._shop_purple_coins = 200
         confirmed = self.runner._yellow_coin_read = object()
         state = self.runner._coin_background
-        reading = CoinReading(self.runner._background_coin_identity(), stamp, 49000, True)
+        reading = CoinReading(self.runner._background_coin_identity(), stamp, 49000, 300, True)
         state.candidate = reading
         state.future = Future()
         state.future.set_result(reading)
         self.runner.poll_background_resources()
         self.assertEqual((self.runner._last_yellow_coins, self.runner._shop_yellow_coins), (60000, 60000))
-        self.assertEqual(self.runner._shop_purple_coins, 200)
+        self.assertEqual(self.runner._shop_purple_coins, 300)
         self.assertIs(self.runner._yellow_coin_read, confirmed)
-        self.writer.assert_not_called()
+        self.writer.assert_called_once_with(self.runner.config, {'PurpleCoin': 300}, observed_at=stamp)
         self.assertIsNone(state.accepted)
         self.assertTrue(state.wanted)
         self.runner.poll_background_resources = Mock()
@@ -271,7 +155,7 @@ class BackgroundRuntimeTests(unittest.TestCase):
         }}}
         state = self.runner._coin_background
         state.future = Future()
-        state.future.set_result(CoinReading(self.runner._background_coin_identity(), stamp, 0, False,
+        state.future.set_result(CoinReading(self.runner._background_coin_identity(), stamp, 0, 0, False,
                                            ap=125, ap_epoch=0, sampled_at=120))
         original = self.runner._ap_snapshot
         self.runner.poll_background_resources()
@@ -279,7 +163,7 @@ class BackgroundRuntimeTests(unittest.TestCase):
         self.writer.assert_not_called()
 
     def test_ap_is_included_only_after_interval_expires(self):
-        for now, expected in ((399, 1), (400, 2)):
+        for now, expected in ((399, 2), (400, 3)):
             with patch('module.os_handler.action_point.monotonic', return_value=now), \
                     patch.object(self.runner._coin_background, 'submit') as submit:
                 self.runner.poll_background_resources(sample=True)
@@ -287,10 +171,10 @@ class BackgroundRuntimeTests(unittest.TestCase):
         self.runner.config.OpsiHazard1Leveling_ActionPointCheckInterval = 0
         with patch.object(self.runner._coin_background, 'submit') as submit:
             self.runner.poll_background_resources(sample=True)
-            self.assertEqual(len(submit.call_args.args[1]), 1)
+            self.assertEqual(len(submit.call_args.args[1]), 2)
 
     def test_ap_accounts_for_consumption_after_capture_without_faking_total_inventory(self):
-        reading = CoinReading(self.runner._background_coin_identity(), datetime.now(), 51000, True,
+        reading = CoinReading(self.runner._background_coin_identity(), datetime.now(), 51000, 100, True,
                               ap=125, ap_epoch=0, ap_spent=0, sampled_at=120)
         self.runner.consume_cached_action_point(5)
         self.runner.apply_background_action_point(reading)
@@ -306,7 +190,7 @@ class BackgroundRuntimeTests(unittest.TestCase):
     def test_low_coins_interrupt_on_main_thread_and_keep_drop_recorder(self):
         self.runner.is_in_map.return_value = False
         state = self.runner._coin_background
-        state.accepted = CoinReading(self.runner._background_coin_identity(), datetime.now(), 49000, True)
+        state.accepted = CoinReading(self.runner._background_coin_identity(), datetime.now(), 49000, 100, True)
         self.runner.poll_background_resources = Mock()
         threads = []
         self.runner.interrupt_auto_search = Mock(side_effect=lambda **kwargs: threads.append(threading.get_ident()))
@@ -321,7 +205,7 @@ class BackgroundRuntimeTests(unittest.TestCase):
 
     def test_low_coins_on_map_do_not_toggle_ambiguous_auto_search_button(self):
         self.runner._coin_background.accepted = CoinReading(
-            self.runner._background_coin_identity(), datetime.now(), 49000, True,
+            self.runner._background_coin_identity(), datetime.now(), 49000, 100, True,
         )
         self.runner.poll_background_resources = Mock()
         self.runner.interrupt_auto_search = Mock()

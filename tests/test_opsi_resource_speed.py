@@ -552,6 +552,7 @@ class TestCurrencyReadReuse(unittest.TestCase):
                     self.handler.device.sleep.assert_called_once_with(0.2)
                     self.assertEqual(self.handler._last_yellow_coins, 97451)
 
+
     def test_invalid_frame_breaks_consecutive_confirmation(self):
         self.handler.loop = lambda **kwargs: iter(range(4))
         self.yellow.ocr.side_effect = [75696, 0, 75696, 75696]

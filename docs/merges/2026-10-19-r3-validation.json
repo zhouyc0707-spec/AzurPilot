@@ -1,0 +1,58 @@
+{
+  "python_groups": [
+    {
+      "label": "资源后台、资源速度、调度上下文和更新服务",
+      "tests": 137,
+      "passed": 137,
+      "log": "resource-updater-first.log"
+    },
+    {
+      "label": "主队预检、全图覆盖、强制移动、明石缓存与融合",
+      "tests": 135,
+      "passed": 135,
+      "log": "map-revert-tests.log"
+    },
+    {
+      "label": "快速奖励回图、独立补扫、智能开荒",
+      "tests": 85,
+      "passed": 85,
+      "log": "map-event-glue-tests.log",
+      "evidence_note": "原95项批次中的其余85项通过；该批次3个失败均属于另行重跑的runtime_akashi模块，不将失败批次写为全通过"
+    },
+    {
+      "label": "明石异步统计最终重跑",
+      "tests": 10,
+      "passed": 10,
+      "log": "runtime-akashi-final.log",
+      "fixture_note": "先同步初始化临时空库，保留原10s异步事务预算与全部断言；存储生产实现及目标统计函数与合前相同"
+    },
+    {
+      "label": "计时口径隔离及真实总库保存/重载",
+      "tests": 7,
+      "passed": 7,
+      "log": "round-time-compat.log"
+    }
+  ],
+  "total_distinct_test_methods": 374,
+  "checks": {
+    "python_ast_files": 2634,
+    "python_ast_errors": 0,
+    "preexisting_syntax_warnings": 12,
+    "ruff": "passed",
+    "config_generator": "passed",
+    "uv_lock_offline_check": "passed",
+    "git_diff_check": "passed"
+  },
+  "unchanged_scopes": [
+    "frontend",
+    "api_contract",
+    "pyproject.toml_and_uv.lock",
+    "currency_and_drop_storage_core"
+  ],
+  "log_root": "D:\\Codex\\reports\\upstream-dev-20261019-r3",
+  "limits": [
+    "未执行真实游戏任务",
+    "按用户选择回退，撤销的上游修复可能使旧故障边界重新出现",
+    "旧full_cycle原组仅在首次新样本写入时原样隔离，不在交付时改写实际数据库"
+  ]
+}

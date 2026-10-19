@@ -20,6 +20,8 @@ class TestAkashiAsyncPersistence(unittest.TestCase):
         self.addCleanup(self.directory.cleanup)
         install_store(self, self.directory.name)
         self.db = database.Cl1Database(db_path=Path(self.directory.name) / 'config' / 'cl1_data.db')
+        # 单独完成首次迁移，异步事务的超时预算不应包含 Windows 进程枚举。
+        self.db.store.ensure_ready()
         self.config = SimpleNamespace(config_name='test')
 
     @staticmethod

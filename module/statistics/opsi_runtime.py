@@ -8,9 +8,8 @@ from __future__ import annotations
 
 import time
 from concurrent.futures import Future
-from contextlib import contextmanager
 from datetime import datetime
-from typing import Any, Iterator
+from typing import Any
 
 from module.logger import logger
 
@@ -65,11 +64,6 @@ def finish_battle_timer(config: Any, source: str | None) -> float | None:
     if source not in {"cl1", "meow"}:
         return None
 
-    if source == "cl1":
-        metrics = getattr(config, "_cl1_round_metrics", None)
-        if metrics is not None:
-            metrics["battle_count"] += 1
-
     try:
         from module.statistics.ship_exp_stats import get_ship_exp_stats
 
@@ -123,8 +117,12 @@ def record_ap_snapshot(config: Any, ap_current: int | None, source: str, distanc
         logger.exception("保存行动力快照失败")
 
 
-def record_cl1_auto_search_battle(config: Any) -> None:
-    """记录一次侵蚀1自律战斗，单轮耗时由完整练级流程统一结算。"""
+def record_cl1_auto_search_battle(
+    config: Any,
+    cl1_battle_count: int,
+    round_started_at: float | int | None,
+) -> float | int | None:
+    """记录一次侵蚀1自律战斗，并维护两战一轮的计时。"""
     instance_name = instance_name_from_config(config)
     try:
         from module.statistics.cl1_database import db as cl1_db
@@ -133,37 +131,22 @@ def record_cl1_auto_search_battle(config: Any) -> None:
     except Exception:
         logger.debug("[统计-大世界] 持久化月度 CL1 战斗次数失败", exc_info=True)
 
+    # 侵蚀1两场战斗消耗一次出击，奇数场代表新一轮开始。
+    # 下一次奇数场到来时，上一轮的完整耗时就能闭合。
+    if cl1_battle_count % 2 != 1:
+        return round_started_at
 
-@contextmanager
-def cl1_round_timer(config: Any) -> Iterator[None]:
-    """将练级准备、搜索和战后处理总耗时按实际完成的两战一轮折算。
+    now = time.time()
+    if round_started_at:
+        cost = round(now - float(round_started_at), 2)
+        logger.attr("CL1单轮耗时", f"{cost}s/round")
+        try:
+            from module.statistics.ship_exp_stats import get_ship_exp_stats
 
-    中断时只用已经返回地图的战斗折算，未完成任何战斗则不生成样本。
-    嵌套事件搜索共用外层计时，退出后立即清除，避免计入其他任务和停机时间。
-    """
-    if getattr(config, "_cl1_round_metrics", None) is not None:
-        yield
-        return
-
-    metrics = {"battle_count": 0}
-    config._cl1_round_metrics = metrics
-    started_at = time.monotonic()
-    try:
-        yield
-    finally:
-        duration = time.monotonic() - started_at
-        del config._cl1_round_metrics
-        if metrics["battle_count"]:
-            try:
-                from module.statistics.ship_exp_stats import get_ship_exp_stats
-
-                rounds = metrics["battle_count"] / 2
-                get_ship_exp_stats(instance_name=instance_name_from_config(config)).record_round_time(
-                    duration, round_count=rounds,
-                )
-                logger.attr("CL1单轮耗时", f"{duration / rounds:.2f}s/round")
-            except Exception:
-                logger.exception("[统计-大世界] 记录侵蚀1完整轮次耗时失败")
+            get_ship_exp_stats(instance_name=instance_name).record_round_time(cost)
+        except Exception:
+            logger.exception("[统计-大世界] 记录侵蚀1轮次耗时失败")
+    return now
 
 
 def meow_hazard_level_from_runtime(main: Any) -> int | None:

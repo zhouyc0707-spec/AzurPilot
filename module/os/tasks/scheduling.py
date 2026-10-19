@@ -46,7 +46,6 @@ from module.os.tasks.task_context import TaskDelayRequest, current_opsi_context,
 from module.os.tasks.smart_explore import SmartExploreMixin
 from module.os_handler.action_point import ActionPointLimit
 from module.os_handler.resource_read import CoinReplenishRequired
-from module.os_handler.resource_state import invalidate_coin_cache
 
 
 class CoinTaskMixin:
@@ -1009,15 +1008,10 @@ class OpsiScheduling(SmartExploreMixin, CoinTaskMixin, OSMap):
             self.TASK_NAME_HAZARD1_LEVELING,
             self.TASK_NAME_MEOWFFICER_FARMING,
         )
-        try:
-            with opsi_task_context(
-                self.config, task, bind_task=task_name, disable_task_switch=disable_task_switch,
-            ):
-                return func(*args, **kwargs)
-        finally:
-            # 子任务可能已结算奖励，但设备仍持有旧帧；返回后的预算必须重新确认。
-            # 异常也可能发生在部分奖励到账后，不能沿用进入子任务前的余额。
-            invalidate_coin_cache(self.config)
+        with opsi_task_context(
+            self.config, task, bind_task=task_name, disable_task_switch=disable_task_switch,
+        ):
+            return func(*args, **kwargs)
 
     def _get_scheduling_action_point(self, *, keep_open=False, allow_cached=False):
         """读取智能调度决策所需的行动力。

@@ -59,12 +59,6 @@ class OSStatus(UI):
             if not sample:
                 return
             state = self._coin_background = BackgroundCoinRead()
-        in_map = sample and self.is_in_map()
-        if (in_map and state.frame is not None and not np.array_equal(
-                crop(self.device.image, OCR_SHOP_YELLOW_COINS.buttons[0]),
-                crop(state.frame, OCR_SHOP_YELLOW_COINS.buttons[0]))):
-            # 奖励后数字已变化，不能把开工前完成的两次 OCR 当作当前预算。
-            state.invalidate()
         try:
             reading = state.poll(self._background_coin_identity())
         except Exception:
@@ -78,25 +72,25 @@ class OSStatus(UI):
                     self.config, 'ActionPoint', result.observed_at)):
                 apply_ap(result)
         if reading is not None:
+            values = {}
             if resource_observation_is_current(self.config, 'YellowCoin', reading.observed_at):
                 self._last_yellow_coins = self._shop_yellow_coins = reading.yellow
                 self._last_yellow_owner = reading.identity[:2]
-                self._yellow_coin_read = (
-                    (*reading.identity[:2], 'map', reading.identity[2]),
-                    crop(state.frame, OCR_SHOP_YELLOW_COINS.buttons[0]).copy(), reading.yellow,
-                )
-                record_resources_background(
-                    self.config, {'YellowCoin': reading.yellow},
-                    observed_at=reading.observed_at,
-                )
+                values['YellowCoin'] = reading.yellow
+            if resource_observation_is_current(self.config, 'PurpleCoin', reading.observed_at):
+                self._shop_purple_coins = reading.purple
+                values['PurpleCoin'] = reading.purple
+            if values:
+                record_resources_background(self.config, values, observed_at=reading.observed_at)
+                logger.info(f'[大世界-资源后台] 已确认资源={values}')
         if (state.accepted is not None and not resource_observation_is_current(
                 self.config, 'YellowCoin', state.accepted.observed_at)):
             # 迟到低币结果既不能回退缓存，也不能触发补币中断；继续采集下一帧。
             state.accepted = None
             state.request()
         ap_due = bool(sample and getattr(self, 'action_point_check_due', lambda: False)())
-        if in_map and (state.wanted or ap_due) and not self.handle_map_event():
-            readers = [OCR_SHOP_YELLOW_COINS]
+        if sample and (state.wanted or ap_due) and self.is_in_map() and not self.handle_map_event():
+            readers = [OCR_SHOP_YELLOW_COINS, OCR_SHOP_PURPLE_COINS]
             if ap_due:
                 from module.os_handler.action_point import OCR_ACTION_POINT_REMAIN_OS
                 readers.append(OCR_ACTION_POINT_REMAIN_OS)
@@ -104,19 +98,22 @@ class OSStatus(UI):
                          ap_epoch=self.__dict__.get('_ap_read_epoch', 0), ap_spent=self.__dict__.get('_ap_spent', 0))
 
     def get_routine_yellow_coins(self):
-        """数字未变化时复用确认值；变化后双读确认，避免旧预算影响调度。"""
+        """首次建立实时预算，此后从已有地图帧旁路采集，主流程不等 OCR。"""
         state = self.__dict__.get('_coin_background')
         if state is not None:
             state.request()
         self.poll_background_resources(sample=True)
-        return self.get_yellow_coins(reuse=True)
+        state = self.__dict__.get('_coin_background')
+        if (self.__dict__.get('_last_yellow_coins', -1) >= 0 and state is not None
+                and self.__dict__.get('_last_yellow_owner') == self._background_coin_identity()[:2]):
+            return self._last_yellow_coins
+        return self.get_yellow_coins()
 
     def background_coin_replenish_required(self):
         """按最新保留值判断，补币任务不被自己的低黄币观察打断。"""
-        # 短猫同样需要消费后台结果；只有低币中断限定为侵蚀一。
-        self.poll_background_resources(sample=self.is_in_map())
         if not self.is_running_cl1_leveling:
             return False
+        self.poll_background_resources(sample=self.is_in_map())
         state = self.__dict__.get('_coin_background')
         reading = state.accepted if state is not None else None
         if reading is None or reading.identity != self._background_coin_identity():
@@ -322,7 +319,7 @@ class OSStatus(UI):
         if observed:
             self._last_yellow_owner = self._background_coin_identity()[:2]
         if observed and '_coin_background' in self.__dict__:
-            self._coin_background.invalidate()
+            self._coin_background.accepted = None
         with self._cache_lock:
             if yellow_coins == 0:
                 same_owner = self.__dict__.get('_last_yellow_owner') == self._background_coin_identity()[:2]

@@ -5,6 +5,7 @@ from contextlib import nullcontext
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from module.base.timer import Timer
 from module.exception import GameStuckError
 from module.os.assets import MAP_EXIT, ZONE_ENTRANCE, ZONE_LOCKED
 from module.os.globe_operation import GlobeOperation, OSExploreError
@@ -13,6 +14,7 @@ from module.os.map_operation import OSMapOperation
 from module.os_shop.assets import PORT_SUPPLY_CHECK
 from module.os_shop.selector import Selector
 from module.os_shop.shop import OSShop
+from tests.test_opsi_cl1_speed import VirtualClock, WalkStateStub
 
 
 class AkashiScopeFixture(unittest.TestCase):
@@ -59,8 +61,6 @@ class AkashiScopeFixture(unittest.TestCase):
         runner.os_shop_buy = Mock()
         runner.os_shop_get_item_to_buy_in_akashi = Mock(name='原明石选品器')
         runner.handle_story_skip = Mock(return_value=False)
-        runner._recover_event_page = Mock(return_value=False)
-        runner._event_safe_click_button = Mock(return_value=object())
         runner.appear = Mock(side_effect=lambda button, **kwargs: button is PORT_SUPPLY_CHECK and runner.frame == 'shop')
         return runner
 
@@ -68,8 +68,7 @@ class AkashiScopeFixture(unittest.TestCase):
     def visit_shop(runner, grid=None):
         # 入口与退出仍由各自导航夹具验证；商店使用连续的地图、商店新画面。
         origin = runner.frame if runner.is_in_map() else 'map'
-        runner.loop = lambda: iter((None, None))
-        runner.device.click.side_effect = lambda button: setattr(runner, 'frame', 'shop')
+        runner.ui_click.side_effect = lambda *args, **kwargs: setattr(runner, 'frame', 'shop')
         runner.ui_back.side_effect = lambda **kwargs: setattr(runner, 'frame', origin)
         return OSShop.handle_akashi_supply_buy(runner, grid or object())
 
@@ -119,11 +118,6 @@ class AkashiScopeFixture(unittest.TestCase):
         runner.os_shop_buy = Mock()
         runner.os_shop_get_item_to_buy_in_akashi = Mock(name='原明石选品器')
         runner.handle_story_skip = Mock(return_value=False)
-        runner._remember_pending_event = Mock()
-        runner._finish_pending_event = Mock()
-        runner._event_global_location = Mock(return_value=None)
-        runner._recover_event_page = Mock(return_value=False)
-        runner._event_safe_click_button = Mock(return_value=object())
         runner.fleet_selector = SimpleNamespace(bar_opened=lambda: False)
 
         def search(drop, **kwargs):
@@ -190,7 +184,9 @@ class TestAkashiEntryScope(AkashiScopeFixture):
         self.visit_shop(runner, grid)
         runner.frame = 'shop'
         self.visit_shop(runner, grid)
-        runner._event_safe_click_button.assert_called_once()
+        runner.ui_click.assert_called_once_with(
+            grid, appear_button=runner.is_in_map, check_button=PORT_SUPPLY_CHECK,
+            additional=runner.handle_story_skip, skip_first_screenshot=True)
         runner.os_shop_buy.assert_called_once()
         self.assertEqual(runner.ui_back.call_count, 2, '已弹出的重复商店仍需关闭')
 
@@ -273,6 +269,148 @@ class TestAkashiSearchAndFilterScope(AkashiScopeFixture):
         self.assertEqual(Selector.items_filter_in_akashi_shop(runner, items), [repair])
         self.assertEqual(runner.config.OpsiGeneral_AkashiShopFilter, 'ActionPoint')
         self.assertEqual(runner.config.OpsiHazard1Leveling_Cl1Filter, 'RepairPack')
+
+
+class TestAkashiVisitLifecycle(unittest.TestCase):
+    """普通入口回退后，本地缓存、去重和正向回图确认仍须完整存在。"""
+
+    def runner(self, *, handled=False, page='map'):
+        runner = SimpleNamespace(
+            _akashi_handled=handled, page=page,
+            os_shop_get_item_to_buy_in_akashi=Mock(),
+            handle_story_skip=Mock(return_value=False),
+        )
+        runner.appear = Mock(side_effect=lambda button, **kwargs:
+                             button is PORT_SUPPLY_CHECK and runner.page == 'shop')
+        runner.is_in_map = Mock(side_effect=lambda: runner.page == 'map')
+        runner.ui_click = Mock(side_effect=lambda *args, **kwargs: setattr(runner, 'page', 'shop'))
+        runner.os_shop_buy = Mock()
+        runner.ui_back = Mock(side_effect=lambda **kwargs: setattr(runner, 'page', 'map'))
+        return runner
+
+    def test_session_survives_purchase_until_confirmed_return_then_clears(self):
+        runner = self.runner()
+        sessions = []
+
+        def enter(*args, **kwargs):
+            self.assertFalse(hasattr(runner, '_akashi_shop_session'))
+            runner.page = 'shop'
+
+        def buy(**kwargs):
+            self.assertEqual(runner.page, 'shop')
+            runner._akashi_shop_session['inventory'] = ['行动力商品']
+            sessions.append(runner._akashi_shop_session)
+
+        def leave(**kwargs):
+            self.assertIs(runner._akashi_shop_session, sessions[0])
+            self.assertFalse(runner._akashi_handled)
+            runner.page = 'map'
+
+        runner.ui_click.side_effect = enter
+        runner.os_shop_buy.side_effect = buy
+        runner.ui_back.side_effect = leave
+        self.assertTrue(OSShop.handle_akashi_supply_buy(runner, object()))
+        self.assertTrue(runner._akashi_handled)
+        self.assertIsNone(runner._akashi_shop_session)
+        runner.os_shop_buy.assert_called_once_with(select_func=runner.os_shop_get_item_to_buy_in_akashi)
+
+    def test_purchase_error_clears_session_without_marking_handled(self):
+        runner = self.runner()
+        runner.os_shop_buy.side_effect = GameStuckError('隔离购买失败')
+        with self.assertRaises(GameStuckError):
+            OSShop.handle_akashi_supply_buy(runner, object())
+        self.assertFalse(runner._akashi_handled)
+        self.assertIsNone(runner._akashi_shop_session)
+        runner.ui_back.assert_not_called()
+
+    def test_failed_entry_clears_cache_without_purchasing(self):
+        runner = self.runner()
+        runner.ui_click.side_effect = GameStuckError('隔离入口失败')
+        with self.assertRaises(GameStuckError):
+            OSShop.handle_akashi_supply_buy(runner, object())
+        self.assertFalse(runner._akashi_handled)
+        self.assertIsNone(runner._akashi_shop_session)
+        runner.os_shop_buy.assert_not_called()
+        runner.ui_back.assert_not_called()
+
+    def test_unconfirmed_map_return_does_not_mark_handled(self):
+        runner = self.runner()
+        runner.ui_back.side_effect = None
+        self.assertFalse(OSShop.handle_akashi_supply_buy(runner, object()))
+        self.assertFalse(runner._akashi_handled)
+        self.assertIsNone(runner._akashi_shop_session)
+        runner.is_in_map.assert_called_once()
+
+    def test_repeated_shop_only_closes_and_requires_positive_map_state(self):
+        runner = self.runner(handled=True, page='shop')
+        self.assertTrue(OSShop.handle_akashi_supply_buy(runner, object()))
+        runner.ui_click.assert_not_called()
+        runner.os_shop_buy.assert_not_called()
+        runner.ui_back.assert_called_once()
+        self.assertFalse(hasattr(runner, '_akashi_shop_session'))
+        runner.page = 'unknown'
+        self.assertFalse(OSShop.handle_akashi_supply_buy(runner, object()))
+        self.assertEqual(runner.ui_back.call_count, 1)
+        runner.os_shop_buy.assert_not_called()
+
+    def test_failed_shop_is_not_reported_as_a_completed_walk_event(self):
+        from module.os.fleet import OSFleet
+
+        clock = VirtualClock()
+        runner = WalkStateStub(clock, command='OpsiHazard1Leveling', shop=True)
+        runner.handle_akashi_supply_buy.return_value = False
+        with patch('module.base.timer.time', clock):
+            result = OSFleet.wait_until_walk_stable(runner, confirm_timer=Timer(1), allow_event_finish=True)
+        self.assertNotIn('akashi', result)
+
+
+class TestAkashiMapCompletion(unittest.TestCase):
+    """三处直接进店和行军回调都必须传播未确认结果。"""
+
+    @staticmethod
+    def runner(distances):
+        grid = SimpleNamespace(is_akashi=True, location=(1, 7), distance_to=lambda other: 3)
+        runner = SimpleNamespace(
+            _solved_map_event=set(),
+            config=SimpleNamespace(temporary=lambda **kwargs: nullcontext()),
+            device=SimpleNamespace(click=Mock(), screenshot=Mock()),
+            view=SimpleNamespace(select=lambda **kwargs: [grid] if kwargs.get('is_akashi') else [],
+                                 predict=Mock()),
+            update_os=Mock(), fleet_set=Mock(),
+            fleet_selector=SimpleNamespace(get=lambda: 1),
+            wait_until_walk_stable=Mock(return_value=''),
+            handle_akashi_supply_buy=Mock(return_value=False),
+        )
+        runner.convert_radar_to_local = Mock(side_effect=[
+            SimpleNamespace(distance_to=lambda other, distance=distance: distance)
+            for distance in distances
+        ])
+        return runner, grid
+
+    def test_adjacent_unconfirmed_shop_does_not_mark_event_solved(self):
+        runner, grid = self.runner([1])
+        self.assertFalse(OSMap.map_rescan_current(runner))
+        runner.handle_akashi_supply_buy.assert_called_once_with(grid)
+        runner.device.click.assert_not_called()
+        self.assertEqual(runner._solved_map_event, set())
+
+    def test_walk_then_unconfirmed_shop_does_not_mark_event_solved(self):
+        runner, grid = self.runner([3, 1])
+        self.assertFalse(OSMap.map_rescan_current(runner))
+        runner.device.click.assert_called_once_with(grid)
+        runner.wait_until_walk_stable.assert_called_once()
+        runner.handle_akashi_supply_buy.assert_called_once_with(grid)
+        self.assertEqual(runner._solved_map_event, set())
+
+    def test_other_fleets_unconfirmed_shops_restore_fleet_without_marking_solved(self):
+        runner, grid = self.runner([1, 1, 1])
+        self.assertFalse(OSMap._goto_akashi_with_other_fleets(runner))
+        self.assertEqual(runner.handle_akashi_supply_buy.call_args_list,
+                         [unittest.mock.call(grid)] * 3)
+        self.assertEqual(runner.fleet_set.call_args_list,
+                         [unittest.mock.call(fleet) for fleet in (2, 3, 4, 1)])
+        runner.device.click.assert_not_called()
+        self.assertEqual(runner._solved_map_event, set())
 
 
 if __name__ == '__main__':

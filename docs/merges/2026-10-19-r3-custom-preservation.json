@@ -1,0 +1,1504 @@
+{
+  "generated_at_utc": "2026-10-19T13:11:59.857451+00:00",
+  "revisions": {
+    "base": "7bc6dbde19530102aff543abec988994ab2aae9f",
+    "local_before_merge": "ed492c86c9ed12ced50757fa676f83a097efa348",
+    "upstream": "c9e1f27b30116ded4cf1415c296a01ae1eebb2eb"
+  },
+  "summary": {
+    "local_changed": 842,
+    "upstream_changed": 55,
+    "overlap": 31,
+    "non_overlap": 811,
+    "non_overlap_raw_byte_equal": 667,
+    "non_overlap_raw_equal_to_before_merge_checkout": 791,
+    "non_overlap_only_crlf_differences_from_before_merge_checkout": 17,
+    "non_overlap_clean_content_equal": 808,
+    "non_overlap_expected_changes": 3,
+    "non_overlap_unexpected_changes": 0,
+    "additional_integration_paths": 1,
+    "unexpected_additional_integration_paths": 0,
+    "overlap_python_files": 18,
+    "local_added_definition_names": 43,
+    "local_added_definition_ast_bodies_preserved": 32,
+    "modified_definition_bodies_requiring_review": 20,
+    "authorized_removed_added_definitions": 9,
+    "authorized_removed_modified_definitions": 15,
+    "added_definitions_retained_with_adapted_body": 2,
+    "missing_added_definitions": 0,
+    "missing_modified_definitions": 0,
+    "configuration_files": 13,
+    "local_config_delta_leaves": 1257,
+    "preserved_local_config_delta_leaves": 1257,
+    "missing_local_config_leaves": 0,
+    "changed_local_config_leaves": 0,
+    "tracked_python_syntax_passed": 2634,
+    "tracked_python_syntax_errors": 0,
+    "tracked_python_syntax_warnings": 12,
+    "parse_errors": 0,
+    "snapshot_stable": true
+  },
+  "scope": "静态核对Git内容、配置和定义；不代表实机验证。允许删除的定义按用户明确回退决定单独列出。",
+  "full_report_sha256": "ae1e3f15b29d71ba42a1b8e918a52a5651d5fe6a17cd0e44c1380883b3015c53",
+  "reference_checkout": {
+    "path": "E:\\AzurPilot",
+    "head": "ed492c86c9ed12ced50757fa676f83a097efa348",
+    "status": "",
+    "valid_before_merge_reference": true,
+    "scope": "有效时逐路径比较实际合前运行目录的raw bytes，另列仅换行差异。",
+    "valid_at_end": true
+  },
+  "snapshot": {
+    "changed_during_audit": [],
+    "stable": true,
+    "head_at_end": "ed492c86c9ed12ced50757fa676f83a097efa348"
+  },
+  "non_overlap_exceptions": [
+    {
+      "path": "tests/test_opsi_akashi_scope.py",
+      "local_blob": "fee4735712447c02c458fb112427c3cf540e7595",
+      "merged_clean_blob": "da5247b57d61858838e60ff4eac5eb5dae344067",
+      "present": true,
+      "raw_blob": "8cbf82b72784a03cc6132abc30a5dc6a419e5880",
+      "raw_byte_equal_to_git_blob": false,
+      "clean_content_equal": false,
+      "status": "内容变化或缺失",
+      "raw_byte_equal_to_before_merge_checkout": false,
+      "only_crlf_difference_from_before_merge_checkout": false,
+      "before_merge_checkout_sha256": "13555461d0a4475b33404277b3d461cd17c0d4148158e638291788153c50dd7e",
+      "current_checkout_sha256": "77693abbb415a0b6b9199ee60607930d8b4e76c69bed05209f80f74b687ce4b4",
+      "reason": "保留用户有效缓存断言，按已授权的上游旧入口适配夹具和返回值。",
+      "diff_from_local": "diff --git a/tests/test_opsi_akashi_scope.py b/tests/test_opsi_akashi_scope.py\nindex fee473571..da5247b57 100644\n--- a/tests/test_opsi_akashi_scope.py\n+++ b/tests/test_opsi_akashi_scope.py\n@@ -5,6 +5,7 @@ from contextlib import nullcontext\n from types import SimpleNamespace\n from unittest.mock import Mock, patch\n \n+from module.base.timer import Timer\n from module.exception import GameStuckError\n from module.os.assets import MAP_EXIT, ZONE_ENTRANCE, ZONE_LOCKED\n from module.os.globe_operation import GlobeOperation, OSExploreError\n@@ -13,6 +14,7 @@ from module.os.map_operation import OSMapOperation\n from module.os_shop.assets import PORT_SUPPLY_CHECK\n from module.os_shop.selector import Selector\n from module.os_shop.shop import OSShop\n+from tests.test_opsi_cl1_speed import VirtualClock, WalkStateStub\n \n \n class AkashiScopeFixture(unittest.TestCase):\n@@ -59,8 +61,6 @@ class AkashiScopeFixture(unittest.TestCase):\n         runner.os_shop_buy = Mock()\n         runner.os_shop_get_item_to_buy_in_akashi = Mock(name='原明石选品器')\n         runner.handle_story_skip = Mock(return_value=False)\n-        runner._recover_event_page = Mock(return_value=False)\n-        runner._event_safe_click_button = Mock(return_value=object())\n         runner.appear = Mock(side_effect=lambda button, **kwargs: button is PORT_SUPPLY_CHECK and runner.frame == 'shop')\n         return runner\n \n@@ -68,8 +68,7 @@ class AkashiScopeFixture(unittest.TestCase):\n     def visit_shop(runner, grid=None):\n         # 入口与退出仍由各自导航夹具验证；商店使用连续的地图、商店新画面。\n         origin = runner.frame if runner.is_in_map() else 'map'\n-        runner.loop = lambda: iter((None, None))\n-        runner.device.click.side_effect = lambda button: setattr(runner, 'frame', 'shop')\n+        runner.ui_click.side_effect = lambda *args, **kwargs: setattr(runner, 'frame', 'shop')\n         runner.ui_back.side_effect = lambda **kwargs: setattr(runner, 'frame', origin)\n         return OSShop.handle_akashi_supply_buy(runner, grid or object())\n \n@@ -119,11 +118,6 @@ class AkashiScopeFixture(unittest.TestCase):\n         runner.os_shop_buy = Mock()\n         runner.os_shop_get_item_to_buy_in_akashi = Mock(name='原明石选品器')\n         runner.handle_story_skip = Mock(return_value=False)\n-        runner._remember_pending_event = Mock()\n-        runner._finish_pending_event = Mock()\n-        runner._event_global_location = Mock(return_value=None)\n-        runner._recover_event_page = Mock(return_value=False)\n-        runner._event_safe_click_button = Mock(return_value=object())\n         runner.fleet_selector = SimpleNamespace(bar_opened=lambda: False)\n \n         def search(drop, **kwargs):\n@@ -190,7 +184,9 @@ class TestAkashiEntryScope(AkashiScopeFixture):\n         self.visit_shop(runner, grid)\n         runner.frame = 'shop'\n         self.visit_shop(runner, grid)\n-        runner._event_safe_click_button.assert_called_once()\n+        runner.ui_click.assert_called_once_with(\n+            grid, appear_button=runner.is_in_map, check_button=PORT_SUPPLY_CHECK,\n+            additional=runner.handle_story_skip, skip_first_screenshot=True)\n         runner.os_shop_buy.assert_called_once()\n         self.assertEqual(runner.ui_back.call_count, 2, '已弹出的重复商店仍需关闭')\n \n@@ -275,5 +271,147 @@ class TestAkashiSearchAndFilterScope(AkashiScopeFixture):\n         self.assertEqual(runner.config.OpsiHazard1Leveling_Cl1Filter, 'RepairPack')\n \n \n+class TestAkashiVisitLifecycle(unittest.TestCase):\n+    \"\"\"普通入口回退后，本地缓存、去重和正向回图确认仍须完整存在。\"\"\"\n+\n+    def runner(self, *, handled=False, page='map'):\n+        runner = SimpleNamespace(\n+            _akashi_handled=handled, page=page,\n+            os_shop_get_item_to_buy_in_akashi=Mock(),\n+            handle_story_skip=Mock(return_value=False),\n+        )\n+        runner.appear = Mock(side_effect=lambda button, **kwargs:\n+                             button is PORT_SUPPLY_CHECK and runner.page == 'shop')\n+        runner.is_in_map = Mock(side_effect=lambda: runner.page == 'map')\n+        runner.ui_click = Mock(side_effect=lambda *args, **kwargs: setattr(runner, 'page', 'shop'))\n+        runner.os_shop_buy = Mock()\n+        runner.ui_back = Mock(side_effect=lambda **kwargs: setattr(runner, 'page', 'map'))\n+        return runner\n+\n+    def test_session_survives_purchase_until_confirmed_return_then_clears(self):\n+        runner = self.runner()\n+        sessions = []\n+\n+        def enter(*args, **kwargs):\n+            self.assertFalse(hasattr(runner, '_akashi_shop_session'))\n+            runner.page = 'shop'\n+\n+        def buy(**kwargs):\n+            self.assertEqual(runner.page, 'shop')\n+            runner._akashi_shop_session['inventory'] = ['行动力商品']\n+            sessions.append(runner._akashi_shop_session)\n+\n+        def leave(**kwargs):\n+            self.assertIs(runner._akashi_shop_session, sessions[0])\n+            self.assertFalse(runner._akashi_handled)\n+            runner.page = 'map'\n+\n+        runner.ui_click.side_effect = enter\n+        runner.os_shop_buy.side_effect = buy\n+        runner.ui_back.side_effect = leave\n+        self.assertTrue(OSShop.handle_akashi_supply_buy(runner, object()))\n+        self.assertTrue(runner._akashi_handled)\n+        self.assertIsNone(runner._akashi_shop_session)\n+        runner.os_shop_buy.assert_called_once_with(select_func=runner.os_shop_get_item_to_buy_in_akashi)\n+\n+    def test_purchase_error_clears_session_without_marking_handled(self):\n+        runner = self.runner()\n+        runner.os_shop_buy.side_effect = GameStuckError('隔离购买失败')\n+        with self.assertRaises(GameStuckError):\n+            OSShop.handle_akashi_supply_buy(runner, object())\n+        self.assertFalse(runner._akashi_handled)\n+        self.assertIsNone(runner._akashi_shop_session)\n+        runner.ui_back.assert_not_called()\n+\n+    def test_failed_entry_clears_cache_without_purchasing(self):\n+        runner = self.runner()\n+        runner.ui_click.side_effect = GameStuckError('隔离入口失败')\n+        with self.assertRaises(GameStuckError):\n+            OSShop.handle_akashi_supply_buy(runner, object())\n+        self.assertFalse(runner._akashi_handled)\n+        self.assertIsNone(runner._akashi_shop_session)\n+        runner.os_shop_buy.assert_not_called()\n+        runner.ui_back.assert_not_called()\n+\n+    def test_unconfirmed_map_return_does_not_mark_handled(self):\n+        runner = self.runner()\n+        runner.ui_back.side_effect = None\n+        self.assertFalse(OSShop.handle_akashi_supply_buy(runner, object()))\n+        self.assertFalse(runner._akashi_handled)\n+        self.assertIsNone(runner._akashi_shop_session)\n+        runner.is_in_map.assert_called_once()\n+\n+    def test_repeated_shop_only_closes_and_requires_positive_map_state(self):\n+        runner = self.runner(handled=True, page='shop')\n+        self.assertTrue(OSShop.handle_akashi_supply_buy(runner, object()))\n+        runner.ui_click.assert_not_called()\n+        runner.os_shop_buy.assert_not_called()\n+        runner.ui_back.assert_called_once()\n+        self.assertFalse(hasattr(runner, '_akashi_shop_session'))\n+        runner.page = 'unknown'\n+        self.assertFalse(OSShop.handle_akashi_supply_buy(runner, object()))\n+        self.assertEqual(runner.ui_back.call_count, 1)\n+        runner.os_shop_buy.assert_not_called()\n+\n+    def test_failed_shop_is_not_reported_as_a_completed_walk_event(self):\n+        from module.os.fleet import OSFleet\n+\n+        clock = VirtualClock()\n+        runner = WalkStateStub(clock, command='OpsiHazard1Leveling', shop=True)\n+        runner.handle_akashi_supply_buy.return_value = False\n+        with patch('module.base.timer.time', clock):\n+            result = OSFleet.wait_until_walk_stable(runner, confirm_timer=Timer(1), allow_event_finish=True)\n+        self.assertNotIn('akashi', result)\n+\n+\n+class TestAkashiMapCompletion(unittest.TestCase):\n+    \"\"\"三处直接进店和行军回调都必须传播未确认结果。\"\"\"\n+\n+    @staticmethod\n+    def runner(distances):\n+        grid = SimpleNamespace(is_akashi=True, location=(1, 7), distance_to=lambda other: 3)\n+        runner = SimpleNamespace(\n+            _solved_map_event=set(),\n+            config=SimpleNamespace(temporary=lambda **kwargs: nullcontext()),\n+            device=SimpleNamespace(click=Mock(), screenshot=Mock()),\n+            view=SimpleNamespace(select=lambda **kwargs: [grid] if kwargs.get('is_akashi') else [],\n+                                 predict=Mock()),\n+            update_os=Mock(), fleet_set=Mock(),\n+            fleet_selector=SimpleNamespace(get=lambda: 1),\n+            wait_until_walk_stable=Mock(return_value=''),\n+            handle_akashi_supply_buy=Mock(return_value=False),\n+        )\n+        runner.convert_radar_to_local = Mock(side_effect=[\n+            SimpleNamespace(distance_to=lambda other, distance=distance: distance)\n+            for distance in distances\n+        ])\n+        return runner, grid\n+\n+    def test_adjacent_unconfirmed_shop_does_not_mark_event_solved(self):\n+        runner, grid = self.runner([1])\n+        self.assertFalse(OSMap.map_rescan_current(runner))\n+        runner.handle_akashi_supply_buy.assert_called_once_with(grid)\n+        runner.device.click.assert_not_called()\n+        self.assertEqual(runner._solved_map_event, set())\n+\n+    def test_walk_then_unconfirmed_shop_does_not_mark_event_solved(self):\n+        runner, grid = self.runner([3, 1])\n+        self.assertFalse(OSMap.map_rescan_current(runner))\n+        runner.device.click.assert_called_once_with(grid)\n+        runner.wait_until_walk_stable.assert_called_once()\n+        runner.handle_akashi_supply_buy.assert_called_once_with(grid)\n+        self.assertEqual(runner._solved_map_event, set())\n+\n+    def test_other_fleets_unconfirmed_shops_restore_fleet_without_marking_solved(self):\n+        runner, grid = self.runner([1, 1, 1])\n+        self.assertFalse(OSMap._goto_akashi_with_other_fleets(runner))\n+        self.assertEqual(runner.handle_akashi_supply_buy.call_args_list,\n+                         [unittest.mock.call(grid)] * 3)\n+        self.assertEqual(runner.fleet_set.call_args_list,\n+                         [unittest.mock.call(fleet) for fleet in (2, 3, 4, 1)])\n+        runner.device.click.assert_not_called()\n+        self.assertEqual(runner._solved_map_event, set())\n+\n+\n if __name__ == '__main__':\n     unittest.main()\n"
+    },
+    {
+      "path": "tests/test_opsi_hazard1_radar_precheck.py",
+      "local_blob": "78787abe0c396e4ebd6497630d5c5088d5bb1956",
+      "merged_clean_blob": "3956ef4938f5755247f90403b56fd05888391c03",
+      "present": true,
+      "raw_blob": "b69d881210f42a8d7a41f982e65a4fcb845ff7f1",
+      "raw_byte_equal_to_git_blob": false,
+      "clean_content_equal": false,
+      "status": "内容变化或缺失",
+      "raw_byte_equal_to_before_merge_checkout": false,
+      "only_crlf_difference_from_before_merge_checkout": false,
+      "before_merge_checkout_sha256": "b006f3c8407d2318cae60c19f9f33792355330c9c09a8b8c3594bf64fd1a1f14",
+      "current_checkout_sha256": "55d4b1be6967a989aa1813a46299020b56a1cce4d59a2ba5aadf5220b53eed80",
+      "reason": "保留用户主队预检测试，移除两项仅依赖已授权撤销的pending框架的测试与夹具。",
+      "diff_from_local": "diff --git a/tests/test_opsi_hazard1_radar_precheck.py b/tests/test_opsi_hazard1_radar_precheck.py\nindex 78787abe0..3956ef493 100644\n--- a/tests/test_opsi_hazard1_radar_precheck.py\n+++ b/tests/test_opsi_hazard1_radar_precheck.py\n@@ -42,9 +42,6 @@ class TestHazard1RadarPrecheck(unittest.TestCase):\n             predict_question=Mock(side_effect=self.predict_question)\n         )\n         self.runner.run_strategic_search = Mock(side_effect=self.strategic_search)\n-        self.runner._get_pending_event = Mock(return_value=None)\n-        self.runner._resume_pending_event = Mock()\n-        self.runner._recover_pending_event = Mock()\n         self.runner.is_in_map = Mock(return_value=True)\n         self.runner.match_template_color = Mock(return_value=True)\n         self.runner.fleet_set = Mock(side_effect=self.fleet_set)\n@@ -160,39 +157,6 @@ class TestHazard1RadarPrecheck(unittest.TestCase):\n         self.assertLess(self.actions.index('primary_clear'), self.actions.index('map_rescan'))\n         self.akashi_record.assert_called_once_with(self.runner.config)\n \n-    def test_pending_event_recovery_preserves_precheck_and_does_not_repeat_patrol(self):\n-        \"\"\"本地主队预检与上游续查共用预算，已恢复的事件不能再触发强制移动。\"\"\"\n-        self.question = (0, -1)\n-        pending = None\n-\n-        def clear(runner, drop=None):\n-            nonlocal pending\n-            pending = {'kind': 'is_question'}\n-            return False\n-\n-        def recover():\n-            nonlocal pending\n-            self.observe_marker('pending_recovery')\n-            self.runner._event_patrol_attempted = True\n-            self.runner._solved_map_event.add('is_akashi')\n-            pending = None\n-\n-        self.primary_clear.side_effect = clear\n-        self.runner._get_pending_event.side_effect = lambda: pending\n-        self.runner._recover_pending_event.side_effect = recover\n-        self.run_battle()\n-        self.runner._recover_pending_event.assert_called_once_with()\n-        self.runner._execute_fixed_patrol_scan.assert_not_called()\n-        self.assertIn(('pending_recovery', 1), self.marker_observations)\n-\n-    def test_pending_event_resumes_before_new_strategic_search(self):\n-        \"\"\"重启时先续查已记录事件，再开始新一轮，本轮仍执行主队预检。\"\"\"\n-        self.runner._get_pending_event.side_effect = [{'kind': 'is_akashi'}, None, None]\n-        self.runner._resume_pending_event.side_effect = lambda: self.actions.append('resume_pending')\n-        self.run_battle()\n-        self.assertEqual(self.actions[:2], ['resume_pending', 'strategic_search'])\n-        self.runner._resume_pending_event.assert_called_once_with()\n-\n     def test_unresolved_question_keeps_original_forced_scan(self):\n         \"\"\"主队清理与全图扫描都失败时，仍进入原有多舰队及挪队兜底。\"\"\"\n         self.question = (0, -1)\n"
+    },
+    {
+      "path": "定制化修改清单.md",
+      "local_blob": "a705d4ec480b41b21f66cfa24d426717953f6c53",
+      "merged_clean_blob": "661d7c80b1ba10fa01c1e5e0b91bbe75590279af",
+      "present": true,
+      "raw_blob": "a1f12950a9e3896a7a0a66dc3a4779aafbcec1e0",
+      "raw_byte_equal_to_git_blob": false,
+      "clean_content_equal": false,
+      "status": "内容变化或缺失",
+      "raw_byte_equal_to_before_merge_checkout": false,
+      "only_crlf_difference_from_before_merge_checkout": false,
+      "before_merge_checkout_sha256": "5cb2e59466e6635a86eddfd85ebd30b1ade9f1d6eb0932c698da06ca3a0224b1",
+      "current_checkout_sha256": "9a14e6ca4da3756058ce1f7b7115c15f950e9670c7d50e8d7bd75f52e290aefe",
+      "reason": "只更新本轮已合入上游基线及说明日期；保留既有定制条目。",
+      "diff_from_local": "diff --git \"a/\\345\\256\\232\\345\\210\\266\\345\\214\\226\\344\\277\\256\\346\\224\\271\\346\\270\\205\\345\\215\\225.md\" \"b/\\345\\256\\232\\345\\210\\266\\345\\214\\226\\344\\277\\256\\346\\224\\271\\346\\270\\205\\345\\215\\225.md\"\nindex a705d4ec4..661d7c80b 100644\n--- \"a/\\345\\256\\232\\345\\210\\266\\345\\214\\226\\344\\277\\256\\346\\224\\271\\346\\270\\205\\345\\215\\225.md\"\n+++ \"b/\\345\\256\\232\\345\\210\\266\\345\\214\\226\\344\\277\\256\\346\\224\\271\\346\\270\\205\\345\\215\\225.md\"\n@@ -1,6 +1,6 @@\n # AzurPilot 本地定制清单\n \n-核对日期：2026-10-19；已合入的上游 dev 基线：`7bc6dbde1`。本文件只记录当前本地差异、必须保留的统计口径及用户确认的融合决定。实现细节、OCR 阈值和回归入口见各模块文档；修复过程与逐次交付记录见 [合入报告](docs/merges/)。\n+核对日期：2026-10-19；已合入的上游 dev 基线：`c9e1f27b3`。本文件只记录当前本地差异、必须保留的统计口径及用户确认的融合决定。实现细节、OCR 阈值和回归入口见各模块文档；修复过程与逐次交付记录见 [合入报告](docs/merges/)。\n \n **合并约定**：完整保留本地功能、配置和历史数据；新版主题及通用能力跟随上游，旧版布局与下列定制不得被覆盖。真实配置、数据库、凭据和截图不作为模板覆盖。\n \n"
+    }
+  ],
+  "additional_integration_paths": [
+    {
+      "path": "tests/test_opsi_runtime_akashi.py",
+      "reason": "先同步初始化临时空总库，将Windows迁移进程枚举从异步事务10秒预算中分离，保留所有原断言和超时。",
+      "diff_from_local": "diff --git a/tests/test_opsi_runtime_akashi.py b/tests/test_opsi_runtime_akashi.py\nindex 40ff70471..d317f463a 100644\n--- a/tests/test_opsi_runtime_akashi.py\n+++ b/tests/test_opsi_runtime_akashi.py\n@@ -20,6 +20,8 @@ class TestAkashiAsyncPersistence(unittest.TestCase):\n         self.addCleanup(self.directory.cleanup)\n         install_store(self, self.directory.name)\n         self.db = database.Cl1Database(db_path=Path(self.directory.name) / 'config' / 'cl1_data.db')\n+        # 单独完成首次迁移，异步事务的超时预算不应包含 Windows 进程枚举。\n+        self.db.store.ensure_ready()\n         self.config = SimpleNamespace(config_name='test')\n \n     @staticmethod\n"
+    }
+  ],
+  "overlap_path_disposition": [
+    {
+      "path": "config/template.json",
+      "local_blob": "c0a274d89ee85c152633e56ce5a0ecad716a7703",
+      "upstream_blob": "819a8b1b1c30764a030d1bfd32aabb385d73181a",
+      "merged_clean_blob": "4990abce62ebb9fb109685d6932f3b01f346facc",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "docs/modules/infra/deploy.md",
+      "local_blob": "330dbe7eaa7d817973873f310959834d1f3dcf87",
+      "upstream_blob": "cef1051c23003bb48c0b7d19a2e1d1270a7e3285",
+      "merged_clean_blob": "181ff822a915e645e67b5d1677297b68d72a9ba9",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "docs/modules/infra/statistics.md",
+      "local_blob": "4e04606556313edeebb6423da1d77567658c98f0",
+      "upstream_blob": "b2958274a99323a91d68a1d580b937ab24d963ea",
+      "merged_clean_blob": "7a8765b2d883242b4ec9830301f941c953830b40",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "docs/modules/os/auxiliary.md",
+      "local_blob": "2bf6cc1b0a90df504b01dcd93c91ba5e9b26146b",
+      "upstream_blob": "8a8940d5209d6f7cd40f52f3566fc60184d1d214",
+      "merged_clean_blob": "e7e49f60a747cccc4fdb6c98e3e424874c3d7009",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "docs/modules/os/index.md",
+      "local_blob": "499e1145808934d8a43db2238ffc115997e61ba0",
+      "upstream_blob": "7a2608bbc06e6a9570d718d213ac0ad8c39c1305",
+      "merged_clean_blob": "1f8acb5b85757fee8fdad6c106551b68894ec0f9",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "docs/modules/webui/runtime.md",
+      "local_blob": "9d991ffa7b3b24bfad1fd186a5023a0a7eb51fb3",
+      "upstream_blob": "c0b5fabdfd672cdf8772338d3f160fec60dbb4af",
+      "merged_clean_blob": "d90155f387b503070c4eb9d0e44218d5cc134a02",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/argument/args.json",
+      "local_blob": "7704a0eac5bad1d4b364febc703aeee3c50019bd",
+      "upstream_blob": "83d70af831ccfdbe2118060e48574047d144d783",
+      "merged_clean_blob": "cdd2fa5113d6826ead711d02d73a983b3358f5a0",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/argument/argument.yaml",
+      "local_blob": "16aa2e216c80f6df82e082b69fba92ccada99bba",
+      "upstream_blob": "6cc56498a01c390533854b49e3793de0d6e45feb",
+      "merged_clean_blob": "0cd64837295a4b0007679cceca47838b0f27a136",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/config_generated.py",
+      "local_blob": "e760de3b74a4f45367f0a8a30586bf97308f1c52",
+      "upstream_blob": "4c026afc91cb3bf1597b193c5e2875f0f18158f9",
+      "merged_clean_blob": "435d8c0988c9aaeed79750fc086467b9846dc57a",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/config_updater.py",
+      "local_blob": "84eb8e4d2bb2c7f18ff94e6b12207d5a1951df3a",
+      "upstream_blob": "be7985325a6817e1a03e4f9cc093d5c598fe7507",
+      "merged_clean_blob": "f9e21b9eb873efce2ed349b2bcfcf4c9265bf3e6",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/i18n/en-US.json",
+      "local_blob": "682689d767e26fab98f634ebaec14d84613f5ec7",
+      "upstream_blob": "63a4e8b01d20fa52f7589975f6a3621db41d18cf",
+      "merged_clean_blob": "59a5aa35aca3103607dc9a7442031f861c61edbb",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/i18n/ja-JP.json",
+      "local_blob": "6bd8edb479a11c7bd38e057bc154507f61011744",
+      "upstream_blob": "c7404a79014567429adde4cebb1e789a09f1b4a8",
+      "merged_clean_blob": "64406044a65dfa691201fd7b8fa4ed544ce0671a",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/i18n/zh-CN.json",
+      "local_blob": "afaf8112876c32118ead744d1ef9eae2f44ef9bd",
+      "upstream_blob": "b2db68a58142524912fdcad0698a564e50422439",
+      "merged_clean_blob": "6aaf87b45b1b499b797d2d425aacd46d352b4603",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/i18n/zh-MIAO.json",
+      "local_blob": "fe77301649de5d57e5455804a49ddc346a1a08b1",
+      "upstream_blob": "65214e29034839c30eadd9dc8240f510e0cc4c46",
+      "merged_clean_blob": "76d134c1d3bfe1f94152769564b89a7627a254c1",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/i18n/zh-TW.json",
+      "local_blob": "d141825658eca1e275cab50273b8a7e20971c097",
+      "upstream_blob": "2130fda916de597d8aa32a20872c64e8c0acc2fb",
+      "merged_clean_blob": "ac26ed8fab51669ecaf2a7d7065a5c8ed69d5102",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/os/event_recovery.py",
+      "local_blob": "6d5ff4a95db039e0c2827a804b8534762314bf65",
+      "upstream_blob": null,
+      "merged_clean_blob": null,
+      "equals_local": false,
+      "equals_upstream": true,
+      "disposition": "与上游一致，需结合本地差异用途核验"
+    },
+    {
+      "path": "module/os/fleet.py",
+      "local_blob": "3b0694f2596f9ee490040577d9a65bec8aa1815c",
+      "upstream_blob": "cd4e995f6b6ac6fe9a285c848f87fded87b2e923",
+      "merged_clean_blob": "975a7da356ef34aeb0c8f79504801c877189bb7a",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/os/map.py",
+      "local_blob": "e64645409e2cb4031b45a5ec5118dc910cd7d708",
+      "upstream_blob": "fc38bb1c10dd84c4cc2ee4e902a716c1263c21ee",
+      "merged_clean_blob": "c04683e6a6f926327ba20726d56c3ae82b5920dc",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/os/tasks/hazard_leveling.py",
+      "local_blob": "91a034fe8be041a1f5c4ba1f5e9e2ece44be86ab",
+      "upstream_blob": "52e39501f35d4d33b4eaeec94ef56abab262c1c2",
+      "merged_clean_blob": "6266722d4ae428a81be8d86dc5287df090415746",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/os/tasks/scheduling.py",
+      "local_blob": "787298cb4fd623e19a5b742c2fbacdfd76025f95",
+      "upstream_blob": "49a86f4c7161053973eb9d4ffad61627e2e3feb4",
+      "merged_clean_blob": "ba127c95eb5ac405ba2a8a9a8c903d92f64ea1a6",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/os_handler/map_event.py",
+      "local_blob": "210081cfc1517277ded167956cc48c457064ce10",
+      "upstream_blob": "4071d6c5b261355171167396547edc3c90368416",
+      "merged_clean_blob": "bef7199f0c0ab1424f815f7a45a13e24c7444dec",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/os_handler/os_status.py",
+      "local_blob": "a9ebe6e39e43989d476ff1af847a614b4e7a4d94",
+      "upstream_blob": "1e6538a3f16ef73ca08ea71d115474267260d581",
+      "merged_clean_blob": "1ab5fe0e72bd948a5fb393c1ed2b0c6d106054f7",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/os_shop/shop.py",
+      "local_blob": "97aec5e8ba442b17795b5f5ca753f97461d6a119",
+      "upstream_blob": "439795ce4da0d32ca31aa5d7a362a68d3e2036bf",
+      "merged_clean_blob": "11d5621a12b4e4ed8a36727364f37d65c908e9a9",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/runtime/updater.py",
+      "local_blob": "c4fc1b7d8350c77a50e5430d995093c7790bed57",
+      "upstream_blob": "903180773d88f3f76f12f5e07e60ec9a22c30875",
+      "merged_clean_blob": "dcdf559940115f1a8421dda8d8a22beb7e1d2428",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "tests/test_opsi_akashi_interaction.py",
+      "local_blob": "f4d6349baf6b2f2667c53b833cbe5086df69f17a",
+      "upstream_blob": null,
+      "merged_clean_blob": null,
+      "equals_local": false,
+      "equals_upstream": true,
+      "disposition": "与上游一致，需结合本地差异用途核验"
+    },
+    {
+      "path": "tests/test_opsi_background_resources.py",
+      "local_blob": "751c18440ae8b8a374c50a6faf17036392c309e7",
+      "upstream_blob": "a023a0255d913a0dfd1fefac3012cf130c1eafc6",
+      "merged_clean_blob": "6e67c7953f8c9aee64037fd1f0066a2c917408d0",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "tests/test_opsi_cl1_round_time.py",
+      "local_blob": "4cdf8b23291430a05cf9835fbf3d6062f3da8e25",
+      "upstream_blob": null,
+      "merged_clean_blob": "c46eb0c66865cbac485eeedb1dfc55eaa988a844",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "tests/test_opsi_event_recovery.py",
+      "local_blob": "ab087bbb9934268cdd33f6ac01170e5594f25cff",
+      "upstream_blob": null,
+      "merged_clean_blob": null,
+      "equals_local": false,
+      "equals_upstream": true,
+      "disposition": "与上游一致，需结合本地差异用途核验"
+    },
+    {
+      "path": "tests/test_opsi_explore_cleanup.py",
+      "local_blob": "f34053e2e65a46d07aab73da89bfee188a35f894",
+      "upstream_blob": "fad68c2b7dd0dfa56340eaf1c7c5e5aba8f3bfee",
+      "merged_clean_blob": "90d9e57a399d3661b6e3e6c4f6844c2b63b4fe10",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "tests/test_opsi_fixed_patrol_escalation.py",
+      "local_blob": "4057bbb36f61820a0c8b78449125bfe0d9654400",
+      "upstream_blob": "c93ae8644083984433984acf3092648a793207b0",
+      "merged_clean_blob": "02555e040f59eda18b687939cd098c075fbc541a",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "tests/test_opsi_resource_speed.py",
+      "local_blob": "9332b01092a4c1bb3c6758ab9023e2b58a7f6e6e",
+      "upstream_blob": "9a168f768759d98835fea2dd072315c9e63c98e1",
+      "merged_clean_blob": "3bc8c61a49420b165fe454ec3d5d594e981c05e1",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    }
+  ],
+  "authorized_removed_added_definitions": [
+    {
+      "path": "tests/test_opsi_akashi_interaction.py",
+      "qualname": "TestAkashiEntry.test_safe_entry_failure_keeps_pending_and_clears_local_cache",
+      "kind": "FunctionDef",
+      "full_local_count_preserved": false,
+      "local_ast_bodies_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "TestAkashiEntry.test_safe_entry_failure_keeps_pending_and_clears_local_cache",
+          "kind": "FunctionDef",
+          "line": 163,
+          "ast_sha256": "eb430c5497ca9f99b97ed0772dd1a62eeea0a22e28b09ada30b95b971c9eee27"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "上游回退删除安全入口和通用续查；用户允许移除失去前提的测试；有效缓存保护另由scope测试保留。"
+    },
+    {
+      "path": "tests/test_opsi_akashi_interaction.py",
+      "qualname": "TestAkashiEntry.test_safe_entry_keeps_local_inventory_session_until_confirmed_return",
+      "kind": "FunctionDef",
+      "full_local_count_preserved": false,
+      "local_ast_bodies_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "TestAkashiEntry.test_safe_entry_keeps_local_inventory_session_until_confirmed_return",
+          "kind": "FunctionDef",
+          "line": 142,
+          "ast_sha256": "9217a2b26d7e5fe0ef5d647a71fd81e91016a447d610b5f154542e46ea70c939"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "上游回退删除安全入口和通用续查；用户允许移除失去前提的测试；有效缓存保护另由scope测试保留。"
+    },
+    {
+      "path": "tests/test_opsi_akashi_interaction.py",
+      "qualname": "TestAkashiEntry.test_safe_entry_keeps_local_inventory_session_until_confirmed_return.<locals>.buy",
+      "kind": "FunctionDef",
+      "full_local_count_preserved": false,
+      "local_ast_bodies_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "TestAkashiEntry.test_safe_entry_keeps_local_inventory_session_until_confirmed_return.<locals>.buy",
+          "kind": "FunctionDef",
+          "line": 147,
+          "ast_sha256": "a30f1f2120f4e4af1a5d4e328c89e26c9e2bc3a999eab0543152e9d47a5cb2d2"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "上游回退删除安全入口和通用续查；用户允许移除失去前提的测试；有效缓存保护另由scope测试保留。"
+    },
+    {
+      "path": "tests/test_opsi_akashi_interaction.py",
+      "qualname": "TestAkashiEntry.test_safe_entry_keeps_local_inventory_session_until_confirmed_return.<locals>.leave",
+      "kind": "FunctionDef",
+      "full_local_count_preserved": false,
+      "local_ast_bodies_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "TestAkashiEntry.test_safe_entry_keeps_local_inventory_session_until_confirmed_return.<locals>.leave",
+          "kind": "FunctionDef",
+          "line": 152,
+          "ast_sha256": "16899a519f9f9763de6c58ece253bdbd28c267f0fc8e2760b9e6b50c0699b68f"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "上游回退删除安全入口和通用续查；用户允许移除失去前提的测试；有效缓存保护另由scope测试保留。"
+    },
+    {
+      "path": "tests/test_opsi_akashi_interaction.py",
+      "qualname": "TestAkashiEntry.test_same_round_repeated_shop_only_closes_and_confirms_map",
+      "kind": "FunctionDef",
+      "full_local_count_preserved": false,
+      "local_ast_bodies_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "TestAkashiEntry.test_same_round_repeated_shop_only_closes_and_confirms_map",
+          "kind": "FunctionDef",
+          "line": 174,
+          "ast_sha256": "d62c2ec3eacdf8fe4267419f6ecd6b5ec817209a31949ca14d60bc546f92f660"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "上游回退删除安全入口和通用续查；用户允许移除失去前提的测试；有效缓存保护另由scope测试保留。"
+    },
+    {
+      "path": "tests/test_opsi_cl1_round_time.py",
+      "qualname": "FullRoundTimeTests.select_fleet",
+      "kind": "FunctionDef",
+      "full_local_count_preserved": false,
+      "local_ast_bodies_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "FullRoundTimeTests.select_fleet",
+          "kind": "FunctionDef",
+          "line": 68,
+          "ast_sha256": "cfd4c8f025d3d83e06873f37a528753a7b5059bad02239fd1f93d85a2b8990f5"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "用户选择恢复搜索内计时；旧完整流程类替换为7项临时真实总库兼容回归，保留完整历史。"
+    },
+    {
+      "path": "tests/test_opsi_event_recovery.py",
+      "qualname": "TestPendingEvent.test_first_event_found_during_regular_l2_cannot_start_a_second_l2",
+      "kind": "FunctionDef",
+      "full_local_count_preserved": false,
+      "local_ast_bodies_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "TestPendingEvent.test_first_event_found_during_regular_l2_cannot_start_a_second_l2",
+          "kind": "FunctionDef",
+          "line": 466,
+          "ast_sha256": "8be13fa332a50cf65e1d06480fce809073d67002ce9e0fcb10fd16216e430f07"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "用户授权撤销通用事件框架及其预算补丁；对应测试不再有执行前提。"
+    },
+    {
+      "path": "tests/test_opsi_event_recovery.py",
+      "qualname": "TestPendingEvent.test_first_event_found_during_regular_l2_cannot_start_a_second_l2.<locals>.find_event",
+      "kind": "FunctionDef",
+      "full_local_count_preserved": false,
+      "local_ast_bodies_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "TestPendingEvent.test_first_event_found_during_regular_l2_cannot_start_a_second_l2.<locals>.find_event",
+          "kind": "FunctionDef",
+          "line": 478,
+          "ast_sha256": "61009fa10c283acfe4aabd499c5301993b75c320ad59c201e9d72f9f0944053b"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "用户授权撤销通用事件框架及其预算补丁；对应测试不再有执行前提。"
+    },
+    {
+      "path": "tests/test_opsi_event_recovery.py",
+      "qualname": "TestPendingEvent.test_new_event_outside_patrol_receives_its_own_recovery_budget",
+      "kind": "FunctionDef",
+      "full_local_count_preserved": false,
+      "local_ast_bodies_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "TestPendingEvent.test_new_event_outside_patrol_receives_its_own_recovery_budget",
+          "kind": "FunctionDef",
+          "line": 458,
+          "ast_sha256": "7d1433343abed471454c95d4120cad84b8551ac2372536f65e2fff285aedeb30"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "用户授权撤销通用事件框架及其预算补丁；对应测试不再有执行前提。"
+    }
+  ],
+  "authorized_removed_modified_definitions": [
+    {
+      "path": "module/os/event_recovery.py",
+      "qualname": "MapEventRecovery",
+      "kind": "ClassDef",
+      "definition_exists": false,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "MapEventRecovery",
+          "kind": "ClassDef",
+          "line": 22,
+          "ast_sha256": "1dd6f683a642146e003e8ea88227ee3dfef21dfe4970cc14f71f592f1bd8519b"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "用户选择回退通用事件恢复框架；本地新事件预算融合补丁随失去前提而撤销。"
+    },
+    {
+      "path": "module/os/event_recovery.py",
+      "qualname": "MapEventRecovery._remember_pending_event",
+      "kind": "FunctionDef",
+      "definition_exists": false,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "MapEventRecovery._remember_pending_event",
+          "kind": "FunctionDef",
+          "line": 88,
+          "ast_sha256": "38396bf28d3c75c1898d7b51da91913b90fc497eb51b63ac4c108f8bf95dc7e7"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "用户选择回退通用事件恢复框架；本地新事件预算融合补丁随失去前提而撤销。"
+    },
+    {
+      "path": "tests/test_opsi_akashi_interaction.py",
+      "qualname": "TestAkashiEntry",
+      "kind": "ClassDef",
+      "definition_exists": false,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "TestAkashiEntry",
+          "kind": "ClassDef",
+          "line": 89,
+          "ast_sha256": "e829af4fa93f7a8d93b26f959e526bcfb6751854abde3bbcfa232aefe6bf94bd"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "上游回退删除安全入口和通用续查；用户允许移除失去前提的测试；有效缓存保护另由scope测试保留。"
+    },
+    {
+      "path": "tests/test_opsi_akashi_interaction.py",
+      "qualname": "TestAkashiEntry.test_unconfirmed_return_does_not_finish_pending_event",
+      "kind": "FunctionDef",
+      "definition_exists": false,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "TestAkashiEntry.test_unconfirmed_return_does_not_finish_pending_event",
+          "kind": "FunctionDef",
+          "line": 133,
+          "ast_sha256": "7837f17a498fdadcbb6d135096ec67cfbc5990169b34fc23c3bf992dbff5c4a7"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "上游回退删除安全入口和通用续查；用户允许移除失去前提的测试；有效缓存保护另由scope测试保留。"
+    },
+    {
+      "path": "tests/test_opsi_akashi_interaction.py",
+      "qualname": "TestEmergencyForcedMovement",
+      "kind": "ClassDef",
+      "definition_exists": false,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "TestEmergencyForcedMovement",
+          "kind": "ClassDef",
+          "line": 441,
+          "ast_sha256": "1b5925762a61d39c6361f0414c0ccbb3b0652f8be629b072c7c925199afe5958"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "上游回退删除安全入口和通用续查；用户允许移除失去前提的测试；有效缓存保护另由scope测试保留。"
+    },
+    {
+      "path": "tests/test_opsi_akashi_interaction.py",
+      "qualname": "TestEmergencyForcedMovement.test_stops_after_the_first_fleet_move_that_reaches_akashi",
+      "kind": "FunctionDef",
+      "definition_exists": false,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "TestEmergencyForcedMovement.test_stops_after_the_first_fleet_move_that_reaches_akashi",
+          "kind": "FunctionDef",
+          "line": 454,
+          "ast_sha256": "27cbecac0a57843e7837d9ffe43ce82264a41de3d0e41083a7b33850f2c5161b"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "上游回退删除安全入口和通用续查；用户允许移除失去前提的测试；有效缓存保护另由scope测试保留。"
+    },
+    {
+      "path": "tests/test_opsi_akashi_interaction.py",
+      "qualname": "TestRecoveryInitialization",
+      "kind": "ClassDef",
+      "definition_exists": false,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "TestRecoveryInitialization",
+          "kind": "ClassDef",
+          "line": 502,
+          "ast_sha256": "76110e5dd7f509674480ade9e05f7a80eaebfac62ad233ec71a9fdb98df1a14b"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "上游回退删除安全入口和通用续查；用户允许移除失去前提的测试；有效缓存保护另由scope测试保留。"
+    },
+    {
+      "path": "tests/test_opsi_akashi_interaction.py",
+      "qualname": "TestRecoveryInitialization.test_unfinished_akashi_resumes_before_new_search_without_forcing_restart",
+      "kind": "FunctionDef",
+      "definition_exists": false,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "TestRecoveryInitialization.test_unfinished_akashi_resumes_before_new_search_without_forcing_restart",
+          "kind": "FunctionDef",
+          "line": 503,
+          "ast_sha256": "a9f35336c31e14b6ebff820745c916043b3b24df12bb1f8feec59cd588bbfe83"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "上游回退删除安全入口和通用续查；用户允许移除失去前提的测试；有效缓存保护另由scope测试保留。"
+    },
+    {
+      "path": "tests/test_opsi_cl1_round_time.py",
+      "qualname": "FullRoundTimeTests",
+      "kind": "ClassDef",
+      "definition_exists": false,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "FullRoundTimeTests",
+          "kind": "ClassDef",
+          "line": 20,
+          "ast_sha256": "fd637a075ea30e61015c624b1f697f1eac873579d9e9ca7625139a0ebb5eae0f"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "用户选择恢复搜索内计时；旧完整流程类替换为7项临时真实总库兼容回归，保留完整历史。"
+    },
+    {
+      "path": "tests/test_opsi_cl1_round_time.py",
+      "qualname": "FullRoundTimeTests.run_once",
+      "kind": "FunctionDef",
+      "definition_exists": false,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "FullRoundTimeTests.run_once",
+          "kind": "FunctionDef",
+          "line": 91,
+          "ast_sha256": "e918c1f33989dcf59144de9ca7e2baef4cefc8fc8879f2f368353ec738b119b3"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "用户选择恢复搜索内计时；旧完整流程类替换为7项临时真实总库兼容回归，保留完整历史。"
+    },
+    {
+      "path": "tests/test_opsi_cl1_round_time.py",
+      "qualname": "FullRoundTimeTests.setUp",
+      "kind": "FunctionDef",
+      "definition_exists": false,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "FullRoundTimeTests.setUp",
+          "kind": "FunctionDef",
+          "line": 21,
+          "ast_sha256": "2e42dd06ae2403b628bbedcd7ec67b04364d804db38868ea225e3e044305b996"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "用户选择恢复搜索内计时；旧完整流程类替换为7项临时真实总库兼容回归，保留完整历史。"
+    },
+    {
+      "path": "tests/test_opsi_event_recovery.py",
+      "qualname": "TestPendingEvent",
+      "kind": "ClassDef",
+      "definition_exists": false,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "TestPendingEvent",
+          "kind": "ClassDef",
+          "line": 177,
+          "ast_sha256": "21fdbf22c9239c4bae62906f54e7e4e944f48f11edc1f0598ca4e817a34703dd"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "用户授权撤销通用事件框架及其预算补丁；对应测试不再有执行前提。"
+    },
+    {
+      "path": "tests/test_opsi_event_recovery.py",
+      "qualname": "TestPendingEvent.test_abandoning_an_event_stops_remaining_camera_scans_only_for_hazard1",
+      "kind": "FunctionDef",
+      "definition_exists": false,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "TestPendingEvent.test_abandoning_an_event_stops_remaining_camera_scans_only_for_hazard1",
+          "kind": "FunctionDef",
+          "line": 645,
+          "ast_sha256": "c143af7cea94adf94be4bd840ae2c6071b44cd0e78663ed610616f45f42946fb"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "用户授权撤销通用事件框架及其预算补丁；对应测试不再有执行前提。"
+    },
+    {
+      "path": "tests/test_opsi_event_recovery.py",
+      "qualname": "TestPendingEvent.test_post_battle_recovery_runs_once_and_still_finishes_maintenance",
+      "kind": "FunctionDef",
+      "definition_exists": false,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "TestPendingEvent.test_post_battle_recovery_runs_once_and_still_finishes_maintenance",
+          "kind": "FunctionDef",
+          "line": 582,
+          "ast_sha256": "16a7112d70e0b417a1dd3ca73ee0ae90cba12923e49b1dfac39e81f3d1ecca4c"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "用户授权撤销通用事件框架及其预算补丁；对应测试不再有执行前提。"
+    },
+    {
+      "path": "tests/test_opsi_event_recovery.py",
+      "qualname": "TestPendingEvent.test_real_recovery_budget_is_shared_with_regular_patrol_and_resets_next_battle",
+      "kind": "FunctionDef",
+      "definition_exists": false,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "TestPendingEvent.test_real_recovery_budget_is_shared_with_regular_patrol_and_resets_next_battle",
+          "kind": "FunctionDef",
+          "line": 612,
+          "ast_sha256": "dd243d54167a2ac67532d333cfef5bf0dfb2d076a9ada884b82dad3b90ffa589"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "用户授权撤销通用事件框架及其预算补丁；对应测试不再有执行前提。"
+    }
+  ],
+  "retained_added_definitions_with_adapted_body": [
+    {
+      "path": "tests/test_opsi_background_resources.py",
+      "qualname": "BackgroundRuntimeTests.test_late_ap_result_does_not_rewind_runtime_snapshot",
+      "kind": "FunctionDef",
+      "full_local_count_preserved": true,
+      "local_ast_bodies_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "BackgroundRuntimeTests.test_late_ap_result_does_not_rewind_runtime_snapshot",
+          "kind": "FunctionDef",
+          "line": 267,
+          "ast_sha256": "ec29cf8556f06f7e82eab4052ab512fdad5701aa11a16461e539566349ee778f"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "BackgroundRuntimeTests.test_late_ap_result_does_not_rewind_runtime_snapshot",
+          "kind": "FunctionDef",
+          "line": 151,
+          "ast_sha256": "eeae239d0c8753724f94d6492bb2ba17d0151ed353dc8a6a641df0679c1f319c"
+        }
+      ],
+      "purpose_review": "本地迟到AP与黄币保护测试适配恢复后的CoinReading紫币字段；保留时间拒绝及低币不得触发等核心断言。"
+    },
+    {
+      "path": "tests/test_opsi_background_resources.py",
+      "qualname": "BackgroundRuntimeTests.test_late_coin_result_cannot_replace_cache_or_trigger_low_balance",
+      "kind": "FunctionDef",
+      "full_local_count_preserved": true,
+      "local_ast_bodies_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "BackgroundRuntimeTests.test_late_coin_result_cannot_replace_cache_or_trigger_low_balance",
+          "kind": "FunctionDef",
+          "line": 243,
+          "ast_sha256": "8f71fea51ba52c59a81b58883bb634aa380f4eecd80cc4dcc4c046750c0618ce"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "BackgroundRuntimeTests.test_late_coin_result_cannot_replace_cache_or_trigger_low_balance",
+          "kind": "FunctionDef",
+          "line": 127,
+          "ast_sha256": "42d9b24ae3839f7394c1acb5ac93c4abb6ecff92a782c24cb4a2ebbd2fefc490"
+        }
+      ],
+      "purpose_review": "本地迟到AP与黄币保护测试适配恢复后的CoinReading紫币字段；保留时间拒绝及低币不得触发等核心断言。"
+    }
+  ],
+  "modified_definition_purpose_reviews": [
+    {
+      "path": "module/config/config_generated.py",
+      "qualname": "GeneratedConfig",
+      "kind": "ClassDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "GeneratedConfig",
+          "kind": "ClassDef",
+          "line": 9,
+          "ast_sha256": "3f37ad926a4e7758d379289e05d555111c9c31e490233ca58cfc5029676a8739"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "GeneratedConfig",
+          "kind": "ClassDef",
+          "line": 9,
+          "ast_sha256": "1da0d7a671b6ad15426b0b1e83412667c04641d4db44784f51fd83b87fe5e959"
+        }
+      ],
+      "purpose_review": "生成器删除上游待恢复字段，1257本地配置差异逐叶原值保持。"
+    },
+    {
+      "path": "module/config/config_updater.py",
+      "qualname": "ConfigUpdater",
+      "kind": "ClassDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "ConfigUpdater",
+          "kind": "ClassDef",
+          "line": 641,
+          "ast_sha256": "1e7f198d1e0f346b3838dd94b20ce4b3d3f730778b69ddadef84c0ec1e5af166"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "ConfigUpdater",
+          "kind": "ClassDef",
+          "line": 641,
+          "ast_sha256": "714544486d74e063d8fcd70a69b986c5d10d5bf801a330ace71939a6f3a4d3eb"
+        }
+      ],
+      "purpose_review": "只撤销上游事件状态迁移，不移除本地配置和其生成约束。"
+    },
+    {
+      "path": "module/os/fleet.py",
+      "qualname": "OSFleet",
+      "kind": "ClassDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "OSFleet",
+          "kind": "ClassDef",
+          "line": 146,
+          "ast_sha256": "1a768637735643dcbe1675718da28ba2578a826732b2a67c9f8bda02854d7e92"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "OSFleet",
+          "kind": "ClassDef",
+          "line": 146,
+          "ast_sha256": "43bfd6c4fe2e645113554705c4575f8e2f262979bb00ee0e1c6f5af80e0b6c99"
+        }
+      ],
+      "purpose_review": "按用户决定撤销通用事件移动状态，保留现有允许事件收尾参数及普通移动流程。"
+    },
+    {
+      "path": "module/os/map.py",
+      "qualname": "OSMap",
+      "kind": "ClassDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "OSMap",
+          "kind": "ClassDef",
+          "line": 85,
+          "ast_sha256": "618a885814375f6ac45e3999f64d2c9543df40f447e95ab91d94279a9acaff68"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "OSMap",
+          "kind": "ClassDef",
+          "line": 86,
+          "ast_sha256": "fc840acfb5d680398e73db615032c6ceae2efb14a014fb7a79657a058dd3d993"
+        }
+      ],
+      "purpose_review": "删除通用续查挂钩，保留主队预检跳过、234补查、明确单舰队调用、严格全图覆盖、停止事件与截图归档边界。"
+    },
+    {
+      "path": "module/os/map.py",
+      "qualname": "OSMap._execute_fixed_patrol_scan",
+      "kind": "FunctionDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "OSMap._execute_fixed_patrol_scan",
+          "kind": "FunctionDef",
+          "line": 2249,
+          "ast_sha256": "27ffc7d5a2c521088e95bf0c039d9f6cef9ddacdc08777c23cf107457bc0639a"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "OSMap._execute_fixed_patrol_scan",
+          "kind": "FunctionDef",
+          "line": 2252,
+          "ast_sha256": "c9f031e4dd72476e8fb1147992fa0f146e9efaaad4762c136d146414a09c4d3a"
+        }
+      ],
+      "purpose_review": "删除通用续查挂钩，保留主队预检跳过、234补查、明确单舰队调用、严格全图覆盖、停止事件与截图归档边界。"
+    },
+    {
+      "path": "module/os/map.py",
+      "qualname": "OSMap._move_fleets_and_rescan",
+      "kind": "FunctionDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "OSMap._move_fleets_and_rescan",
+          "kind": "FunctionDef",
+          "line": 2392,
+          "ast_sha256": "1bd318f238bc0919a7096a4ab3634ae3890c84ab32be57700bec2cae2b0dd0fe"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "OSMap._move_fleets_and_rescan",
+          "kind": "FunctionDef",
+          "line": 2387,
+          "ast_sha256": "e65820b7b3cdde927061acad799632f59d5fc42af8f33b9ef698258413e79302"
+        }
+      ],
+      "purpose_review": "删除通用续查挂钩，保留主队预检跳过、234补查、明确单舰队调用、严格全图覆盖、停止事件与截图归档边界。"
+    },
+    {
+      "path": "module/os/map.py",
+      "qualname": "OSMap.clear_question",
+      "kind": "FunctionDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "OSMap.clear_question",
+          "kind": "FunctionDef",
+          "line": 1303,
+          "ast_sha256": "c98277d58ab6024e166e02f18dcfa9ae99d1ceb07b7a3bb36d6f4b1d858b3031"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "OSMap.clear_question",
+          "kind": "FunctionDef",
+          "line": 1300,
+          "ast_sha256": "6d16226f73a23c0903a7b0e8ceb0660900c2e6eefc7eec1596929d37eb50e221"
+        }
+      ],
+      "purpose_review": "删除通用续查挂钩，保留主队预检跳过、234补查、明确单舰队调用、严格全图覆盖、停止事件与截图归档边界。"
+    },
+    {
+      "path": "module/os/map.py",
+      "qualname": "OSMap.map_rescan_once",
+      "kind": "FunctionDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "OSMap.map_rescan_once",
+          "kind": "FunctionDef",
+          "line": 1939,
+          "ast_sha256": "3f34c6b54a30027e20b1a7671da30d89efb97b64dac0a73e864c2daa9e2153b2"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "OSMap.map_rescan_once",
+          "kind": "FunctionDef",
+          "line": 1950,
+          "ast_sha256": "31372ca8f3a8de5f323db4f23d66cca885855298c01c40c892e4dc95744585a4"
+        }
+      ],
+      "purpose_review": "删除通用续查挂钩，保留主队预检跳过、234补查、明确单舰队调用、严格全图覆盖、停止事件与截图归档边界。"
+    },
+    {
+      "path": "module/os/tasks/hazard_leveling.py",
+      "qualname": "OpsiHazard1Leveling",
+      "kind": "ClassDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "OpsiHazard1Leveling",
+          "kind": "ClassDef",
+          "line": 32,
+          "ast_sha256": "22b18046d3baf5adba970ceb1599028950209e1307441c3ebd2e31143f6ae12b"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "OpsiHazard1Leveling",
+          "kind": "ClassDef",
+          "line": 32,
+          "ast_sha256": "9e4c60c0d2fa1855e9053ae63abb511749701b378a5474207cb24ddb613e3a3b"
+        }
+      ],
+      "purpose_review": "保留主队优先预检、成功免扫图、补查234和finally复位，仅删除已撤销的续查及其预算依赖。"
+    },
+    {
+      "path": "module/os/tasks/hazard_leveling.py",
+      "qualname": "OpsiHazard1Leveling._cl1_run_battle",
+      "kind": "FunctionDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "OpsiHazard1Leveling._cl1_run_battle",
+          "kind": "FunctionDef",
+          "line": 120,
+          "ast_sha256": "f88dcfa37bc3aaddd72ec98e542b257e09f195a4dd69e05edae183cfe57d1be2"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "OpsiHazard1Leveling._cl1_run_battle",
+          "kind": "FunctionDef",
+          "line": 120,
+          "ast_sha256": "61e19b126ad17ae9878b075c41a5a8ac0fc2b3b6fd8e7a105ca1d23dc5f3677e"
+        }
+      ],
+      "purpose_review": "保留主队优先预检、成功免扫图、补查234和finally复位，仅删除已撤销的续查及其预算依赖。"
+    },
+    {
+      "path": "module/os/tasks/scheduling.py",
+      "qualname": "OpsiScheduling",
+      "kind": "ClassDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "OpsiScheduling",
+          "kind": "ClassDef",
+          "line": 971,
+          "ast_sha256": "f7918dfad8928c26ffa746b24c147939b4f62aecc230c0e4eb5422feb72602ef"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "OpsiScheduling",
+          "kind": "ClassDef",
+          "line": 970,
+          "ast_sha256": "bce5156fad31c3a5cd88bed22775efc6a7b4e23d91dfb5d6f77956df9b647aed"
+        }
+      ],
+      "purpose_review": "按上游撤回代理黄币失效补丁，保留原任务代理身份和上下文恢复。"
+    },
+    {
+      "path": "module/os_handler/map_event.py",
+      "qualname": "MapEventHandler",
+      "kind": "ClassDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "MapEventHandler",
+          "kind": "ClassDef",
+          "line": 46,
+          "ast_sha256": "96e9ee73369708f4bb409e873ba1c125f71fd432949ac29d5dcc8b36fd208202"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "MapEventHandler",
+          "kind": "ClassDef",
+          "line": 46,
+          "ast_sha256": "f9bc1174c9e638a51d0fdde2f7ee1bf4c8b6c050c470039faa2489ce15369170"
+        }
+      ],
+      "purpose_review": "采用上游旧自律重试及状态顺序，保留本地正向回地图后的事件检索入口。"
+    },
+    {
+      "path": "module/os_handler/os_status.py",
+      "qualname": "OSStatus",
+      "kind": "ClassDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "OSStatus",
+          "kind": "ClassDef",
+          "line": 43,
+          "ast_sha256": "fa10f8efef096fc744f9d0dfdbca0c3936a6f87a37e0682b2ce529a454c92e6c"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "OSStatus",
+          "kind": "ClassDef",
+          "line": 43,
+          "ast_sha256": "1505fa97fc05fe647af9928ab8449e22d6fde784ea7ca572d031102c84e38292"
+        }
+      ],
+      "purpose_review": "采用上游旧预算与双币后台采样，保留本地采样时间、弹窗可见期禁止读余额及明石会话双帧确认保护。"
+    },
+    {
+      "path": "module/os_handler/os_status.py",
+      "qualname": "OSStatus.get_yellow_coins",
+      "kind": "FunctionDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "OSStatus.get_yellow_coins",
+          "kind": "FunctionDef",
+          "line": 224,
+          "ast_sha256": "e5af67d57942c5a4f588d70184dc970391aa18765fa25290c0793c9ab9c8f6a9"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "OSStatus.get_yellow_coins",
+          "kind": "FunctionDef",
+          "line": 221,
+          "ast_sha256": "7dfe9179dca5805fbc1f3bafc285d0396a8bf5322b04d97c92c747faf5c9020f"
+        }
+      ],
+      "purpose_review": "采用上游旧预算与双币后台采样，保留本地采样时间、弹窗可见期禁止读余额及明石会话双帧确认保护。"
+    },
+    {
+      "path": "module/os_handler/os_status.py",
+      "qualname": "OSStatus.poll_background_resources",
+      "kind": "FunctionDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "OSStatus.poll_background_resources",
+          "kind": "FunctionDef",
+          "line": 53,
+          "ast_sha256": "d3868e268d72ac3aca560fde99a929520288178bdf5db956fa32fa69a1eb1150"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "OSStatus.poll_background_resources",
+          "kind": "FunctionDef",
+          "line": 53,
+          "ast_sha256": "2c508b234bd87c55ae3f0d4323288b06be2f85c84185e121e1be12d555ca48cc"
+        }
+      ],
+      "purpose_review": "采用上游旧预算与双币后台采样，保留本地采样时间、弹窗可见期禁止读余额及明石会话双帧确认保护。"
+    },
+    {
+      "path": "module/os_shop/shop.py",
+      "qualname": "OSShop",
+      "kind": "ClassDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "OSShop",
+          "kind": "ClassDef",
+          "line": 32,
+          "ast_sha256": "b563e5e84ab277d9cf590360e3fa57651778c08f06950b89d81f289da3244333"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "OSShop",
+          "kind": "ClassDef",
+          "line": 30,
+          "ast_sha256": "1266098e1af60caa141aee3b89a2fe9decf8be4912641c498dfd5f46e3bb7652"
+        }
+      ],
+      "purpose_review": "采用上游旧ui_click入口，保留本地访问缓存/去重/耗时及购买后确认地图与finally缓存清理。"
+    },
+    {
+      "path": "module/os_shop/shop.py",
+      "qualname": "OSShop.handle_akashi_supply_buy",
+      "kind": "FunctionDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "OSShop.handle_akashi_supply_buy",
+          "kind": "FunctionDef",
+          "line": 432,
+          "ast_sha256": "058a9bfb2d5557c47a0da87eb44e7e52d50ef2722e829a3b4d5c00252bf7c69a"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "OSShop.handle_akashi_supply_buy",
+          "kind": "FunctionDef",
+          "line": 405,
+          "ast_sha256": "0d8363f7bdb65b57522751e92ac7debefa90bb518190d5c68f40ca78c0b87a64"
+        }
+      ],
+      "purpose_review": "采用上游旧ui_click入口，保留本地访问缓存/去重/耗时及购买后确认地图与finally缓存清理。"
+    },
+    {
+      "path": "module/runtime/updater.py",
+      "qualname": "Updater",
+      "kind": "ClassDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "Updater",
+          "kind": "ClassDef",
+          "line": 29,
+          "ast_sha256": "0cabc50ace257e7dca8d876340abc528950435bd3f6dc5f185d9a1cbf7a05ad6"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "Updater",
+          "kind": "ClassDef",
+          "line": 29,
+          "ast_sha256": "7ff6d0b7a9408fec5741ab77d5c77f702d0fd88988261804aa017774edd53bfa"
+        }
+      ],
+      "purpose_review": "恢复上游云端总开关，保留单独执行任务更新重启边界。"
+    },
+    {
+      "path": "tests/test_opsi_background_resources.py",
+      "qualname": "BackgroundRuntimeTests",
+      "kind": "ClassDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "BackgroundRuntimeTests",
+          "kind": "ClassDef",
+          "line": 128,
+          "ast_sha256": "56a9e2d86ed9023c7e78c61a66fc8ed8343aef238f0f4f26b3aa3e6c1af563b8"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "BackgroundRuntimeTests",
+          "kind": "ClassDef",
+          "line": 97,
+          "ast_sha256": "1d029e6697efc227e82d93f02aa0511f9d3c26d792fe706a24caaa77a415e384"
+        }
+      ],
+      "purpose_review": "本地迟到AP与黄币保护测试适配恢复后的CoinReading紫币字段；保留时间拒绝及低币不得触发等核心断言。"
+    },
+    {
+      "path": "tests/test_opsi_explore_cleanup.py",
+      "qualname": "CleanupTests",
+      "kind": "ClassDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "CleanupTests",
+          "kind": "ClassDef",
+          "line": 24,
+          "ast_sha256": "f23bbbbd26d5d6e0ac7c654a456d20be754d732fb6cccd6ba779a901693b0dbe"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "CleanupTests",
+          "kind": "ClassDef",
+          "line": 24,
+          "ast_sha256": "c17dc86a4784ff040ae7e827717f0b286039d482562336c10d56f0a510e602de"
+        }
+      ],
+      "purpose_review": "移除已撤销框架所需的无效夹具，完整事件类型扫描断言仍在。"
+    }
+  ],
+  "configuration_files": [
+    {
+      "path": "config/template.json",
+      "local_delta_leaf_count": 37,
+      "preserved_local_leaf_count": 37,
+      "upstream_added_leaf_count": 0
+    },
+    {
+      "path": "module/config/argument/args.json",
+      "local_delta_leaf_count": 119,
+      "preserved_local_leaf_count": 119,
+      "upstream_added_leaf_count": 0
+    },
+    {
+      "path": "module/config/i18n/zh-CN.json",
+      "local_delta_leaf_count": 189,
+      "preserved_local_leaf_count": 189,
+      "upstream_added_leaf_count": 0
+    },
+    {
+      "path": "module/config/i18n/zh-MIAO.json",
+      "local_delta_leaf_count": 189,
+      "preserved_local_leaf_count": 189,
+      "upstream_added_leaf_count": 0
+    },
+    {
+      "path": "module/config/i18n/en-US.json",
+      "local_delta_leaf_count": 189,
+      "preserved_local_leaf_count": 189,
+      "upstream_added_leaf_count": 0
+    },
+    {
+      "path": "module/config/i18n/ja-JP.json",
+      "local_delta_leaf_count": 189,
+      "preserved_local_leaf_count": 189,
+      "upstream_added_leaf_count": 0
+    },
+    {
+      "path": "module/config/i18n/zh-TW.json",
+      "local_delta_leaf_count": 189,
+      "preserved_local_leaf_count": 189,
+      "upstream_added_leaf_count": 0
+    },
+    {
+      "path": "module/config/argument/argument.yaml",
+      "local_delta_leaf_count": 95,
+      "preserved_local_leaf_count": 95,
+      "upstream_added_leaf_count": 0
+    },
+    {
+      "path": "module/config/argument/dashboard.yaml",
+      "local_delta_leaf_count": 0,
+      "preserved_local_leaf_count": 0,
+      "upstream_added_leaf_count": 0
+    },
+    {
+      "path": "module/config/argument/default.yaml",
+      "local_delta_leaf_count": 0,
+      "preserved_local_leaf_count": 0,
+      "upstream_added_leaf_count": 0
+    },
+    {
+      "path": "module/config/argument/gui.yaml",
+      "local_delta_leaf_count": 60,
+      "preserved_local_leaf_count": 60,
+      "upstream_added_leaf_count": 0
+    },
+    {
+      "path": "module/config/argument/override.yaml",
+      "local_delta_leaf_count": 0,
+      "preserved_local_leaf_count": 0,
+      "upstream_added_leaf_count": 0
+    },
+    {
+      "path": "module/config/argument/task.yaml",
+      "local_delta_leaf_count": 1,
+      "preserved_local_leaf_count": 1,
+      "upstream_added_leaf_count": 0
+    }
+  ],
+  "syntax_warnings": [
+    {
+      "path": "module/commission/project.py",
+      "line": 147,
+      "category": "SyntaxWarning",
+      "message": "\"\\d\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\d\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "module/commission/project.py",
+      "line": 148,
+      "category": "SyntaxWarning",
+      "message": "\"\\d\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\d\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "module/commission/project.py",
+      "line": 599,
+      "category": "SyntaxWarning",
+      "message": "\"\\d\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\d\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "module/commission/project.py",
+      "line": 609,
+      "category": "SyntaxWarning",
+      "message": "\"\\d\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\d\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "module/config/redirect_utils/shop_filter.py",
+      "line": 92,
+      "category": "SyntaxWarning",
+      "message": "\"\\>\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\>\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "module/config/redirect_utils/shop_filter.py",
+      "line": 93,
+      "category": "SyntaxWarning",
+      "message": "\"\\>\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\>\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "module/handler/sensitive_info.py",
+      "line": 62,
+      "category": "SyntaxWarning",
+      "message": "\"\\[\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\[\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "module/research/project.py",
+      "line": 228,
+      "category": "SyntaxWarning",
+      "message": "\"\\d\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\d\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "module/research/selector.py",
+      "line": 51,
+      "category": "SyntaxWarning",
+      "message": "\"\\d\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\d\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "module/research/selector.py",
+      "line": 52,
+      "category": "SyntaxWarning",
+      "message": "\"\\d\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\d\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "submodule/AlasFpyBridge/module/config/config_updater.py",
+      "line": 116,
+      "category": "SyntaxWarning",
+      "message": "\"\\|\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\|\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "tests/test_background_service.py",
+      "line": 103,
+      "category": "SyntaxWarning",
+      "message": "\"\\s\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\s\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    }
+  ]
+}

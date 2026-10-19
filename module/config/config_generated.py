@@ -846,7 +846,6 @@ class GeneratedConfig:
     OpsiHazard1Leveling_RecordNonCL1AP = True
     OpsiHazard1Leveling_RecordSeaMiles = -1
     OpsiHazard1Leveling_SeaMilesLastRecord = None
-    OpsiHazard1Leveling_PendingEventRecovery = None
     OpsiHazard1Leveling_DebugClip = False
 
     # 配置组 `OpsiSirenBug`

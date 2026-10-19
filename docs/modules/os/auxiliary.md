@@ -112,14 +112,11 @@ module/os_simulator/
 
 | 类 | 要点 |
 | --- | --- |
-| `AshCombat(Combat)` | META 战斗中的战斗状态、战前检查及完成信号处理 |
-| `OSAsh(UI, MapEventHandler)` | 地图侧读取信标持有量与每日进度；`AshDigitCounter` 核对持有量的计数格式、范围和完整字形数量，`DailyDigitCounter` 裁掉每日进度左侧文字 |
+| `AshCombat(Combat)` | 战斗中持续采集信标收集进度（`ash_collect_status`，`DailyDigitCounter` 左裁剪适配信标数字） |
 | `Meta(UI, MapEventHandler)` | META 页面基类；`MetaState` 枚举（INIT/ATTACKING/COMPLETE/UNDEFINED）驱动页面状态机 |
 | `OpsiAshBeacon(Meta)` | 信标攻击任务：`ui_ensure(page_reward)` → 攻击 → `MetaReward` 领奖 → `task_delay(server_update=True)` → **必须 `ui_goto_main`**（MetaReward 停在 META 页，不回主界面会让下一个任务页面识别失败） |
 | `AshBeaconAssist(Meta)` | 协助好友信标：成功领奖延迟到服务器刷新，失败 `task_delay(minute=(10, 20))` 重试 |
-| `handle_ash_beacon_attack()` | 在大世界战斗链路中调用：持有量通过字形校验、≥100 且可调度时 `task_call('OpsiAshBeacon')`；读数不可信时不覆盖 META 排期。`AttackMode=current_dossier_only`（只打档案）时不触发——该模式下信标数据永不消耗，触发条件会永久成立并反复打断智能调度 |
-
-地图持有量不能只信任 OCR 文本：两位数若被补出百位，会反复召回数据不足的 META 任务，并中断正在执行的自动搜索。`AshDigitCounter` 用同一原生字图的完整连通字形数核对文字长度，拒绝不一致或越界结果，不截掉首位猜数；下一张地图截图可重新识别。持有量无效时仍独立读取每日进度，已达每日上限的状态继续用于侵蚀一行动力保留判断。离线回归与匿名原生字图见 `tests/test_opsi_ash_status.py`、`tests/fixtures/opsi_beacon/`。
+| `handle_ash_beacon_attack()` | 在大世界战斗链路中调用：收集 ≥100 且可调度时 `task_call('OpsiAshBeacon')`；`AttackMode=current_dossier_only`（只打档案）时不触发——该模式下信标数据永不消耗，触发条件会永久成立并反复打断智能调度|
 
 `OpsiAshBeacon.AssistRequestLimit` 替代原「一击即走」开关：`0`（默认）打一刀后持续每半小时求援；`-1` 自行连续出击，是否求援仍由 `RequestAssist` 控制；正整数在求援指定轮数、最后等待半小时后，若信标仍未击破则自行连续打完。首次战斗前的求援计入，好友/大舰队/世界的一次操作合计一轮。正整数模式将轮数及下次检查时刻保存到隐藏的 `AssistRequestState`，防止首刀后立即重复计数，并在重启后继续；确认信标为空或本信标奖励领取完毕时清除。META 主入口、每日刷新和档案信标不会自行清零该记录。旧布尔值迁移为 `true → 0`、`false → -1`。离线回归见 `tests/test_meta_beacon.py`。
 
@@ -127,7 +124,6 @@ module/os_simulator/
 
 - `ContinuousCombat`：塞壬扫描装置触发的连续战斗控制流异常，守护与任务循环捕获后继续。
 - `Combat(Combat_, MapEventHandler)` 覆写四个关键点：`_handle_auto_battle_status_s`（S 评价页自动点击，`battle_status_s_autoclick_delay` 可被子类改短）、`_os_combat_expected_end`（预期结束判定，大世界守护优先点 AUTO_SEARCH_REWARD）、`combat_status` 的结束判定、`handle_exp_info`。普通守护任务若用 `expected_end='no_searching'` 在大世界永不成立，会卡死在奖励页——`os_daemon` 的注释记录了这个坑。
-- `auto_search_combat()` 在加载和执行阶段优先确认战斗执行状态，暂停按钮可见时不处理地图自律开关。自动搜索中断后仍确认 S/A/B/C/D 经验页，与 `OpsiGeneral_RepairThreshold` 无关；点击使用结算冷却，并由下一张截图确认返回地图。关闭修理不能关闭结算处理，否则会在经验页等待至卡死重启。离线回归见 `tests/test_opsi_auto_search_combat.py`，覆盖脱敏原始截图、连续敌人清理及下一轮搜索。
 
 ### os_shop
 
@@ -137,8 +133,6 @@ module/os_simulator/
 | `PortShop` | 港口货架 `ItemGrid`（按钮网格 + 滚动），`OS_SHOP_SCROLL = AdaptiveScroll(...)` 适配背景多变的商店界面 |
 | `AkashiShop` | 明石商店货架定义按 `@Config.when(SERVER='tw'/'en'/None)` 三分支——三服货架布局不同 |
 | `Selector` | 策略适配层：把「侵蚀等级偏好、紫币保留、数量上限」等配置翻译成对货架条目的过滤与排序；港口/明石共用 |
-
-`OSShop.handle_akashi_supply_buy()` 返回购买及返回地图是否完成，不能将入口失败计为明石成功。普通任务的近距离入口处理舰队菜单和误入的总览、仓库、情报、指令页面，点击三次后停止重试，连续十二秒无进展后交回上层；已在商店时直接执行购买，不受入口超时限制。侵蚀一中相邻明石直接进入商店，较远时使用只发送一次移动指令的事件循环，行军中不补点，剧情透出地图也不再定位。其安全定位、换队、完整强制移动与中断续查由 `module/os/event_recovery.py` 编排，详见[大世界核心](index.md#侵蚀一随机事件安全交互与续查)。
 
 ### os_simulator
 
@@ -208,13 +202,9 @@ OpsiAshBeacon.run() → META 页攻击 → MetaReward 领奖 → task_delay(serv
 
 侵蚀一与短猫的事件检索通过 `wait_until_walk_stable(allow_event_finish=True)` 在商店正常退出、最终领奖、档案领取或战斗处理完成后，用新截图确认地图及计划作战入口并快速收尾。后续选项会撤销旧完成标记，意外页面恢复仍要求重新定位；下一轮保留任务收尾、EMP、修理和任务切换检查；同一海域完成事件后复用刚确认的地图位置，省略开工前重复的海域名称 OCR，随即进入计划作战。近距离清除问号、当前视野重扫之前的提示条等待继续保留；上述优化只缩短事件已完成后的镜头稳定收尾，不绕过地图识别的提示条保护。
 
-地图黄币使用 `resource_read.py` 的有界后台队列识别固定截图，两张有效地图帧同值才接受；每次最多一个待识别帧。地图不显示商店紫币栏，不识别或记录该区域，也不以紫币结果阻塞黄币。侵蚀一与短猫都会验收结果，数字变化后重新采样。识别器状态与按钮坐标在提交时复制，实例、服务器、货币修订不匹配，以及数字变化或同步确认之前采样的结果均丢弃；在途任务保留队列槽，完成后排空，不堆积替代任务。
+常规黄币与紫币使用 `resource_read.py` 的有界后台队列识别固定截图，两张有效地图帧同值才接受；每次最多一个待识别帧。识别器状态与按钮坐标在提交时复制，实例、服务器和货币修订不匹配的结果丢弃。到期时同帧附带当前行动力，扣除采样后的已知消耗，补给后拒绝旧结果。当前行动力只更新运行判断、库存观察和仪表盘；只有本次完整面板确认的含箱总量进入行动力与资产统计，不能用旧配置或缓存箱子补齐。海里数独立记录，不附带估算行动力。商店预算及开箱决策保留同步识别。
 
-`get_routine_yellow_coins()` 只有在当前数字区域、实例、服务器、页面及交易修订均与已确认值相同时才复用；变化后先同步双读再决定补币或返回侵蚀一，不能直接返回 `_last_yellow_coins`。到期时后台同帧附带当前行动力，扣除采样后的已知消耗，补给后拒绝旧结果。当前行动力只更新运行判断、库存观察和仪表盘；只有本次完整面板确认的含箱总量进入行动力与资产统计，不能用旧配置或缓存箱子补齐。海里数独立记录，不附带估算行动力。商店预算及开箱决策保留同步识别。
-
-代理任务可能已经结算奖励或购买物品，但运行器仍保留进入任务前的截图。`OpsiScheduling._run_with_opsi_task_context()` 因此在 `finally` 中更新货币修订，使旧预算和在途结果失效；覆盖正常返回、`TaskEnd`、异常及防溢出嵌套代理。下一次黄币预算必须通过新截图重新确认，不能只比较旧截图上的数字区域。独立隐秘、深渊、要塞等不启用常规缓存，直接沿同步预算读取。
-
-资源观察、收支复核及仪表盘保存由 `resource_write.py` 串行提交；固定采样时间和任务上下文，后台只事务合并仪表盘字段，不修改运行中的配置对象。收支复核按采样时间计算已发生交易，旧观察不能覆盖新读数。后台确认侵蚀一黄币低于当前保留值时，由主线程通过 `interrupt_auto_search(goto_main=False, end_task=False)` 返回地图，智能调度下一轮立即执行补币决策；补币任务不被自己的低黄币状态打断。后台正常采样使用 `ocr_batch(..., show_log=False)`，不输出逐帧批量结果和黄币确认日志；`[大世界-资源后台]` 仅保留识别异常与低币切换提示。离线回归见 `tests/test_opsi_background_resources.py`。
+资源观察、收支复核及仪表盘保存由 `resource_write.py` 串行提交；固定采样时间和任务上下文，后台只事务合并仪表盘字段，不修改运行中的配置对象。收支复核按采样时间计算已发生交易，旧观察不能覆盖新读数。后台确认侵蚀一黄币低于当前保留值时，由主线程通过 `interrupt_auto_search(goto_main=False, end_task=False)` 返回地图，智能调度下一轮立即执行补币决策；补币任务不被自己的低黄币状态打断。日志入口为 `[大世界-资源后台]`，离线回归见 `tests/test_opsi_background_resources.py`。
 
 快速模式会减少总行动力曲线的实测采样点，已有原始历史保留不删；当前行动力和保守下界不冒充总量。已确认明石会话仍使用连续实际截图校验，省去额外固定验证等待。
 
