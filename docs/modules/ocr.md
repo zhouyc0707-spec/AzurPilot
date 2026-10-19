@@ -68,7 +68,7 @@ bin/ocr_models/     # 模型文件（非代码）
 | 入口 | 用途 |
 | --- | --- |
 | `from module.ocr.ocr import Ocr / Digit / DigitCounter / Duration` | 业务构造识别器的唯一常规入口（含 `*Yuv` 变体） |
-| `ocr_batch(image, readers)` | 同帧、同语言及字符表的单区域合并队列提交，逐字段保持预处理、后处理和有效性 |
+| `ocr_batch(image, readers, *, show_log=True)` | 同帧、同语言及字符表的单区域合并队列提交，逐字段保持预处理、后处理和有效性；后台采样可关闭结果日志 |
 | `OCR_MODEL.<lang>` | 框架内获取 `AlOcr` 实例；导入时按部署配置决定本地模型或 RPC 代理 |
 | `AlOcr(config=…, settings=…)` | 框架内部（models.py、ocr_benchmark）直接构造；业务代码不应使用 |
 | `release_ocr_models()` / `reset_ocr_model()` | 空闲释放内存 / 配置变更后重置模型缓存 |
@@ -77,7 +77,7 @@ bin/ocr_models/     # 模型文件（非代码）
 
 追代码建议从 `module/ocr/ocr.py` 的 `Ocr.ocr()` 开始：它串起了预处理、后端调用与后处理全链路。
 
-大世界常规资源由 `module/os_handler/resource_read.py` 在截图副本上后台执行同帧合批。提交时复制识别器和坐标，避免 `last_valid` 与按钮偏移的跨线程竞争。主线程只轮询已完成的 Future，不等待推理；两帧货币稳定确认、采样版本校验、到期行动力检查及低黄币中断见[大世界辅助模块](os/auxiliary.md)。商店预算与实际补给决策仍同步确认。
+大世界地图黄币与到期的当前行动力由 `module/os_handler/resource_read.py` 在截图副本上后台执行；地图不显示商店紫币栏，不对该区域做货币识别。提交时复制识别器和坐标，避免 `last_valid` 与按钮偏移的跨线程竞争。主线程轮询已完成的 Future；调度预算只复用数字区域未变化的确认值，变化后同步双读，旧后台结果不能覆盖新确认。两帧黄币稳定确认、采样版本校验、到期行动力检查及低黄币中断见[大世界辅助模块](os/auxiliary.md)。商店预算与实际补给决策仍同步确认。
 
 ## 5. 核心组件
 

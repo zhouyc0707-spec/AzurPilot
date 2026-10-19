@@ -85,37 +85,32 @@ class MapEventRecovery:
             self.config.cross_set(PENDING_EVENT_PATH, state)
         return state
 
-    def _event_matches_pending(self, kind, grid):
-        """同类事件也按全局格子区分；问号允许在原格子上细化身份。"""
-        state = self._get_pending_event()
-        if state is None:
-            return True
-        if state['kind'] != 'is_question' and kind not in (state['kind'], 'is_question'):
-            return False
-        return state.get('target') is None or tuple(state['target']) == self._event_global_location(grid)
-
     def _remember_pending_event(self, kind, grid=None):
-        """确认随机事件或雷达问号后、首次操作前立即保存；重扫不重置预算。"""
+        """确认随机事件或雷达问号后、首次操作前立即保存；重扫不重置预算。
+
+        视野里识别到的格子才是当前可点击的位置，续查快照按它重新锚定；旧快照
+        只在重启后、当前视野没有同类事件时继续沿用。另一类事件的记录不覆盖。
+        """
         if not self._event_recovery_enabled() or getattr(self, '_event_recovery_exhausted', False):
             return
+        target = self._event_global_location(grid) if grid is not None else None
         state = self._get_pending_event()
         if state is not None:
-            if (grid is not None and hasattr(grid, 'location')
-                    and not self._event_matches_pending(kind, grid)):
+            if kind != 'is_question' and state['kind'] not in (kind, 'is_question'):
                 return
             changed = False
-            if state.get('target') is None and grid is not None:
-                target = self._event_global_location(grid)
-                if target is not None:
-                    state['target'] = list(target)
-                    changed = True
-            if state['kind'] == 'is_question' and kind != 'is_question' and grid is not None:
+            old = None if state.get('target') is None else tuple(state['target'])
+            if target is not None and old != target:
+                if old is not None:
+                    logger.info(f'[大世界-事件] 按当前视野更新事件格子 {location2node(old)} -> {location2node(target)}')
+                state['target'] = list(target)
+                changed = True
+            if state['kind'] == 'is_question' and kind != 'is_question':
                 state['kind'] = kind
                 changed = True
             if changed:
                 self.config.cross_set(PENDING_EVENT_PATH, state)
             return
-        target = self._event_global_location(grid)
         self.config.cross_set(PENDING_EVENT_PATH, dict(
             server=self.config.SERVER,
             reset=get_os_next_reset().isoformat(),
@@ -125,6 +120,9 @@ class MapEventRecovery:
             kind=kind,
             phase='interact',
         ))
+        # 普通新事件获得预算；强制移动中首次发现的事件不能重开已消耗的额度。
+        if not getattr(self, '_in_event_recovery', False):
+            self._event_patrol_attempted = False
         logger.attr('待续查事件', f'{kind}, 全局格子={target}')
 
     def _finish_pending_event(self, kind):
@@ -167,13 +165,7 @@ class MapEventRecovery:
         target = self._event_global_location(grid)
         self._remember_pending_event('is_akashi', grid)
         if self._event_recovery_enabled():
-            # 相邻明石也可能需要走一格，统一用只发送一次移动指令的事件循环。
-            with self.config.temporary(STORY_ALLOW_SKIP=False):
-                result = self.wait_until_walk_stable(
-                    confirm_timer=Timer(3, count=4), drop=drop, walk_out_of_step=False,
-                    allow_event_finish=True, event_target=target,
-                )
-            return 'akashi' in result
+            return self._try_akashi_recovery(grid, target, drop=drop)
         fleet = self.convert_radar_to_local((0, 0))
         if fleet.distance_to(grid) > 1:
             button = self._prepare_event_click(target)
@@ -196,6 +188,45 @@ class MapEventRecovery:
                 return False
         return self.handle_akashi_supply_buy(grid)
 
+    def _akashi_adjacent(self, grid):
+        """舰队是否已经贴住明石；贴住时再点事件格不会移动，旧版直接进店。"""
+        if grid is None or not hasattr(grid, 'location'):
+            return False
+        try:
+            fleet = self.convert_radar_to_local((0, 0))
+        except KeyError:
+            return False
+        return fleet.distance_to(grid) <= 1
+
+    def _try_akashi_recovery(self, grid, target, drop=None):
+        """恢复模式下沿用旧版明石语义：相邻直接进店，较远才走一格。"""
+        if self._akashi_adjacent(grid):
+            logger.info(f'[大世界-搜索] 明石 ({grid}) 靠近当前舰队，直接进入商店')
+            if self.handle_akashi_supply_buy(grid):
+                self._solved_map_event.add('is_akashi')
+                return True
+            return False
+        with self.config.temporary(STORY_ALLOW_SKIP=False):
+            result = self.wait_until_walk_stable(
+                confirm_timer=Timer(3, count=4), drop=drop, walk_out_of_step=False,
+                allow_event_finish=True, event_target=target,
+            )
+        if 'akashi' in result:
+            return True
+        # 明石图标会被舰队模型遮住，视图检测会闪断；重新识别后再判断是否已经贴近。
+        try:
+            self.update()
+        except MapDetectionError:
+            return False
+        grids = self.view.select(is_akashi=True)
+        visible = grids[0] if grids else None
+        if visible is not None and self._akashi_adjacent(visible):
+            logger.info(f'[大世界-搜索] 明石 ({visible}) 靠近当前舰队，直接进入商店')
+            if self.handle_akashi_supply_buy(visible):
+                self._solved_map_event.add('is_akashi')
+                return True
+        return False
+
     def _visit_akashi(self, grid, drop=None):
         """其他任务沿用明石恢复；侵蚀一统一交给地图事件恢复。"""
         if self._event_recovery_enabled():
@@ -212,8 +243,6 @@ class MapEventRecovery:
     def _visit_map_event(self, kind, grid, drop=None):
         if getattr(self, '_event_recovery_exhausted', False):
             return False
-        if not self._event_matches_pending(kind, grid):
-            return False
         if kind == 'is_scanning_device' and not self._is_siren_research_enabled:
             if self._get_pending_event() is not None:
                 self._remember_pending_event(kind, grid)
@@ -222,11 +251,16 @@ class MapEventRecovery:
             self._finish_pending_event(kind)
             logger.info('[大世界-事件] 按配置跳过塞壬装置，不触发交互恢复')
             return True
+        # 与旧版一致：视野内确认的事件直接交互；续查记录在这里按可见格子重新锚定。
         self._remember_pending_event(kind, grid)
         if self._try_map_event_grid(kind, grid, drop=drop):
             return True
         if (getattr(self, '_event_recovery_active', False)
                 or getattr(self, '_in_event_recovery', False)):
+            return False
+        state = self._get_pending_event()
+        if state is None or state['kind'] != kind:
+            # 记录属于另一类事件，不为眼前这次失败占用它的续查预算。
             return False
         return self._recover_pending_event(drop=drop)
 
@@ -254,6 +288,10 @@ class MapEventRecovery:
             return self._get_pending_event() is None
         if kind in ('is_question', 'is_scanning_device') and getattr(self, 'is_siren_device_confirmed', False):
             state = self._get_pending_event()
+            if state is None or state['kind'] not in (kind, 'is_question'):
+                # 装置后续步骤要占用续查记录，不能覆盖另一类事件的待处理身份。
+                logger.info('[大世界-事件] 仍有其他事件的续查记录，本次先不推进装置后续步骤')
+                return False
             mode = getattr(self, 'siren_device_mode', None) or 'unknown'
             if mode not in ('enemy', 'resource', 'collected'):
                 mode = 'unknown'
@@ -303,6 +341,25 @@ class MapEventRecovery:
             if state['mode'] == 'enemy' and fleet > 0 and self.is_in_map():
                 self.fleet_set(current)
 
+    def _event_grid_from_state(self, state):
+        """按事件类型在当前视野重新定位续查事件；旧全局格子只作兜底。"""
+        if state is None:
+            return None
+        kind = state['kind']
+        if kind != 'is_question':
+            grids = self.view.select(**{kind: True})
+            if grids:
+                return grids[0]
+        radar_grid = self._radar_question_to_local()
+        if radar_grid is not None:
+            return radar_grid
+        if state.get('target') is None:
+            return None
+        grid = self._event_local_grid(state['target'])
+        if grid is not None and self._pending_event_visible(state, grid):
+            return grid
+        return None
+
     def _goto_pending_event_with_other_fleets(self, drop=None):
         state = self._get_pending_event()
         current = self.fleet_selector.get()
@@ -313,22 +370,14 @@ class MapEventRecovery:
                 self.fleet_set(fleet)
                 self.device.screenshot()
                 self.update()
-                if state.get('target') is not None:
-                    grid = self._event_local_grid(state['target'])
-                    # 重启续查不允许按旧位置盲点；至少需要新图标或雷达问号。
-                    if grid is None or not self._pending_event_visible(state, grid):
-                        continue
-                    kind = self._map_event_type(grid)
-                    if kind == 'is_question':
-                        kind = state['kind']
-                else:
-                    grids = self.view.select(**{state['kind']: True}) if state['kind'] != 'is_question' else []
-                    grid = grids[0] if grids else self._radar_question_to_local()
-                    if grid is None or not self._event_matches_pending(state['kind'], grid):
-                        continue
-                    kind = self._map_event_type(grid)
-                if (self._event_matches_pending(kind, grid)
-                        and self._try_map_event_grid(kind, grid, drop=drop)):
+                # 重启续查不能按旧屏幕位置盲点，但允许按事件类型或雷达问号重新定位。
+                grid = self._event_grid_from_state(state)
+                if grid is None:
+                    continue
+                kind = self._map_event_type(grid)
+                if kind == 'is_question':
+                    kind = state['kind']
+                if self._try_map_event_grid(kind, grid, drop=drop):
                     return True
             return False
         finally:

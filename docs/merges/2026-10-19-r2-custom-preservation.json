@@ -1,0 +1,395 @@
+{
+  "generated_at_utc": "2026-10-19T11:23:32.349763+00:00",
+  "revisions": {
+    "base": "916745b4842e0f8531e01fee30e82440bc659fb6",
+    "local_before_merge": "092a487412d7f2604d8f1ad2ba09b8a95b99081d",
+    "upstream": "7bc6dbde19530102aff543abec988994ab2aae9f"
+  },
+  "summary": {
+    "local_changed": 835,
+    "upstream_changed": 25,
+    "overlap": 12,
+    "non_overlap": 823,
+    "non_overlap_raw_byte_equal": 685,
+    "non_overlap_raw_equal_to_before_merge_checkout": 806,
+    "non_overlap_only_crlf_differences_from_before_merge_checkout": 16,
+    "non_overlap_clean_content_equal": 822,
+    "non_overlap_expected_changes": 1,
+    "non_overlap_unexpected_changes": 0,
+    "overlap_python_files": 8,
+    "local_added_definition_names": 18,
+    "local_added_definition_ast_bodies_preserved": 16,
+    "modified_definition_bodies_requiring_review": 9,
+    "missing_added_definitions": 0,
+    "missing_modified_definitions": 0,
+    "configuration_files": 13,
+    "local_config_delta_leaves": 1257,
+    "preserved_local_config_delta_leaves": 1257,
+    "missing_local_config_leaves": 0,
+    "changed_local_config_leaves": 0,
+    "tracked_python_syntax_passed": 2639,
+    "tracked_python_syntax_errors": 0,
+    "tracked_python_syntax_warnings": 12,
+    "parse_errors": 0,
+    "snapshot_stable": true
+  },
+  "reference_checkout": {
+    "path": "E:\\AzurPilot",
+    "head": "092a487412d7f2604d8f1ad2ba09b8a95b99081d",
+    "status": "",
+    "valid_before_merge_reference": true,
+    "scope": "有效时逐路径比较实际合前运行目录的raw bytes，另列仅换行差异。",
+    "valid_at_end": true
+  },
+  "snapshot": {
+    "changed_during_audit": [],
+    "stable": true,
+    "head_at_end": "092a487412d7f2604d8f1ad2ba09b8a95b99081d"
+  },
+  "non_overlap_expected_changes": [
+    {
+      "path": "定制化修改清单.md",
+      "local_blob": "3ab562f207146928c0320dfe84af8f101a2e3bbc",
+      "merged_clean_blob": "a705d4ec480b41b21f66cfa24d426717953f6c53",
+      "present": true,
+      "raw_blob": "19cf56205636189b2a5ba241ae203e114233e0a9",
+      "raw_byte_equal_to_git_blob": false,
+      "clean_content_equal": false,
+      "status": "内容变化或缺失",
+      "raw_byte_equal_to_before_merge_checkout": false,
+      "only_crlf_difference_from_before_merge_checkout": false,
+      "before_merge_checkout_sha256": "0f2514e9890c2ccebd3d92e9a2b99ace3393be26a6c0e1526e3877b69edb6957",
+      "current_checkout_sha256": "5cb2e59466e6635a86eddfd85ebd30b1ade9f1d6eb0932c698da06ca3a0224b1",
+      "reason": "只更新本轮已合入上游基线及说明日期；保留既有定制条目。",
+      "diff_from_local": "diff --git \"a/\\345\\256\\232\\345\\210\\266\\345\\214\\226\\344\\277\\256\\346\\224\\271\\346\\270\\205\\345\\215\\225.md\" \"b/\\345\\256\\232\\345\\210\\266\\345\\214\\226\\344\\277\\256\\346\\224\\271\\346\\270\\205\\345\\215\\225.md\"\nindex 3ab562f20..a705d4ec4 100644\n--- \"a/\\345\\256\\232\\345\\210\\266\\345\\214\\226\\344\\277\\256\\346\\224\\271\\346\\270\\205\\345\\215\\225.md\"\n+++ \"b/\\345\\256\\232\\345\\210\\266\\345\\214\\226\\344\\277\\256\\346\\224\\271\\346\\270\\205\\345\\215\\225.md\"\n@@ -1,6 +1,6 @@\n # AzurPilot 本地定制清单\n \n-核对日期：2026-10-17；已合入的上游 dev 基线：`c2567ccdc`。本文件只记录当前本地差异、必须保留的统计口径及用户确认的融合决定。实现细节、OCR 阈值和回归入口见各模块文档；修复过程与逐次交付记录见 [合入报告](docs/merges/)。\n+核对日期：2026-10-19；已合入的上游 dev 基线：`7bc6dbde1`。本文件只记录当前本地差异、必须保留的统计口径及用户确认的融合决定。实现细节、OCR 阈值和回归入口见各模块文档；修复过程与逐次交付记录见 [合入报告](docs/merges/)。\n \n **合并约定**：完整保留本地功能、配置和历史数据；新版主题及通用能力跟随上游，旧版布局与下列定制不得被覆盖。真实配置、数据库、凭据和截图不作为模板覆盖。\n \n"
+    }
+  ],
+  "non_overlap_unexpected_changes": [],
+  "overlap_path_disposition": [
+    {
+      "path": "docs/modules/infra/deploy.md",
+      "local_blob": "181ff822a915e645e67b5d1677297b68d72a9ba9",
+      "upstream_blob": "9662e7e41c34a8dbf9a360b868e01a90fa291031",
+      "merged_clean_blob": "330dbe7eaa7d817973873f310959834d1f3dcf87",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "docs/modules/os/auxiliary.md",
+      "local_blob": "5ae3f8953a3da85a947307c93ed423a669cfe500",
+      "upstream_blob": "13ee42e9dac89c30777cb826fc54f9c111268b58",
+      "merged_clean_blob": "2bf6cc1b0a90df504b01dcd93c91ba5e9b26146b",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "docs/modules/os/index.md",
+      "local_blob": "62817342965bc66e7f5628a5ec530ee86aaed38e",
+      "upstream_blob": "b0b007699ec09ce222568774eb3c276da4e6d63f",
+      "merged_clean_blob": "499e1145808934d8a43db2238ffc115997e61ba0",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "docs/modules/webui/runtime.md",
+      "local_blob": "d90155f387b503070c4eb9d0e44218d5cc134a02",
+      "upstream_blob": "0fff4f867a74e5dc58703cd1ed974d8eb86f3429",
+      "merged_clean_blob": "9d991ffa7b3b24bfad1fd186a5023a0a7eb51fb3",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/os/map.py",
+      "local_blob": "f45b2ca4c24632f220c526c8909d5bb7d7efd072",
+      "upstream_blob": "f689ad5548f8d081bad95baf88396496379c9409",
+      "merged_clean_blob": "e64645409e2cb4031b45a5ec5118dc910cd7d708",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/os/tasks/scheduling.py",
+      "local_blob": "ba127c95eb5ac405ba2a8a9a8c903d92f64ea1a6",
+      "upstream_blob": "b475799af64acd605595b4d81dece71db529e2cc",
+      "merged_clean_blob": "787298cb4fd623e19a5b742c2fbacdfd76025f95",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/os_handler/os_status.py",
+      "local_blob": "1ab5fe0e72bd948a5fb393c1ed2b0c6d106054f7",
+      "upstream_blob": "1b395596e09bd89c205717798ae10def909e1b9e",
+      "merged_clean_blob": "a9ebe6e39e43989d476ff1af847a614b4e7a4d94",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/runtime/updater.py",
+      "local_blob": "dcdf559940115f1a8421dda8d8a22beb7e1d2428",
+      "upstream_blob": "a1a39c89ebc2317d2f9b481c3d1d0d09749365c5",
+      "merged_clean_blob": "c4fc1b7d8350c77a50e5430d995093c7790bed57",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "tests/test_opsi_akashi_interaction.py",
+      "local_blob": "8a942a81db5ddeaeec31861fa7154fda1c6e53a2",
+      "upstream_blob": "18e482b20a3645aad98e97c59a4c8d7055145525",
+      "merged_clean_blob": "f4d6349baf6b2f2667c53b833cbe5086df69f17a",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "tests/test_opsi_background_resources.py",
+      "local_blob": "7d59461c9d2ae971b8197aaaa96b97177b56f1f8",
+      "upstream_blob": "63f0ccf260c8f08c99b9d477ddebf301913b585e",
+      "merged_clean_blob": "751c18440ae8b8a374c50a6faf17036392c309e7",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "tests/test_opsi_event_recovery.py",
+      "local_blob": "a7d76111049a4df71810abbb804c7d4b94632dc1",
+      "upstream_blob": "92996815168b1f0ff86c64c2f3ac196ba8336d92",
+      "merged_clean_blob": "ab087bbb9934268cdd33f6ac01170e5594f25cff",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "tests/test_opsi_resource_speed.py",
+      "local_blob": "cd307a0d19fde64b92a31343793985d73e0f05bb",
+      "upstream_blob": "5f049c9d4becc7adca12ce270861f17ce311ee63",
+      "merged_clean_blob": "9332b01092a4c1bb3c6758ab9023e2b58a7f6e6e",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    }
+  ],
+  "changed_local_added_definitions": [
+    {
+      "path": "tests/test_opsi_background_resources.py",
+      "qualname": "BackgroundRuntimeTests.test_late_ap_result_does_not_rewind_runtime_snapshot",
+      "kind": "FunctionDef",
+      "base_count": 0,
+      "local_count": 1,
+      "merged_count": 1,
+      "local_added_count": 1,
+      "full_local_count_preserved": true,
+      "local_ast_bodies_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "BackgroundRuntimeTests.test_late_ap_result_does_not_rewind_runtime_snapshot",
+          "kind": "FunctionDef",
+          "line": 149,
+          "ast_sha256": "eeae239d0c8753724f94d6492bb2ba17d0151ed353dc8a6a641df0679c1f319c"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "BackgroundRuntimeTests.test_late_ap_result_does_not_rewind_runtime_snapshot",
+          "kind": "FunctionDef",
+          "line": 267,
+          "ast_sha256": "ec29cf8556f06f7e82eab4052ab512fdad5701aa11a16461e539566349ee778f"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_opsi_background_resources.py",
+      "qualname": "BackgroundRuntimeTests.test_late_coin_result_cannot_replace_cache_or_trigger_low_balance",
+      "kind": "FunctionDef",
+      "base_count": 0,
+      "local_count": 1,
+      "merged_count": 1,
+      "local_added_count": 1,
+      "full_local_count_preserved": true,
+      "local_ast_bodies_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "BackgroundRuntimeTests.test_late_coin_result_cannot_replace_cache_or_trigger_low_balance",
+          "kind": "FunctionDef",
+          "line": 127,
+          "ast_sha256": "ebd05194f7a5d4353e80e9b5fcb033d1d4e838c7d47cad5cba9d1698a08c829b"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "BackgroundRuntimeTests.test_late_coin_result_cannot_replace_cache_or_trigger_low_balance",
+          "kind": "FunctionDef",
+          "line": 243,
+          "ast_sha256": "8f71fea51ba52c59a81b58883bb634aa380f4eecd80cc4dcc4c046750c0618ce"
+        }
+      ]
+    }
+  ],
+  "manual_review": [
+    {
+      "path": "module/os/map.py",
+      "qualname": "OSMap",
+      "kind": "ClassDef",
+      "review": "父类 AST 随上游新一轮自律开关预算清理及可见事件优先匹配变化。本地停止事件、截图保存范围、主队预检去重和全图严格覆盖方法未删除，相关本地非重叠实现逐文件保持。",
+      "scope": "源码与 diff 静态核对；不等同实机行为证明"
+    },
+    {
+      "path": "module/os/tasks/scheduling.py",
+      "qualname": "OpsiScheduling",
+      "kind": "ClassDef",
+      "review": "父类 AST 随上游代跑子任务结束后黄币缓存失效化变化。本地月末指定海域不占轮换索引的 try/finally 原逻辑仍在。",
+      "scope": "源码与 diff 静态核对；不等同实机行为证明"
+    },
+    {
+      "path": "module/os_handler/os_status.py",
+      "qualname": "OSStatus",
+      "kind": "ClassDef",
+      "review": "父类 AST 反映后台黄币/缓存融合，具体两个方法单列。",
+      "scope": "源码与 diff 静态核对；不等同实机行为证明"
+    },
+    {
+      "path": "module/os_handler/os_status.py",
+      "qualname": "OSStatus.get_yellow_coins",
+      "kind": "FunctionDef",
+      "review": "同步确认后调用上游 invalidate 丢弃后台旧候选及 Future；保留本地 skip_verification_delay 明石快捷入口、奖励页阻止缓存复用和清除配对紫币、非快速模式连续双读间隔 0.2 秒。",
+      "scope": "源码与 diff 静态核对；不等同实机行为证明"
+    },
+    {
+      "path": "module/os_handler/os_status.py",
+      "qualname": "OSStatus.poll_background_resources",
+      "kind": "FunctionDef",
+      "review": "采用上游只后台读取黄币与按需行动力；保留本地按 sampled observed_at 分资源验证，旧 AP 不回退快照、迟到黄币不回退缓存、不触发低币中断；紫币沿原余额留存，不由本次后台读数覆盖。",
+      "scope": "源码与 diff 静态核对；不等同实机行为证明"
+    },
+    {
+      "path": "module/runtime/updater.py",
+      "qualname": "Updater",
+      "kind": "ClassDef",
+      "review": "父类 AST 随上游取消云更新总开关前置短路变化；本地单次执行实例不列入恢复调度名称的 is_single_task 过滤原样保留。",
+      "scope": "源码与 diff 静态核对；不等同实机行为证明"
+    },
+    {
+      "path": "tests/test_opsi_background_resources.py",
+      "qualname": "BackgroundRuntimeTests",
+      "kind": "ClassDef",
+      "review": "跟随上游 CoinReading 移除 purple 字段适配两条本地迟到结果测试；仍断言旧黄币/AP均不回退，紫币沿用200、writer不调用，并新增已确认读数缓存保持对象身份断言。",
+      "scope": "源码与 diff 静态核对；不等同实机行为证明"
+    },
+    {
+      "path": "tests/test_opsi_event_recovery.py",
+      "qualname": "TestPendingEvent",
+      "kind": "ClassDef",
+      "review": "合入上游可见事件优先、相邻明石直接进店等用例，另新增普通新事件预算与常规L2首次发现不得第二轮L2两条融合回归。原本本地新增方法无缺失。",
+      "scope": "源码与 diff 静态核对；不等同实机行为证明"
+    },
+    {
+      "path": "tests/test_opsi_resource_speed.py",
+      "qualname": "TestCurrencyReadReuse",
+      "kind": "ClassDef",
+      "review": "设备夹具增加 sleep Mock；上游非快速任务读取断言新增0.2秒精确校验。原本本地奖励弹窗/紫币配对保护两条测试及其内部帧函数 AST 原样保留。",
+      "scope": "源码与 diff 静态核对；不等同实机行为证明"
+    }
+  ],
+  "additional_fusion": {
+    "path": "module/os/event_recovery.py",
+    "method": "MapEventRecovery._remember_pending_event",
+    "reason": "上游普通新事件重获一次预算仍生效；已在实际常规 L2 恢复中的首次事件不得重置已消耗的强制移动预算，避免融合后重复 L2。"
+  },
+  "warnings": [
+    {
+      "path": "module/commission/project.py",
+      "line": 147,
+      "category": "SyntaxWarning",
+      "message": "\"\\d\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\d\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "module/commission/project.py",
+      "line": 148,
+      "category": "SyntaxWarning",
+      "message": "\"\\d\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\d\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "module/commission/project.py",
+      "line": 599,
+      "category": "SyntaxWarning",
+      "message": "\"\\d\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\d\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "module/commission/project.py",
+      "line": 609,
+      "category": "SyntaxWarning",
+      "message": "\"\\d\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\d\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "module/config/redirect_utils/shop_filter.py",
+      "line": 92,
+      "category": "SyntaxWarning",
+      "message": "\"\\>\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\>\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "module/config/redirect_utils/shop_filter.py",
+      "line": 93,
+      "category": "SyntaxWarning",
+      "message": "\"\\>\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\>\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "module/handler/sensitive_info.py",
+      "line": 62,
+      "category": "SyntaxWarning",
+      "message": "\"\\[\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\[\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "module/research/project.py",
+      "line": 228,
+      "category": "SyntaxWarning",
+      "message": "\"\\d\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\d\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "module/research/selector.py",
+      "line": 51,
+      "category": "SyntaxWarning",
+      "message": "\"\\d\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\d\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "module/research/selector.py",
+      "line": 52,
+      "category": "SyntaxWarning",
+      "message": "\"\\d\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\d\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "submodule/AlasFpyBridge/module/config/config_updater.py",
+      "line": 116,
+      "category": "SyntaxWarning",
+      "message": "\"\\|\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\|\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "tests/test_background_service.py",
+      "line": 103,
+      "category": "SyntaxWarning",
+      "message": "\"\\s\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\s\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    }
+  ],
+  "limitations": [
+    "仅比较 Git 跟踪文件、AST 定义和配置叶，不导入模块或运行游戏。",
+    "类/函数存在及同名数量不能单独证明调用语义正确；融合方法另经源码 diff 核对，运行测试由主代理提供。",
+    "本轮未改变前端；全部前端本地差异属于非重叠逐文件一致校验。"
+  ]
+}

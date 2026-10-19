@@ -1228,6 +1228,9 @@ class OSMap(MapEventRecovery, OSFleet, Map, GlobeCamera, StorageHandler, Strateg
         Returns:
             int: 完成的战斗次数。
         """
+        # 每轮搜索独立计时：事件恢复、换队和强制移动期间不会经过自律开关，跨轮
+        # 残留的 45 秒预算会让新一轮第一次点击就误报“连续点击仍未生效”。
+        self._os_auto_search_enable_budget_clear()
         previous_resource = getattr(self, '_os_auto_search_siren_resource', False)
         self._os_auto_search_siren_resource = siren_resource
         try:
@@ -1707,15 +1710,23 @@ class OSMap(MapEventRecovery, OSFleet, Map, GlobeCamera, StorageHandler, Strateg
             bool: 是否解决了地图随机事件。
         """
         if self.config.task.command == 'OpsiHazard1Leveling' and self._event_recovery_enabled():
+            # 与旧版一致：视野内识别到的随机事件按固定优先级直接交互。续查快照只
+            # 用于重启后当前视野没有事件时的定位，不再要求格子严格相等——相机漂移
+            # 或换队后同一事件会落在相邻格子，旧实现会因此把可见事件当成没找到。
             for kind in MAP_EVENT_TYPES[:-1]:
-                for grid in self.view.select(**{kind: True}):
-                    if (kind not in self._solved_map_event and self._event_matches_pending(kind, grid)):
-                        return self._visit_map_event(kind, grid, drop=drop)
+                if kind in self._solved_map_event:
+                    continue
+                grids = self.view.select(**{kind: True})
+                if grids:
+                    logger.info(f'[大世界-搜索] 在 {grids[0]} 找到事件 {kind}')
+                    return self._visit_map_event(kind, grids[0], drop=drop)
             state = self._get_pending_event()
-            if state is not None and state.get('target') is not None:
-                grid = self._event_local_grid(state['target'])
-                if grid is not None and self._pending_event_visible(state, grid):
-                    return self._visit_map_event(state['kind'], grid, drop=drop)
+            grid = self._event_grid_from_state(state)
+            if grid is not None:
+                kind = self._map_event_type(grid)
+                if kind == 'is_question':
+                    kind = state['kind']
+                return self._visit_map_event(kind, grid, drop=drop)
             return False
 
         grids = self.view.select(is_exploration_container=True)

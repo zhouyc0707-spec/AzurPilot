@@ -223,6 +223,11 @@ class TestAkashiEntry(unittest.TestCase):
 class View(dict):
     center_loca = (4, 3)
 
+    def select(self, **kwargs):
+        """按事件类型筛选当前视野，模拟 SelectedGrids 的 select。"""
+        return [grid for grid in self.values()
+                if all(getattr(grid, key, False) is value for key, value in kwargs.items())]
+
 
 class CameraHarness(MapEventRecovery, OSShop):
     def __init__(self, *, movable=True):
@@ -287,6 +292,8 @@ class RecoveryHarness(MapEventRecovery):
         self.map_rescan = Mock()
         self.camera = (4, 3)
         self.view = View()
+        # 真实 OSMap 从雷达问号换算局部格子，测试只验证续查定位的兜底顺序。
+        self._radar_question_to_local = Mock(return_value=None)
 
     def save_pending(self):
         self.config.cross_set(PENDING_EVENT_PATH, dict(
@@ -326,7 +333,8 @@ class TestPendingAkashi(unittest.TestCase):
     def test_confirmation_is_saved_before_first_click_and_keeps_global_location(self):
         handler = RecoveryHarness()
         grid = make_grid()
-        handler.convert_radar_to_local = Mock(return_value=SimpleNamespace(distance_to=lambda grid: 1))
+        handler.convert_radar_to_local = Mock(return_value=SimpleNamespace(distance_to=lambda grid: 4))
+        handler.update = Mock()
 
         def walk(**kwargs):
             state = handler._get_pending_event()

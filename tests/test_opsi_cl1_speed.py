@@ -334,6 +334,19 @@ class TestCl1AutoSearchRetry(unittest.TestCase):
         self.assertTrue(self.handler.handle_os_auto_search_map_option())
         self.handler.device.click.assert_called_once_with(AUTO_SEARCH_OS_MAP_OPTION_OFF)
 
+    def test_new_search_round_resets_the_enable_budget_after_event_recovery(self):
+        self.assertTrue(self.handler.handle_os_auto_search_map_option())
+        # 事件恢复、换队和强制移动期间不经过自律开关，可能耗尽跨轮的 45 秒预算。
+        self.clock.now += 50
+        self.handler.config.temporary = Mock(return_value=SimpleNamespace(recover=Mock()))
+        self.handler.config.is_task_enabled = Mock(return_value=False)
+        self.handler.ash_popup_canceled = False
+        self.handler.os_auto_search_daemon = Mock(return_value=0)
+        OSMap.os_auto_search_run(self.handler)
+        # 新一轮第一次点击应重新计时，而不是立刻抛“连续点击 45 秒仍未生效”。
+        self.assertTrue(self.handler.handle_os_auto_search_map_option())
+        self.assertEqual(self.handler.device.click.call_count, 2)
+
     def test_battle_transition_does_not_toggle_again_after_half_second(self):
         self.assertTrue(self.handler.handle_os_auto_search_map_option())
         # 开启操作已受理，但战后按钮动画仍短暂保留关闭外观。

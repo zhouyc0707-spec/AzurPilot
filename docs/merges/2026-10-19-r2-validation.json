@@ -1,0 +1,42 @@
+{
+  "python_groups": [
+    {
+      "label": "资源后台、迟到观察、资源速度",
+      "tests": 101,
+      "passed": 101,
+      "log": "resource-tests-final.log"
+    },
+    {
+      "label": "事件恢复、主队预检、强制移动",
+      "tests": 108,
+      "passed": 108,
+      "log": "event-budget-after.log"
+    },
+    {
+      "label": "调度、更新、CL1、地图及明石关联",
+      "tests": 262,
+      "passed": 262,
+      "log": "associated-tests-final.log"
+    }
+  ],
+  "total_distinct_test_methods": 471,
+  "checks": {
+    "python_ast_files": 2639,
+    "python_ast_errors": 0,
+    "preexisting_syntax_warnings": 12,
+    "ruff": "passed",
+    "git_diff_check": "passed"
+  },
+  "unchanged_scopes": [
+    "frontend",
+    "configuration_sources_and_generated_files",
+    "api_contract",
+    "pyproject.toml_and_uv.lock"
+  ],
+  "log_root": "D:\\Codex\\reports\\upstream-dev-20261019-r2",
+  "limits": [
+    "未执行真实游戏任务",
+    "没有前端改动，本轮未重复浏览器/构建验收",
+    "没有配置定义或API变化，本轮无需重新生成"
+  ]
+}

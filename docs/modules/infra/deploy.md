@@ -94,6 +94,8 @@ Alas.bat → python -m deploy.installer
 成功 → start pythonw gui.py --electron
 ```
 
+`GitManager.git_install()` 按本地配置直接执行 Git/CDN 更新，不再请求云端更新总开关。云端仅保留运行期间的强制更新开关，其访问失败不阻止正常版本检查。
+
 ### 启动后的依赖自举
 
 仓库的 `[tool.uv] cache-dir` 与启动器的 `UV_CACHE_DIR` 统一指向项目内 `.uv-cache/`，

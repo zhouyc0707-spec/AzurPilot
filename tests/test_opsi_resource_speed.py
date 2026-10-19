@@ -447,7 +447,7 @@ class TestCurrencyReadReuse(unittest.TestCase):
         self.handler = OSStatus.__new__(OSStatus)
         self.handler.config = SimpleNamespace(task=SimpleNamespace(command='OpsiHazard1Leveling'),
                                                config_name='isolated')
-        self.handler.device = SimpleNamespace(image=np.zeros((720, 1280, 3), np.uint8))
+        self.handler.device = SimpleNamespace(image=np.zeros((720, 1280, 3), np.uint8), sleep=Mock())
         self.handler.appear = Mock(return_value=False)
         self.handler.appear_then_click = Mock(return_value=False)
         self.handler.loop = lambda **kwargs: iter(range(2))
@@ -527,6 +527,30 @@ class TestCurrencyReadReuse(unittest.TestCase):
         self.handler.device.image[:20, :20] = 255
         self.handler.get_yellow_coins(reuse=True)
         self.assertEqual(self.yellow.ocr.call_count, 4)
+
+    def test_other_world_tasks_confirm_live_coins_even_with_an_old_verified_cache(self):
+        tasks = (
+            'OpsiObscure', 'OpsiAbyssal', 'OpsiStronghold', 'OpsiExplore', 'OpsiExploreCleanup',
+            'OpsiDaily', 'OpsiArchive', 'OpsiMonthBoss', 'OpsiAshBeacon', 'OpsiAshAssist',
+            'OpsiShop', 'OpsiVoucher', 'OpsiCrossMonth', 'OpsiDaemon',
+        )
+        for task in tasks:
+            for delegated in (False, True):
+                with self.subTest(task=task, delegated=delegated):
+                    self.handler.config.task.command = 'OpsiScheduling' if delegated else task
+                    self.handler.config._bind_task_override = task if delegated else None
+                    self.handler._last_yellow_coins = 91760
+                    self.handler._last_yellow_owner = ('isolated', 'cn')
+                    self.handler._yellow_coin_read = (
+                        ('isolated', 'cn', 'map', 0), self.handler.device.image[:20, :20].copy(), 91760,
+                    )
+                    self.yellow.ocr.reset_mock()
+                    self.handler.device.sleep.reset_mock()
+                    self.yellow.ocr.return_value = 97451
+                    self.assertEqual(self.handler.get_yellow_coins(), 97451)
+                    self.assertEqual(self.yellow.ocr.call_count, 2)
+                    self.handler.device.sleep.assert_called_once_with(0.2)
+                    self.assertEqual(self.handler._last_yellow_coins, 97451)
 
     def test_invalid_frame_breaks_consecutive_confirmation(self):
         self.handler.loop = lambda **kwargs: iter(range(4))
