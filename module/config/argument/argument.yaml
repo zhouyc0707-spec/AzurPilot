@@ -1219,6 +1219,11 @@ Dorm:
   Collect: true
   Feed: true
   FeedFilter: 20000 > 10000 > 5000 > 3000 > 2000 > 1000
+  ReserveFood: false
+  FeedReserveState:
+    type: stored
+    value: null
+    display: hide
   BuyFood:
     value: false
     display: disabled
@@ -1703,6 +1708,10 @@ OpsiHazard1Leveling:
     valuetype: int
     validate: ^(-1|\d+)$
   SeaMilesLastRecord:
+    type: stored
+    value: null
+    display: hide
+  PendingEventRecovery:
     type: stored
     value: null
     display: hide

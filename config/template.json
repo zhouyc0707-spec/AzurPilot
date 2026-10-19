@@ -2246,6 +2246,8 @@
       "Collect": true,
       "Feed": true,
       "FeedFilter": "20000 > 10000 > 5000 > 3000 > 2000 > 1000",
+      "ReserveFood": false,
+      "FeedReserveState": null,
       "BuyFood": false
     },
     "BuyFurniture": {
@@ -3062,6 +3064,7 @@
       "RecordNonCL1AP": true,
       "RecordSeaMiles": -1,
       "SeaMilesLastRecord": null,
+      "PendingEventRecovery": null,
       "DebugClip": false
     },
     "OpsiSirenBug": {

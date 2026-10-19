@@ -49,6 +49,9 @@ ISLAND_POST_SWIPE_DISTANCE = 550
 ISLAND_POST_SWIPE_TO_TOP_MAX = 5
 ISLAND_POST_SWIPE_SEARCH_MAX = 8
 
+# 规则里 `switch`（切换到啾咖啡餐厅）的等待上限：点击按钮后等对话关闭、场景切换完成
+ISLAND_SWITCH_TIMEOUT = 12
+
 # 岛屿走位路线与规则解析集中在 module/island/island_walk.py；可以用岛屿计划的
 # 全局配置 `IslandPlan.IslandWalk.<路线名>` 覆盖整条规则（所有控制方式都生效，
 # 桥接 swipe 的位移随负载漂移，按机器各配一套规则最稳）。
@@ -1546,11 +1549,11 @@ class Island(SelectCharacter):
                 if direction not in ISLAND_WALK_ACTIONS]
 
     def island_walk_switch_restaurant(self):
-        """规则里 `switch` 步骤：切换到啾咖啡餐厅并等待岛内可操作。
+        """规则里 `switch` 步骤：点击按钮切换到啾咖啡餐厅并等待切换完成。
 
-        “进入啾咖啡”入口出现时岛屿主页面标识也可能可见，不能把门外当作完成。
+        切换前后都可能出现 `ISLAND_CHECK`，不能把门外当作完成。
         同时确认门图标、完整文字与原色，排除下方“前往基地”；真实点击入店后，
-        入口仍可见时限频补点，后续持续截图确认岛内状态稳定。
+        入口仍可见时限频补点，入口消失后持续截图确认岛内状态稳定。
 
         Pages:
             page_island
@@ -1558,7 +1561,7 @@ class Island(SelectCharacter):
         clicked = False
         stable = Timer(1, count=2)
         self.interval_clear(ISLAND_JUU_CAFE_ENTER)
-        for _ in self.loop(timeout=12, skip_first=False):
+        for _ in self.loop(timeout=ISLAND_SWITCH_TIMEOUT, skip_first=False):
             # 原色与完整入口模板共同确认；点击冷却不代表入口已消失。
             if self.match_template_color(ISLAND_JUU_CAFE_ENTER, offset=(20, 20), similarity=0.9):
                 stable.clear()

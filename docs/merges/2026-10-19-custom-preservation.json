@@ -1,0 +1,1192 @@
+{
+  "revisions": {
+    "base": "c2567ccdcaf92602395d9c64db00041a45172ea4",
+    "local_before_merge": "91327fda4b46eb335d39f3a4100afd9c25027574",
+    "upstream": "916745b4842e0f8531e01fee30e82440bc659fb6"
+  },
+  "method": {
+    "scope": "Git树及当前工作树的只读静态核对；不导入项目模块、不操作模拟器或游戏。",
+    "non_overlap": "逐路径比较合前Git blob与当前raw bytes，并另用git clean过滤后的blob ID判断内容是否一致。",
+    "definitions": "比较重叠.py中的AST全限定类/函数名称及同名定义数量；类/函数存在不代表调用链、行为或实机功能通过。",
+    "config": "逐叶子保留base到local的添加、修改和删除；上游新增键不纳入本地删除判断。列表整体比较。",
+    "syntax": "对当前所有Git跟踪.py执行ast.parse；不编译、不导入、不创建pyc。"
+  },
+  "path_counts": {
+    "local_changed": 825,
+    "upstream_changed": 111,
+    "overlap": 43,
+    "non_overlap": 782
+  },
+  "summary": {
+    "local_changed": 825,
+    "upstream_changed": 111,
+    "overlap": 43,
+    "non_overlap": 782,
+    "non_overlap_raw_byte_equal": 652,
+    "non_overlap_raw_equal_to_before_merge_checkout": 760,
+    "non_overlap_only_crlf_differences_from_before_merge_checkout": 16,
+    "non_overlap_clean_content_equal": 776,
+    "non_overlap_test_exceptions": 6,
+    "non_overlap_unexpected_changes": 0,
+    "overlap_python_files": 16,
+    "local_added_definition_names": 36,
+    "local_added_definition_ast_bodies_preserved": 36,
+    "modified_definition_bodies_requiring_review": 21,
+    "missing_added_definitions": 0,
+    "missing_modified_definitions": 0,
+    "configuration_files": 13,
+    "local_config_delta_leaves": 1257,
+    "preserved_local_config_delta_leaves": 1257,
+    "missing_local_config_leaves": 0,
+    "changed_local_config_leaves": 0,
+    "tracked_python_syntax_passed": 2639,
+    "tracked_python_syntax_errors": 0,
+    "tracked_python_syntax_warnings": 12,
+    "parse_errors": 0,
+    "snapshot_stable": true
+  },
+  "snapshot": {
+    "changed_during_audit": [],
+    "stable": true,
+    "head_at_end": "91327fda4b46eb335d39f3a4100afd9c25027574"
+  },
+  "non_overlap_exceptions": [
+    {
+      "path": "tests/test_opsi_akashi_scope.py",
+      "local_blob": "032aa35e3daaa6d4e3d7b7270a36ee0e74e24fee",
+      "merged_clean_blob": "fee4735712447c02c458fb112427c3cf540e7595",
+      "present": true,
+      "raw_blob": "fee4735712447c02c458fb112427c3cf540e7595",
+      "raw_byte_equal_to_git_blob": false,
+      "clean_content_equal": false,
+      "status": "内容变化或缺失",
+      "raw_byte_equal_to_before_merge_checkout": false,
+      "only_crlf_difference_from_before_merge_checkout": false,
+      "before_merge_checkout_sha256": "2dbe611642c6948e0df7e4f5f994fc533741d2af4a00b53a969bc7ee0977b1e3",
+      "current_checkout_sha256": "13555461d0a4475b33404277b3d461cd17c0d4148158e638291788153c50dd7e",
+      "reason": "安全入口改为连续地图/商店画面，保留原同轮去重及新地图重置断言。",
+      "diff_from_local": "diff --git a/tests/test_opsi_akashi_scope.py b/tests/test_opsi_akashi_scope.py\nindex 032aa35e3..fee473571 100644\n--- a/tests/test_opsi_akashi_scope.py\n+++ b/tests/test_opsi_akashi_scope.py\n@@ -58,10 +58,21 @@ class AkashiScopeFixture(unittest.TestCase):\n         runner.ui_back = Mock()\n         runner.os_shop_buy = Mock()\n         runner.os_shop_get_item_to_buy_in_akashi = Mock(name='原明石选品器')\n-        runner.handle_story_skip = Mock()\n+        runner.handle_story_skip = Mock(return_value=False)\n+        runner._recover_event_page = Mock(return_value=False)\n+        runner._event_safe_click_button = Mock(return_value=object())\n         runner.appear = Mock(side_effect=lambda button, **kwargs: button is PORT_SUPPLY_CHECK and runner.frame == 'shop')\n         return runner\n \n+    @staticmethod\n+    def visit_shop(runner, grid=None):\n+        # 入口与退出仍由各自导航夹具验证；商店使用连续的地图、商店新画面。\n+        origin = runner.frame if runner.is_in_map() else 'map'\n+        runner.loop = lambda: iter((None, None))\n+        runner.device.click.side_effect = lambda button: setattr(runner, 'frame', 'shop')\n+        runner.ui_back.side_effect = lambda **kwargs: setattr(runner, 'frame', origin)\n+        return OSShop.handle_akashi_supply_buy(runner, grid or object())\n+\n     def exit_runner(self, frames):\n         runner = SimpleNamespace(\n             _akashi_handled=True,\n@@ -101,15 +112,22 @@ class AkashiScopeFixture(unittest.TestCase):\n         runner.map_rescan = Mock()\n         runner.frame = 'map'\n         runner.is_in_map = Mock(return_value=True)\n-        runner.appear = Mock(return_value=False)\n+        runner.appear = Mock(side_effect=lambda button, **kwargs:\n+                             button is PORT_SUPPLY_CHECK and runner.frame == 'shop')\n         runner.ui_click = Mock()\n         runner.ui_back = Mock()\n         runner.os_shop_buy = Mock()\n         runner.os_shop_get_item_to_buy_in_akashi = Mock(name='原明石选品器')\n-        runner.handle_story_skip = Mock()\n+        runner.handle_story_skip = Mock(return_value=False)\n+        runner._remember_pending_event = Mock()\n+        runner._finish_pending_event = Mock()\n+        runner._event_global_location = Mock(return_value=None)\n+        runner._recover_event_page = Mock(return_value=False)\n+        runner._event_safe_click_button = Mock(return_value=object())\n+        runner.fleet_selector = SimpleNamespace(bar_opened=lambda: False)\n \n         def search(drop, **kwargs):\n-            OSShop.handle_akashi_supply_buy(runner, object())\n+            self.visit_shop(runner)\n             return 0\n \n         runner.os_auto_search_run = Mock(side_effect=search)\n@@ -151,7 +169,7 @@ class TestAkashiEntryScope(AkashiScopeFixture):\n             with self.subTest(zone_type=zone_type):\n                 runner = self.shop_runner(self.entry_runner(pinned=zone_type))\n                 self.enter(runner)\n-                OSShop.handle_akashi_supply_buy(runner, object())\n+                self.visit_shop(runner)\n                 runner.os_shop_buy.assert_called_once_with(select_func=runner.os_shop_get_item_to_buy_in_akashi)\n                 self.assertTrue(runner._akashi_handled)\n \n@@ -160,7 +178,7 @@ class TestAkashiEntryScope(AkashiScopeFixture):\n         for _ in range(2):\n             self.set_frames(runner, ('pinned', 'loading', 'map'))\n             self.enter(runner)\n-            OSShop.handle_akashi_supply_buy(runner, object())\n+            self.visit_shop(runner)\n             self.assertTrue(runner._akashi_handled)\n         self.assertEqual(runner.os_shop_buy.call_count, 2)\n \n@@ -169,10 +187,10 @@ class TestAkashiEntryScope(AkashiScopeFixture):\n         self.set_frames(runner, ('pinned', 'map'))\n         self.enter(runner)\n         grid = object()\n-        OSShop.handle_akashi_supply_buy(runner, grid)\n+        self.visit_shop(runner, grid)\n         runner.frame = 'shop'\n-        OSShop.handle_akashi_supply_buy(runner, grid)\n-        runner.ui_click.assert_called_once()\n+        self.visit_shop(runner, grid)\n+        runner._event_safe_click_button.assert_called_once()\n         runner.os_shop_buy.assert_called_once()\n         self.assertEqual(runner.ui_back.call_count, 2, '已弹出的重复商店仍需关闭')\n \n@@ -182,7 +200,7 @@ class TestAkashiEntryScope(AkashiScopeFixture):\n         self.enter(runner)\n         runner.os_shop_buy.side_effect = GameStuckError('测试购买中断')\n         with self.assertRaises(GameStuckError):\n-            OSShop.handle_akashi_supply_buy(runner, object())\n+            self.visit_shop(runner)\n         self.assertFalse(runner._akashi_handled)\n \n \n@@ -218,7 +236,7 @@ class TestAkashiExitScope(AkashiScopeFixture):\n     def test_special_shop_flag_does_not_suppress_source_map_shop(self):\n         runner = self.shop_runner(self.exit_runner(('special', 'event', 'source')))\n         self.exit(runner)\n-        OSShop.handle_akashi_supply_buy(runner, object())\n+        self.visit_shop(runner)\n         runner.os_shop_buy.assert_called_once()\n \n \n"
+    },
+    {
+      "path": "tests/test_opsi_hazard1_radar_precheck.py",
+      "local_blob": "12e04ba5922687ae678637a7e9db77de80c55a6c",
+      "merged_clean_blob": "78787abe0c396e4ebd6497630d5c5088d5bb1956",
+      "present": true,
+      "raw_blob": "78787abe0c396e4ebd6497630d5c5088d5bb1956",
+      "raw_byte_equal_to_git_blob": false,
+      "clean_content_equal": false,
+      "status": "内容变化或缺失",
+      "raw_byte_equal_to_before_merge_checkout": false,
+      "only_crlf_difference_from_before_merge_checkout": false,
+      "before_merge_checkout_sha256": "4cf393a1cf600db32b3d2f988525f989ba24de6f879abc9dd3d0fc449450a7cc",
+      "current_checkout_sha256": "b006f3c8407d2318cae60c19f9f33792355330c9c09a8b8c3594bf64fd1a1f14",
+      "reason": "主队雷达预检与上游待续查状态、恢复预算融合后，补充调用上下文夹具。",
+      "diff_from_local": "diff --git a/tests/test_opsi_hazard1_radar_precheck.py b/tests/test_opsi_hazard1_radar_precheck.py\nindex 12e04ba59..78787abe0 100644\n--- a/tests/test_opsi_hazard1_radar_precheck.py\n+++ b/tests/test_opsi_hazard1_radar_precheck.py\n@@ -42,6 +42,11 @@ class TestHazard1RadarPrecheck(unittest.TestCase):\n             predict_question=Mock(side_effect=self.predict_question)\n         )\n         self.runner.run_strategic_search = Mock(side_effect=self.strategic_search)\n+        self.runner._get_pending_event = Mock(return_value=None)\n+        self.runner._resume_pending_event = Mock()\n+        self.runner._recover_pending_event = Mock()\n+        self.runner.is_in_map = Mock(return_value=True)\n+        self.runner.match_template_color = Mock(return_value=True)\n         self.runner.fleet_set = Mock(side_effect=self.fleet_set)\n         self.runner.map_rescan = Mock(side_effect=self.map_rescan)\n         self.runner._forced_move_enabled = Mock(return_value=True)\n@@ -155,6 +160,39 @@ class TestHazard1RadarPrecheck(unittest.TestCase):\n         self.assertLess(self.actions.index('primary_clear'), self.actions.index('map_rescan'))\n         self.akashi_record.assert_called_once_with(self.runner.config)\n \n+    def test_pending_event_recovery_preserves_precheck_and_does_not_repeat_patrol(self):\n+        \"\"\"本地主队预检与上游续查共用预算，已恢复的事件不能再触发强制移动。\"\"\"\n+        self.question = (0, -1)\n+        pending = None\n+\n+        def clear(runner, drop=None):\n+            nonlocal pending\n+            pending = {'kind': 'is_question'}\n+            return False\n+\n+        def recover():\n+            nonlocal pending\n+            self.observe_marker('pending_recovery')\n+            self.runner._event_patrol_attempted = True\n+            self.runner._solved_map_event.add('is_akashi')\n+            pending = None\n+\n+        self.primary_clear.side_effect = clear\n+        self.runner._get_pending_event.side_effect = lambda: pending\n+        self.runner._recover_pending_event.side_effect = recover\n+        self.run_battle()\n+        self.runner._recover_pending_event.assert_called_once_with()\n+        self.runner._execute_fixed_patrol_scan.assert_not_called()\n+        self.assertIn(('pending_recovery', 1), self.marker_observations)\n+\n+    def test_pending_event_resumes_before_new_strategic_search(self):\n+        \"\"\"重启时先续查已记录事件，再开始新一轮，本轮仍执行主队预检。\"\"\"\n+        self.runner._get_pending_event.side_effect = [{'kind': 'is_akashi'}, None, None]\n+        self.runner._resume_pending_event.side_effect = lambda: self.actions.append('resume_pending')\n+        self.run_battle()\n+        self.assertEqual(self.actions[:2], ['resume_pending', 'strategic_search'])\n+        self.runner._resume_pending_event.assert_called_once_with()\n+\n     def test_unresolved_question_keeps_original_forced_scan(self):\n         \"\"\"主队清理与全图扫描都失败时，仍进入原有多舰队及挪队兜底。\"\"\"\n         self.question = (0, -1)\n"
+    },
+    {
+      "path": "tests/test_opsi_map_scan_coverage.py",
+      "local_blob": "e44b7f42b9f38b42354c5de55377e79e29ece559",
+      "merged_clean_blob": "cffc292f68dfde109e8247d5714fdc8249fc0d17",
+      "present": true,
+      "raw_blob": "cffc292f68dfde109e8247d5714fdc8249fc0d17",
+      "raw_byte_equal_to_git_blob": false,
+      "clean_content_equal": false,
+      "status": "内容变化或缺失",
+      "raw_byte_equal_to_before_merge_checkout": false,
+      "only_crlf_difference_from_before_merge_checkout": false,
+      "before_merge_checkout_sha256": "4f2abaf1cd4222dd7413178344e7a71fd65b5d74c85c96c232b24ecbd3f74cb1",
+      "current_checkout_sha256": "c985424bf355ff6821180a24eab1ccb8d8c4929fdb366f89290f83efb66139c1",
+      "reason": "clear_question按当前任务选择事件恢复，旧扫描夹具补充OpsiDaily任务身份，断言未删改。",
+      "diff_from_local": "diff --git a/tests/test_opsi_map_scan_coverage.py b/tests/test_opsi_map_scan_coverage.py\nindex e44b7f42b..cffc292f6 100644\n--- a/tests/test_opsi_map_scan_coverage.py\n+++ b/tests/test_opsi_map_scan_coverage.py\n@@ -83,7 +83,10 @@ class TestOSMapScanCoverage(unittest.TestCase):\n         runner.convert_radar_to_local = Mock(return_value=SimpleNamespace())\n         runner._should_skip_siren_research = Mock(return_value=False)\n         runner._solved_map_event = set()\n-        runner.config = SimpleNamespace(temporary=lambda **kwargs: nullcontext())\n+        runner.config = SimpleNamespace(\n+            task=SimpleNamespace(command='OpsiDaily'),\n+            temporary=lambda **kwargs: nullcontext(),\n+        )\n         runner.wait_until_walk_stable = Mock(return_value='akashi')\n         self.assertTrue(OSMap.clear_question(runner))\n         self.assertEqual(order, ['tip', 'view'])\n"
+    },
+    {
+      "path": "tests/test_opsi_preservation_policy.py",
+      "local_blob": "9d177e75714a1936d744357bc96ef1b3c72c2993",
+      "merged_clean_blob": "be9ce6d18294837d5f14e1b1a6cbec288ec9d21d",
+      "present": true,
+      "raw_blob": "be9ce6d18294837d5f14e1b1a6cbec288ec9d21d",
+      "raw_byte_equal_to_git_blob": false,
+      "clean_content_equal": false,
+      "status": "内容变化或缺失",
+      "raw_byte_equal_to_before_merge_checkout": false,
+      "only_crlf_difference_from_before_merge_checkout": false,
+      "before_merge_checkout_sha256": "21327b573dfb695d7c0c4077cc9159b1a6885966188d0060592c89340425f04b",
+      "current_checkout_sha256": "ff0f9306520490e94f0c58a7748b77da8f6fae62b90431d4fcf7edc699e4f3e0",
+      "reason": "已有统一总库迁移需复用夹具的MemoryProvider，补充provider_for_descriptor注入与azurpilot.db路径断言；历史喵收益CSV第一列改为有效侵蚀等级1至6，其他历史值、全历史逐项相等断言均保留。根代理已在合前91327fda4复现旧夹具1fail/1error；本例外只调整测试上下文，无生产修改。",
+      "diff_from_local": "diff --git a/tests/test_opsi_preservation_policy.py b/tests/test_opsi_preservation_policy.py\nindex 9d177e757..be9ce6d18 100644\n--- a/tests/test_opsi_preservation_policy.py\n+++ b/tests/test_opsi_preservation_policy.py\n@@ -197,7 +197,11 @@ class OpsiPreservationPolicyTests(unittest.TestCase):\n         self.assertNotIn('coins_month_start_residue', json.loads(public))\n         self.assertNotIn('coins_snapshots', json.loads(public))\n         self.assertTrue(sealed.startswith(opsi_secure.BLOB_PREFIX))\n-        stored = Cl1Database(self.path).get_stats('inst', '2026-09')\n+        database = Cl1Database(self.path)\n+        self.assertEqual(database.db_path, self.root / 'config' / 'azurpilot.db')\n+        # 总库迁移独立读取旧凭据，需要注入生成夹具时使用的同一个内存提供者。\n+        with patch.object(opsi_secure, 'provider_for_descriptor', return_value=self.provider):\n+            stored = database.get_stats('inst', '2026-09')\n         self.assertEqual(stored['coins_month_start_residue'] + stored['coins_snapshots'], points)\n         self.assertEqual(stored['commission_income_entries'], full['commission_income_entries'])\n \n@@ -206,13 +210,18 @@ class OpsiPreservationPolicyTests(unittest.TestCase):\n         csv_path.parent.mkdir()\n         expected = np.arange(6 * len(AzurStats.meowofficer_farming_labels), dtype=float).reshape(\n             6, len(AzurStats.meowofficer_farming_labels))\n+        # 第一列是侵蚀等级，旧收益缓存只包含 1–6 级；其余列保留各不相同的历史值。\n+        expected[:, 0] = np.arange(1, 7)\n         header = ','.join(AzurStats.meowofficer_farming_labels)\n         # 历史导出文件本就使用 UTF-8；夹具必须遵守相同格式，避免被系统编码写成 GBK。\n         np.savetxt(csv_path, expected, delimiter=',', header=header, comments='', encoding='utf-8')\n         self.assertEqual(csv_path.read_bytes().splitlines()[0], header.encode('utf-8'))\n         self.assertTrue(self.vault.ensure_ready())\n         self.assertTrue(csv_path.read_text(encoding='utf-8').startswith(opsi_secure.BLOB_PREFIX))\n-        with patch.object(AzurStats, 'LOCAL_MEOW_CSV', str(csv_path)):\n+        with patch.object(AzurStats, 'LOCAL_DB', str(self.root / 'config' / 'azurstats_local.db')), \\\n+                patch.object(AzurStats, 'LOCAL_MEOW_CSV', str(csv_path)), \\\n+                patch.object(opsi_secure, 'provider_for_descriptor', return_value=self.provider):\n+            self.assertEqual(AzurStats._database().path, self.root / 'config' / 'azurpilot.db')\n             np.testing.assert_array_equal(AzurStats.load_meowofficer_farming(), expected)\n \n \n"
+    },
+    {
+      "path": "tests/test_opsi_shop_coin_read.py",
+      "local_blob": "7c43ae76f27d17641e1804217e1a873389d6cc11",
+      "merged_clean_blob": "990c57acef7781afe772ea64440f65c74a96c0b2",
+      "present": true,
+      "raw_blob": "990c57acef7781afe772ea64440f65c74a96c0b2",
+      "raw_byte_equal_to_git_blob": false,
+      "clean_content_equal": false,
+      "status": "内容变化或缺失",
+      "raw_byte_equal_to_before_merge_checkout": false,
+      "only_crlf_difference_from_before_merge_checkout": false,
+      "before_merge_checkout_sha256": "e9a83f2e34e2f2a704214fc84249b4be2dee0566867e226b34be6b48ec970750",
+      "current_checkout_sha256": "05c3b8b28df3ec5d2c406b0e0cd39ef6363b96434c6f41a8b470d0d122021790",
+      "reason": "同步安全入口的会话夹具，并补充已有余额缓存owner和后台写入隔离。",
+      "diff_from_local": "diff --git a/tests/test_opsi_shop_coin_read.py b/tests/test_opsi_shop_coin_read.py\nindex 7c43ae76f..990c57ace 100644\n--- a/tests/test_opsi_shop_coin_read.py\n+++ b/tests/test_opsi_shop_coin_read.py\n@@ -31,6 +31,7 @@ class CoinReadFixture(unittest.TestCase):\n         )\n         self.reader.device = Mock()\n         self.reader._last_yellow_coins = 54321\n+        self.reader._last_yellow_owner = self.reader._background_coin_identity()[:2]\n         self.reader.appear = Mock(\n             side_effect=lambda button, **kwargs: self.reader.device.image.popup is button,\n         )\n@@ -54,6 +55,7 @@ class CoinReadFixture(unittest.TestCase):\n             ('module.os_handler.os_status.OCR_SHOP_PURPLE_COINS', self.purple_ocr),\n             ('module.os_handler.os_status.OCR_OS_SHOP_PURPLE_COINS', self.port_purple_ocr),\n             ('module.os_handler.os_status.LogRes', self.recorder),\n+            ('module.os_handler.os_status.record_resources_background', Mock()),\n             ('module.os_handler.os_status.logger', Mock()),\n         ):\n             replacement = patch(target, return_value=value) if target.endswith(('Timer', 'LogRes')) else patch(target, value)\n@@ -292,11 +294,18 @@ class TestAkashiShopSession(unittest.TestCase):\n     def runner(self):\n         runner = OSShop.__new__(OSShop)\n         runner._akashi_handled = False\n-        runner.is_in_map = Mock()\n-        runner.handle_story_skip = Mock()\n-        runner.appear = Mock(return_value=False)\n+        runner.page = 'map'\n+        runner.is_in_map = Mock(side_effect=lambda: runner.page == 'map')\n+        runner.handle_story_skip = Mock(return_value=False)\n+        runner.appear = Mock(side_effect=lambda button, **kwargs:\n+                             button is PORT_SUPPLY_CHECK and runner.page == 'shop')\n         runner.ui_click = Mock()\n-        runner.ui_back = Mock()\n+        runner.ui_back = Mock(side_effect=lambda **kwargs: setattr(runner, 'page', 'map'))\n+        runner.device = Mock()\n+        runner.device.click.side_effect = lambda button: setattr(runner, 'page', 'shop')\n+        runner.loop = lambda: iter((None, None))\n+        runner._recover_event_page = Mock(return_value=False)\n+        runner._event_safe_click_button = Mock(return_value=object())\n         runner.os_shop_buy = Mock()\n         runner.os_shop_get_item_to_buy_in_akashi = Mock()\n         return runner\n@@ -304,9 +313,17 @@ class TestAkashiShopSession(unittest.TestCase):\n     def test_successful_visit_has_session_only_after_entry_and_until_exit(self):\n         runner = self.runner()\n         states = []\n-        runner.ui_click.side_effect = lambda *args, **kwargs: states.append(('enter', getattr(runner, '_akashi_shop_session', None)))\n+        def enter(button):\n+            states.append(('enter', getattr(runner, '_akashi_shop_session', None)))\n+            runner.page = 'shop'\n+\n+        runner.device.click.side_effect = enter\n         runner.os_shop_buy.side_effect = lambda **kwargs: states.append(('buy', runner._akashi_shop_session))\n-        runner.ui_back.side_effect = lambda **kwargs: states.append(('exit', runner._akashi_shop_session))\n+        def leave(**kwargs):\n+            states.append(('exit', runner._akashi_shop_session))\n+            runner.page = 'map'\n+\n+        runner.ui_back.side_effect = leave\n         runner.handle_akashi_supply_buy(object())\n         self.assertEqual(states, [('enter', None), ('buy', {}), ('exit', {})])\n         self.assertIsNone(runner._akashi_shop_session)\n@@ -315,7 +332,7 @@ class TestAkashiShopSession(unittest.TestCase):\n \n     def test_entry_failure_does_not_leave_session_or_mark_handled(self):\n         runner = self.runner()\n-        runner.ui_click.side_effect = GameStuckError('模拟进店失败')\n+        runner.device.click.side_effect = GameStuckError('模拟进店失败')\n         with self.assertRaises(GameStuckError):\n             runner.handle_akashi_supply_buy(object())\n         self.assertIsNone(runner._akashi_shop_session)\n"
+    },
+    {
+      "path": "tests/test_upstream_runtime_fusion.py",
+      "local_blob": "37cb22b0a5e861fd17256dbaa6eba0977d1c044d",
+      "merged_clean_blob": "b81e097e33e7569d276bca1f33deedf556f05283",
+      "present": true,
+      "raw_blob": "b81e097e33e7569d276bca1f33deedf556f05283",
+      "raw_byte_equal_to_git_blob": false,
+      "clean_content_equal": false,
+      "status": "内容变化或缺失",
+      "raw_byte_equal_to_before_merge_checkout": false,
+      "only_crlf_difference_from_before_merge_checkout": false,
+      "before_merge_checkout_sha256": "b48af49c30d1ba0600fb777e5f8483763b0ee412322ef4579f0a3c6fdbb6224e",
+      "current_checkout_sha256": "87dbd7899dba8c9fca6e7da9e07afc78c505d5393d841b077c9f8b1d6305a6db",
+      "reason": "重复明石处理新增正向地图确认，夹具显式提供is_in_map。",
+      "diff_from_local": "diff --git a/tests/test_upstream_runtime_fusion.py b/tests/test_upstream_runtime_fusion.py\nindex 37cb22b0a..b81e097e3 100644\n--- a/tests/test_upstream_runtime_fusion.py\n+++ b/tests/test_upstream_runtime_fusion.py\n@@ -117,6 +117,7 @@ class TestCommissionScreenshotLimitFusion(unittest.TestCase):\n class TestOSShopFusion(unittest.TestCase):\n     def test_already_handled_akashi_does_not_buy_again(self):\n         shop = SimpleNamespace(_akashi_handled=True, appear=Mock(return_value=False),\n+                               is_in_map=Mock(return_value=True),\n                                ui_click=Mock(), ui_back=Mock(), os_shop_buy=Mock())\n         OSShop.handle_akashi_supply_buy(shop, object())\n         shop.ui_click.assert_not_called()\n"
+    }
+  ],
+  "overlap_path_disposition": [
+    {
+      "path": ".agents/skills/alas-secretary/references/mind-scan-performance.md",
+      "local_blob": "5063ffde882c35d1f6383246783cafbfc2edbb5c",
+      "upstream_blob": null,
+      "merged_clean_blob": "5063ffde882c35d1f6383246783cafbfc2edbb5c",
+      "equals_local": true,
+      "equals_upstream": false,
+      "disposition": "与本地一致"
+    },
+    {
+      "path": ".gitignore",
+      "local_blob": "a86cb9ae1adff8be2a9439f0306f368a1fe960b3",
+      "upstream_blob": "a5b3bdd6e0505c3274f8f6a6838a2cfa88b6b5c8",
+      "merged_clean_blob": "98d07ecba4e28e0ea4ec4b57feb154f80b27d177",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "config/template.json",
+      "local_blob": "5ee7184d41fb684cc733bf36e2b40d33f011800f",
+      "upstream_blob": "89042e4c086f738312939b65ab01108e939ab31a",
+      "merged_clean_blob": "c0a274d89ee85c152633e56ce5a0ecad716a7703",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "docs/modules/game/daily-maintenance.md",
+      "local_blob": "c25696d323f2ae9eeec07c592c797f5a514c0569",
+      "upstream_blob": "48ef7196dcaaa2654f07fe946af102d2f29fc8aa",
+      "merged_clean_blob": "a67afdc28b2949c9875c52e9b1b341e4c5c6eada",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "docs/modules/game/misc.md",
+      "local_blob": "1895f5cddf3242a5dfc5515d3a5ff50138f42f03",
+      "upstream_blob": "43e8493c161964c47a18ece465877b3d0522e8bb",
+      "merged_clean_blob": "6ab8400dffcee66feec476437736795b64163b18",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "docs/modules/infra/deploy.md",
+      "local_blob": "bc8dce1ad3a98bbc0dbe39cdeb79ca01e6823269",
+      "upstream_blob": "cef1051c23003bb48c0b7d19a2e1d1270a7e3285",
+      "merged_clean_blob": "181ff822a915e645e67b5d1677297b68d72a9ba9",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "docs/modules/infra/statistics.md",
+      "local_blob": "1780c01f0c1adf96ef92028fd2fea1cef9a76a02",
+      "upstream_blob": "2bab661551eaf902797061f15c8d4b1c25fb095f",
+      "merged_clean_blob": "4e04606556313edeebb6423da1d77567658c98f0",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "docs/modules/os/auxiliary.md",
+      "local_blob": "88bc7367ff30ec3f01f9fb2b95356a4a1c436f87",
+      "upstream_blob": "9bb1d9d566082f5c3a8b9d41659c8c86281aafd3",
+      "merged_clean_blob": "5ae3f8953a3da85a947307c93ed423a669cfe500",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "docs/modules/os/index.md",
+      "local_blob": "d28e02fafc7d946d118b55607f5a458333fcb901",
+      "upstream_blob": "e848c08be0f893df275735beeba11431f241ee3f",
+      "merged_clean_blob": "62817342965bc66e7f5628a5ec530ee86aaed38e",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "docs/modules/webui/api.md",
+      "local_blob": "bbb194e4187209ae7e405341afc20c8c444f1e65",
+      "upstream_blob": "0bcc579be2398ddad752612de3e9a40d4ed954e4",
+      "merged_clean_blob": "ad0a9183954ba411bbb7cd1b17aeb014d576acd4",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "docs/modules/webui/frontend.md",
+      "local_blob": "86941f20663899a050b3595a82733d42681c26de",
+      "upstream_blob": "509e4504d6391ab73de4968c0061e04f6a12fe9b",
+      "merged_clean_blob": "aac0c4b3e37812fe07938e4ecb5bd1dc3987a7c7",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "docs/modules/webui/runtime.md",
+      "local_blob": "4e8d7522e788634184f6a2749dfac875fc06d7ce",
+      "upstream_blob": "c0b5fabdfd672cdf8772338d3f160fec60dbb4af",
+      "merged_clean_blob": "d90155f387b503070c4eb9d0e44218d5cc134a02",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "frontend/mock/state.mjs",
+      "local_blob": "b60fee9b1ca03cfbddc78f5cd06406acf76691b1",
+      "upstream_blob": "3095defacc495e9d079b5e6eca84097d6e0717de",
+      "merged_clean_blob": "e4526e258886aa2317707191beeb7b9a3b2d575c",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "frontend/src/api/contract.json",
+      "local_blob": "9252a4250fc405f7cd99e4dad8d1539ee7369448",
+      "upstream_blob": "ff1fc0a9e99d71406ae62506478b5f54c7c6a373",
+      "merged_clean_blob": "54c4ee94c54c164f31d9e486453bccaefeb62062",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "frontend/src/api/generated.ts",
+      "local_blob": "b8d7f3669b388800d3ecbb7c428c5ed45639d1be",
+      "upstream_blob": "98bb6ead585bcd86c2414c7c1e16cbfc5e5c6450",
+      "merged_clean_blob": "ee058d4f71a0114012313cf537ac6f9a06f7f27c",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "frontend/src/api/types.ts",
+      "local_blob": "00226af0a8b55e1e828bfa8d49544cb7101ac97d",
+      "upstream_blob": "6bebf95344c784acdd2726aa77cee234a80dd4c1",
+      "merged_clean_blob": "dc7605584cd0ea2a21fd6e59f1eff2c4bb87112f",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "frontend/src/styles/apple.css",
+      "local_blob": "f59532330aa8bbf132da35842cd511468e6e51fb",
+      "upstream_blob": "67e371333d5c0c84d481dd4aa4deff798dff1df2",
+      "merged_clean_blob": "f574832123bad43c688734cf7f9a7becab996560",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/api/protocol.py",
+      "local_blob": "8e229f0b79c0ea9238e650c2aec73ce77c773ee8",
+      "upstream_blob": "fd7ab40b55264ec48394aa07192b3feb26ca33d5",
+      "merged_clean_blob": "afbd2c287ef51ddbc9b4b3473f31219bf7608048",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/api/router.py",
+      "local_blob": "92197d02ac22d376537995e08216735bf4205277",
+      "upstream_blob": "7c12b316a7e383343140b2842610281d2531176f",
+      "merged_clean_blob": "6a92603b4a8c1f8e1177b2efadd7e6eab47a0970",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/api/socket.py",
+      "local_blob": "416ad253c5456d3e22f1038908e99266b735f37c",
+      "upstream_blob": "26f010446b231a8d8e8e3296e6a34247e1f0dc61",
+      "merged_clean_blob": "ee9dc65fb2e271f441872c496a34d15a35ded7a9",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/argument/args.json",
+      "local_blob": "86fb00e2845d118c57a1277eb9cc21abadb2067b",
+      "upstream_blob": "cd431cb85e8eec5816ee43a4d07c9be6aada73ee",
+      "merged_clean_blob": "7704a0eac5bad1d4b364febc703aeee3c50019bd",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/argument/argument.yaml",
+      "local_blob": "7922a719b4605a4630a7dbf2a9e22ffab1a09e70",
+      "upstream_blob": "168c10467ed25ce26b480b8142c2459a91db198e",
+      "merged_clean_blob": "16aa2e216c80f6df82e082b69fba92ccada99bba",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/argument/gui.yaml",
+      "local_blob": "787aabb2a491e15cb0ae1a666f3fef64c4bf43ca",
+      "upstream_blob": "5d0447e4eb615bf7586785699ba6d2bd5eb71a5b",
+      "merged_clean_blob": "830c1a52441740cb763d0e60eebe21ec65f97ec5",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/config_generated.py",
+      "local_blob": "9ad0117a1eebe72b0e655d35b7fb50e5bea7908a",
+      "upstream_blob": "b2f6d7b619a522894b9cc8f3921222268b20ec95",
+      "merged_clean_blob": "e760de3b74a4f45367f0a8a30586bf97308f1c52",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/config_updater.py",
+      "local_blob": "f9e21b9eb873efce2ed349b2bcfcf4c9265bf3e6",
+      "upstream_blob": "ea084945382c8ffaa8b76982cb1f75040d7a1644",
+      "merged_clean_blob": "84eb8e4d2bb2c7f18ff94e6b12207d5a1951df3a",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/i18n/en-US.json",
+      "local_blob": "4fa1119b7e3e5cad9ecb92929daca55e58adaa37",
+      "upstream_blob": "38eae7972a4d482752853615b62703a34a40616c",
+      "merged_clean_blob": "682689d767e26fab98f634ebaec14d84613f5ec7",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/i18n/ja-JP.json",
+      "local_blob": "64d64d42efe31a0c36af554fab021a6c3320e002",
+      "upstream_blob": "4eb2ba50b9a12562f515672695637e3d11eea5ab",
+      "merged_clean_blob": "6bd8edb479a11c7bd38e057bc154507f61011744",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/i18n/zh-CN.json",
+      "local_blob": "13222c8ab8dd629502fd6b861dc2cc010915d453",
+      "upstream_blob": "7d73e4406188a339736864ca68a9dc4030c55209",
+      "merged_clean_blob": "afaf8112876c32118ead744d1ef9eae2f44ef9bd",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/i18n/zh-MIAO.json",
+      "local_blob": "b94a0d05ca5bbb143dd6cda81d1b46c976f78f4d",
+      "upstream_blob": "d1d0ec2cfe30a38874e209b92833f5d87281e5d5",
+      "merged_clean_blob": "fe77301649de5d57e5455804a49ddc346a1a08b1",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/i18n/zh-TW.json",
+      "local_blob": "cf92bec227c95b5b46b432f160b7ce2fe310a700",
+      "upstream_blob": "895ca83bc6f0f1fcc51759dfe1dbfbf69f6a633a",
+      "merged_clean_blob": "d141825658eca1e275cab50273b8a7e20971c097",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/device/connection.py",
+      "local_blob": "82907eb15027165e3669eeb2024f51a8581cd214",
+      "upstream_blob": "e9bcb0eee0db44aa68eaf15fa6ea3e9b7b5f7dfb",
+      "merged_clean_blob": "daa97ddd8144d645f9d9dd5a1d4ad2b0e73284cf",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/island/island.py",
+      "local_blob": "2871f157395d6e17663fb65d3090d7f48cf5341c",
+      "upstream_blob": "b2b498364e6c01a7ae6abae221b4b3b8e4166a98",
+      "merged_clean_blob": "3bddb9ae5cca065d3d411ffc6b35083873d5b2f3",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/os/fleet.py",
+      "local_blob": "38983a80ce8e0a01a3e45839013b43475844305b",
+      "upstream_blob": "cfb639768ad2302e9e3357123fba1f9648f6714f",
+      "merged_clean_blob": "3b0694f2596f9ee490040577d9a65bec8aa1815c",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/os/map.py",
+      "local_blob": "2dba84691224d25840f98a46f95ff0d5f4b31a00",
+      "upstream_blob": "39bc08ab90dbef654e2ae36fdd2af339bbf7cf89",
+      "merged_clean_blob": "f45b2ca4c24632f220c526c8909d5bb7d7efd072",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/os/tasks/hazard_leveling.py",
+      "local_blob": "6266722d4ae428a81be8d86dc5287df090415746",
+      "upstream_blob": "ee390f9682cb684665f38f64aae328910323f788",
+      "merged_clean_blob": "91a034fe8be041a1f5c4ba1f5e9e2ece44be86ab",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/os_handler/map_event.py",
+      "local_blob": "bef7199f0c0ab1424f815f7a45a13e24c7444dec",
+      "upstream_blob": "294e007d9757f83f5401cda9c99fcdc30c002dca",
+      "merged_clean_blob": "210081cfc1517277ded167956cc48c457064ce10",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/os_shop/shop.py",
+      "local_blob": "0ce89751756074e3a2fc2f708f9d0239f2e8234a",
+      "upstream_blob": "5679ed69288224bf43c3b37c50c3b1cf08bbc2b6",
+      "merged_clean_blob": "97aec5e8ba442b17795b5f5ca753f97461d6a119",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/ui/assets.py",
+      "local_blob": "c2df9e1e1c51ebd90b4a4d1f5bf375fff8e7a739",
+      "upstream_blob": "65729807632e3b2a2497f361d6334b433160817f",
+      "merged_clean_blob": "1ffd8a33489c4fb280684ee29617c928064f1f7b",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "pyproject.toml",
+      "local_blob": "e0eadd8d152d9974cdffe787415597370484f877",
+      "upstream_blob": "27e9f095cc000ba44675fb50edf9db5fa5bf8e54",
+      "merged_clean_blob": "1a63627445f3d58c52bd682ccb467e15c7ab5c0c",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "tests/test_api.py",
+      "local_blob": "e9081aae56a807bb395f14acd4da0c4578a681f3",
+      "upstream_blob": "b47c3a5c39d8faf1c79c07b345d15cc94fd0593d",
+      "merged_clean_blob": "0258bfbd825f62f69264e4261de46efedb7ba5d9",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "tests/test_opsi_explore_cleanup.py",
+      "local_blob": "90d9e57a399d3661b6e3e6c4f6844c2b63b4fe10",
+      "upstream_blob": "6515fc89c9073d8c84c93ecaa7a2d66ef1eb5238",
+      "merged_clean_blob": "f34053e2e65a46d07aab73da89bfee188a35f894",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "tests/test_opsi_fixed_patrol_escalation.py",
+      "local_blob": "02555e040f59eda18b687939cd098c075fbc541a",
+      "upstream_blob": "6527f66562d68c84c7237b3615f8fca3347209d5",
+      "merged_clean_blob": "4057bbb36f61820a0c8b78449125bfe0d9654400",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "uv.lock",
+      "local_blob": "6af4373e6a87ad9f777e2d480d50f406734c2c4f",
+      "upstream_blob": "d8d66e2af567ff97334060c4985e711d5e36439e",
+      "merged_clean_blob": "6efbd13dea79a134c0e1e526b64980f390d396f2",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    }
+  ],
+  "modified_definition_bodies_requiring_review": [
+    {
+      "path": "module/api/router.py",
+      "qualname": "Router",
+      "kind": "ClassDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "Router",
+          "kind": "ClassDef",
+          "line": 29,
+          "ast_sha256": "dcc9abfdbf2fa687ce47ca98262d9ccce075d7f267387ab69c7914cae2b7ce98"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "Router",
+          "kind": "ClassDef",
+          "line": 30,
+          "ast_sha256": "40be3af5740271a72249e691a518c3f0a486a77ce83a053233512a4fcc30e049"
+        }
+      ]
+    },
+    {
+      "path": "module/api/router.py",
+      "qualname": "Router.__init__",
+      "kind": "FunctionDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "Router.__init__",
+          "kind": "FunctionDef",
+          "line": 35,
+          "ast_sha256": "b8e91136c390f2429a63e231dd712abd5a13f4636ad1e41eaf41e2b4da4f7bf0"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "Router.__init__",
+          "kind": "FunctionDef",
+          "line": 36,
+          "ast_sha256": "b909aa7e67efcfd8fb2258540f9191934480b8b368a2fc44ad6d0be6faf2624b"
+        }
+      ]
+    },
+    {
+      "path": "module/api/socket.py",
+      "qualname": "Session",
+      "kind": "ClassDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "Session",
+          "kind": "ClassDef",
+          "line": 118,
+          "ast_sha256": "294c3fc4f29680b14e9a1b22766411cb52421d59d62f75b81f768295b694de9e"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "Session",
+          "kind": "ClassDef",
+          "line": 129,
+          "ast_sha256": "6c489b1d9c82e7f6dee234dc0da9927079d99049d10e2f98de903732e391ea17"
+        }
+      ]
+    },
+    {
+      "path": "module/config/config_generated.py",
+      "qualname": "GeneratedConfig",
+      "kind": "ClassDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "GeneratedConfig",
+          "kind": "ClassDef",
+          "line": 9,
+          "ast_sha256": "e201cc6efc1301ea912db81684a3332fb35395274534a0d615b5cf2634f1b38f"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "GeneratedConfig",
+          "kind": "ClassDef",
+          "line": 9,
+          "ast_sha256": "3f37ad926a4e7758d379289e05d555111c9c31e490233ca58cfc5029676a8739"
+        }
+      ]
+    },
+    {
+      "path": "module/config/config_updater.py",
+      "qualname": "ConfigUpdater",
+      "kind": "ClassDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "ConfigUpdater",
+          "kind": "ClassDef",
+          "line": 641,
+          "ast_sha256": "714544486d74e063d8fcd70a69b986c5d10d5bf801a330ace71939a6f3a4d3eb"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "ConfigUpdater",
+          "kind": "ClassDef",
+          "line": 641,
+          "ast_sha256": "1e7f198d1e0f346b3838dd94b20ce4b3d3f730778b69ddadef84c0ec1e5af166"
+        }
+      ]
+    },
+    {
+      "path": "module/device/connection.py",
+      "qualname": "Connection",
+      "kind": "ClassDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "Connection",
+          "kind": "ClassDef",
+          "line": 138,
+          "ast_sha256": "97712b59407462d22ef3896442f9c34d284029031dc2a5107dcaf6eddf2bca74"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "Connection",
+          "kind": "ClassDef",
+          "line": 138,
+          "ast_sha256": "bf010816f3e71c1629b18fcb4d93c93d9bbf4779eb54503b6212027b3d1bede2"
+        }
+      ]
+    },
+    {
+      "path": "module/island/island.py",
+      "qualname": "Island",
+      "kind": "ClassDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "Island",
+          "kind": "ClassDef",
+          "line": 168,
+          "ast_sha256": "85868dc860f43a10272277e344d665c0587829fbac7e5256cdce005822d323a9"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "Island",
+          "kind": "ClassDef",
+          "line": 171,
+          "ast_sha256": "e5c88eaba42fbfd1a9a55aa02adadf6796228deb5c6f19fab379365313566327"
+        }
+      ]
+    },
+    {
+      "path": "module/island/island.py",
+      "qualname": "Island.island_walk_switch_restaurant",
+      "kind": "FunctionDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "Island.island_walk_switch_restaurant",
+          "kind": "FunctionDef",
+          "line": 1548,
+          "ast_sha256": "e3a58c65649a364bcb55991ea393e75194aff4666264b60d282ea09bccb7938f"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "Island.island_walk_switch_restaurant",
+          "kind": "FunctionDef",
+          "line": 1551,
+          "ast_sha256": "92ef4d2b30ed92bf7006e1029930e961c559d9e46090f4518d35b273a626d5ba"
+        }
+      ]
+    },
+    {
+      "path": "module/os/fleet.py",
+      "qualname": "OSFleet",
+      "kind": "ClassDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "OSFleet",
+          "kind": "ClassDef",
+          "line": 146,
+          "ast_sha256": "8d598077b2151941640ecc6cd8b996a9fb7594a42824333b3c4217999c6c07a9"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "OSFleet",
+          "kind": "ClassDef",
+          "line": 146,
+          "ast_sha256": "1a768637735643dcbe1675718da28ba2578a826732b2a67c9f8bda02854d7e92"
+        }
+      ]
+    },
+    {
+      "path": "module/os/map.py",
+      "qualname": "OSMap",
+      "kind": "ClassDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "OSMap",
+          "kind": "ClassDef",
+          "line": 86,
+          "ast_sha256": "d90dfed9d91304a42c65a5153629271dbdbc91e0a66a4646ac4a722a4a177412"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "OSMap",
+          "kind": "ClassDef",
+          "line": 85,
+          "ast_sha256": "0e8f039c41789a1e41bfdb0a41fd7bea5b9b42a363c9ddadbbd918122f8229c7"
+        }
+      ]
+    },
+    {
+      "path": "module/os/map.py",
+      "qualname": "OSMap._execute_fixed_patrol_scan",
+      "kind": "FunctionDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "OSMap._execute_fixed_patrol_scan",
+          "kind": "FunctionDef",
+          "line": 2250,
+          "ast_sha256": "c9f031e4dd72476e8fb1147992fa0f146e9efaaad4762c136d146414a09c4d3a"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "OSMap._execute_fixed_patrol_scan",
+          "kind": "FunctionDef",
+          "line": 2238,
+          "ast_sha256": "27ffc7d5a2c521088e95bf0c039d9f6cef9ddacdc08777c23cf107457bc0639a"
+        }
+      ]
+    },
+    {
+      "path": "module/os/map.py",
+      "qualname": "OSMap._move_fleets_and_rescan",
+      "kind": "FunctionDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "OSMap._move_fleets_and_rescan",
+          "kind": "FunctionDef",
+          "line": 2385,
+          "ast_sha256": "e65820b7b3cdde927061acad799632f59d5fc42af8f33b9ef698258413e79302"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "OSMap._move_fleets_and_rescan",
+          "kind": "FunctionDef",
+          "line": 2381,
+          "ast_sha256": "1bd318f238bc0919a7096a4ab3634ae3890c84ab32be57700bec2cae2b0dd0fe"
+        }
+      ]
+    },
+    {
+      "path": "module/os/map.py",
+      "qualname": "OSMap.clear_question",
+      "kind": "FunctionDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "OSMap.clear_question",
+          "kind": "FunctionDef",
+          "line": 1300,
+          "ast_sha256": "6d16226f73a23c0903a7b0e8ceb0660900c2e6eefc7eec1596929d37eb50e221"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "OSMap.clear_question",
+          "kind": "FunctionDef",
+          "line": 1300,
+          "ast_sha256": "c98277d58ab6024e166e02f18dcfa9ae99d1ceb07b7a3bb36d6f4b1d858b3031"
+        }
+      ]
+    },
+    {
+      "path": "module/os/map.py",
+      "qualname": "OSMap.map_rescan_once",
+      "kind": "FunctionDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "OSMap.map_rescan_once",
+          "kind": "FunctionDef",
+          "line": 1948,
+          "ast_sha256": "31372ca8f3a8de5f323db4f23d66cca885855298c01c40c892e4dc95744585a4"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "OSMap.map_rescan_once",
+          "kind": "FunctionDef",
+          "line": 1928,
+          "ast_sha256": "3f34c6b54a30027e20b1a7671da30d89efb97b64dac0a73e864c2daa9e2153b2"
+        }
+      ]
+    },
+    {
+      "path": "module/os/tasks/hazard_leveling.py",
+      "qualname": "OpsiHazard1Leveling",
+      "kind": "ClassDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "OpsiHazard1Leveling",
+          "kind": "ClassDef",
+          "line": 32,
+          "ast_sha256": "9e4c60c0d2fa1855e9053ae63abb511749701b378a5474207cb24ddb613e3a3b"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "OpsiHazard1Leveling",
+          "kind": "ClassDef",
+          "line": 32,
+          "ast_sha256": "22b18046d3baf5adba970ceb1599028950209e1307441c3ebd2e31143f6ae12b"
+        }
+      ]
+    },
+    {
+      "path": "module/os/tasks/hazard_leveling.py",
+      "qualname": "OpsiHazard1Leveling._cl1_run_battle",
+      "kind": "FunctionDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "OpsiHazard1Leveling._cl1_run_battle",
+          "kind": "FunctionDef",
+          "line": 120,
+          "ast_sha256": "61e19b126ad17ae9878b075c41a5a8ac0fc2b3b6fd8e7a105ca1d23dc5f3677e"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "OpsiHazard1Leveling._cl1_run_battle",
+          "kind": "FunctionDef",
+          "line": 120,
+          "ast_sha256": "f88dcfa37bc3aaddd72ec98e542b257e09f195a4dd69e05edae183cfe57d1be2"
+        }
+      ]
+    },
+    {
+      "path": "module/os_handler/map_event.py",
+      "qualname": "MapEventHandler",
+      "kind": "ClassDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "MapEventHandler",
+          "kind": "ClassDef",
+          "line": 46,
+          "ast_sha256": "f9bc1174c9e638a51d0fdde2f7ee1bf4c8b6c050c470039faa2489ce15369170"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "MapEventHandler",
+          "kind": "ClassDef",
+          "line": 46,
+          "ast_sha256": "96e9ee73369708f4bb409e873ba1c125f71fd432949ac29d5dcc8b36fd208202"
+        }
+      ]
+    },
+    {
+      "path": "module/os_shop/shop.py",
+      "qualname": "OSShop",
+      "kind": "ClassDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "OSShop",
+          "kind": "ClassDef",
+          "line": 30,
+          "ast_sha256": "bd86f9bde73e1fefbf5c7ba17b247476faa6c2b763b124a23f629d7763de1f09"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "OSShop",
+          "kind": "ClassDef",
+          "line": 32,
+          "ast_sha256": "b563e5e84ab277d9cf590360e3fa57651778c08f06950b89d81f289da3244333"
+        }
+      ]
+    },
+    {
+      "path": "module/os_shop/shop.py",
+      "qualname": "OSShop.handle_akashi_supply_buy",
+      "kind": "FunctionDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "OSShop.handle_akashi_supply_buy",
+          "kind": "FunctionDef",
+          "line": 405,
+          "ast_sha256": "1d2686c0b3f8cbf3b741d06a74c7c28f19366a57c11bc1fc0a6de89bf4e88e66"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "OSShop.handle_akashi_supply_buy",
+          "kind": "FunctionDef",
+          "line": 432,
+          "ast_sha256": "058a9bfb2d5557c47a0da87eb44e7e52d50ef2722e829a3b4d5c00252bf7c69a"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_api.py",
+      "qualname": "ConfigApiTests",
+      "kind": "ClassDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "ConfigApiTests",
+          "kind": "ClassDef",
+          "line": 34,
+          "ast_sha256": "299cc5d0e3271d2919a248bea94bf534fa3d29437d72fc28d1e93e5e2537db9f"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "ConfigApiTests",
+          "kind": "ClassDef",
+          "line": 34,
+          "ast_sha256": "dd9662bf70730e1c2cc9f0f104e0d230a9bf70fdd94a0e67cf6f37f69b3758c9"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_opsi_explore_cleanup.py",
+      "qualname": "CleanupTests",
+      "kind": "ClassDef",
+      "definition_exists": true,
+      "local_ast_body_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "CleanupTests",
+          "kind": "ClassDef",
+          "line": 24,
+          "ast_sha256": "c17dc86a4784ff040ae7e827717f0b286039d482562336c10d56f0a510e602de"
+        }
+      ],
+      "merged_entries": [
+        {
+          "qualname": "CleanupTests",
+          "kind": "ClassDef",
+          "line": 24,
+          "ast_sha256": "f23bbbbd26d5d6e0ac7c654a456d20be754d732fb6cccd6ba779a901693b0dbe"
+        }
+      ]
+    }
+  ],
+  "configuration_files": [
+    {
+      "path": "config/template.json",
+      "local_delta_leaf_count": 37,
+      "preserved_local_leaf_count": 37,
+      "upstream_added_leaf_count": 3
+    },
+    {
+      "path": "module/config/argument/args.json",
+      "local_delta_leaf_count": 119,
+      "preserved_local_leaf_count": 119,
+      "upstream_added_leaf_count": 8
+    },
+    {
+      "path": "module/config/i18n/zh-CN.json",
+      "local_delta_leaf_count": 189,
+      "preserved_local_leaf_count": 189,
+      "upstream_added_leaf_count": 8
+    },
+    {
+      "path": "module/config/i18n/zh-MIAO.json",
+      "local_delta_leaf_count": 189,
+      "preserved_local_leaf_count": 189,
+      "upstream_added_leaf_count": 8
+    },
+    {
+      "path": "module/config/i18n/en-US.json",
+      "local_delta_leaf_count": 189,
+      "preserved_local_leaf_count": 189,
+      "upstream_added_leaf_count": 8
+    },
+    {
+      "path": "module/config/i18n/ja-JP.json",
+      "local_delta_leaf_count": 189,
+      "preserved_local_leaf_count": 189,
+      "upstream_added_leaf_count": 8
+    },
+    {
+      "path": "module/config/i18n/zh-TW.json",
+      "local_delta_leaf_count": 189,
+      "preserved_local_leaf_count": 189,
+      "upstream_added_leaf_count": 8
+    },
+    {
+      "path": "module/config/argument/argument.yaml",
+      "local_delta_leaf_count": 95,
+      "preserved_local_leaf_count": 95,
+      "upstream_added_leaf_count": 7
+    },
+    {
+      "path": "module/config/argument/dashboard.yaml",
+      "local_delta_leaf_count": 0,
+      "preserved_local_leaf_count": 0,
+      "upstream_added_leaf_count": 0
+    },
+    {
+      "path": "module/config/argument/default.yaml",
+      "local_delta_leaf_count": 0,
+      "preserved_local_leaf_count": 0,
+      "upstream_added_leaf_count": 0
+    },
+    {
+      "path": "module/config/argument/gui.yaml",
+      "local_delta_leaf_count": 60,
+      "preserved_local_leaf_count": 60,
+      "upstream_added_leaf_count": 2
+    },
+    {
+      "path": "module/config/argument/override.yaml",
+      "local_delta_leaf_count": 0,
+      "preserved_local_leaf_count": 0,
+      "upstream_added_leaf_count": 0
+    },
+    {
+      "path": "module/config/argument/task.yaml",
+      "local_delta_leaf_count": 1,
+      "preserved_local_leaf_count": 1,
+      "upstream_added_leaf_count": 0
+    }
+  ],
+  "syntax_warnings": [
+    {
+      "path": "module/commission/project.py",
+      "line": 147,
+      "category": "SyntaxWarning",
+      "message": "\"\\d\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\d\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "module/commission/project.py",
+      "line": 148,
+      "category": "SyntaxWarning",
+      "message": "\"\\d\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\d\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "module/commission/project.py",
+      "line": 599,
+      "category": "SyntaxWarning",
+      "message": "\"\\d\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\d\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "module/commission/project.py",
+      "line": 609,
+      "category": "SyntaxWarning",
+      "message": "\"\\d\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\d\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "module/config/redirect_utils/shop_filter.py",
+      "line": 92,
+      "category": "SyntaxWarning",
+      "message": "\"\\>\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\>\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "module/config/redirect_utils/shop_filter.py",
+      "line": 93,
+      "category": "SyntaxWarning",
+      "message": "\"\\>\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\>\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "module/handler/sensitive_info.py",
+      "line": 62,
+      "category": "SyntaxWarning",
+      "message": "\"\\[\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\[\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "module/research/project.py",
+      "line": 228,
+      "category": "SyntaxWarning",
+      "message": "\"\\d\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\d\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "module/research/selector.py",
+      "line": 51,
+      "category": "SyntaxWarning",
+      "message": "\"\\d\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\d\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "module/research/selector.py",
+      "line": 52,
+      "category": "SyntaxWarning",
+      "message": "\"\\d\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\d\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "submodule/AlasFpyBridge/module/config/config_updater.py",
+      "line": 116,
+      "category": "SyntaxWarning",
+      "message": "\"\\|\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\|\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    },
+    {
+      "path": "tests/test_background_service.py",
+      "line": 103,
+      "category": "SyntaxWarning",
+      "message": "\"\\s\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\s\"? A raw string is also an option.",
+      "same_git_content_as_before_merge": true
+    }
+  ],
+  "full_audit": "D:/Codex/reports/upstream-dev-20261019/custom-preservation-static.json"
+}

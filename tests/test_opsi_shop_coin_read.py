@@ -31,6 +31,7 @@ class CoinReadFixture(unittest.TestCase):
         )
         self.reader.device = Mock()
         self.reader._last_yellow_coins = 54321
+        self.reader._last_yellow_owner = self.reader._background_coin_identity()[:2]
         self.reader.appear = Mock(
             side_effect=lambda button, **kwargs: self.reader.device.image.popup is button,
         )
@@ -54,6 +55,7 @@ class CoinReadFixture(unittest.TestCase):
             ('module.os_handler.os_status.OCR_SHOP_PURPLE_COINS', self.purple_ocr),
             ('module.os_handler.os_status.OCR_OS_SHOP_PURPLE_COINS', self.port_purple_ocr),
             ('module.os_handler.os_status.LogRes', self.recorder),
+            ('module.os_handler.os_status.record_resources_background', Mock()),
             ('module.os_handler.os_status.logger', Mock()),
         ):
             replacement = patch(target, return_value=value) if target.endswith(('Timer', 'LogRes')) else patch(target, value)
@@ -292,11 +294,18 @@ class TestAkashiShopSession(unittest.TestCase):
     def runner(self):
         runner = OSShop.__new__(OSShop)
         runner._akashi_handled = False
-        runner.is_in_map = Mock()
-        runner.handle_story_skip = Mock()
-        runner.appear = Mock(return_value=False)
+        runner.page = 'map'
+        runner.is_in_map = Mock(side_effect=lambda: runner.page == 'map')
+        runner.handle_story_skip = Mock(return_value=False)
+        runner.appear = Mock(side_effect=lambda button, **kwargs:
+                             button is PORT_SUPPLY_CHECK and runner.page == 'shop')
         runner.ui_click = Mock()
-        runner.ui_back = Mock()
+        runner.ui_back = Mock(side_effect=lambda **kwargs: setattr(runner, 'page', 'map'))
+        runner.device = Mock()
+        runner.device.click.side_effect = lambda button: setattr(runner, 'page', 'shop')
+        runner.loop = lambda: iter((None, None))
+        runner._recover_event_page = Mock(return_value=False)
+        runner._event_safe_click_button = Mock(return_value=object())
         runner.os_shop_buy = Mock()
         runner.os_shop_get_item_to_buy_in_akashi = Mock()
         return runner
@@ -304,9 +313,17 @@ class TestAkashiShopSession(unittest.TestCase):
     def test_successful_visit_has_session_only_after_entry_and_until_exit(self):
         runner = self.runner()
         states = []
-        runner.ui_click.side_effect = lambda *args, **kwargs: states.append(('enter', getattr(runner, '_akashi_shop_session', None)))
+        def enter(button):
+            states.append(('enter', getattr(runner, '_akashi_shop_session', None)))
+            runner.page = 'shop'
+
+        runner.device.click.side_effect = enter
         runner.os_shop_buy.side_effect = lambda **kwargs: states.append(('buy', runner._akashi_shop_session))
-        runner.ui_back.side_effect = lambda **kwargs: states.append(('exit', runner._akashi_shop_session))
+        def leave(**kwargs):
+            states.append(('exit', runner._akashi_shop_session))
+            runner.page = 'map'
+
+        runner.ui_back.side_effect = leave
         runner.handle_akashi_supply_buy(object())
         self.assertEqual(states, [('enter', None), ('buy', {}), ('exit', {})])
         self.assertIsNone(runner._akashi_shop_session)
@@ -315,7 +332,7 @@ class TestAkashiShopSession(unittest.TestCase):
 
     def test_entry_failure_does_not_leave_session_or_mark_handled(self):
         runner = self.runner()
-        runner.ui_click.side_effect = GameStuckError('模拟进店失败')
+        runner.device.click.side_effect = GameStuckError('模拟进店失败')
         with self.assertRaises(GameStuckError):
             runner.handle_akashi_supply_buy(object())
         self.assertIsNone(runner._akashi_shop_session)

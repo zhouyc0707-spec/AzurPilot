@@ -42,6 +42,11 @@ class TestHazard1RadarPrecheck(unittest.TestCase):
             predict_question=Mock(side_effect=self.predict_question)
         )
         self.runner.run_strategic_search = Mock(side_effect=self.strategic_search)
+        self.runner._get_pending_event = Mock(return_value=None)
+        self.runner._resume_pending_event = Mock()
+        self.runner._recover_pending_event = Mock()
+        self.runner.is_in_map = Mock(return_value=True)
+        self.runner.match_template_color = Mock(return_value=True)
         self.runner.fleet_set = Mock(side_effect=self.fleet_set)
         self.runner.map_rescan = Mock(side_effect=self.map_rescan)
         self.runner._forced_move_enabled = Mock(return_value=True)
@@ -154,6 +159,39 @@ class TestHazard1RadarPrecheck(unittest.TestCase):
         self.runner._execute_fixed_patrol_scan.assert_not_called()
         self.assertLess(self.actions.index('primary_clear'), self.actions.index('map_rescan'))
         self.akashi_record.assert_called_once_with(self.runner.config)
+
+    def test_pending_event_recovery_preserves_precheck_and_does_not_repeat_patrol(self):
+        """本地主队预检与上游续查共用预算，已恢复的事件不能再触发强制移动。"""
+        self.question = (0, -1)
+        pending = None
+
+        def clear(runner, drop=None):
+            nonlocal pending
+            pending = {'kind': 'is_question'}
+            return False
+
+        def recover():
+            nonlocal pending
+            self.observe_marker('pending_recovery')
+            self.runner._event_patrol_attempted = True
+            self.runner._solved_map_event.add('is_akashi')
+            pending = None
+
+        self.primary_clear.side_effect = clear
+        self.runner._get_pending_event.side_effect = lambda: pending
+        self.runner._recover_pending_event.side_effect = recover
+        self.run_battle()
+        self.runner._recover_pending_event.assert_called_once_with()
+        self.runner._execute_fixed_patrol_scan.assert_not_called()
+        self.assertIn(('pending_recovery', 1), self.marker_observations)
+
+    def test_pending_event_resumes_before_new_strategic_search(self):
+        """重启时先续查已记录事件，再开始新一轮，本轮仍执行主队预检。"""
+        self.runner._get_pending_event.side_effect = [{'kind': 'is_akashi'}, None, None]
+        self.runner._resume_pending_event.side_effect = lambda: self.actions.append('resume_pending')
+        self.run_battle()
+        self.assertEqual(self.actions[:2], ['resume_pending', 'strategic_search'])
+        self.runner._resume_pending_event.assert_called_once_with()
 
     def test_unresolved_question_keeps_original_forced_scan(self):
         """主队清理与全图扫描都失败时，仍进入原有多舰队及挪队兜底。"""

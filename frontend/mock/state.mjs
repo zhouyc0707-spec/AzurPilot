@@ -122,6 +122,13 @@ export function createMockState({ empty = false } = {}) {
     localHead = divergedUpdater ? divergedLocalHead : commits[3].sha
   }
   const updateStatus = () => ({ state: localHead === upstreamHead ? 'idle' : 'available', localHead, upstreamHead, branch: 'dev', ahead: divergedUpdater ? 1 : 0, behind: divergedUpdater ? 3 : commits.findIndex(item => item.sha === localHead), available: localHead !== upstreamHead, busy: false, canApply: localHead !== upstreamHead, canCancel: false, error: '', shaMismatch: divergedUpdater })
+  let mockClients = [
+    { id: '11112222333344445555666677778888', created_at: 1729214415 },
+    { id: 'aaaabbbbccccddddeeeeffff00001111', created_at: 1729214533 },
+    { id: '22223333444455556666777788889999', created_at: 1729214650 },
+    { id: 'bbbbccccddddeeeeffff000011112222', created_at: 1729214780 },
+    { id: '3333444455556666777788889999aaaa', created_at: 1729214910 },
+  ]
   const settings = {
     groups: [
       {
@@ -143,7 +150,7 @@ export function createMockState({ empty = false } = {}) {
         ]
       },
     ], notice: '前端测试数据', demo: false, remote: {
-      enabled: true, state: 'waiting_peer', address: 'https://tunnel.example.com/p2p/example-peer-id', error: '',
+      enabled: true, state: 'cloudflare_ready', address: 'https://remote.azurpilot.com/d/mock-device-id/', error: '',
     }
   }
   const get = name => instances.get(name) ?? fail('NOT_FOUND', '实例不存在')
@@ -998,12 +1005,34 @@ export function createMockState({ empty = false } = {}) {
           url: 'https://github.com/wess09/AzurPilot'
         }
       case 'events.subscribe':
-        if (params.topics.some(topic => topic !== 'instances') && !name) fail('INVALID_PARAMS', '订阅此主题需要指定实例')
+        if (params.topics.some(topic => topic !== 'instances' && topic !== 'notifications') && !name) fail('INVALID_PARAMS', '订阅此主题需要指定实例')
         return { topics: params.topics, instance: name ?? null }
       case 'background.gallery.list': return []
       case 'background.gallery.open': return { path: 'cache/background/library' }
       case 'background.gallery.remove': return { removed: true }
       case 'background.gallery.add': return { entry: { id: 'mock_bg', name: params.name || 'mock', kind: 'image', size: 1024, added: Date.now() } }
+      case 'remote.pair.create':
+        mockClients = [
+          { id: '11112222333344445555666677778888', created_at: 1729214415 },
+          { id: 'aaaabbbbccccddddeeeeffff00001111', created_at: 1729214533 },
+          { id: '22223333444455556666777788889999', created_at: 1729214650 },
+          { id: 'bbbbccccddddeeeeffff000011112222', created_at: 1729214780 },
+          { id: '3333444455556666777788889999aaaa', created_at: 1729214910 },
+        ]
+        return {
+          id: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+          client_id: '11112222333344445555666677778888',
+          code: '849201',
+          particle_secret: '0123456789abcdef0123456789abcdef',
+          expires_at: Math.floor(Date.now() / 1000) + 300,
+        }
+      case 'remote.pair.status':
+        return { state: 'pending' }
+      case 'remote.clients':
+        return structuredClone(mockClients)
+      case 'remote.revoke':
+        mockClients = mockClients.filter(item => item.id !== params.id)
+        return { revoked: true }
       default: fail('METHOD_NOT_FOUND', '此方法由连接层处理')
     }
   }

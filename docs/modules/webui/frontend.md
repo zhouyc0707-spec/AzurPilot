@@ -1,5 +1,10 @@
 # 前端
 
+远程页的 `src/remote/PairingPanel.tsx` 展示服务器生成的配对码与标准二维码（`src/remote/PairingQr.tsx`）。
+`PairingQr` 将 128 位单次配对密钥编码为 `azurpilot://pair?secret=<secret>` 协议二维码并支持一键复制六码与链接；AFA 在原生网关完成配对与认证，见 [远程访问](remote-access.md)。
+
+二维码使用相连的圆角模块与圆角定位框，保留四模块静区、32px 纯白内边距及深色码点；主题色只少量混入深色基底。等待配对时，`PairingScanGuide` 在操作区旁展示手机对准二维码、扫描与识别反馈的六秒循环示意。示意图使用二维码图标，不接收配对密钥，其识别反馈不表示实际配对成功；真实二维码保持静止。窄屏时示意移至下方，离开视口或切到后台时暂停；系统开启减少动态效果时保留静态取景画面。示意图只保留辅助阅读标签，不展示说明文字。
+
 > React 控制台（frontend/）：React + TypeScript + Vite 实现的 WebUI，业务通信统一走 `/api/v1/ws`。详细界面设计与协议见 frontend/README.md 与 frontend/API.md。
 
 ## 1. 模块概述

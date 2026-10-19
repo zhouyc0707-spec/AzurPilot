@@ -337,6 +337,8 @@ DeploySetting:
   EnableRemoteAccessHelp:
   RemoteAccessMode:
   RemoteAccessModeHelp:
+  CloudflareRegistry:
+  CloudflareRegistryHelp:
   SSHUser:
   SSHUserHelp:
   SSHServer:

@@ -58,9 +58,20 @@ class AkashiScopeFixture(unittest.TestCase):
         runner.ui_back = Mock()
         runner.os_shop_buy = Mock()
         runner.os_shop_get_item_to_buy_in_akashi = Mock(name='原明石选品器')
-        runner.handle_story_skip = Mock()
+        runner.handle_story_skip = Mock(return_value=False)
+        runner._recover_event_page = Mock(return_value=False)
+        runner._event_safe_click_button = Mock(return_value=object())
         runner.appear = Mock(side_effect=lambda button, **kwargs: button is PORT_SUPPLY_CHECK and runner.frame == 'shop')
         return runner
+
+    @staticmethod
+    def visit_shop(runner, grid=None):
+        # 入口与退出仍由各自导航夹具验证；商店使用连续的地图、商店新画面。
+        origin = runner.frame if runner.is_in_map() else 'map'
+        runner.loop = lambda: iter((None, None))
+        runner.device.click.side_effect = lambda button: setattr(runner, 'frame', 'shop')
+        runner.ui_back.side_effect = lambda **kwargs: setattr(runner, 'frame', origin)
+        return OSShop.handle_akashi_supply_buy(runner, grid or object())
 
     def exit_runner(self, frames):
         runner = SimpleNamespace(
@@ -101,15 +112,22 @@ class AkashiScopeFixture(unittest.TestCase):
         runner.map_rescan = Mock()
         runner.frame = 'map'
         runner.is_in_map = Mock(return_value=True)
-        runner.appear = Mock(return_value=False)
+        runner.appear = Mock(side_effect=lambda button, **kwargs:
+                             button is PORT_SUPPLY_CHECK and runner.frame == 'shop')
         runner.ui_click = Mock()
         runner.ui_back = Mock()
         runner.os_shop_buy = Mock()
         runner.os_shop_get_item_to_buy_in_akashi = Mock(name='原明石选品器')
-        runner.handle_story_skip = Mock()
+        runner.handle_story_skip = Mock(return_value=False)
+        runner._remember_pending_event = Mock()
+        runner._finish_pending_event = Mock()
+        runner._event_global_location = Mock(return_value=None)
+        runner._recover_event_page = Mock(return_value=False)
+        runner._event_safe_click_button = Mock(return_value=object())
+        runner.fleet_selector = SimpleNamespace(bar_opened=lambda: False)
 
         def search(drop, **kwargs):
-            OSShop.handle_akashi_supply_buy(runner, object())
+            self.visit_shop(runner)
             return 0
 
         runner.os_auto_search_run = Mock(side_effect=search)
@@ -151,7 +169,7 @@ class TestAkashiEntryScope(AkashiScopeFixture):
             with self.subTest(zone_type=zone_type):
                 runner = self.shop_runner(self.entry_runner(pinned=zone_type))
                 self.enter(runner)
-                OSShop.handle_akashi_supply_buy(runner, object())
+                self.visit_shop(runner)
                 runner.os_shop_buy.assert_called_once_with(select_func=runner.os_shop_get_item_to_buy_in_akashi)
                 self.assertTrue(runner._akashi_handled)
 
@@ -160,7 +178,7 @@ class TestAkashiEntryScope(AkashiScopeFixture):
         for _ in range(2):
             self.set_frames(runner, ('pinned', 'loading', 'map'))
             self.enter(runner)
-            OSShop.handle_akashi_supply_buy(runner, object())
+            self.visit_shop(runner)
             self.assertTrue(runner._akashi_handled)
         self.assertEqual(runner.os_shop_buy.call_count, 2)
 
@@ -169,10 +187,10 @@ class TestAkashiEntryScope(AkashiScopeFixture):
         self.set_frames(runner, ('pinned', 'map'))
         self.enter(runner)
         grid = object()
-        OSShop.handle_akashi_supply_buy(runner, grid)
+        self.visit_shop(runner, grid)
         runner.frame = 'shop'
-        OSShop.handle_akashi_supply_buy(runner, grid)
-        runner.ui_click.assert_called_once()
+        self.visit_shop(runner, grid)
+        runner._event_safe_click_button.assert_called_once()
         runner.os_shop_buy.assert_called_once()
         self.assertEqual(runner.ui_back.call_count, 2, '已弹出的重复商店仍需关闭')
 
@@ -182,7 +200,7 @@ class TestAkashiEntryScope(AkashiScopeFixture):
         self.enter(runner)
         runner.os_shop_buy.side_effect = GameStuckError('测试购买中断')
         with self.assertRaises(GameStuckError):
-            OSShop.handle_akashi_supply_buy(runner, object())
+            self.visit_shop(runner)
         self.assertFalse(runner._akashi_handled)
 
 
@@ -218,7 +236,7 @@ class TestAkashiExitScope(AkashiScopeFixture):
     def test_special_shop_flag_does_not_suppress_source_map_shop(self):
         runner = self.shop_runner(self.exit_runner(('special', 'event', 'source')))
         self.exit(runner)
-        OSShop.handle_akashi_supply_buy(runner, object())
+        self.visit_shop(runner)
         runner.os_shop_buy.assert_called_once()
 
 

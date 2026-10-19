@@ -184,7 +184,13 @@ module/
 
 ### 小游戏（module/minigame）
 
-`Minigame(UI)` 导航学院 → 游戏室，OCR 代币（上限 40，≤30 触发收集），代币 >0 时游玩（单次任务最多 10 局）。`MinigameRun` 是模板方法基类：子类实现 `choose_game/use_coin/play_game/exit_game/deal_specific_popup`。当前唯一实现 `NewYearChallenge` 用颜色匹配点按钮、OCR 读取得分与代币消耗。JP 服代币字体颜色不同（模块级按服务器分支定义）。
+`Minigame(MinigameUI)` 导航学院 → 游戏室，OCR 代币（上限 40，≤30 触发收集），代币 >0 时游玩（单次任务最多 10 局）。`MinigameRun(MinigameUI)` 是模板方法基类：子类实现 `choose_game/use_coin/play_game/exit_game/deal_specific_popup`。当前唯一实现 `NewYearChallenge` 用颜色匹配点按钮、OCR 读取得分与代币消耗。JP 服代币字体颜色不同（模块级按服务器分支定义）。
+
+`MinigameUI.minigame_list_appear()` 用滚动条颜色检测与左右任一列的卡片标记共同确认游戏列表；卡片标记允许纵向偏移 500px。列表可能残留 `GOTO_CHOOSE_GAME` 开始按钮，不能以该按钮消失作为列表就绪条件。进入游戏、回游戏室主页和收集代币共用此判断；选择新年挑战时先找目标卡片，再在确认列表后滚动，最后才处理主页的开始按钮。退出游戏时检测到列表即可结束，`minigame_run()` 的结束页面可以是游戏室主页或列表。
+
+`MinigameScroll` 只替换小游戏的滚动控件。位置通过 `MINIGAME_SCROLL_KNOB` 模板匹配获取，不用白色像素的平均位置，避免残留开始按钮边框干扰。轨道纵向范围为 95～655px，参考滑块中心为 164px，推算滑块长度 138px，位置按 `(当前中心 y - 164) / 422` 归一化并截断到 0～1。滑块遮挡时返回 `None`；非底部目标先在卡片区向下滑动恢复滑块，再拖到目标位置。目标在底部附近时向上滑动卡片，比较 `(300, 110, 600, 500)` 区域，相邻观察的平均绝对像素差小于 1、连续成立两次后按到底处理。这是卡片停止移动的启发式判断，不是客户端提供的底部标志。操作间隔为 1 秒，持续截图确认；最多 8 次滑动或 20 秒仍未确认时抛出 `RequestHumanTakeover`，由现有 `alas.py` 调度器保存现场并按重启敏感配置决定停止或尝试重启模拟器恢复。设备卡死、连击等异常继续向上层传播。
+
+新列表标记和滑块资源位于 `assets/cn/minigame/`，EN/JP/TW 通过生成器回退到国服资源，其他按钮保留各服务器原有资源。离线回归 `uv run python -m unittest discover -s tests -p test_minigame.py` 覆盖原生资源匹配、按钮残留下的页面导航、白色边框误定位、遮挡恢复、底部静止确认和失败上限；模拟测试不连接账号，也不代表实机验收。
 
 ### 作战委托（module/handover）
 

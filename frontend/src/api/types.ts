@@ -180,6 +180,8 @@ export interface LegacyStatisticsReport {
 export interface DeployField { key: string; type: string; label: string; help: string; value: Value; options: Value[] }
 export interface RemoteAccessStatus { enabled: boolean; state: string; address: string; error: string }
 export interface Settings { groups: {key: string; label: string; fields: DeployField[]}[]; notice: string; demo: boolean; remote?: RemoteAccessStatus }
+export interface RemotePairing { id: string; client_id: string; code: string; particle_secret: string; expires_at: number }
+export interface RemoteClient { id: string; created_at: number }
 export interface ApiEvent { v: 1; type: 'event'; topic: string; seq: number; data: unknown }
 export interface ApiResponse { v: 1; type: 'response'; id: string; ok: boolean; result?: unknown; error?: {code: string; message: string; details?: unknown} }
 export interface Announcement {
@@ -279,6 +281,10 @@ export interface Results {
   'meowfficer.scoreReport': MeowfficerScoreReport
   'meowfficer.clearReport': {cleared: boolean; removed: string[]}
   'settings.get': Settings
+    'remote.pair.create': RemotePairing
+    'remote.pair.status': {state: 'pending' | 'claimed' | 'expired'}
+    'remote.clients': RemoteClient[]
+    'remote.revoke': {revoked: boolean}
   'settings.patch': {updated: string[]}
   'startup.get': {enabled: boolean; remember: boolean}
   'startup.set': {enabled: boolean; remember: boolean}

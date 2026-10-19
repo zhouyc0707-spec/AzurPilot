@@ -39,6 +39,16 @@ class Params(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
 
 
+class RemotePairingParams(Params):
+    """服务器生成的配对会话标识。"""
+    id: StrictStr = Field(pattern=r'^[a-f0-9]{64}$')
+
+
+class RemoteClientParams(Params):
+    """本机生成的配对客户端标识。"""
+    id: StrictStr = Field(pattern=r'^[a-f0-9]{32}$')
+
+
 class MindShip(Params):
     """可编辑的舰船字段，核对状态与排除状态独立保存。"""
     name: StrictStr = Field(min_length=1, max_length=100)

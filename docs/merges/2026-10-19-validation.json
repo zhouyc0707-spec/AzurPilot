@@ -1,0 +1,67 @@
+{
+  "python_groups": [
+    {
+      "label": "大世界事件、预检、战斗、计时及后宅/小游戏/API/历史兼容",
+      "tests": 409,
+      "passed": 408,
+      "skipped": 1,
+      "log": "python-final.log",
+      "skip_reason": "当前Windows用户无创建符号链接权限"
+    },
+    {
+      "label": "明石安全入口、库存缓存、去重与余额",
+      "tests": 101,
+      "passed": 101,
+      "log": "shop-tests-final.txt"
+    },
+    {
+      "label": "岛屿入口、经营、ALAS订单及对齐",
+      "tests": 74,
+      "passed": 74,
+      "log": "island-focused-tests.log"
+    },
+    {
+      "label": "Quick Tunnel隔离服务",
+      "tests": 21,
+      "passed": 21,
+      "log": "remote-tests.log",
+      "log_kind": "已有测试终端输出摘录，非完整原始日志"
+    }
+  ],
+  "frontend_unit": {
+    "tests": 64,
+    "passed": 64,
+    "log": "frontend-tests.log"
+  },
+  "browser": [
+    {
+      "label": "新旧UI与两项新增定制",
+      "tests": 11,
+      "passed": 11,
+      "log": "browser-runtime.log"
+    },
+    {
+      "label": "远程配对六视口mock",
+      "tests": 6,
+      "passed": 6,
+      "log": "pairing-browser.log"
+    }
+  ],
+  "checks": {
+    "python_ast_files": 2639,
+    "python_ast_errors": 0,
+    "ruff": "passed",
+    "config_generator": "passed",
+    "button_generator": "passed",
+    "api_contract_generator": "passed",
+    "uv_lock_offline_check": "passed",
+    "frontend_typecheck_and_build": "passed",
+    "git_diff_check": "passed"
+  },
+  "log_root": "D:\\Codex\\reports\\upstream-dev-20261019",
+  "limits": [
+    "未执行真实游戏任务或消费账号资源",
+    "未启动公网隧道或验证外部注册服务可达性",
+    "静态保留和离线回归不替代全部定制的实机验收"
+  ]
+}

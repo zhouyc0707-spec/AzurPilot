@@ -2822,6 +2822,64 @@
         "type": "object"
       }
     },
+    "remote.pair.create": {
+      "mutates": true,
+      "params": {
+        "additionalProperties": false,
+        "description": "API 入参基础模型，禁止额外字段并启用严格类型校验。",
+        "properties": {},
+        "title": "Params",
+        "type": "object"
+      }
+    },
+    "remote.pair.status": {
+      "mutates": false,
+      "params": {
+        "additionalProperties": false,
+        "description": "服务器生成的配对会话标识。",
+        "properties": {
+          "id": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "RemotePairingParams",
+        "type": "object"
+      }
+    },
+    "remote.clients": {
+      "mutates": false,
+      "params": {
+        "additionalProperties": false,
+        "description": "API 入参基础模型，禁止额外字段并启用严格类型校验。",
+        "properties": {},
+        "title": "Params",
+        "type": "object"
+      }
+    },
+    "remote.revoke": {
+      "mutates": true,
+      "params": {
+        "additionalProperties": false,
+        "description": "本机生成的配对客户端标识。",
+        "properties": {
+          "id": {
+            "pattern": "^[a-f0-9]{32}$",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "RemoteClientParams",
+        "type": "object"
+      }
+    },
     "settings.patch": {
       "mutates": true,
       "params": {

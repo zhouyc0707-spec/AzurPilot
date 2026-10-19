@@ -117,6 +117,7 @@ class TestCommissionScreenshotLimitFusion(unittest.TestCase):
 class TestOSShopFusion(unittest.TestCase):
     def test_already_handled_akashi_does_not_buy_again(self):
         shop = SimpleNamespace(_akashi_handled=True, appear=Mock(return_value=False),
+                               is_in_map=Mock(return_value=True),
                                ui_click=Mock(), ui_back=Mock(), os_shop_buy=Mock())
         OSShop.handle_akashi_supply_buy(shop, object())
         shop.ui_click.assert_not_called()

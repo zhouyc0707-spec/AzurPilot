@@ -547,6 +547,8 @@ class GeneratedConfig:
     Dorm_Collect = True
     Dorm_Feed = True
     Dorm_FeedFilter = '20000 > 10000 > 5000 > 3000 > 2000 > 1000'
+    Dorm_ReserveFood = False
+    Dorm_FeedReserveState = None
     Dorm_BuyFood = False
 
     # 配置组 `BuyFurniture`
@@ -844,6 +846,7 @@ class GeneratedConfig:
     OpsiHazard1Leveling_RecordNonCL1AP = True
     OpsiHazard1Leveling_RecordSeaMiles = -1
     OpsiHazard1Leveling_SeaMilesLastRecord = None
+    OpsiHazard1Leveling_PendingEventRecovery = None
     OpsiHazard1Leveling_DebugClip = False
 
     # 配置组 `OpsiSirenBug`

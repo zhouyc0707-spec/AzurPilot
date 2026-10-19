@@ -9,6 +9,7 @@ from module.persistence.database import configured_database
 from module.api import background_service as background
 from module.api import protocol as p
 from module.api import search_service as search
+from module.api import remote_service as remote
 from module.runtime.process_manager import ProcessManager
 
 
@@ -111,6 +112,10 @@ class Router:
                                              self.meowfficer_clear_report, True),
             'statistics.resources': Method(p.StatisticsParams, lambda x: runtime.statistics(x.instance, x.days, x.resource)),
             'settings.get': Method(p.Params, self.settings),
+            'remote.pair.create': Method(p.Params, lambda _: remote.create_pairing(), True),
+            'remote.pair.status': Method(p.RemotePairingParams, lambda x: remote.pairing_status(x.id)),
+            'remote.clients': Method(p.Params, lambda _: remote.clients()),
+            'remote.revoke': Method(p.RemoteClientParams, lambda x: remote.revoke(x.id), True),
             'settings.patch': Method(p.DeployParams, self.save_settings, True),
             'startup.get': Method(p.InstanceParams, self.get_startup),
             'startup.set': Method(p.StartupParams, self.set_startup, True),

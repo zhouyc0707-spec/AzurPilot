@@ -83,7 +83,10 @@ class TestOSMapScanCoverage(unittest.TestCase):
         runner.convert_radar_to_local = Mock(return_value=SimpleNamespace())
         runner._should_skip_siren_research = Mock(return_value=False)
         runner._solved_map_event = set()
-        runner.config = SimpleNamespace(temporary=lambda **kwargs: nullcontext())
+        runner.config = SimpleNamespace(
+            task=SimpleNamespace(command='OpsiDaily'),
+            temporary=lambda **kwargs: nullcontext(),
+        )
         runner.wait_until_walk_stable = Mock(return_value='akashi')
         self.assertTrue(OSMap.clear_question(runner))
         self.assertEqual(order, ['tip', 'view'])

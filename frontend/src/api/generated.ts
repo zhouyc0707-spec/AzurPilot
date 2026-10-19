@@ -57,6 +57,10 @@ export interface Parameters {
   "meowfficer.clearReport": { instance: string }
   "statistics.resources": { instance: string; days?: number; resource?: "Oil" | "Coin" | "Gem" | "Cube" | "Pt" | "ActionPoint" | "Core" | "Medal" | "Merit" | "GuildCoin" | "YellowCoin" | "PurpleCoin" }
   "settings.get": Record<string, never>
+  "remote.pair.create": Record<string, never>
+  "remote.pair.status": { id: string }
+  "remote.clients": Record<string, never>
+  "remote.revoke": { id: string }
   "settings.patch": { values: Record<string, unknown> }
   "startup.get": { instance: string }
   "startup.set": { instance: string; enabled?: boolean | null; remember?: boolean | null }

@@ -1,5 +1,7 @@
 # 运行时服务（module/runtime）
 
+Cloudflare 模式、固定入口与 AFA 配对的使用及恢复契约见 [remote-access.md](remote-access.md)。
+
 > WebUI 服务子进程内的「进程与后台服务层」：管理每个配置实例的 alas worker 进程、驱动更新事务、调度 WebUI 后台任务、转发日志与截图预览，并为 MCP/远程访问/密码等横切能力提供实现；进程与状态归它管，HTTP 协议归 `module/api`，端口与监督归 `gui.py`。
 
 ## 1. 模块概述
@@ -22,7 +24,7 @@
 - 更新流程：`updater` 检查上游、编排停止-更新-重启事务，`module/api/update_service.py` 只是它的 WebUI 门面。
 - 被动截图通道：`preview.py` 接收 worker 截图、后台编码 JPEG、按实例保留最新帧。
 - 横切安全能力：`mcp_auth`（MCP 鉴权与会话）、`password_utils`（密码策略与本机判定）、`launcher_trust`（启动器信任令牌）。
-- 远程访问：`remote_access.py` 的 SSH 反向隧道与 WebRTC P2P 两种 provider 及自动切换。
+- 远程访问：`remote_access.py` 的 SSH / WebRTC provider，以及 `remote_cloudflare.py` 的 Quick Tunnel、固定入口续约与配对身份。
 - 部署设置：`deploy_settings` 定义表单 schema 与校验，`config.py` 的 `DeployConfig` 把属性赋值自动落盘到 `deploy.yaml`。
 - 共享状态根：`setting.py` 的 `State`（跨进程事件、SyncManager、进程注册表）。
 - 停止后收尾：`scheduler_stop` 在独立进程中执行返回主页/关游戏/关模拟器。
@@ -52,6 +54,7 @@ module/runtime/
 ├── preview.py             # PreviewHub：被动截图最新帧分发
 ├── scheduler_stop.py      # 手动停止后的收尾动作（独立进程执行）
 ├── remote_access.py       # SSH / WebRTC 远程访问 provider
+├── remote_cloudflare.py   # pyflared Quick Tunnel、固定入口续约与配对身份
 ├── mcp_auth.py            # MCP 鉴权：凭据提取、常数时间比对、会话表、日志脱敏
 ├── password_utils.py      # 密码生成/校验、本机判定、远程访问标记头
 ├── launcher.py            # LauncherControl：外部启动器命令通道
@@ -322,8 +325,9 @@ stateDiagram-v2
 | `Update.AutoRestartTime` | str\|null | null | 每日定时更新时刻（ISO time）；null 则移除定时任务 |
 | `Update.EnableReload` | bool | true | false 时 `State.restart_event` 为 None，更新器拒绝执行热重载更新 |
 | `Git.GitOverCdn` | bool | false | 走 GitOverCdn 检查/更新，failed 时回退 `git pull` |
-| `RemoteAccess.RemoteAccessMode` | select | auto | `auto`/`webrtc`/`ssh`，决定激活哪个远程访问 provider |
+| `RemoteAccess.RemoteAccessMode` | select | auto | `auto`/`webrtc`/`ssh`/`cloudflare`，决定激活哪个远程访问 provider；Quick Tunnel 显式选择 |
 | `RemoteAccess.EnableRemoteAccess` | bool | false | 启动时挂载远程访问保活任务 |
+| `RemoteAccess.CloudflareRegistry` / `CloudflareDeviceId` | str | 注册服务入口 / 空 | Quick Tunnel 的 HTTPS 注册地址与安装 ID；空 ID 由身份文件首次生成并持久化 |
 | `RemoteAccess.SSHServer` / `SignalingServer` / `StunServers` / `TurnServers` | str\|null | null | 隧道与信令配置；未配置信令时从 SSHServer 推导 |
 | `Webui.Password` | str\|null | null | WebUI 与 MCP 共用密码；公网监听未设置时自动生成并回写 |
 | `Optimization.WhenSchedulerStopped`（实例配置） | select | stay_there | 手动停止后的收尾动作，`scheduler_stop` 消费 |
@@ -359,7 +363,8 @@ stateDiagram-v2
 | TaskHandler 调度线程 | 服务子进程 daemon 线程 | `task_handler.start()` | `stop()` 置 `_alive=False` 后 join（2 秒超时） |
 | 更新检查线程 | 服务子进程 daemon 线程 | `updater.check_update` | 单次检查即结束 |
 | 日志/预览转发线程 ×2/实例 | 服务子进程线程 | `start_log_queue_handler` | 检测到本轮进程退出后 `join(1)` 回收 |
-| 远程访问线程 | 服务子进程**非 daemon** 线程 | provider.start() | stop_event 或进程内唯一线程时退出 |
+| SSH / WebRTC 远程访问线程 | 服务子进程**非 daemon** 线程 | provider.start() | stop_event 或进程内唯一线程时退出 |
+| Quick Tunnel 线程 | 服务子进程 daemon 线程 | CloudflareRemoteAccessProvider.start() | 独立 asyncio 循环；stop() 取消任务、上报离线并回收 cloudflared |
 | preview 编码线程 | **worker 进程内** daemon 线程 | `preview.initialize` | 队列断开即退出 |
 
 同步约束：
@@ -379,6 +384,7 @@ stateDiagram-v2
 | `config/webui-dependency-sync-pending` | updater（更新前） | gui.py（启动前检查）、setting（is/clear） | 存在即「必须先依赖同步再启动 WebUI」；仅同步成功后清除 |
 | `config/reloadalas` | updater（更新前写实例名单） | `ProcessManager.restart_processes` | 更新后待恢复的实例列表；恢复后删除 |
 | `config/deploy.yaml` | `DeployConfig.__setattr__` / `save_deploy_settings` | 全模块经 `State.deploy_config` | 部署设置唯一持久化点；属性赋值即落盘 |
+| `config/remote-access.json` | `remote_cloudflare.RemoteIdentity` | Quick Tunnel provider、WebSocket 网关 | 设备 ID、注册密钥与配对凭据摘要；原子写，损坏时拒绝自动重建身份 |
 | `config/stock-exchange/game.key` / `registry.json` | `game_data.GameDataProtector` | 交易代理、中央行动力历史与补传日志 | 独立随机游戏密钥及加密登记/检查点；不绑定主机、用户或项目路径 |
 | `config/stock-exchange/` | `GameDataProtector` / 交易代理 | 交易代理与历史采集 | 密文身份、绑定、补传 SQLite 与 `protected-v2` 标记；旧 cache 文件先搬到本目录再按常规流程处理 |
 | `password.txt`（仓库根） | `ensure_password_for_host` | 用户查看 | 公网监听自动生成的密码副本 |
@@ -418,7 +424,7 @@ TUI 使用相同服务边界；配置弹窗显示时，时钟刷新查询主屏�
 - **新增 WebUI 后台周期任务**：在 `module/api/lifecycle.startup` 中 `task_handler.add(生成器, 初始延迟)`；生成器第一个 `yield` 接收 TaskHandler，可动态改 `th._task.delay`（参照 `updater.check_update_loop`）或 `th.remove_current_task()` 自毁。
 - **新增 worker 启动形态**：`_run_process` 的 `func` 分发已覆盖 `alas` / 单任务 / submodule / submodule 单功能四种；新增形态在此添加分支并让 `get_config_mod` 能解析对应配置名。
 - **新增停止收尾动作**：在 `scheduler_stop.STOP_ACTIONS` 加选项、`execute_stop_action` 加分支，并在 `module/config/argument/argument.yaml` 的 `WhenSchedulerStopped` 选项中登记（五个 i18n 文件补翻译）。
-- **新增远程访问 provider**：继承 `RemoteAccessProvider`（start/stop/is_alive/get_state/get_entry_point/get_connection_state/get_error 七个接口），接入 `AutoRemoteAccessProvider` 的模式分派。
+- **新增远程访问 provider**：实现 `RemoteAccessProvider` 的 start/stop/is_alive/get_state/get_entry_point/get_connection_state/get_error 七个接口，接入 `AutoRemoteAccessProvider` 的模式分派；Quick Tunnel 为独立实现。
 - **新增部署设置字段**：`deploy_settings.py` 的 `DEPLOY_GROUPS` 加 `DeployField`，`deploy/config.py` 加模板默认值，`gui.yaml` 补 `Gui.DeploySetting.*` 翻译；类型解析在 `_parse_value` 扩展。
 - **新增 MCP 端点保护**：只需扩展 `mcp_auth.ROUTE_METHODS` 与 `route_of` 的末尾匹配，`authorize` 会自动覆盖。
 
@@ -439,7 +445,7 @@ TUI 使用相同服务边界；配置弹窗显示时，时钟刷新查询主屏�
 - **`event_calculator.py` 当前没有生产消费者**（截至 2026-09）：自旧 PyWebIO 前端迁移而来，逻辑与单测完整，但新 React 前端尚未实现活动计算器页面。它是预留能力，接线前不会生效。启动器命令通道与免密令牌由 `module/api/launcher_api.py` 实现，`launcher_routes.py` 将其与本地保留的通知投递／订阅端点一起注册到 `create_app`；控制、信任与限流状态共用一份。
 - worker 的更新退出依赖任务边界轮询（`wait_until` 每 5 秒、任务间每次循环），**正在执行的长任务会推迟更新等待**，因此事务里有 10 分钟超时强停兜底；强停可能让该实例下次启动时状态不完整。
 - `alive` 在登记不可验证时保守返回 False，配合 `start()` 的二次验证避免重复启动；但这意味着登记文件损坏期间（自愈前）实例可能显示为已停止。
-- 远程访问线程是非 daemon 线程，其退出依赖 `stop_event` 或「进程内唯一线程」检测；极端情况下（其他线程意外全部退出）可能延迟进程退出。
+- SSH / WebRTC 远程访问线程是非 daemon 线程，其退出依赖 `stop_event` 或「进程内唯一线程」检测；极端情况下（其他线程意外全部退出）可能延迟进程退出。Quick Tunnel 使用 daemon 线程及显式取消与子进程回收。
 - 预览每实例仅保留一帧且队列容量 2，快速连续截图时中间帧会被丢弃；这是设计（前端只看最新画面），不提供回放。
 - `restart_processes` 从 `reloadalas` 恢复实例时不校验实例是否仍存在（文件由 updater 按当时运行名单写入）；恢复一个刚被删除的实例会以启动失败告终并记录日志。
 

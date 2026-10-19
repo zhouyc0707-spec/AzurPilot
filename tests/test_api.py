@@ -37,6 +37,34 @@ class ConfigApiTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.configs = ConfigService(fixture(self.temp.name))
 
+    def test_dorm_food_reserve_defaults_for_old_configs(self):
+        from module.config.config_updater import ConfigUpdater
+
+        path = self.configs.path('testpilot')
+        data = self.configs.read_json(path)
+        data['Dorm']['Dorm'].pop('ReserveFood')
+        data['Dorm']['Dorm'].pop('FeedReserveState')
+        path.write_text(json.dumps(data), encoding='utf-8')
+        before = path.read_bytes()
+        for values in (self.configs.get('testpilot')['values'], ConfigUpdater().config_update(data)):
+            self.assertFalse(values['Dorm']['Dorm']['ReserveFood'])
+            self.assertIsNone(values['Dorm']['Dorm']['FeedReserveState'])
+        self.assertEqual(before, path.read_bytes())
+
+    def test_dorm_food_reserve_persists_and_internal_state_is_read_only(self):
+        field = 'Dorm.Dorm.ReserveFood'
+        for enabled in (True, False):
+            with self.subTest(enabled=enabled):
+                result = self.configs.patch('testpilot', None, [ConfigChange(path=field, value=enabled)])
+                self.assertEqual(enabled, result['values']['Dorm']['Dorm']['ReserveFood'])
+                saved = self.configs.read_json(self.configs.path('testpilot'))
+                self.assertEqual(enabled, saved['Dorm']['Dorm']['ReserveFood'])
+        with self.assertRaises(ApiError) as caught:
+            self.configs.patch('testpilot', None, [ConfigChange(
+                path='Dorm.Dorm.FeedReserveState', value={'day': '2026-10-15'},
+            )])
+        self.assertEqual('READ_ONLY', caught.exception.code)
+
     def test_gacha_clear_ticket_time_fills_default_for_old_configs(self):
         from module.config.config_updater import ConfigUpdater
 

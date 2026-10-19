@@ -197,7 +197,11 @@ class OpsiPreservationPolicyTests(unittest.TestCase):
         self.assertNotIn('coins_month_start_residue', json.loads(public))
         self.assertNotIn('coins_snapshots', json.loads(public))
         self.assertTrue(sealed.startswith(opsi_secure.BLOB_PREFIX))
-        stored = Cl1Database(self.path).get_stats('inst', '2026-09')
+        database = Cl1Database(self.path)
+        self.assertEqual(database.db_path, self.root / 'config' / 'azurpilot.db')
+        # 总库迁移独立读取旧凭据，需要注入生成夹具时使用的同一个内存提供者。
+        with patch.object(opsi_secure, 'provider_for_descriptor', return_value=self.provider):
+            stored = database.get_stats('inst', '2026-09')
         self.assertEqual(stored['coins_month_start_residue'] + stored['coins_snapshots'], points)
         self.assertEqual(stored['commission_income_entries'], full['commission_income_entries'])
 
@@ -206,13 +210,18 @@ class OpsiPreservationPolicyTests(unittest.TestCase):
         csv_path.parent.mkdir()
         expected = np.arange(6 * len(AzurStats.meowofficer_farming_labels), dtype=float).reshape(
             6, len(AzurStats.meowofficer_farming_labels))
+        # 第一列是侵蚀等级，旧收益缓存只包含 1–6 级；其余列保留各不相同的历史值。
+        expected[:, 0] = np.arange(1, 7)
         header = ','.join(AzurStats.meowofficer_farming_labels)
         # 历史导出文件本就使用 UTF-8；夹具必须遵守相同格式，避免被系统编码写成 GBK。
         np.savetxt(csv_path, expected, delimiter=',', header=header, comments='', encoding='utf-8')
         self.assertEqual(csv_path.read_bytes().splitlines()[0], header.encode('utf-8'))
         self.assertTrue(self.vault.ensure_ready())
         self.assertTrue(csv_path.read_text(encoding='utf-8').startswith(opsi_secure.BLOB_PREFIX))
-        with patch.object(AzurStats, 'LOCAL_MEOW_CSV', str(csv_path)):
+        with patch.object(AzurStats, 'LOCAL_DB', str(self.root / 'config' / 'azurstats_local.db')), \
+                patch.object(AzurStats, 'LOCAL_MEOW_CSV', str(csv_path)), \
+                patch.object(opsi_secure, 'provider_for_descriptor', return_value=self.provider):
+            self.assertEqual(AzurStats._database().path, self.root / 'config' / 'azurpilot.db')
             np.testing.assert_array_equal(AzurStats.load_meowofficer_farming(), expected)
 
 
