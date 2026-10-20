@@ -1,0 +1,72 @@
+{
+  "python_suites": [
+    {
+      "modules": [
+        "tests.test_opsi_background_resources",
+        "tests.test_opsi_resource_speed",
+        "tests.test_opsi_scheduling_modes",
+        "tests.test_opsi_task_context"
+      ],
+      "tests": 125,
+      "seconds": 52.15,
+      "result": "OK"
+    },
+    {
+      "modules": [
+        "tests.test_opsi_ash_status",
+        "tests.test_webui_updater",
+        "tests.test_frontend_static"
+      ],
+      "tests": 47,
+      "seconds": 0.531,
+      "result": "OK"
+    },
+    {
+      "modules": [
+        "tests.test_opsi_cl1_round_time"
+      ],
+      "tests": 20,
+      "seconds": 127.429,
+      "result": "OK"
+    },
+    {
+      "modules": [
+        "tests.test_opsi_hazard1_radar_precheck",
+        "tests.test_opsi_map_scan_coverage",
+        "tests.test_opsi_cl1_fast_map_return",
+        "tests.test_opsi_akashi_scope",
+        "tests.test_opsi_akashi_inventory",
+        "tests.test_opsi_runtime_akashi",
+        "tests.test_opsi_month_end_cleanup",
+        "tests.test_opsi_explore_cleanup",
+        "tests.test_webui_opsi_rounds_display"
+      ],
+      "tests": 164,
+      "seconds": 70.062,
+      "result": "OK"
+    }
+  ],
+  "python_tests_total": 356,
+  "browser_tests": 11,
+  "browser_scope": [
+    "两主题任务优先级中文显示及英文保存",
+    "旧版白卡/统计/顶栏切换及新统计导航",
+    "模拟器状态和桌面侧栏",
+    "启动器模拟接口",
+    "两主题官网链接/noindex/robots纯文本及统计加载完成"
+  ],
+  "frontend_build": "npm run build --prefix frontend，通过；含tsc -b类型检查",
+  "frontend_build_warning": "既有体积超过500kB的分块提示，未作无关拆包",
+  "source_fingerprint": "709cb8bba18afd9d4d07226afe262873769e6c6989ed19a20b73b3084a717d36",
+  "python_ast": 2635,
+  "python_ast_errors": 0,
+  "python_ast_warnings": 12,
+  "all_syntax_warning_paths_unchanged": true,
+  "diff_check": "通过",
+  "limits": [
+    "未运行真实游戏任务或使用真实账号资源",
+    "没有加载真实OCR模型全服验收，信标使用匿名字图和注入OCR回归",
+    "无依赖或API参数变更，不重新生成锁和API契约",
+    "昨晚战略搜索召回指挥喵二次确认遗漏不在本次变更中"
+  ]
+}

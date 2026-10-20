@@ -22,7 +22,7 @@ from module.os.map import OSMap
 from module.os.ship_exp import ship_info_get_level_exp
 from module.os.ship_exp_data import LIST_SHIP_EXP
 from module.os.tasks.scheduling import CoinTaskMixin
-from module.statistics.opsi_runtime import record_cl1_akashi_encounter
+from module.statistics.opsi_runtime import cl1_round_timer, record_cl1_akashi_encounter
 from module.os.sea_miles_ocr import OCR_SEA_MILES_DIGIT
 from module.os_handler.assets import MISSION_ENTER, MISSION_CHECK, MISSION_QUIT
 from module.os_handler.assets import STRATEGIC_SEARCH_MAP_OPTION_OFF
@@ -243,6 +243,11 @@ class OpsiHazard1Leveling(CoinTaskMixin, OSMap):
                 行动力消耗时传入（智能调度决策读）；行动力足够开工时
                 复用它跳过行动点弹窗。
         """
+        with cl1_round_timer(self.config):
+            self._run_hazard1_leveling_once(ap_preserve=ap_preserve, fresh_ap=fresh_ap)
+
+    def _run_hazard1_leveling_once(self, ap_preserve=None, fresh_ap=None):
+        """执行包含开工检查、海里检测、战略搜索和战后清理的完整流程。"""
         # 启用随机事件以获得收益。调度器直接调用单轮时也需要保持该行为。
         self.config.override(
             OpsiGeneral_DoRandomMapEvent=True,

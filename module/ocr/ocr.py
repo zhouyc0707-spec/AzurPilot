@@ -147,12 +147,13 @@ class Ocr:
         return result_list
 
 
-def ocr_batch(image, readers):
+def ocr_batch(image, readers, *, show_log=True):
     """合并同一模型的单区域识别，分别保留预处理、后处理和有效性标记。
 
     Args:
         image (np.ndarray): 同一张原始截图。
         readers (list[Ocr]): 每个识别器必须只有一个区域，语言及字符表相同。
+        show_log (bool): 是否输出批量识别结果与耗时。
 
     Returns:
         list: 与识别器顺序一致的结果。
@@ -169,7 +170,8 @@ def ocr_batch(image, readers):
     if len(raw) != len(readers):
         raise ValueError('OCR 合批返回数量与区域数量不一致')
     results = [reader.after_process(''.join(value)) for reader, value in zip(readers, raw)]
-    logger.attr(f'OCR_BATCH {time.perf_counter() - started:.3f}s', results)
+    if show_log:
+        logger.attr(f'OCR_BATCH {time.perf_counter() - started:.3f}s', results)
     return results
 
 

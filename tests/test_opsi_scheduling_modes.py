@@ -62,6 +62,15 @@ class TestSmartSchedulingModes(unittest.TestCase):
                 dispatch.assert_called_once_with(30000, 500, target, 200, 100)
                 leveling.assert_not_called()
 
+    def test_current_balance_above_return_target_ends_coin_replenishment(self):
+        scheduling, values = self.make_scheduling(True, smart_preserve=70000)
+        values[scheduling.CONFIG_PATH_SMART_COIN_RETURN_THRESHOLD] = 23000
+        self.assertEqual(scheduling._get_coin_replenish_target(67831, 70000), (93000, 67831, 23000))
+        dispatch, leveling = self.run_decision(scheduling, yellow_coins=97451, total_ap=1608)
+        dispatch.assert_not_called()
+        leveling.assert_called_once_with(97451, 1608, 100)
+        self.assertFalse(scheduling._is_coin_replenish_active())
+
     def test_zero_coin_reserve_is_valid_in_both_modes(self):
         for coin_target in (True, False):
             with self.subTest(coin_target=coin_target):

@@ -1,0 +1,426 @@
+{
+  "summary": {
+    "local_changed": 847,
+    "upstream_changed": 50,
+    "overlap": 23,
+    "non_overlap": 824,
+    "non_overlap_raw_byte_equal": 681,
+    "non_overlap_raw_equal_to_before_merge_checkout": 808,
+    "non_overlap_only_crlf_differences_from_before_merge_checkout": 15,
+    "non_overlap_clean_content_equal": 823,
+    "non_overlap_expected_changes": 1,
+    "non_overlap_unexpected_changes": 0,
+    "additional_integration_paths": 0,
+    "unexpected_additional_integration_paths": 0,
+    "overlap_python_files": 11,
+    "local_added_definition_names": 28,
+    "local_added_definition_ast_bodies_preserved": 16,
+    "modified_definition_bodies_requiring_review": 12,
+    "authorized_removed_added_definitions": 8,
+    "authorized_removed_modified_definitions": 0,
+    "added_definitions_retained_with_adapted_body": 4,
+    "missing_added_definitions": 0,
+    "missing_modified_definitions": 0,
+    "configuration_files": 13,
+    "local_config_delta_leaves": 1257,
+    "preserved_local_config_delta_leaves": 1257,
+    "missing_local_config_leaves": 0,
+    "changed_local_config_leaves": 0,
+    "tracked_python_syntax_passed": 2635,
+    "tracked_python_syntax_errors": 0,
+    "tracked_python_syntax_warnings": 12,
+    "parse_errors": 0,
+    "snapshot_stable": true
+  },
+  "overlap_path_disposition": [
+    {
+      "path": ".devin/wiki.json",
+      "local_blob": "f6b32fc678b34d3a6ab856f9cf61b5a523ea70cf",
+      "upstream_blob": "f8d885778fd555d7eb345cabbd64daadfa2edfb4",
+      "merged_clean_blob": "6fee7ddee69c0160310e83e63a80067f4c7849c4",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "docs/modules/infra/deploy.md",
+      "local_blob": "181ff822a915e645e67b5d1677297b68d72a9ba9",
+      "upstream_blob": "9662e7e41c34a8dbf9a360b868e01a90fa291031",
+      "merged_clean_blob": "330dbe7eaa7d817973873f310959834d1f3dcf87",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "docs/modules/infra/statistics.md",
+      "local_blob": "7a8765b2d883242b4ec9830301f941c953830b40",
+      "upstream_blob": "2bab661551eaf902797061f15c8d4b1c25fb095f",
+      "merged_clean_blob": "8b64dd73df70ee3ab379d75933418cdb526338c9",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "docs/modules/os/auxiliary.md",
+      "local_blob": "e7e49f60a747cccc4fdb6c98e3e424874c3d7009",
+      "upstream_blob": "41bd14d067e5e2bd51e12a353ec69dad4ffdf411",
+      "merged_clean_blob": "87a0d09d9be6ccbbaacb675da1355909e718f1d4",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "docs/modules/os/index.md",
+      "local_blob": "1f8acb5b85757fee8fdad6c106551b68894ec0f9",
+      "upstream_blob": "0a17790ec674767545e48cc6c7b762fa73a0c325",
+      "merged_clean_blob": "12b2533acb9e773fd8b1c7f26fca45d10d1ae9e9",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "docs/modules/webui/runtime.md",
+      "local_blob": "d90155f387b503070c4eb9d0e44218d5cc134a02",
+      "upstream_blob": "0fff4f867a74e5dc58703cd1ed974d8eb86f3429",
+      "merged_clean_blob": "9d991ffa7b3b24bfad1fd186a5023a0a7eb51fb3",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "frontend/src/i18n.ts",
+      "local_blob": "ac7f86a40d2a495381feab4b2904eba3cc4be7fa",
+      "upstream_blob": "7386674f32ee91156899a909aaea1fcfcf30ce34",
+      "merged_clean_blob": "18dc496c52c222b3de3f8e535338315d3323b49f",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/api/app.py",
+      "local_blob": "b9ea2d53dd3a6ea0a1d460833955c6fe9fe98945",
+      "upstream_blob": "b6cb282f2dfbd7cc69b8337dfc48a2c00266da16",
+      "merged_clean_blob": "9a78372c6a4267d1256c7116d76b87a64eeafb59",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/i18n/en-US.json",
+      "local_blob": "59a5aa35aca3103607dc9a7442031f861c61edbb",
+      "upstream_blob": "d3c9d1ab846d5f3f426a24bd940ac627df6a8b18",
+      "merged_clean_blob": "7aff9fef83ad31f1166ad5b6d32ad84fe4a470cb",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/i18n/ja-JP.json",
+      "local_blob": "64406044a65dfa691201fd7b8fa4ed544ce0671a",
+      "upstream_blob": "88e21fa43ae8bc2907ef0b87b21b49208da65585",
+      "merged_clean_blob": "e9774d39384dd5f07a37a328c74e1e8473daa701",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/i18n/zh-CN.json",
+      "local_blob": "6aaf87b45b1b499b797d2d425aacd46d352b4603",
+      "upstream_blob": "1c9df9784429405f956df14ffe3f50e02cebacad",
+      "merged_clean_blob": "4672c490e2d70991de46e04eb1e83120794e95fe",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/i18n/zh-MIAO.json",
+      "local_blob": "76d134c1d3bfe1f94152769564b89a7627a254c1",
+      "upstream_blob": "e9c85850d40895934891c4b83731df054f9531d2",
+      "merged_clean_blob": "358579291d4576d59ef028ea4dfd2da698f3e04d",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/i18n/zh-TW.json",
+      "local_blob": "ac26ed8fab51669ecaf2a7d7065a5c8ed69d5102",
+      "upstream_blob": "a2b232518a416ef2cfd43d36ab899e521b12b5f2",
+      "merged_clean_blob": "f9a447994aa7ca8b74e4af25d16fa0531dddf44b",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/os/map.py",
+      "local_blob": "c04683e6a6f926327ba20726d56c3ae82b5920dc",
+      "upstream_blob": "0a6d1afc3e9e2c1e38933e610055470bfefc22bb",
+      "merged_clean_blob": "c20b56835767def2957aed57b96bb04ed0e4d8fe",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/os/tasks/hazard_leveling.py",
+      "local_blob": "6266722d4ae428a81be8d86dc5287df090415746",
+      "upstream_blob": "c5a571fba6f6866df6d02369ef19c63abb96bb79",
+      "merged_clean_blob": "fb69f5051a02c886a8fa09a8ea44ad57f433c423",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/os/tasks/scheduling.py",
+      "local_blob": "ba127c95eb5ac405ba2a8a9a8c903d92f64ea1a6",
+      "upstream_blob": "b475799af64acd605595b4d81dece71db529e2cc",
+      "merged_clean_blob": "787298cb4fd623e19a5b742c2fbacdfd76025f95",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/os_handler/os_status.py",
+      "local_blob": "1ab5fe0e72bd948a5fb393c1ed2b0c6d106054f7",
+      "upstream_blob": "1b395596e09bd89c205717798ae10def909e1b9e",
+      "merged_clean_blob": "d32549031577bce93eede17fd70c461c4e999ffb",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/runtime/updater.py",
+      "local_blob": "dcdf559940115f1a8421dda8d8a22beb7e1d2428",
+      "upstream_blob": "a1a39c89ebc2317d2f9b481c3d1d0d09749365c5",
+      "merged_clean_blob": "c4fc1b7d8350c77a50e5430d995093c7790bed57",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/statistics/ship_exp_stats.py",
+      "local_blob": "43ee7a98fb703b81b9f62f2cbc41d3c3747c6be9",
+      "upstream_blob": "ddbfedcc3fb43c9ef2f029def92983f85e8682a9",
+      "merged_clean_blob": "ca6685cc5896c0a251079e1ea376bb95cb475e52",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "tests/test_frontend_static.py",
+      "local_blob": "16b0fb5befd3d8b36c281200dc625dbdbb9a3aaf",
+      "upstream_blob": "918ef01f653c38966c49c0c765e779ec0c74a529",
+      "merged_clean_blob": "d93de8b0393560fa86106d54326333a9b5600506",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "tests/test_opsi_background_resources.py",
+      "local_blob": "6e67c7953f8c9aee64037fd1f0066a2c917408d0",
+      "upstream_blob": "b4d564d49bd43772ffaefad15229e76e277474d7",
+      "merged_clean_blob": "ebf5f147c46ce928949fef9a08bf3bf72b509bb2",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "tests/test_opsi_cl1_round_time.py",
+      "local_blob": "c46eb0c66865cbac485eeedb1dfc55eaa988a844",
+      "upstream_blob": "3986c89297dff1be08c6afaf33f8543e036cde78",
+      "merged_clean_blob": "1e3fbb23adf8b1c04aec5be7c0cf72c637ec4b5c",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "tests/test_opsi_resource_speed.py",
+      "local_blob": "3bc8c61a49420b165fe454ec3d5d594e981c05e1",
+      "upstream_blob": "3a7d055214f8e631b7e32314e41cf4c4077841e0",
+      "merged_clean_blob": "e481ea401e9a72447d2901f0fcb5701459370640",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    }
+  ],
+  "expected_non_overlap_changes": [
+    {
+      "path": "定制化修改清单.md",
+      "reason": "更新本次上游基线日期并说明恢复完整流程计时时保留旧口径整组历史。"
+    }
+  ],
+  "test_semantic_replacements": [
+    {
+      "path": "tests/test_opsi_cl1_round_time.py",
+      "qualname": "RoundTimeCompatibilityTests.seed_full_cycle",
+      "kind": "FunctionDef",
+      "base_count": 0,
+      "local_count": 1,
+      "merged_count": 0,
+      "local_added_count": 1,
+      "full_local_count_preserved": false,
+      "local_ast_bodies_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "RoundTimeCompatibilityTests.seed_full_cycle",
+          "kind": "FunctionDef",
+          "line": 41,
+          "ast_sha256": "50e1f5de068d654adb1fde2b8a4a95e5adbae7f7a9d2ad2cba8ced2221e262e7"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "仅替换与恢复full_cycle冲突的旧search_cycle断言和seed_full_cycle夹具：7条旧测试分别由20条新流程/真实总库回归覆盖；生产代码定义不在例外范围。"
+    },
+    {
+      "path": "tests/test_opsi_cl1_round_time.py",
+      "qualname": "RoundTimeCompatibilityTests.test_compatibility_change_does_not_touch_another_instance",
+      "kind": "FunctionDef",
+      "base_count": 0,
+      "local_count": 1,
+      "merged_count": 0,
+      "local_added_count": 1,
+      "full_local_count_preserved": false,
+      "local_ast_bodies_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "RoundTimeCompatibilityTests.test_compatibility_change_does_not_touch_another_instance",
+          "kind": "FunctionDef",
+          "line": 98,
+          "ast_sha256": "5a68b0fae7babf2c829c0676cd2d2ef6f6872d3ef22416c776806f01be622728"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "仅替换与恢复full_cycle冲突的旧search_cycle断言和seed_full_cycle夹具：7条旧测试分别由20条新流程/真实总库回归覆盖；生产代码定义不在例外范围。"
+    },
+    {
+      "path": "tests/test_opsi_cl1_round_time.py",
+      "qualname": "RoundTimeCompatibilityTests.test_existing_search_samples_follow_upstream_without_reclassification",
+      "kind": "FunctionDef",
+      "base_count": 0,
+      "local_count": 1,
+      "merged_count": 0,
+      "local_added_count": 1,
+      "full_local_count_preserved": false,
+      "local_ast_bodies_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "RoundTimeCompatibilityTests.test_existing_search_samples_follow_upstream_without_reclassification",
+          "kind": "FunctionDef",
+          "line": 76,
+          "ast_sha256": "4412e05d11b692cf00d2b12f825ac748210a5295c817dbca56f0d725a291634c"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "仅替换与恢复full_cycle冲突的旧search_cycle断言和seed_full_cycle夹具：7条旧测试分别由20条新流程/真实总库回归覆盖；生产代码定义不在例外范围。"
+    },
+    {
+      "path": "tests/test_opsi_cl1_round_time.py",
+      "qualname": "RoundTimeCompatibilityTests.test_existing_search_window_still_keeps_recent_100",
+      "kind": "FunctionDef",
+      "base_count": 0,
+      "local_count": 1,
+      "merged_count": 0,
+      "local_added_count": 1,
+      "full_local_count_preserved": false,
+      "local_ast_bodies_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "RoundTimeCompatibilityTests.test_existing_search_window_still_keeps_recent_100",
+          "kind": "FunctionDef",
+          "line": 86,
+          "ast_sha256": "1b2e2887c1b9e78b4131741faa8b4afecaf9947627f84c3751ae0fd02ce4e1ae"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "仅替换与恢复full_cycle冲突的旧search_cycle断言和seed_full_cycle夹具：7条旧测试分别由20条新流程/真实总库回归覆盖；生产代码定义不在例外范围。"
+    },
+    {
+      "path": "tests/test_opsi_cl1_round_time.py",
+      "qualname": "RoundTimeCompatibilityTests.test_first_sample_for_new_instance_keeps_upstream_structure",
+      "kind": "FunctionDef",
+      "base_count": 0,
+      "local_count": 1,
+      "merged_count": 0,
+      "local_added_count": 1,
+      "full_local_count_preserved": false,
+      "local_ast_bodies_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "RoundTimeCompatibilityTests.test_first_sample_for_new_instance_keeps_upstream_structure",
+          "kind": "FunctionDef",
+          "line": 94,
+          "ast_sha256": "fd314dd4e04c4f10feabf72fdd79c551fd012f620da444b331f4476d247b145b"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "仅替换与恢复full_cycle冲突的旧search_cycle断言和seed_full_cycle夹具：7条旧测试分别由20条新流程/真实总库回归覆盖；生产代码定义不在例外范围。"
+    },
+    {
+      "path": "tests/test_opsi_cl1_round_time.py",
+      "qualname": "RoundTimeCompatibilityTests.test_first_search_sample_preserves_entire_full_cycle_group_after_reload",
+      "kind": "FunctionDef",
+      "base_count": 0,
+      "local_count": 1,
+      "merged_count": 0,
+      "local_added_count": 1,
+      "full_local_count_preserved": false,
+      "local_ast_bodies_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "RoundTimeCompatibilityTests.test_first_search_sample_preserves_entire_full_cycle_group_after_reload",
+          "kind": "FunctionDef",
+          "line": 48,
+          "ast_sha256": "36ae17cc7731cd1baba83bab4915eaa3d6b904163b4418fec43474ef74c8c5f6"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "仅替换与恢复full_cycle冲突的旧search_cycle断言和seed_full_cycle夹具：7条旧测试分别由20条新流程/真实总库回归覆盖；生产代码定义不在例外范围。"
+    },
+    {
+      "path": "tests/test_opsi_cl1_round_time.py",
+      "qualname": "RoundTimeCompatibilityTests.test_recent_100_search_samples_do_not_trim_or_renest_archived_full_cycle",
+      "kind": "FunctionDef",
+      "base_count": 0,
+      "local_count": 1,
+      "merged_count": 0,
+      "local_added_count": 1,
+      "full_local_count_preserved": false,
+      "local_ast_bodies_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "RoundTimeCompatibilityTests.test_recent_100_search_samples_do_not_trim_or_renest_archived_full_cycle",
+          "kind": "FunctionDef",
+          "line": 64,
+          "ast_sha256": "181b96e38dc3458821140878717196a219323b5ed4671ce54e637f723367887e"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "仅替换与恢复full_cycle冲突的旧search_cycle断言和seed_full_cycle夹具：7条旧测试分别由20条新流程/真实总库回归覆盖；生产代码定义不在例外范围。"
+    },
+    {
+      "path": "tests/test_opsi_cl1_round_time.py",
+      "qualname": "RoundTimeCompatibilityTests.test_runtime_odd_battles_close_search_cycle_and_even_battle_only_counts",
+      "kind": "FunctionDef",
+      "base_count": 0,
+      "local_count": 1,
+      "merged_count": 0,
+      "local_added_count": 1,
+      "full_local_count_preserved": false,
+      "local_ast_bodies_preserved": false,
+      "local_entries": [
+        {
+          "qualname": "RoundTimeCompatibilityTests.test_runtime_odd_battles_close_search_cycle_and_even_battle_only_counts",
+          "kind": "FunctionDef",
+          "line": 107,
+          "ast_sha256": "7d56bf9a6f49128a91a12b50de300f065fd209f7d1189f5c5ac4a4aca193848a"
+        }
+      ],
+      "merged_entries": [],
+      "authorization": "仅替换与恢复full_cycle冲突的旧search_cycle断言和seed_full_cycle夹具：7条旧测试分别由20条新流程/真实总库回归覆盖；生产代码定义不在例外范围。"
+    }
+  ],
+  "configuration_protection": {
+    "missing": [],
+    "changed": []
+  },
+  "syntax_warnings_existing_and_unchanged": true,
+  "limits": "静态保留审计与隔离回归不能替代实际游戏验收。"
+}

@@ -24,7 +24,7 @@ def invalidate_action_point_inventory(config):
 
 
 def invalidate_coin_cache(config):
-    """交易及奖励后必须重新确认货币，不能复用尚未更新的计数动画。"""
+    """交易、奖励和代理任务收尾后重新确认货币，避免沿用旧帧和计数动画。"""
     config._opsi_coin_revision = getattr(config, '_opsi_coin_revision', 0) + 1
 
 

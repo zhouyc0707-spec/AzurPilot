@@ -1468,7 +1468,7 @@
     },
     "TelemetryReport": {
       "name": "遙測資料上報",
-      "help": "啟用後將定期向伺服器匿名上報 CL1 統計資料（戰鬥次數、明石遇見機率等匿名資料）ID生成詳見原始碼，統計資訊 https://alas.nanoda.work/"
+      "help": "啟用後將定期向伺服器匿名上報 CL1 統計資料（戰鬥次數、明石遇見機率等匿名資料）ID生成詳見原始碼，統計資訊 https://azurpilot.com/"
     },
     "BugReport": {
       "name": "Bug 日誌上報",

@@ -848,14 +848,12 @@ class OSMap(OSFleet, Map, GlobeCamera, StorageHandler, StrategicSearchHandler):
 
     # 自动搜索战斗计数器
     _auto_search_battle_count = 0
-    _auto_search_round_timer = 0
     _cl1_auto_search_battle_count = 0
     _meow_auto_search_battle_count = 0
 
     def on_auto_search_battle_count_reset(self):
-        """重置自律寻敌相关的各个战斗计数器与回合计时器。"""
+        """重置自律寻敌战斗计数，完整练级计时不受搜索重启影响。"""
         self._auto_search_battle_count = 0
-        self._auto_search_round_timer = 0
         self._cl1_auto_search_battle_count = 0
         self._meow_auto_search_battle_count = 0
 
@@ -869,13 +867,7 @@ class OSMap(OSFleet, Map, GlobeCamera, StorageHandler, StrategicSearchHandler):
             try:
                 self._cl1_auto_search_battle_count += 1
                 logger.attr("CL1战斗计数", self._cl1_auto_search_battle_count)
-                # CL1 回合计时使用自己的计数器，而非共享的自动搜索计数器，
-                # 因为其他任务可能复用此循环。
-                self._auto_search_round_timer = record_cl1_auto_search_battle(
-                    self.config,
-                    self._cl1_auto_search_battle_count,
-                    self._auto_search_round_timer,
-                )
+                record_cl1_auto_search_battle(self.config)
             except Exception:
                 logger.debug("Failed to update cl1 battle counter", exc_info=True)
 
