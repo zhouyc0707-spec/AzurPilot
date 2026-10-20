@@ -16,7 +16,7 @@
 """
 import datetime
 from module.config.time_source import now as current_time
-from module.config.utils import get_server_last_update
+from module.config.utils import get_server_last_update, server_timezone
 from module.exercise.assets import *
 from module.exercise.combat import ExerciseCombat
 from module.logger import logger
@@ -282,6 +282,14 @@ class Exercise(ExerciseCombat):
 
         return preserve, admiral_interval
 
+    def _get_exercise_start_time(self, next_update):
+        """计算本轮最早执行时间，保留五次策略在周四中午补次数前提前至九点。"""
+        server_update = next_update.astimezone(datetime.timezone(server_timezone()))
+        if self.preserve == 5 and server_update.weekday() == 3 \
+                and (server_update.hour, server_update.minute) == (12, 0):
+            return next_update - datetime.timedelta(hours=3)
+        return next_update - datetime.timedelta(hours=self.config.Exercise_DelayUntilHoursBeforeNextUpdate)
+
     def run(self):
         """
         演习任务主入口。
@@ -326,12 +334,10 @@ class Exercise(ExerciseCombat):
         else:
             forced_run = False
 
-        # 延迟到设定时间执行任务
-        if ((get_server_next_update(server_update) - current_time()).seconds >
-            3600 * self.config.Exercise_DelayUntilHoursBeforeNextUpdate)\
-                and not forced_run:
-            logger.warning(f'[演习-调度] 应在下次更新前 {self.config.Exercise_DelayUntilHoursBeforeNextUpdate} '
-                           f'小时执行，延迟任务')
+        # 执行门禁与下次排程使用同一时间，确保周四九点即可运行。
+        start_time = self._get_exercise_start_time(get_server_next_update(server_update))
+        if current_time() < start_time and not forced_run:
+            logger.warning(f'[演习-调度] 尚未到执行时间 {start_time}，延迟任务')
             run = False
         else:
             run = True
@@ -355,14 +361,13 @@ class Exercise(ExerciseCombat):
         # 调度器
         with self.config.multi_set():
             self.config.set_record(Exercise_OpponentRefreshValue=self.opponent_change_count)
-            if self.remain <= self.preserve or self.opponent_change_count >= 5:
-                next_run = get_server_next_update(server_update) \
-                           - datetime.timedelta(hours=self.config.Exercise_DelayUntilHoursBeforeNextUpdate)
+            if not run or self.remain <= self.preserve or self.opponent_change_count >= 5:
+                next_run = self._get_exercise_start_time(get_server_next_update(server_update))
                 now = current_time()
-                if next_run < now or run:
+                if run:
                     self.config.task_delay(server_update=True)
                     return
-                minutes_to_delay = int((next_run - now).total_seconds() / 60 + 1)
-                self.config.task_delay(minute=minutes_to_delay)
+                # 若检查过程中刚好跨过执行时间，立即重排，避免漏掉本轮。
+                self.config.task_delay(target=max(next_run, now))
             else:
                 self.config.task_delay(success=False)

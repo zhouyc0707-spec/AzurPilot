@@ -3790,7 +3790,7 @@
     },
     "DelayUntilHoursBeforeNextUpdate": {
       "name": "Delay Exercise until X hours before next refresh",
-      "help": "",
+      "help": "With a strategy that preserves 5 attempts, the Thursday morning round starts at 09:00 server time to leave room for the noon refill during maintenance. Other rounds follow this setting.",
       "1": "1",
       "2": "2",
       "3": "3",
