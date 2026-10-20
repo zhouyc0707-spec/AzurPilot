@@ -575,6 +575,85 @@ class RewardDorm(UI):
         logger.warning('[宿舍-喂食] 喂食次数达到上限')
         return 10
 
+    def _dorm_daily_feed_done(self):
+        """检查当前服务器日期是否已完成关闭常规喂食后的每日补喂。"""
+        today = current_time(timezone(server_timezone())).date().isoformat()
+        state = self.config.Dorm_DailyFeedState
+        return isinstance(state, dict) and state.get('day') == today and state.get('done') is True
+
+    def dorm_feed_daily(self):
+        """使用一份现有最小面值食物，确认库存减少后持久化当天完成状态。
+
+        点击前保存库存基线，中断后先核对该次消耗，避免直接重复喂食。
+        不购买食物，不使用常规过滤器和保留一个食物的限制。
+
+        Returns:
+            bool: 当天补喂已完成；无食物或可填充量不足时返回 False。
+
+        Pages:
+            in: DORM_FEED_CHECK，已有可用截图
+            out: DORM_FEED_CHECK
+        """
+        if self._dorm_daily_feed_done():
+            return True
+        today = current_time(timezone(server_timezone())).date().isoformat()
+        state = self.config.Dorm_DailyFeedState
+        pending = state if isinstance(state, dict) and state.get('day') == today else None
+        previous = None
+        clicked = False
+        timeout = Timer(15, count=3).start()
+        self.popup_interval_clear()
+        for _ in self.loop():
+            if timeout.reached():
+                raise GameStuckError('[宿舍-每日喂食] 未能确认一份食物的实际消耗')
+            if self.handle_popup_cancel('DORM_FEED') or self.handle_info_bar():
+                previous = None
+                continue
+            if not self.appear(DORM_FEED_CHECK, offset=(20, 20)):
+                previous = None
+                continue
+            food, fill = self.dorm_food_get()
+            if fill < 0 or len(food) != len(FOOD_FEED_AMOUNT):
+                previous = None
+                continue
+            sample = (tuple(f.amount for f in food), fill)
+            if sample != previous:
+                previous = sample
+                continue
+
+            if pending:
+                index = FOOD_FEED_AMOUNT.index(pending['feed'])
+                amount = food[index].amount
+                if amount == pending['amount'] - 1:
+                    self.config.Dorm_DailyFeedState = {'day': today, 'done': True}
+                    logger.info(f'[宿舍-每日喂食] 已确认使用 {pending["feed"]} 食物，今日不再补喂')
+                    return True
+                if amount != pending['amount']:
+                    raise GameStuckError('[宿舍-每日喂食] 待确认期间库存变化异常，无法安全判断是否已喂食')
+                if clicked:
+                    continue
+                selected = food[index]
+            else:
+                selected = next((f for f in food if f.amount > 0), None)
+                if selected is None:
+                    logger.info('[宿舍-每日喂食] 没有食物，稍后复查')
+                    return False
+            if fill < selected.feed:
+                logger.info('[宿舍-每日喂食] 后宅可填充量不足一份最小食物，稍后复查')
+                return False
+
+            # 按实际点击日期记账，避免识别过程跨过服务器零点后重复补喂。
+            today = current_time(timezone(server_timezone())).date().isoformat()
+            # 先记录待确认库存；一次调用仅提交一次单击，后续只截图核对。
+            pending = {'day': today, 'feed': selected.feed, 'amount': selected.amount, 'done': False}
+            self.config.Dorm_DailyFeedState = pending
+            button = self._dorm_food.buttons[food.index(selected)]
+            logger.info(f'[宿舍-每日喂食] 常规喂食已关闭，使用 {selected.feed} 食物 x 1')
+            self.device.click(button)
+            clicked = True
+            previous = None
+            timeout.reset()
+
     def dorm_feed_enter(self):
         """
         从宿舍主页进入喂食界面。
@@ -832,7 +911,7 @@ class RewardDorm(UI):
         最后购买家具。
 
         Args:
-            feed (bool): 是否执行喂食。
+            feed (bool): 是否执行常规喂食；关闭后每天最小食物补喂一次。
             collect (bool): 是否收取金币和爱心。
             buy_furniture (bool): 是否购买家具。
 
@@ -840,7 +919,8 @@ class RewardDorm(UI):
             in: 任意页面
             out: page_dorm
         """
-        if not feed and not collect and not buy_furniture:
+        daily_feed = not feed and not self._dorm_daily_feed_done()
+        if not feed and not daily_feed and not collect and not buy_furniture:
             return
 
         self.ui_ensure(page_dormmenu)
@@ -855,10 +935,13 @@ class RewardDorm(UI):
 
         # 先喂食以处理 DORM_INFO
         # DORM_INFO 可能会遮挡宿舍金币和爱心
-        if feed:
-            logger.hr('后宅喂食', level=1)
+        if feed or daily_feed:
+            logger.hr('后宅喂食' if feed else '后宅每日补喂', level=1)
             self.dorm_feed_enter()
-            self.dorm_feed()
+            if feed:
+                self.dorm_feed()
+            else:
+                self.dorm_feed_daily()
             self.dorm_feed_quit()
 
         if collect:
@@ -948,19 +1031,26 @@ class RewardDorm(UI):
 
         Pages:
             in: 任意页面
-            out: page_dorm
+            out: page_dorm；当日已完成且无需其他操作时保持原页面
         """
-        if not self.config.Dorm_Feed and not self.config.Dorm_Collect \
-                and not self.config.BuyFurniture_Enable:
-            self.config.Scheduler_Enable = False
-            self.config.task_stop()
+        feed = self.config.Dorm_Feed
+        collect = self.config.Dorm_Collect
+        buy_furniture = self.config.BuyFurniture_Enable
+        if not feed and not collect and not buy_furniture and self._dorm_daily_feed_done():
+            self.config.task_delay(server_update='00:00')
+            return
 
-        self.dorm_run(feed=self.config.Dorm_Feed,
-                      collect=self.config.Dorm_Collect,
-                      buy_furniture=self.config.BuyFurniture_Enable)
+        self.dorm_run(feed=feed, collect=collect, buy_furniture=buy_furniture)
 
-        # Scheduler
-        ships = self.get_dorm_ship_amount()
-        delay = self.cal_dorm_delay(ships)
-        logger.info(f'[宿舍-调度] 宿舍舰船数: {ships}, 任务延迟: {delay}')
-        self.config.task_delay(minute=delay)
+        delay = None
+        if feed or collect or buy_furniture:
+            ships = self.get_dorm_ship_amount()
+            delay = self.cal_dorm_delay(ships)
+            logger.info(f'[宿舍-调度] 宿舍舰船数: {ships}, 任务延迟: {delay}')
+        if feed:
+            self.config.task_delay(minute=delay)
+        else:
+            # 完成后最迟服务器零点再检查；未完成时半小时复查库存与饱食度。
+            if not self._dorm_daily_feed_done():
+                delay = min(delay, 30) if delay is not None else 30
+            self.config.task_delay(minute=delay, server_update='00:00')

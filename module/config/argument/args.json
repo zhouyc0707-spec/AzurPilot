@@ -12566,6 +12566,11 @@
         "value": null,
         "display": "hide"
       },
+      "DailyFeedState": {
+        "type": "stored",
+        "value": null,
+        "display": "hide"
+      },
       "BuyFood": {
         "type": "checkbox",
         "value": false,

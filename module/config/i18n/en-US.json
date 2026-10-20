@@ -2902,7 +2902,7 @@
     },
     "Feed": {
       "name": "Feed",
-      "help": ""
+      "help": "When enabled, feed normally using the filter. When disabled, use one owned food item with the lowest food value each server day for the daily mission, ignoring the filter and food reserve. Keep the Dorm task enabled. Retry later if food is unavailable or the dorm is full."
     },
     "FeedFilter": {
       "name": "Feed filter",
@@ -2915,6 +2915,10 @@
     "FeedReserveState": {
       "name": "Food reserve state",
       "help": "Automatically records the server date of the first eligible feeding check to prevent repeated exemptions after restarting."
+    },
+    "DailyFeedState": {
+      "name": "Daily feeding state",
+      "help": "Automatically records the server date and consumption verification to prevent repeated daily feeding."
     },
     "BuyFood": {
       "name": "Automatically purchase food",

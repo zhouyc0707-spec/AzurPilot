@@ -11,7 +11,7 @@
 - **入口统一**：调度器按优先级 `Commission > Tactical > Research > ... > Dorm > Meowfficer > Guild > ... > Reward` 唤起任务，`alas.py` 上的同名任务方法惰性导入处理器并调用 `run()`。
 - **结构一致**：全部继承 `UI`（战术学院经 `Dock` 间接继承），以「截图 → 正向状态识别 → 点击 → continue」的状态循环推进，用 `Timer` 做 confirm/interval 控制；页面跳转复用 `ui_ensure()`/`ui_goto()`，弹窗交给 `InfoHandler` 与 `ui_additional()`。
 - **自排程**：`run()` 末尾按资源再生节奏调用 `config.task_delay()`——多数延迟到服务器刷新点（`server_update=True`），宿舍按饱食度消耗推算、指挥喵按训练时长推算、战术学院直接使用 OCR 出的课程剩余时间。
-- **功能可独立关闭**：各子功能配置全关时，`run()` 会置 `Scheduler_Enable=False` 并 `task_stop()`，让调度器不再空跑（收获、后宅、指挥喵、大舰队均如此）。
+- **功能可独立关闭**：收获、指挥喵、大舰队的各子功能全关时，`run()` 会置 `Scheduler_Enable=False` 并 `task_stop()`；后宅保留每日最小食物补喂，关闭整个任务须使用后宅任务开关。
 
 把这一批页面合并为一个「日常维护」层的原因是它们面对同一类问题：低价值、高频次、状态简单的收取循环，且彼此共享识别设施（Navbar 侧边栏、`Filter` 优先级串、OCR 数字识别）。独立成模块是按游戏页面切分的，而它们的工程形态几乎是同一个模板的五次实例化。
 
@@ -150,6 +150,10 @@ module/
 `ui_ensure(page_dormmenu)` → `ui_goto(page_dorm)`，随后按「先喂食、再收取、最后买家具」的固定顺序执行——喂食在前是因为 `DORM_INFO` 弹窗会遮挡金币与爱心。喂食循环（最多 10 轮 `dorm_feed_once`）：OCR 六种食物库存与饱食度 → `FOOD_FILTER` 按 `Dorm_FeedFilter`（默认大份优先）排序 → 取第一个「有库存且单次喂食量 < 剩余饱食度」的食物，按 `count = min(饱食度/单次量, 库存)` 决定连点还是长按。收取用 `DORM_QUICK_COLLECT` 一键按钮，info_bar 出现即完成。买家具（`BuyFurniture.run()`）先比对 `BuyFurniture_LastRun + 6 天`，再进家具店详情页按 `DORM_FURNITURE_COUNTDOWN` 识别限时家具，OCR 比对家具币与价格后按 `BuyFurniture_BuyOption`（set/all）购买并回写 `LastRun`。
 
 排程是本模块特色：OCR 宿舍栏位得到舰船数 0~6，查表得 278~1000 分钟的任务延迟（舰船越多吃粮越快，下次喂食越近），`task_delay(minute=delay)`。
+
+关闭 `Dorm_Feed` 后，仍按服务器时区零点换日，每天使用一份当前有库存且面值最低的食物（1000 → 2000 → 3000 → 5000 → 10000 → 20000），用于每日喂食任务；不按过滤器选大份，也不受保留一个食物限制，所以允许用掉最后一份。不自动购粮。先确认两帧库存和可填充量一致，点击前将 `day/feed/amount/done=false` 写入隐藏的 `Dorm_DailyFeedState`，每次执行只提交一次单击，再截图确认该项库存恰好减少一份才保存 `day/done=true`。中断后先核对待确认库存，已减少一份只补记完成，稳定未变才再次尝试；异常增减不猜测，保留记录并交由 `GameStuckError` 恢复。该记录只跟踪每日补喂，正常喂食后当日再关开关，仍可能补喂一份；不推断用户手动喂食或每日任务的完成状态。
+
+无库存或可填充量小于该份食物时不消耗、不登记完成，30 分钟后复查，完成后最迟服务器次日零点再检查。收取、家具仍按原频率运行；三项子功能全关也不会自动停用后宅任务，当天补喂完成后可直接安排次日而不再进页面。关闭整个后宅任务仍不会执行。`Dorm_Feed=true` 的原喂食、保留和调度策略不变。
 
 `Dorm_ReserveFood` 默认关闭。开启后按六种食物的**总个数**保留一个，仍沿用 `Dorm_FeedFilter` 的使用顺序，过滤器排除的库存也计入总数。首次启用且尚无记录时先建立当天记录，不豁免；按服务器时区零点换日后，首次有食物且饱食度允许、过滤器也允许喂食时，若总数恰好为一个则允许用掉，否则取消当天豁免并继续保留一个。当天之后新获得的食物仍保留一个，次日重新判断。无食物、库存识别无效、饱食度不足或过滤器无可用项时不消耗当天首次机会。
 
@@ -308,10 +312,11 @@ CN 已校准五槽布局从确认的顶部累计读全第 1～5 槽，且无矛�
 | 配置 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
 | `Dorm_Collect` | checkbox | true | 一键收取爱心与家具币 |
-| `Dorm_Feed` | checkbox | true | 喂食 |
+| `Dorm_Feed` | checkbox | true | 开启时常规喂食；关闭时每天最小面值食物补喂一份 |
 | `Dorm_FeedFilter` | textarea | `20000 > ... > 1000` | 喂食优先级（按单次喂食量） |
 | `Dorm_ReserveFood` | checkbox | false | 保留一个食物到第二天使用；按服务器零点换日，次日首次可喂食且总库存为一个时仅豁免一次 |
 | `Dorm_FeedReserveState` | stored / 隐藏 | null | 自动记录首次可喂食检查的服务器日期，跨任务重试与重启持久化 |
+| `Dorm_DailyFeedState` | stored / 隐藏 | null | 每日补喂服务器日期、待确认库存及完成记录，重启后先核验再补喂 |
 | `Dorm_BuyFood` | 隐藏 | false | 已停用（`display: disabled`）；自动购粮由原调度石油控制或委托溢出兜底调用 |
 | `General.OilControl.Enable` / `Target` | checkbox / int | false / 24000 | 原调度石油控制，范围 1000–24999；独立于日常后宅开关 |
 | `BuyFurniture_Enable` / `BuyOption` / `LastRun` | checkbox/select/datetime | false / all / 2020-01-01 | 限时家具购买，检查间隔 6 天由代码常量 `CHECK_INTERVAL` 决定 |
@@ -427,6 +432,7 @@ for _ in self.loop():
 ## 19. 调试方法
 
 - **日志前缀**：`[奖励-领取]`、`[战术-教材/技能/船坞/提示]`、`[宿舍-喂食/收取/调度]`、`[指挥喵-购买/训练/收集/强化/评分]`、`[大舰队-大厅/后勤/作战]`；`logger.attr` 输出的中间状态（教材列表、兑换排序、舰队切换）是定位误识别的第一手材料。
+- **后宅每日补喂回归**：`uv run python -m unittest tests.test_dorm_daily_feed` 验证最小库存单份使用、无食物与容量不足、OCR与延迟刷新、一次点击及中断核验、同日重启去重和服务器换日、关闭常规功能后的调度；只使用模拟截图和临时配置，不操作游戏账号。
 - **后宅跨天保留回归**：`uv run python -m unittest tests.test_dorm_food_reserve` 用模拟库存与临时配置覆盖首次启用、多种食物总量、次日首次单个/多个库存、当天补粮、四服零点、重启持久化、库存充足时沿用原方案、临界库存切换、整批连点、吞操作后按差额补点、整批及分次延迟刷新、长批次超时判定、合法零库存、饱食度识别失败与超时恢复；点击交互用真实截图循环、设备 `multi_click` 和连击检测验证，不连接真实账号。
 - **WebUI 单任务运行**：在对应任务页点「立即执行」，观察 `task_delay` 日志确认排程是否符合预期。
 - **指挥喵评分**：先跑一次「工具 → 指挥喵评分」，产物在 `log/` 下；HTML 版可在 WebUI `/reports/meowfficer_score` 直接打开；识别率问题先看 `[指挥喵-评分] OCR 原始命中` 调试日志。

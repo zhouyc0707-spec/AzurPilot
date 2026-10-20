@@ -549,6 +549,7 @@ class GeneratedConfig:
     Dorm_FeedFilter = '20000 > 10000 > 5000 > 3000 > 2000 > 1000'
     Dorm_ReserveFood = False
     Dorm_FeedReserveState = None
+    Dorm_DailyFeedState = None
     Dorm_BuyFood = False
 
     # 配置组 `BuyFurniture`
