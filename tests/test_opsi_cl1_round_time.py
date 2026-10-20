@@ -38,6 +38,8 @@ class FullRoundTimeTests(unittest.TestCase):
             OpsiHazard1Leveling_SeaMilesLastRecord=None,
             OpsiHazard1Leveling_TargetZone=0,
             OpsiFleet_Fleet=1, override=Mock(), is_task_enabled=Mock(return_value=False),
+            # 每轮开始会读隐藏的续查记录，没有记录就按普通流程继续
+            cross_get=Mock(return_value=None), cross_set=Mock(),
         )
         self.runner = OpsiHazard1Leveling.__new__(OpsiHazard1Leveling)
         self.runner.config = self.config

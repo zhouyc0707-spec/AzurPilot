@@ -132,6 +132,8 @@ class BackgroundRuntimeTests(unittest.TestCase):
             config_name='isolated', task=SimpleNamespace(command='OpsiHazard1Leveling'),
             OpsiHazard1Leveling_ActionPointCheckInterval=5, OS_ACTION_POINT_BOX_USE=True,
             OpsiHazard1Leveling_OperationCoinsPreserve=50000,
+            # 侵袭1每轮开始会读隐藏的续查记录，没有记录就不续查
+            cross_get=Mock(return_value=None), cross_set=Mock(),
         )
         self.runner.device = Mock(image=np.zeros((720, 1280, 3), np.uint8))
         self.runner.is_in_map = Mock(return_value=True)

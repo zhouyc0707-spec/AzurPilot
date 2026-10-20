@@ -318,6 +318,12 @@ class OpsiHazard1Leveling(CoinTaskMixin, OSMap):
             self.globe_goto(self.name_to_zone(22), types="SAFE", refresh=True)
         self.fleet_set(self.config.OpsiFleet_Fleet)
 
+        # ===== 续查上次看到却没处理完的地图事件（卡死重启后）=====
+        # 明石/探测装置/塞壬装置在点击或后续自律途中卡死重启时，重启后本轮
+        # 先把它做完，避免重开一局把这只猫/这个装置漏掉。完整走完一遍全图
+        # 扫描与强制移动仍没看到事件时，续查会自行清除记录并继续下一轮。
+        self._resume_pending_map_event()
+
         # ===== 海里数记录（按配置的天数间隔检测）=====
         sea_miles = None
         if self._sea_miles_record_due():

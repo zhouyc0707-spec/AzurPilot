@@ -41,6 +41,7 @@
 module/os/
 ├── operation_siren.py   # OperationSiren：全部任务类的最终组合体
 ├── map.py               # OSMap：主控类（导航/寻敌/维修/重扫）
+├── map_event_resume.py  # MapEventResumeMixin：地图事件待办记录与重启续查
 ├── fleet.py             # OSFleet：行走、血量、Boss 战
 ├── globe_operation.py   # GlobeOperation：球面图操作（选区/钉住/进出）
 ├── globe_camera.py      # GlobeCamera：球面相机与聚焦
@@ -60,6 +61,7 @@ module/os/
 | 文件 | 作用 |
 | --- | --- |
 | `map.py` | 大多数功能的实际宿主：`globe_goto`、`run_auto_search`、`fleet_repair`、`map_rescan` 都在这 |
+| `map_event_resume.py` | `MapEventResumeMixin`：地图事件隐藏待办记录（服务器/重置周期/海域/类型/模式）与重启续查 |
 | `globe_operation.py` | 球面图状态判定：钉住海域、类型选择按钮、`OSExploreError`/`RewardUncollectedError` |
 | `globe_zone.py` | `Zone` 数据类（zone_id/侵蚀等级/四服名称/是否港口）与按相机坐标/名称查区 |
 | `camera.py` | `OSCamera` 内置一份标定好的球面单应性参数（大世界视角固定，永不重算） |
@@ -99,6 +101,7 @@ flowchart BT
     Fleet[Fleet] --> OSFleet
     OSAsh[OSAsh] --> OSFleet
     OSFleet --> OSMap[OSMap]
+    MapEventResumeMixin[MapEventResumeMixin<br>事件待办续查] --> OSMap
     Map[Map] --> OSMap
     StorageHandler[StorageHandler] --> OSMap
     StrategicSearchHandler --> OSMap
@@ -106,7 +109,7 @@ flowchart BT
     OSMap --> OperationSiren[OperationSiren<br>全部任务组合]
 ```
 
-`OSMap(OSFleet, Map, GlobeCamera, StorageHandler, StrategicSearchHandler)` 是「一个实例具备全部大世界能力」的枢纽；`OperationSiren` 再叠加 14 个 `tasks/` 任务类，理论上一个实例可执行任何大世界任务，实际由调度器按任务身份构造。
+`OSMap(MapEventResumeMixin, OSFleet, Map, GlobeCamera, StorageHandler, StrategicSearchHandler)` 是「一个实例具备全部大世界能力」的枢纽；`OperationSiren` 再叠加 14 个 `tasks/` 任务类，理论上一个实例可执行任何大世界任务，实际由调度器按任务身份构造。
 
 ### tasks/ 任务清单
 
@@ -204,11 +207,20 @@ flowchart BT
 | `globe_goto(zone, types, refresh, stop_if_safe)` | 跨海域导航的标准路径：特殊海域先退出 → 海域图进球面 → 聚焦/类型选择/进入 → `zone_init` |
 | `os_map_goto_globe()` | 包装重试 3 次：`RewardUncollectedError`（探索奖励未领不能离开海域）时先 `run_auto_search(rescan=True, after_auto_search=False)` 再试；禁用 after_auto_search 防止递归退出海域 |
 | `run_auto_search(question, rescan, after_auto_search, interrupt)` | 自律寻敌主循环：drop 统计上下文内跑战斗、清问号、按 `rescan` 重扫（`current`/`full`），特殊任务可整体关闭 |
-| `map_rescan(rescan_mode)` | 全图重扫：明石商店、扫描装置、伐木塔、双舰队机关（`ALREADY_SOLVED_MAP_EVENTS` 集合去重） |
+| `map_rescan(rescan_mode)` | 全图重扫：明石商店、扫描装置、伐木塔、双舰队机关（`ALREADY_SOLVED_MAP_EVENTS` 集合去重）；明石/装置点击被遮挡时先收起舰队栏，再换舰队，仍不行走恢复式强制移动 |
 | `fleet_repair()` / `port_goto()` | 港口维修与「走不动就换港口绕路」的容错包装 |
 | `boss_clear()`（`fleet.py`） | 月度/要塞 Boss 的多舰队轮换攻击，`limit_walk` 限制单次行走曼哈顿距离 ≤3 格 |
 
 全图重扫先通过 `OSCamera.ensure_edge_insight()` 识别真实横纵边缘，建立绝对坐标；格内单应相位不用于判定镜头已到头。定位次数按地图尺寸和滑动步长限制。每个节点按当前镜头距离排序后记录目标，聚焦与格心校准后核对摄像机坐标；所有节点检查完且没有事件才记录全图无事件，处理到事件仍按原去重规则结束本轮。初始识别、边缘定位或目标到达失败一律上抛 `MapDetectionError`，由调度器在错误现场保存开启时保存最近截图与日志后恢复，不能转换为“没有事件”。此保护适用于耄耋相接、侵蚀一、智能调度代理及其他复用全图重扫的任务，不改变通用战役的边缘兜底。离线回归见 `tests/test_opsi_map_scan_coverage.py`。
+
+### 地图事件点击失败与重启续查（module/os/map_event_resume.py）
+
+明石与扫描装置可能刷新在地图左下角，与「第一舰队 FLEET SELECT」舰队栏及底部按钮重合：点击坐标先命中 UI，商店/装置对话永远不会出现；`handle_akashi_supply_buy()` 的 `ui_click` 会一直等 `is_in_map`，直到设备卡死检查抛 `GameStuckError`。现在把这条路径拆成三层有界处理：
+
+- **有界点击**：`_open_akashi_store()` 最多点 3 次，每次点击后用 `wait_until_walk_stable(..., allow_event_finish=True)` 与固定确认时间判断是否真的完成商店处理并确认回到地图；`_close_fleet_bar_if_open()` 发现点击落在舰队栏上就收起下拉栏，清问号与装置行军后同样检查。点不到就快速返回交给下一层，不再无界空转。
+- **升级恢复**：明石失败走 `_recover_unreachable_akashi()`：先换其余舰队（`_goto_akashi_with_other_fleets` / `_goto_scanning_device_with_other_fleets`），仍不行则 `_mark_event_unreachable(node)` + 置 `_question_unreachable` + `_execute_fixed_patrol_scan(ExecuteFixedPatrolScan=True, recovery=True)`。`recovery=True` 只对本次已看见的事件临时绕过「强制移动」开关，置位 `_question_unreachable` 则让 L2 挪舰队不受当前行动力门槛限制；两者都不改用户配置。雷达补查会复位不可达标记，因此在进入补查前局部保留本次已见事件的恢复依据，补查未命中时仍允许 L2；普通无事件扫描继续受原行动力门槛限制。装置确认失败同样返回 `False` 交给强制移动，不再伪装成功导致重扫空转。
+- **重启续查**：看到明石/装置、尚未处理完时，在开始购买或装置后续自律之前 `_save_pending_map_event()` 写入隐藏配置；购买/装置确认并完成后续自律后 `_finish_pending_map_event()` 清除，本次换队与强制移动整遍仍没解决时同样清除（等价于放弃这只事件、继续下一轮）。侵蚀一单轮开始（`fleet_set` 之后、海里数检测之前）调用 `_resume_pending_map_event()`：扫描装置已提交物品的记录按剩余次数补自律（敌人模式共 3 次，重启后只补没跑完的）；其余先清已解事件集合、`map_rescan(rescan_mode="full")` 全图重扫，仍未清记录则置 `_question_unreachable` 并执行 `recovery=True` 的强制移动；整遍仍没看到事件就清掉记录继续本轮。服务器、重置周期、海域、事件类型/模式与记录不符时记录自动作废；保存时的同节点去重也须校验这些身份，不复用其他服务器或海域的提交进度；中途异常向上抛并保留记录。续查先失效上一轮主队预检标记，避免遗留事件被当成已经检查；L2 全图定位失败保留异常语义并向上抛出，不作为“未找到事件”清除记录。续查只在单轮入口触发一次，重扫与强制移动内部不再递归调用续查，`_in_akashi_recovery` 防的是强制移动自身嵌套。
+- **装置后续自律按模式补跑**：装置确认提交物品后，敌人模式执行 3 次 `os_auto_search_run()`（游戏可能把自律暂停，必须逐次重新点击直到三次）、资源模式 1 次（点「自律收柱子」）、`collected`（信息收集）0 次、未知模式 1 次；资源在点击后即被消耗，不要求对应事件再次完成。每次跑完把剩余次数写回续查记录，卡死重启后只补没跑完的次数。只有敌人模式且 `OpsiSirenBug.Siren_Fleet` 有效时才临时切换舰队，结束后恢复原舰队；旧记录没有剩余次数时按模式跑满。
 
 ## 6. 工作流程
 
@@ -289,7 +301,7 @@ OCR：行动力面板 / 黄币 / 紫币 ──▶ 决策（智能调度状态机
 | `OpsiGeneral.*` | `DoRandomMapEvent`、`UseLogger`、`BuyActionPointLimit` | 随机事件、日志仪、每周石油购买上限等通用行为 |
 | `OpsiHazard1Leveling.ActionPointCheckInterval` | 默认 0 分钟，关闭定时读取 | 侵蚀一、智能调度和短猫的后台行动力检查间隔；补给及首次确认仍读面板 |
 | `OpsiScheduling.*` | `Scheduler.Enable`、黄币保留、行动力保留、通知阈值 | 智能调度开关与决策参数 |
-| `OpsiHazard1Leveling.*` | `TargetZone`（0/44/22）、`MinimumActionPointReserve` | 侵蚀 1 目标海域与保留 |
+| `OpsiHazard1Leveling.*` | `TargetZone`（0/44/22）、`MinimumActionPointReserve`、隐藏 `PendingMapEvent` | 侵蚀 1 目标海域、保留与地图事件续查记录 |
 | `OpsiMeowfficerFarming.*` | `StayInZone` 等 | 耄耋相接模式 |
 | `OpsiPreventActionPointOverflow.*` | `Task`（OpsiScheduling/OpsiHazard1Leveling/OpsiMeowfficerFarming）、上下限 | 防溢出目标任务与阈值（上限 ≤200） |
 | `OpsiDaily.*` / `OpsiShop.*` / `OpsiVoucher.*` | —— | 日常/商店/兑换参数 |
@@ -323,6 +335,7 @@ OCR：行动力面板 / 黄币 / 紫币 ──▶ 决策（智能调度状态机
 ## 13. 缓存与持久化
 
 - 进度状态全部持久化在配置文件：`OpsiExplore_LastZone`、`OpsiExploreCleanup_State`、智能调度的状态键（`_get_smart_scheduling_state_value`，存于配置而非内存，防进程重启丢账）、各任务 `NextRun/LastRun`。
+- 地图事件续查记录保存在隐藏配置 `OpsiHazard1Leveling.OpsiHazard1Leveling.PendingMapEvent`（`MapEventResumeMixin` 维护）：看到明石/扫描装置、开始购买或装置提交物品后的自律之前写入，记录服务器、重置周期、海域、事件类型、格子、装置模式/是否已提交物品/剩余自律次数与当时舰队。购买或装置后续自律真正完成后才清除；卡死重启、进程中断保留记录，侵蚀一下一轮优先续查。服务器、重置周期、海域、事件类型/格子不符即作废；「已提交物品」按剩余次数补自律（敌人模式共 3 次、资源模式 1 次），不要求对应事件再次完成。
 - “普通海域事件补扫”是独立任务 `OpsiExploreCleanup`，使用自己的 `Scheduler.Enable`、`Progress` 和 `State`。初始化游戏前检查 `OpsiExplore.ExploreProgress` 是否为 `已完成百分之100.00`，已有开荒月度标记时还检查月份，避免沿用上月完成状态；不满足则提示重新运行每月开荒并延期。每月开荒完成后只唤起已启用的补扫任务，不在开荒任务内部执行补扫。
 - 补扫按原开荒顺序严格进入普通海域（`DANGEROUS`），不选择或刷新安全海域（`SAFE`）。每张图先全图识别，再处理地图事件并逐队检查雷达；找到一种事件后仍检查其他舰队。沿用现有事件及战斗逻辑，不使用侵蚀一的固定坐标挪队。进入同一海域也重新确认类型，不把“当前海域相同”当作已经进入目标地图。
 - 补扫状态保存月份、原始顺序、下一海域索引和尝试次数，成功退出当前图才推进断点。重启续扫，本月完成后延迟到下次重置；跨月先清除补扫自己的旧进度。单图三次未完成后请求检查，修复原因后可在停止实例时将 `OpsiExploreCleanup.OpsiExploreCleanup.State.attempts` 改为 `0`。旧开关和旧补扫断点通过配置迁移进入独立任务；开荒自身的月度标记不会被当成补扫进度。
@@ -363,12 +376,15 @@ OCR：行动力面板 / 黄币 / 紫币 ──▶ 决策（智能调度状态机
 - **明石商店处理速度**：确认进店后建立仅本次访问有效的 `_akashi_shop_session`，正常结束、购买／退出失败及任务中断都在 `finally` 清理。黄币校验省去额外固定等待，仍由截图循环取得连续两张一致读数；零值或奖励可见会打断校验，奖励处于点击冷却时不读背景余额。每次选品仍读取实际黄／紫币并记录原统计，不按价格推算余额。
 - 商品识别逐格比较当前截图的全部识别区域，只有像素完全相同且已知的格才复用本次进店结果；变更格走原名称、数量、币种及价格识别链。未知、空格和价格失败格每轮重识别，离开商店、布局或截图尺寸变化、新会话、模板提取模式不沿用旧缓存。余额下降、价格变化和售罄按当前结果重新过滤；临时局部网格在异常时也还原。货架加载初次识别后最多重拍两次，最后一次有效结果仍可选品。入口稳定确认、成交确认及补点冷却保持原值；日志记录本次商店处理耗时。验证见 `tests/test_opsi_shop_coin_read.py`、`tests/test_opsi_akashi_inventory.py`，存储追加优化见[统计模块](../infra/statistics.md)。
 - **侵蚀一战后检索**：独立任务与智能调度代理共用 `_cl1_run_battle()`。关闭本次搜索奖励后，以新截图确认奖励退场、地图图案及原色恢复，即交回战后流程，不强制等待 1.2 秒；不充分时保留原确认，详见[辅助模块的奖励回图](auxiliary.md)。战略搜索结束后先恢复主舰队、重新截图并检测附近雷达问号，发现时显式调用单舰队 `OSMap.clear_question()`；清理成功跳过本轮全图重扫，没有问号或清理失败才进入地图重扫及后续补查。当轮未移动舰队的雷达补查排除已预检的主队，仅按编号升序检查其他舰队（主队为 1 队时检查 2→3→4），每队只调用当前队的单舰队清理，不再嵌套多队遍历。排除不延续到移动后的重扫，也不影响每日、耄耋或月度补扫；结束时恢复主队，正常结束或异常退出均清除本轮预检标记，下一轮重新预检主队。预检不依赖强制移动开关，保留明石去重、装置处理及异常上抛；验证见 `tests/test_opsi_hazard1_radar_precheck.py`。
+
+- **事件续查记录是「已看见但未完成」的唯一凭据**。新增可能被 UI 遮挡或重启中断的地图事件时，要在首次点击前 `_save_pending_map_event()`、在真正完成时 `_finish_pending_map_event()`，并同步 `_VALID_EVENT_TYPES` 与续查分支；不能把「已开始尝试」当成完成，也不能因为点击后没检测到事件就当已解决。
 - **刷图交互确认**：侵蚀 1 与耄耋相接在明石退出商店、首次提交探测资源选项及剧情领奖后，使用 0.8 秒且至少三次检测确认地图稳定；初始行军及信息装置后续剧情仍等待原条件。回到地图后开启自律的重试间隔为 0.5 秒，正常和灰显关闭按钮共用冷却，剧情显示时先处理剧情；其他任务及停止自律仍为 3 秒。每轮正向确认自律已开启后，正常奖励收尾不再重开一次空搜索；未确认开启的旧奖励、META/退役恢复与战后重扫继续执行。所有大世界任务的普通对话都由 `MapEventHandler.story_skip()` 使用快速 SKIP，重要选项仍优先选择。
 
 
 ## 17. 已知限制
 
 - `alas.py` 的 `opsi_daily_delay()` 转发到 `OSCampaignRun.opsi_daily_delay()`，但该方法在整个 `module/` 中没有定义（截至 2026-09）——启用该任务会 `AttributeError`，属待修缺陷。
+- 地图事件续查目前只在 `OpsiHazard1Leveling` 单轮入口触发（`_run_hazard1_leveling_once()` → `_resume_pending_map_event()`）；其他大世界任务在事件处卡死重启后仍按各自流程重新扫描，不在本轮开始主动续查。
 - `OpsiHazard1Leveling` 的练度检查 `os_check_leveling` 没有独立调度入口，只能作为 CL1 前置或被代理调用；`OpsiCheckLeveling` 是配置组而非任务，WebUI 上不可单独启用。
 - 自律寻敌要求游戏内已通关大世界剧情；未解锁的账号在 `run_auto_search` 会持续卡识别直到底层超时。
 - 球面图定位依赖固定模板与单应性参数，分辨率/画质异常时的恢复能力有限（详见[地图系统与检测](../map.md)的限制节）。

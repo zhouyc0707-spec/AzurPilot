@@ -1,0 +1,280 @@
+{
+  "summary": {
+    "local_changed": 853,
+    "upstream_changed": 41,
+    "overlap": 19,
+    "non_overlap": 834,
+    "non_overlap_raw_byte_equal": 682,
+    "non_overlap_raw_equal_to_before_merge_checkout": 816,
+    "non_overlap_only_crlf_differences_from_before_merge_checkout": 15,
+    "non_overlap_clean_content_equal": 831,
+    "non_overlap_expected_changes": 3,
+    "non_overlap_unexpected_changes": 0,
+    "additional_integration_paths": 0,
+    "unexpected_additional_integration_paths": 0,
+    "overlap_python_files": 8,
+    "local_added_definition_names": 43,
+    "local_added_definition_ast_bodies_preserved": 42,
+    "modified_definition_bodies_requiring_review": 12,
+    "authorized_removed_added_definitions": 0,
+    "authorized_removed_modified_definitions": 0,
+    "added_definitions_retained_with_adapted_body": 1,
+    "missing_added_definitions": 0,
+    "missing_modified_definitions": 0,
+    "configuration_files": 13,
+    "local_config_delta_leaves": 1257,
+    "preserved_local_config_delta_leaves": 1257,
+    "missing_local_config_leaves": 0,
+    "changed_local_config_leaves": 0,
+    "tracked_python_syntax_passed": 2638,
+    "tracked_python_syntax_errors": 0,
+    "tracked_python_syntax_warnings": 12,
+    "parse_errors": 0,
+    "snapshot_stable": true
+  },
+  "overlap_path_disposition": [
+    {
+      "path": "config/template.json",
+      "local_blob": "4990abce62ebb9fb109685d6932f3b01f346facc",
+      "upstream_blob": "27718d9ba9ce2218adb4bf9bc8974bece4cf1b90",
+      "merged_clean_blob": "4e9012295c76553306e68f15d79685fccda0fa60",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "docs/modules/os/auxiliary.md",
+      "local_blob": "87a0d09d9be6ccbbaacb675da1355909e718f1d4",
+      "upstream_blob": "dfd29548aeead2926bbdd7213aa18d8906dfeef1",
+      "merged_clean_blob": "303697658e89c1e979a329a2a93adcfd6911eb61",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "docs/modules/os/index.md",
+      "local_blob": "12b2533acb9e773fd8b1c7f26fca45d10d1ae9e9",
+      "upstream_blob": "c10bdb3247873aa0363d1707a51d944995ef3ceb",
+      "merged_clean_blob": "89a16643813a291e81f5199f9a2b157d1a6e2763",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "frontend/playwright.config.ts",
+      "local_blob": "99ca2031b3bc47b8d05191cc8b06d24a4ee2cbc8",
+      "upstream_blob": "2cb04f18df328ce034e0fdce45b5f9b07d0fbc18",
+      "merged_clean_blob": "c0a97cb56988e0fad6fb41cebbbb423fab506697",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/argument/args.json",
+      "local_blob": "cdd2fa5113d6826ead711d02d73a983b3358f5a0",
+      "upstream_blob": "5bced0d2abb7073ce29716352b5a57ab9c0c8a6d",
+      "merged_clean_blob": "73522371a7edd844f15fbab054939ac341574c4e",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/argument/argument.yaml",
+      "local_blob": "0cd64837295a4b0007679cceca47838b0f27a136",
+      "upstream_blob": "901b1d6e439a6eb933ba0199e640ddb0fd4bf3bd",
+      "merged_clean_blob": "790dafce89088e3b1cfffae379a30ba6dea9b65f",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/config_generated.py",
+      "local_blob": "435d8c0988c9aaeed79750fc086467b9846dc57a",
+      "upstream_blob": "d041e97331aaed238ad10c0dfc8185f363d62437",
+      "merged_clean_blob": "3f6aff80d449f828a5c8ee161ba3110cd6048f61",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/i18n/en-US.json",
+      "local_blob": "7aff9fef83ad31f1166ad5b6d32ad84fe4a470cb",
+      "upstream_blob": "d64a59a49d92e7ad06b6ea89a247195f088dd84b",
+      "merged_clean_blob": "2c997ddf87b8f0a745f00e420e13d91bbccf6932",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/i18n/ja-JP.json",
+      "local_blob": "e9774d39384dd5f07a37a328c74e1e8473daa701",
+      "upstream_blob": "49600d8d262012b5bd0c90650259ba0a46c73e82",
+      "merged_clean_blob": "8dd585397ef2fb62ff6a116e5694edf79b9e1c68",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/i18n/zh-CN.json",
+      "local_blob": "4672c490e2d70991de46e04eb1e83120794e95fe",
+      "upstream_blob": "33d8d774d4a1d1892e80845f837fdae91f693151",
+      "merged_clean_blob": "0cdff0f73a5a7931a1fce2a49f4ca1f21ce1c751",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/i18n/zh-MIAO.json",
+      "local_blob": "358579291d4576d59ef028ea4dfd2da698f3e04d",
+      "upstream_blob": "222cb0eb2175f1e6bf4bd911be4d2c9805c56583",
+      "merged_clean_blob": "7e62885f7d4e06b3eb6f8103e46ac56025e4b209",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/config/i18n/zh-TW.json",
+      "local_blob": "f9a447994aa7ca8b74e4af25d16fa0531dddf44b",
+      "upstream_blob": "445124667db1964e492452dfc884c909f0248e2b",
+      "merged_clean_blob": "bd6811a63b9fe91d471a26b23e892c0fd281e110",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/os/map.py",
+      "local_blob": "c20b56835767def2957aed57b96bb04ed0e4d8fe",
+      "upstream_blob": "eb391b68a5bd71d0fe75f7e7a389fda30ff39fd2",
+      "merged_clean_blob": "4f25dabc38946191ff7f87905cecde71e84ddd1a",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/os/tasks/hazard_leveling.py",
+      "local_blob": "fb69f5051a02c886a8fa09a8ea44ad57f433c423",
+      "upstream_blob": "e03f2951337d5f9891a107286730db99bff41bf8",
+      "merged_clean_blob": "3bfc02b029c5a26c29f196cf64f23358d2b30dbe",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "module/os_handler/map_event.py",
+      "local_blob": "bef7199f0c0ab1424f815f7a45a13e24c7444dec",
+      "upstream_blob": "7990fc43dce9ad9b39bc895ea632858d13b371d1",
+      "merged_clean_blob": "50862f54bb5c631611f486009e190c3ca02b0a22",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "tests/test_opsi_background_resources.py",
+      "local_blob": "ebf5f147c46ce928949fef9a08bf3bf72b509bb2",
+      "upstream_blob": "1169b3896654cdb9910cc2926a94a2ff6cdbf8c6",
+      "merged_clean_blob": "bc5c875bc43087f80ea45c747ba9a9ac656f4162",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "tests/test_opsi_cl1_round_time.py",
+      "local_blob": "1e3fbb23adf8b1c04aec5be7c0cf72c637ec4b5c",
+      "upstream_blob": "caf708b60ddc2277c3978d03cf9c1b4519ea8c5c",
+      "merged_clean_blob": "74e21aa29429c36c28f57d8f746da680d70baf2f",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "tests/test_opsi_fixed_patrol_escalation.py",
+      "local_blob": "02555e040f59eda18b687939cd098c075fbc541a",
+      "upstream_blob": "d2b3cfa9cde406c9e2d44b6dc40282ec29bbb043",
+      "merged_clean_blob": "04a08b15005defddb4662ea1f4704feee53a13fa",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    },
+    {
+      "path": "tests/test_opsi_sea_miles.py",
+      "local_blob": "f09aace66733b74047c8df99a34af65d86ad893d",
+      "upstream_blob": "127e7e8fb91e2c352d21ec5e9535b147560739b9",
+      "merged_clean_blob": "7f5afc2acec05441c097ea199b3bd3258929eaed",
+      "equals_local": false,
+      "equals_upstream": false,
+      "disposition": "融合或重新生成的内容"
+    }
+  ],
+  "expected_non_overlap_changes": [
+    {
+      "path": "tests/test_opsi_akashi_scope.py",
+      "reason": "现有不误记成功断言适配上游有界进店入口，补充确认成功才清续查与记solved；保留失败和恢复舰队断言。"
+    },
+    {
+      "path": "tests/test_opsi_map_scan_coverage.py",
+      "reason": "夹具增加上游收起舰队栏方法，原有完整扫描及提示等待断言保留。"
+    },
+    {
+      "path": "定制化修改清单.md",
+      "reason": "更新本轮基线及已恢复的事件续查说明，保留旧版UI、配置、全部历史和本地保护。"
+    }
+  ],
+  "adapted_added_definitions": [
+    {
+      "path": "tests/test_opsi_fixed_patrol_escalation.py",
+      "qualname": "TestFixedPatrolPrecheckedPrimary"
+    }
+  ],
+  "reviewed_modified_definitions": [
+    {
+      "path": "module/config/config_generated.py",
+      "qualname": "GeneratedConfig"
+    },
+    {
+      "path": "module/os/map.py",
+      "qualname": "OSMap"
+    },
+    {
+      "path": "module/os/map.py",
+      "qualname": "OSMap._execute_fixed_patrol_scan"
+    },
+    {
+      "path": "module/os/map.py",
+      "qualname": "OSMap._goto_akashi_with_other_fleets"
+    },
+    {
+      "path": "module/os/map.py",
+      "qualname": "OSMap._move_fleets_and_rescan"
+    },
+    {
+      "path": "module/os/map.py",
+      "qualname": "OSMap.clear_question"
+    },
+    {
+      "path": "module/os/map.py",
+      "qualname": "OSMap.map_rescan_current"
+    },
+    {
+      "path": "module/os/tasks/hazard_leveling.py",
+      "qualname": "OpsiHazard1Leveling"
+    },
+    {
+      "path": "module/os_handler/map_event.py",
+      "qualname": "MapEventHandler"
+    },
+    {
+      "path": "tests/test_opsi_background_resources.py",
+      "qualname": "BackgroundRuntimeTests"
+    },
+    {
+      "path": "tests/test_opsi_cl1_round_time.py",
+      "qualname": "FullRoundTimeTests"
+    },
+    {
+      "path": "tests/test_opsi_cl1_round_time.py",
+      "qualname": "FullRoundTimeTests.setUp"
+    }
+  ],
+  "all_syntax_warning_files_unchanged": true,
+  "limitations": "静态保留与模拟流程回归不替代真实游戏验收。"
+}

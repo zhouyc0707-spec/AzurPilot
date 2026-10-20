@@ -23,6 +23,9 @@ class TestSchedulingActionPointPanel(unittest.TestCase):
             OpsiGeneral_BuyActionPointLimit=0, OpsiGeneral_OilLimit=0,
             OpsiMeowfficerFarming_StayInZone=True,
             is_task_enabled=Mock(return_value=False),
+            # 侵蚀 1 单轮入口会读隐藏的事件续查记录，桩配置保持无待续查。
+            cross_get=Mock(return_value=None),
+            cross_set=Mock(),
         )
         self.runner.device = Mock()
         self.runner.action_point_enter = Mock(side_effect=self.enter)

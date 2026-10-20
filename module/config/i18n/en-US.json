@@ -4289,6 +4289,10 @@
       "name": "Last sea miles check",
       "help": "Internal timestamp of the last successful sea miles check, used to calculate the check interval."
     },
+    "PendingMapEvent": {
+      "name": "Pending map event",
+      "help": "Internal record of a map event that has already been spotted but not finished (Akashi / scanning device / Siren research device). Used to resume it after a stuck restart. No need to edit manually."
+    },
     "DebugClip": {
       "name": "Post-battle debug recording",
       "help": "When enabled, during each Corrosion 1 round's post-battle handling (rescan / event resolution / forced movement), record what ALAS itself sees into an mp4 under log/clips/. Every round is saved, whether or not an event occurred, so you can review each round. Use this to manually verify whether Akashi is missed. Clips are cleaned up automatically according to the clip retention setting under OS General Settings."

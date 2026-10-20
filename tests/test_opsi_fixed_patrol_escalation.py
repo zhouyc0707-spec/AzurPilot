@@ -19,6 +19,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from module.config.redirect_utils.utils import execute_fixed_patrol_scan_redirect
+from module.exception import MapDetectionError
 from module.os.map import ALREADY_SOLVED_MAP_EVENTS, OSMap
 from module.os.tasks.meowfficer_farming import OpsiMeowfficerFarming
 
@@ -262,6 +263,9 @@ class ClearQuestionStub:
     def wait_until_walk_stable(self, **kwargs):
         return self.walk_result
 
+    def _close_fleet_bar_if_open(self):
+        return False
+
 
 class TestClearQuestion(unittest.TestCase):
     def run_clear_question(self, predictions, walk_result=''):
@@ -494,6 +498,15 @@ class TestFixedPatrolPrecheckedPrimary(unittest.TestCase):
         self.assertEqual(stub.rescan_markers, [None])
         self.assertIsNone(stub._cl1_prechecked_primary)
         self.assertEqual(stub.fleet_sets, [1, 1])
+        self.assertEqual(stub.current_fleet, 1)
+        stub.recover.assert_called_once_with()
+
+    def test_l2_scan_detection_failure_remains_recoverable_error(self):
+        stub = FleetMoveStub(move_on_fleet=1)
+        stub.map_rescan = Mock(side_effect=MapDetectionError('全图定位未完成'))
+        with self.assertRaises(MapDetectionError):
+            self.run_l2(stub, through_recovery=True)
+        self.assertFalse(stub._in_akashi_recovery)
         self.assertEqual(stub.current_fleet, 1)
         stub.recover.assert_called_once_with()
 

@@ -1,0 +1,87 @@
+{
+  "python_suites": [
+    {
+      "modules": [
+        "tests.test_opsi_map_event_resume",
+        "tests.test_opsi_fixed_patrol_escalation",
+        "tests.test_opsi_hazard1_radar_precheck",
+        "tests.test_opsi_map_scan_coverage",
+        "tests.test_opsi_akashi_scope",
+        "tests.test_opsi_explore_cleanup"
+      ],
+      "tests": 157,
+      "result": "156项联合批次+新增1项后续自律中断进度回归均通过",
+      "logs": [
+        "event-resume-after.txt",
+        "event-resume-progress.txt"
+      ]
+    },
+    {
+      "modules": [
+        "tests.test_opsi_auto_search_combat",
+        "tests.test_opsi_cl1_fast_map_return",
+        "tests.test_opsi_cl1_speed",
+        "tests.test_leave_os_popup",
+        "tests.test_auto_search_menu_recovery"
+      ],
+      "tests": 117,
+      "result": "OK",
+      "log": "combat-compat-tests.log"
+    },
+    {
+      "modules": [
+        "tests.test_debug_clip",
+        "tests.test_island_cargo_preparation",
+        "tests.test_git_over_cdn",
+        "tests.test_git_over_cdn_build",
+        "tests.test_research_start_requirements",
+        "tests.test_research_template_naming"
+      ],
+      "tests": 91,
+      "seconds": 3.124,
+      "result": "OK",
+      "log": "general-tests-final.log"
+    },
+    {
+      "modules": [
+        "tests.test_opsi_scheduling",
+        "tests.test_opsi_scheduling_ap_panel",
+        "tests.test_opsi_sea_miles",
+        "tests.test_opsi_cl1_round_time",
+        "tests.test_opsi_background_resources"
+      ],
+      "tests": 132,
+      "seconds": 199.423,
+      "result": "OK",
+      "log": "scheduling-resource-timing-tests.log"
+    }
+  ],
+  "python_tests_total": 497,
+  "browser": {
+    "tests": 6,
+    "result": "OK",
+    "seconds": 49.3,
+    "scope": "专用模拟服务配对流程，多桌面/平板/手机视口",
+    "log": "pairing-browser.log"
+  },
+  "syntax": {
+    "files": 2638,
+    "errors": 0,
+    "warnings": 12,
+    "warnings_all_from_unchanged_files": true
+  },
+  "generators": [
+    "python -B -m module.config.config_updater",
+    "python -B -m dev_tools.button_extract"
+  ],
+  "generators_result": "通过，无预期之外路径差异；五语言隐藏字段翻译完整",
+  "node_syntax_check": ".github/scripts/build_git_over_cdn_eo_esa.mjs 通过",
+  "frontend": "仅测试配置变化；生产src/public/index/依赖/契约均无变化，不重新构建",
+  "diff_check": "通过",
+  "limitations": [
+    "未运行真实游戏、实机录像或公网隧道",
+    "未实测CDN节点网络可用性",
+    "主动事件续查入口目前仅侵蚀一；其他任务沿各自正常扫描流程",
+    "战略搜索召回指挥喵二次确认遗漏仍未修改"
+  ]
+}

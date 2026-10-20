@@ -87,6 +87,7 @@ class TestOSMapScanCoverage(unittest.TestCase):
             task=SimpleNamespace(command='OpsiDaily'),
             temporary=lambda **kwargs: nullcontext(),
         )
+        runner._close_fleet_bar_if_open = Mock(return_value=False)
         runner.wait_until_walk_stable = Mock(return_value='akashi')
         self.assertTrue(OSMap.clear_question(runner))
         self.assertEqual(order, ['tip', 'view'])

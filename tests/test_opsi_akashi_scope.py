@@ -379,7 +379,11 @@ class TestAkashiMapCompletion(unittest.TestCase):
             update_os=Mock(), fleet_set=Mock(),
             fleet_selector=SimpleNamespace(get=lambda: 1),
             wait_until_walk_stable=Mock(return_value=''),
-            handle_akashi_supply_buy=Mock(return_value=False),
+            _open_akashi_store=Mock(return_value=False),
+            _save_pending_map_event=Mock(),
+            _finish_pending_map_event=Mock(),
+            _close_fleet_bar_if_open=Mock(return_value=False),
+            _recover_unreachable_akashi=Mock(return_value=False),
         )
         runner.convert_radar_to_local = Mock(side_effect=[
             SimpleNamespace(distance_to=lambda other, distance=distance: distance)
@@ -390,7 +394,7 @@ class TestAkashiMapCompletion(unittest.TestCase):
     def test_adjacent_unconfirmed_shop_does_not_mark_event_solved(self):
         runner, grid = self.runner([1])
         self.assertFalse(OSMap.map_rescan_current(runner))
-        runner.handle_akashi_supply_buy.assert_called_once_with(grid)
+        runner._open_akashi_store.assert_called_once_with(grid, drop=None)
         runner.device.click.assert_not_called()
         self.assertEqual(runner._solved_map_event, set())
 
@@ -399,18 +403,27 @@ class TestAkashiMapCompletion(unittest.TestCase):
         self.assertFalse(OSMap.map_rescan_current(runner))
         runner.device.click.assert_called_once_with(grid)
         runner.wait_until_walk_stable.assert_called_once()
-        runner.handle_akashi_supply_buy.assert_called_once_with(grid)
+        runner._open_akashi_store.assert_called_once_with(grid, drop=None)
         self.assertEqual(runner._solved_map_event, set())
 
     def test_other_fleets_unconfirmed_shops_restore_fleet_without_marking_solved(self):
         runner, grid = self.runner([1, 1, 1])
         self.assertFalse(OSMap._goto_akashi_with_other_fleets(runner))
-        self.assertEqual(runner.handle_akashi_supply_buy.call_args_list,
-                         [unittest.mock.call(grid)] * 3)
+        self.assertEqual(runner._open_akashi_store.call_args_list,
+                         [unittest.mock.call(grid, drop=None)] * 3)
         self.assertEqual(runner.fleet_set.call_args_list,
                          [unittest.mock.call(fleet) for fleet in (2, 3, 4, 1)])
         runner.device.click.assert_not_called()
         self.assertEqual(runner._solved_map_event, set())
+
+
+    def test_confirmed_bounded_shop_finishes_pending_and_marks_solved(self):
+        runner, grid = self.runner([1])
+        runner._open_akashi_store.return_value = True
+        self.assertTrue(OSMap.map_rescan_current(runner))
+        runner._finish_pending_map_event.assert_called_once_with('akashi', node='B8')
+        runner._recover_unreachable_akashi.assert_not_called()
+        self.assertEqual(runner._solved_map_event, {'is_akashi'})
 
 
 if __name__ == '__main__':

@@ -33,6 +33,9 @@ class SeaMilesIntervalTests(unittest.TestCase):
             OpsiFleet_Fleet=1,
             override=Mock(),
             is_task_enabled=Mock(return_value=False),
+            # 单轮入口会读隐藏的事件续查记录，桩配置保持无待续查。
+            cross_get=Mock(return_value=None),
+            cross_set=Mock(),
         )
         self.runner.zone = SimpleNamespace(zone_id=22, hazard_level=1)
         self.runner.is_zone_name_hidden = True
