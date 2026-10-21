@@ -13705,6 +13705,23 @@
           12
         ]
       },
+      "MaintenanceAdvance": {
+        "type": "checkbox",
+        "value": true
+      },
+      "MaintenanceWeekday": {
+        "type": "select",
+        "value": "thu",
+        "option": [
+          "mon",
+          "tue",
+          "wed",
+          "thu",
+          "fri",
+          "sat",
+          "sun"
+        ]
+      },
       "OpponentChooseMode": {
         "type": "select",
         "value": "max_exp",

@@ -283,10 +283,12 @@ class Exercise(ExerciseCombat):
         return preserve, admiral_interval
 
     def _get_exercise_start_time(self, next_update):
-        """计算本轮最早执行时间，保留五次策略在周四中午补次数前提前至九点。"""
+        """计算本轮最早执行时间，可在指定星期中午补次数前提前至九点。"""
         server_update = next_update.astimezone(datetime.timezone(server_timezone()))
-        if self.preserve == 5 and server_update.weekday() == 3 \
-                and (server_update.hour, server_update.minute) == (12, 0):
+        weekdays = ('mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun')
+        if (self.preserve == 5 and self.config.Exercise_MaintenanceAdvance
+                and server_update.weekday() == weekdays.index(self.config.Exercise_MaintenanceWeekday)
+                and (server_update.hour, server_update.minute) == (12, 0)):
             return next_update - datetime.timedelta(hours=3)
         return next_update - datetime.timedelta(hours=self.config.Exercise_DelayUntilHoursBeforeNextUpdate)
 
@@ -334,7 +336,7 @@ class Exercise(ExerciseCombat):
         else:
             forced_run = False
 
-        # 执行门禁与下次排程使用同一时间，确保周四九点即可运行。
+        # 执行门禁与下次排程使用同一时间，确保所选星期九点即可运行。
         start_time = self._get_exercise_start_time(get_server_next_update(server_update))
         if current_time() < start_time and not forced_run:
             logger.warning(f'[演习-调度] 尚未到执行时间 {start_time}，延迟任务')

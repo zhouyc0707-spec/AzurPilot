@@ -1514,6 +1514,10 @@ Exercise:
   DelayUntilHoursBeforeNextUpdate:
     value: 12
     option: [ 1, 2, 3, 4, 5, 12]
+  MaintenanceAdvance: true
+  MaintenanceWeekday:
+    value: thu
+    option: [mon, tue, wed, thu, fri, sat, sun]
   OpponentChooseMode:
     value: max_exp
     option: [max_exp, easiest, leftmost, easiest_else_exp]

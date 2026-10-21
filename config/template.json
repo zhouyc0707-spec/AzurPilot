@@ -2507,6 +2507,8 @@
     },
     "Exercise": {
       "DelayUntilHoursBeforeNextUpdate": 12,
+      "MaintenanceAdvance": true,
+      "MaintenanceWeekday": "thu",
       "OpponentChooseMode": "max_exp",
       "OpponentTrial": 1,
       "ExerciseStrategy": "aggressive",

@@ -1,11 +1,17 @@
-"""核对周四维护前演习调度，全部使用内存时间、库存和战斗结果。"""
+"""核对可配置的维护前演习调度，全部使用模拟时间、库存和战斗结果。"""
 
 import datetime
+import json
+import os
+import tempfile
 import unittest
-from contextlib import ExitStack, nullcontext
+from contextlib import ExitStack, contextmanager, nullcontext
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from module.config.config import AzurLaneConfig
+from module.config.config_generated import GeneratedConfig
 from module.exercise.exercise import Exercise
 
 
@@ -22,12 +28,15 @@ class ExerciseScheduleTests(unittest.TestCase):
 
     def run_exercise(self, now, next_update, *, stock=10, stale_remain=0,
                      strategy='sun18', delay=1, season_hours=120,
-                     server_offset=datetime.timedelta(hours=8), end_now=None):
+                     server_offset=datetime.timedelta(hours=8), end_now=None,
+                     maintenance_advance=True, maintenance_weekday='thu'):
         exercise = object.__new__(Exercise)
         exercise.config = SimpleNamespace(
             Scheduler_ServerUpdate='00:00,12:00,18:00',
             Exercise_ExerciseStrategy=strategy,
             Exercise_DelayUntilHoursBeforeNextUpdate=delay,
+            Exercise_MaintenanceAdvance=maintenance_advance,
+            Exercise_MaintenanceWeekday=maintenance_weekday,
             Exercise_OpponentChooseMode='leftmost',
             multi_set=lambda: nullcontext(),
             set_record=Mock(),
@@ -178,6 +187,122 @@ class ExerciseScheduleTests(unittest.TestCase):
     def test_skipped_task_with_stale_ten_remaining_still_schedules_nine(self):
         result = self.run_exercise(cn_time(22, 8), cn_time(22, 12), stale_remain=10)
         self.assert_skipped_until(*result, cn_time(22, 9))
+
+    def test_disabling_maintenance_advance_restores_thursday_eleven(self):
+        for hour in (0, 9):
+            with self.subTest(hour=hour):
+                result = self.run_exercise(
+                    cn_time(22, hour), cn_time(22, 12), maintenance_advance=False,
+                )
+                self.assert_skipped_until(*result, cn_time(22, 11))
+        exercise, remaining, _ = self.run_exercise(
+            cn_time(22, 11), cn_time(22, 12), maintenance_advance=False,
+        )
+        self.assertEqual(remaining, 5)
+        self.assertEqual(exercise._exercise_once.call_count, 5)
+
+    def test_each_selected_weekday_schedules_nine_and_retains_five(self):
+        for day, weekday in ((19, 'mon'), (20, 'tue'), (21, 'wed'),
+                             (23, 'fri'), (24, 'sat'), (25, 'sun')):
+            with self.subTest(weekday=weekday):
+                result = self.run_exercise(
+                    cn_time(day, 8), cn_time(day, 12), maintenance_weekday=weekday,
+                )
+                self.assert_skipped_until(*result, cn_time(day, 9))
+                exercise, remaining, _ = self.run_exercise(
+                    cn_time(day, 9), cn_time(day, 12), maintenance_weekday=weekday,
+                )
+                self.assertEqual(remaining, 5)
+                self.assertEqual(exercise._exercise_once.call_count, 5)
+                exercise.config.task_delay.assert_called_once_with(server_update=True)
+
+    def test_selecting_another_weekday_stops_thursday_advance(self):
+        for weekday in ('mon', 'tue', 'wed', 'fri', 'sat', 'sun'):
+            with self.subTest(weekday=weekday):
+                result = self.run_exercise(
+                    cn_time(22, 9), cn_time(22, 12), maintenance_weekday=weekday,
+                )
+                self.assert_skipped_until(*result, cn_time(22, 11))
+
+    def test_selected_weekday_afternoon_and_evening_keep_original_time(self):
+        for day, weekday in enumerate(('mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'), 19):
+            for hour, update, target in ((12, cn_time(day, 18), cn_time(day, 17)),
+                                         (18, cn_time(day + 1), cn_time(day, 23))):
+                with self.subTest(weekday=weekday, hour=hour):
+                    result = self.run_exercise(
+                        cn_time(day, hour, 0, 1), update, maintenance_weekday=weekday,
+                    )
+                    self.assert_skipped_until(*result, target)
+
+    def test_disabled_advance_uses_custom_delay_on_selected_weekday(self):
+        for delay in (0, 2, 5):
+            for day, weekday in ((19, 'mon'), (22, 'thu'), (25, 'sun')):
+                with self.subTest(delay=delay, weekday=weekday):
+                    result = self.run_exercise(
+                        cn_time(day, 0, 0, 1), cn_time(day, 12), delay=delay,
+                        maintenance_advance=False, maintenance_weekday=weekday,
+                    )
+                    self.assert_skipped_until(
+                        *result, cn_time(day, 12) - datetime.timedelta(hours=delay),
+                    )
+
+
+class ExerciseMaintenanceConfigTests(unittest.TestCase):
+    """用临时配置验证旧设置迁移与维护星期的持久化。"""
+
+    @contextmanager
+    def temporary_config(self, values=None, *, legacy=False):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'exercise_maintenance_test.json'
+            template = Path(__file__).resolve().parents[1] / 'config/template.json'
+            data = json.loads(template.read_text(encoding='utf-8'))
+            exercise = data['Exercise']['Exercise']
+            exercise.update(values or {})
+            if legacy:
+                exercise.pop('MaintenanceAdvance', None)
+                exercise.pop('MaintenanceWeekday', None)
+            path.write_text(json.dumps(data), encoding='utf-8')
+            with patch.dict(os.environ, {'AZURPILOT_NTP_DISABLE': '1'}), patch(
+                'module.config.config.filepath_config', return_value=str(path)
+            ), patch('module.config.config_updater.filepath_config', return_value=str(path)):
+                yield AzurLaneConfig('exercise_maintenance_test', task='Exercise'), path
+
+    def test_generated_defaults_preserve_existing_thursday_behavior(self):
+        self.assertIs(GeneratedConfig.Exercise_MaintenanceAdvance, True)
+        self.assertEqual(GeneratedConfig.Exercise_MaintenanceWeekday, 'thu')
+
+    def test_legacy_config_gains_defaults_without_changing_strategy_or_delay(self):
+        with self.temporary_config({
+            'ExerciseStrategy': 'sun18', 'DelayUntilHoursBeforeNextUpdate': 2,
+        }, legacy=True) as (config, path):
+            self.assertIs(config.Exercise_MaintenanceAdvance, True)
+            self.assertEqual(config.Exercise_MaintenanceWeekday, 'thu')
+            self.assertEqual(config.Exercise_ExerciseStrategy, 'sun18')
+            self.assertEqual(config.Exercise_DelayUntilHoursBeforeNextUpdate, 2)
+            # 加载只合并默认值；一次正常保存后检查迁移字段落盘。
+            config.Exercise_MaintenanceAdvance = True
+            saved = json.loads(path.read_text(encoding='utf-8'))['Exercise']['Exercise']
+            self.assertIs(saved['MaintenanceAdvance'], True)
+            self.assertEqual(saved['MaintenanceWeekday'], 'thu')
+            restarted = AzurLaneConfig('exercise_maintenance_test', task='Exercise')
+            self.assertIs(restarted.Exercise_MaintenanceAdvance, True)
+            self.assertEqual(restarted.Exercise_MaintenanceWeekday, 'thu')
+            self.assertEqual(restarted.Exercise_DelayUntilHoursBeforeNextUpdate, 2)
+
+    def test_disabled_advance_and_selected_weekday_survive_restart(self):
+        with self.temporary_config() as (config, path):
+            config.Exercise_MaintenanceWeekday = 'tue'
+            config.Exercise_MaintenanceAdvance = False
+            saved = json.loads(path.read_text(encoding='utf-8'))['Exercise']['Exercise']
+            self.assertIs(saved['MaintenanceAdvance'], False)
+            self.assertEqual(saved['MaintenanceWeekday'], 'tue')
+            restarted = AzurLaneConfig('exercise_maintenance_test', task='Exercise')
+            self.assertIs(restarted.Exercise_MaintenanceAdvance, False)
+            self.assertEqual(restarted.Exercise_MaintenanceWeekday, 'tue')
+            restarted.Exercise_MaintenanceAdvance = True
+            enabled = AzurLaneConfig('exercise_maintenance_test', task='Exercise')
+            self.assertIs(enabled.Exercise_MaintenanceAdvance, True)
+            self.assertEqual(enabled.Exercise_MaintenanceWeekday, 'tue')
 
 
 if __name__ == '__main__':

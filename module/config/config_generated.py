@@ -727,6 +727,8 @@ class GeneratedConfig:
 
     # 配置组 `Exercise`
     Exercise_DelayUntilHoursBeforeNextUpdate = 12  # 1, 2, 3, 4, 5, 12
+    Exercise_MaintenanceAdvance = True
+    Exercise_MaintenanceWeekday = 'thu'  # mon, tue, wed, thu, fri, sat, sun
     Exercise_OpponentChooseMode = 'max_exp'  # max_exp, easiest, leftmost, easiest_else_exp
     Exercise_OpponentTrial = 1
     Exercise_ExerciseStrategy = 'aggressive'  # aggressive, fri18, sat0, sat12, sat18, sun0, sun12, sun18

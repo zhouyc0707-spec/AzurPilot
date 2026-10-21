@@ -104,7 +104,9 @@ module/
 
 消耗策略中，`aggressive` 不保留次数，其余策略每次 `run()` 开始时重新设为保留 5 次，并在赛季剩余时间落入将军试炼区间（`ADMIRAL_TRIAL_HOUR_INTERVAL`）或不足 6 小时时取消保留并强制运行。区间按赛季倒计时判断，不是到达某个星期的时刻后持续清空：例如 `fri18` 当前范围为 `[56, 48]`，实际条件是 `48 <= floor(赛季剩余小时) < 56`；后续新一轮任务在剩余 6 至 48 小时期间恢复保留 5 次。同一次任务仅在开始判断区间，不在战斗循环中反复更新保留数。普通运行还受 `Exercise_DelayUntilHoursBeforeNextUpdate` 限制，只在下一次服务器补次数前指定小时数内执行；强制运行不受该延迟限制。
 
-保留五次的策略另有周四维护前排程：按服务器时区识别周四，上午这轮（下一补次数点为 12:00）固定从 09:00 开始执行，打到剩余五次，不修改用户保存的延迟小时数。执行门禁和下次运行时间共用 `_get_exercise_start_time()`，凌晨或九点前检查会精确安排到九点，九点后进入则直接补跑，不再等待十一点。周三晚结束后仍先在周四零点检查；周四中午、傍晚和其他日期继续按原延迟配置排程，激进清空及赛季强制清空保持原语义。九点是任务成为可运行的时间，仍受调度器当前任务和账号可用状态影响，不强制打断其他任务。针对性回归：`uv run python -m unittest tests.test_exercise_schedule tests.test_exercise_opponent_selection`，使用固定时间和模拟战斗，不执行真实演习。
+演习配置提供「维护前提前演习」（`Exercise_MaintenanceAdvance`，默认开启）和「提前演习星期」（`Exercise_MaintenanceWeekday`，`mon` 至 `sun`，默认周四）两个选项。保留五次策略开启此功能时，所选星期上午这轮（下一补次数点为服务器时间 12:00）固定从 09:00 开始执行，打到剩余五次；关闭后完全按原延迟小时数排程，所选星期仍保留。不会修改用户保存的延迟小时数。执行门禁和下次运行时间共用 `_get_exercise_start_time()`，凌晨或九点前检查会精确安排到九点，九点后进入则直接补跑。所选日中午、傍晚和其他日期继续按原延迟配置排程，激进清空及赛季强制清空保持原语义。
+
+页面保存开关或星期的新值后，配置服务在同次保存中将已启用演习任务的下次运行提前为立即检查，已有更早待运行时间不后移；现有执行判断再按新设置重排，未到执行时间不进行演习。不启用已关闭的任务，也不覆盖同批明确修改的 `Exercise.Scheduler.NextRun`。九点是任务成为可运行的时间，仍受调度器当前任务和账号可用状态影响，不强制打断其他任务。针对性回归：`uv run python -m unittest tests.test_exercise_schedule tests.test_exercise_config_schedule tests.test_exercise_opponent_selection`，使用固定时间、临时配置和模拟战斗，不执行真实演习；新旧主题页面保存回归见 `frontend/e2e/exercise-maintenance-options.spec.ts`。
 
 ### 建造（module/gacha）
 

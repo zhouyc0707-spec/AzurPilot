@@ -510,15 +510,31 @@ class ConfigService:
             data, _ = self.read(name)
             seen = set()
             edited_groups = {}
+            exercise_schedule_changed = False
             for change in changes:
                 task, group, arg = self.validate(change.path, change.value)
                 if change.path in seen:
                     raise ApiError('INVALID_PARAMS', '同一次保存不能重复修改同一个参数')
                 seen.add(change.path)
+                if change.path in ('Exercise.Exercise.MaintenanceAdvance',
+                                    'Exercise.Exercise.MaintenanceWeekday'):
+                    exercise_schedule_changed |= deep_get(data, change.path) != change.value
                 data.setdefault(task, {}).setdefault(group, {})[arg] = change.value
                 if change.path in OPSI_EXPLORE_PROGRESS:
                     self._reset_opsi_explore_progress(data, change.path)
                 edited_groups.setdefault((task, group), set()).add(arg)
+            if exercise_schedule_changed and 'Exercise.Scheduler.NextRun' not in seen:
+                scheduler = data['Exercise']['Scheduler']
+                if scheduler.get('Enable') is True:
+                    # 只唤醒演习重新检查时间门禁，不提前消费，也不推迟已经待运行的任务。
+                    exercise_now = current_time().replace(microsecond=0)
+                    try:
+                        scheduled = datetime.fromisoformat(scheduler.get('NextRun', ''))
+                        pending = scheduled.astimezone() <= exercise_now.astimezone()
+                    except (TypeError, ValueError):
+                        pending = False
+                    if not pending:
+                        scheduler['NextRun'] = exercise_now.isoformat(sep=' ')
             # 按最终配置校准；同一批先改心情再改恢复条件，也使用最终条件。
             now = current_time() if any(group in ('Emotion', 'PublicEmotion') and
                                         any(arg.endswith('Value') for arg in args)

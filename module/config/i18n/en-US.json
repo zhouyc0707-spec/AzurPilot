@@ -3790,13 +3790,28 @@
     },
     "DelayUntilHoursBeforeNextUpdate": {
       "name": "Delay Exercise until X hours before next refresh",
-      "help": "With a strategy that preserves 5 attempts, the Thursday morning round starts at 09:00 server time to leave room for the noon refill during maintenance. Other rounds follow this setting.",
+      "help": "Normally follows this setting. When early exercise is enabled, the selected weekday morning starts at 09:00; other rounds follow this delay.",
       "1": "1",
       "2": "2",
       "3": "3",
       "4": "4",
       "5": "5",
       "12": "Don't delay"
+    },
+    "MaintenanceAdvance": {
+      "name": "Exercise early before maintenance",
+      "help": "At 09:00 on the selected weekday, exercise down to 5 remaining attempts to leave room for the noon refill. Applies only to strategies that preserve 5 attempts. Disable to use the normal delay setting."
+    },
+    "MaintenanceWeekday": {
+      "name": "Early exercise weekday",
+      "help": "Uses the game server time zone. Only this morning round is moved; afternoon rounds and other days use the normal settings.",
+      "mon": "Monday",
+      "tue": "Tuesday",
+      "wed": "Wednesday",
+      "thu": "Thursday",
+      "fri": "Friday",
+      "sat": "Saturday",
+      "sun": "Sunday"
     },
     "OpponentChooseMode": {
       "name": "Opponent selection mode",
