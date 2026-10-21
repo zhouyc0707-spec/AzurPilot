@@ -524,6 +524,9 @@ button:disabled, input:disabled, textarea:disabled, select:disabled, .select-tri
 .task-picker-menu button:hover, .task-picker-menu button:focus-visible, .task-picker-menu button[aria-checked='true'] {background: var(--accent-soft); color: var(--accent)}
 .task-picker-empty {padding: 14px 8px; color: var(--muted); font-size: 12px; text-align: center}
 
+/* 浅色普通材质只由卡片绘制底色，布局间隙透出页面背景。 */
+:root[data-theme='legacy-light'][data-material='plain'] .instance-page-grid > .instance-page-rail {background: transparent}
+
 @media (min-width: 951px) {
   /* 顶栏占了第一行，侧栏与右栏从它下方开始各自滚动。 */
   .app-shell.legacy-shell > .topbar {position: relative; justify-content: flex-start; gap: 14px}
