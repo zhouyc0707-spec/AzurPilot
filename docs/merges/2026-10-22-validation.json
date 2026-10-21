@@ -1,0 +1,203 @@
+{
+  "base": "4b22f5ebc1a3969c51a389ba20c48b2db3897424",
+  "before": "cb8ebc9e632bec81f724e3eeadc827315bcca319",
+  "upstream": "ea067052a10a53dc8c5e31c4a80d65d3e32534ee",
+  "python_unittest": {
+    "groups": [
+      {
+        "name": "campaign",
+        "modules_or_classes": [
+          "tests.test_campaign_restart_recovery",
+          "tests.test_campaign_restart_tasks",
+          "tests.test_campaign_emotion_restart",
+          "tests.test_emotion_recovery",
+          "tests.test_emotion_observation",
+          "tests.test_auto_search_defeat",
+          "tests.test_auto_search_menu_recovery",
+          "tests.test_combat_results",
+          "tests.test_combat_status_fresh_frame",
+          "tests.test_farming_combat_config",
+          "tests.test_farming_ship_change_safety",
+          "tests.test_farming_event_stop",
+          "tests.test_farming_stage_navigation"
+        ],
+        "ran": 195,
+        "passed": 195,
+        "skipped": 0,
+        "seconds": 22.886,
+        "log": "campaign-tests.log"
+      },
+      {
+        "name": "general",
+        "modules_or_classes": [
+          "tests.test_hard_schedule",
+          "tests.test_shop_upstream",
+          "tests.test_shop_gem_observation",
+          "tests.test_shop_refresh",
+          "tests.test_capsule_rerun_login",
+          "tests.test_campaign_chapter_navigation",
+          "tests.test_campaign_entrance_refresh",
+          "tests.test_campaign_event_navigation"
+        ],
+        "ran": 120,
+        "passed": 120,
+        "skipped": 0,
+        "seconds": 1.692,
+        "log": "general-tests.log"
+      },
+      {
+        "name": "custom",
+        "modules_or_classes": [
+          "tests.test_scheduler_recovery",
+          "tests.test_scheduler_live_loop",
+          "tests.test_scheduler_stop",
+          "tests.test_campaign_resource_observation",
+          "tests.test_resource_flow",
+          "tests.test_dorm_daily_feed",
+          "tests.test_dorm_food_reserve",
+          "tests.test_exercise_schedule",
+          "tests.test_exercise_config_schedule",
+          "tests.test_exercise_opponent_selection",
+          "tests.test_api.ConfigApiTests"
+        ],
+        "ran": 228,
+        "passed": 227,
+        "skipped": 1,
+        "seconds": 313.516,
+        "log": "custom-tests.log"
+      }
+    ],
+    "ran": 543,
+    "passed": 542,
+    "skipped": 1,
+    "skip_reason": "当前 Windows 用户没有创建符号链接的权限",
+    "skipped_case": "tests.test_api.ConfigApiTests.test_importable_lists_configs_in_import_folder"
+  },
+  "playwright": {
+    "spec": "exercise-maintenance-options.spec.ts",
+    "themes": [
+      "light",
+      "legacy-light"
+    ],
+    "passed": 2,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0,
+    "seconds": 39.564814,
+    "uses_mock_service": true
+  },
+  "syntax": {
+    "python_files": 2645,
+    "errors": [],
+    "warnings": [
+      {
+        "file": "module/commission/project.py",
+        "line": 147,
+        "message": "\"\\d\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\d\"? A raw string is also an option."
+      },
+      {
+        "file": "module/commission/project.py",
+        "line": 148,
+        "message": "\"\\d\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\d\"? A raw string is also an option."
+      },
+      {
+        "file": "module/commission/project.py",
+        "line": 599,
+        "message": "\"\\d\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\d\"? A raw string is also an option."
+      },
+      {
+        "file": "module/commission/project.py",
+        "line": 609,
+        "message": "\"\\d\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\d\"? A raw string is also an option."
+      },
+      {
+        "file": "module/config/redirect_utils/shop_filter.py",
+        "line": 92,
+        "message": "\"\\>\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\>\"? A raw string is also an option."
+      },
+      {
+        "file": "module/config/redirect_utils/shop_filter.py",
+        "line": 93,
+        "message": "\"\\>\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\>\"? A raw string is also an option."
+      },
+      {
+        "file": "module/handler/sensitive_info.py",
+        "line": 62,
+        "message": "\"\\[\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\[\"? A raw string is also an option."
+      },
+      {
+        "file": "module/research/project.py",
+        "line": 228,
+        "message": "\"\\d\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\d\"? A raw string is also an option."
+      },
+      {
+        "file": "module/research/selector.py",
+        "line": 51,
+        "message": "\"\\d\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\d\"? A raw string is also an option."
+      },
+      {
+        "file": "module/research/selector.py",
+        "line": 52,
+        "message": "\"\\d\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\d\"? A raw string is also an option."
+      },
+      {
+        "file": "submodule/AlasFpyBridge/module/config/config_updater.py",
+        "line": 116,
+        "message": "\"\\|\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\|\"? A raw string is also an option."
+      },
+      {
+        "file": "tests/test_background_service.py",
+        "line": 103,
+        "message": "\"\\s\" is an invalid escape sequence. Such sequences will not work in the future. Did you mean \"\\\\s\"? A raw string is also an option."
+      }
+    ]
+  },
+  "auxiliary": {
+    "syntax_warning_count": 12,
+    "syntax_warning_files": [
+      "module/commission/project.py",
+      "module/config/redirect_utils/shop_filter.py",
+      "module/handler/sensitive_info.py",
+      "module/research/project.py",
+      "module/research/selector.py",
+      "submodule/AlasFpyBridge/module/config/config_updater.py",
+      "tests/test_background_service.py"
+    ],
+    "warning_files_changed": [],
+    "upstream_frontend_changes": [],
+    "runtime_frontend_source_fingerprint": "709cb8bba18afd9d4d07226afe262873769e6c6989ed19a20b73b3084a717d36",
+    "runtime_frontend_dist_marker": "709cb8bba18afd9d4d07226afe262873769e6c6989ed19a20b73b3084a717d36",
+    "runtime_frontend_dist_matches": true,
+    "AdventureGalley_template": {
+      "size": [
+        96,
+        96
+      ],
+      "mode": "RGB"
+    }
+  },
+  "configuration_generation": {
+    "passed": true,
+    "repeat_generation_no_additional_diff": true,
+    "five_locale_labels_verified": true
+  },
+  "git_diff_check": "passed",
+  "ruff": {
+    "executed": false,
+    "reason": "当前虚拟环境未安装 ruff；未将此项记为通过"
+  },
+  "focused_import_smoke": {
+    "passed": true,
+    "modules": [
+      "alas",
+      "module.campaign.recovery",
+      "module.campaign.run",
+      "module.combat.auto_search_combat",
+      "module.combat.emotion",
+      "module.hard.hard",
+      "module.shop.base"
+    ]
+  },
+  "real_game_tasks_executed": false,
+  "runtime_delivery_receipt": "D:/Codex/reports/upstream-dev-20261022/delivery.json"
+}

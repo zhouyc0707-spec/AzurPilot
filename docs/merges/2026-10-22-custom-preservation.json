@@ -1,0 +1,160 @@
+{
+  "base": "4b22f5ebc1a3969c51a389ba20c48b2db3897424",
+  "before": "cb8ebc9e632bec81f724e3eeadc827315bcca319",
+  "upstream": "ea067052a10a53dc8c5e31c4a80d65d3e32534ee",
+  "working_tree": "D:\\Codex\\workspace\\AzurPilot-upstream-dev-20261022",
+  "custom_paths": 870,
+  "upstream_paths": 28,
+  "overlap_paths": 14,
+  "exclusive_paths_checked": 856,
+  "exclusive_existing_blob_checks": 849,
+  "exclusive_deletion_checks": 7,
+  "exclusive_unexpected_changes": [],
+  "allowed_document_changes": [
+    {
+      "path": "定制化修改清单.md",
+      "before_blob": "d0302ee057c411dbc4f30637fd90561d02b77c1b",
+      "after_blob": "c16dfefbb345875ab3aea398d4177e8b89e9a677"
+    }
+  ],
+  "configuration": {
+    "module/config/argument/argument.yaml": {
+      "before_leaf_total": 1646,
+      "after_leaf_total": 1648,
+      "custom_leaves_checked": 101,
+      "missing_custom_leaves": [],
+      "changed_custom_leaves": [],
+      "removed_leaves_checked": 0,
+      "unexpectedly_restored_leaves": []
+    },
+    "config/template.json": {
+      "before_leaf_total": 2843,
+      "after_leaf_total": 2866,
+      "custom_leaves_checked": 40,
+      "missing_custom_leaves": [],
+      "changed_custom_leaves": [],
+      "removed_leaves_checked": 0,
+      "unexpectedly_restored_leaves": []
+    },
+    "module/config/argument/args.json": {
+      "before_leaf_total": 8019,
+      "after_leaf_total": 8074,
+      "custom_leaves_checked": 127,
+      "missing_custom_leaves": [],
+      "changed_custom_leaves": [],
+      "removed_leaves_checked": 0,
+      "unexpectedly_restored_leaves": []
+    },
+    "module/config/i18n/zh-CN.json": {
+      "before_leaf_total": 5208,
+      "after_leaf_total": 5212,
+      "custom_leaves_checked": 201,
+      "missing_custom_leaves": [],
+      "changed_custom_leaves": [],
+      "removed_leaves_checked": 3,
+      "unexpectedly_restored_leaves": []
+    },
+    "module/config/i18n/zh-MIAO.json": {
+      "before_leaf_total": 5208,
+      "after_leaf_total": 5212,
+      "custom_leaves_checked": 201,
+      "missing_custom_leaves": [],
+      "changed_custom_leaves": [],
+      "removed_leaves_checked": 3,
+      "unexpectedly_restored_leaves": []
+    },
+    "module/config/i18n/en-US.json": {
+      "before_leaf_total": 5208,
+      "after_leaf_total": 5212,
+      "custom_leaves_checked": 201,
+      "missing_custom_leaves": [],
+      "changed_custom_leaves": [],
+      "removed_leaves_checked": 3,
+      "unexpectedly_restored_leaves": []
+    },
+    "module/config/i18n/ja-JP.json": {
+      "before_leaf_total": 5208,
+      "after_leaf_total": 5212,
+      "custom_leaves_checked": 201,
+      "missing_custom_leaves": [],
+      "changed_custom_leaves": [],
+      "removed_leaves_checked": 3,
+      "unexpectedly_restored_leaves": []
+    },
+    "module/config/i18n/zh-TW.json": {
+      "before_leaf_total": 5208,
+      "after_leaf_total": 5212,
+      "custom_leaves_checked": 201,
+      "missing_custom_leaves": [],
+      "changed_custom_leaves": [],
+      "removed_leaves_checked": 3,
+      "unexpectedly_restored_leaves": []
+    }
+  },
+  "configuration_custom_leaf_total": 1273,
+  "configuration_removed_leaf_total": 15,
+  "configuration_missing_count": 0,
+  "configuration_changed_count": 0,
+  "configuration_unexpectedly_restored_count": 0,
+  "critical_file_blob_checks": 409,
+  "critical_counts": {
+    "frontend/src/": 266,
+    "module/webui/": 61,
+    "module/statistics/": 34,
+    "module/persistence/": 7,
+    "module/dorm/": 3,
+    "module/exercise/": 6,
+    "webapp/": 9,
+    "assets/gui/": 23
+  },
+  "critical_changed_paths": [],
+  "ast_custom_preservation": {
+    "alas.py": {
+      "custom_functions": [
+        "AzurLaneAutoScript.__init__",
+        "AzurLaneAutoScript._get_emulator_uptime",
+        "AzurLaneAutoScript._run",
+        "AzurLaneAutoScript._watchdog_loop",
+        "AzurLaneAutoScript._watchdog_recover",
+        "AzurLaneAutoScript.island_daily_order",
+        "AzurLaneAutoScript.loop",
+        "AzurLaneAutoScript.wait_until"
+      ],
+      "exact_comparisons": [
+        "AzurLaneAutoScript.__init__",
+        "AzurLaneAutoScript._get_emulator_uptime",
+        "AzurLaneAutoScript._watchdog_loop",
+        "AzurLaneAutoScript._watchdog_recover",
+        "AzurLaneAutoScript.island_daily_order",
+        "AzurLaneAutoScript.loop",
+        "AzurLaneAutoScript.wait_until"
+      ],
+      "changed_exact_functions": [],
+      "semantic_overlap": [
+        "AzurLaneAutoScript._run"
+      ]
+    },
+    "module/combat/auto_search_combat.py": {
+      "custom_functions": [
+        "AutoSearchCombat.map_offensive_auto_search"
+      ],
+      "exact_comparisons": [],
+      "changed_exact_functions": [],
+      "semantic_overlap": [
+        "AutoSearchCombat.map_offensive_auto_search"
+      ]
+    }
+  },
+  "semantic_guards": {
+    "worker_cold_start_getattr_retained": true,
+    "upstream_campaign_recovery_scope_retained": true,
+    "upstream_campaign_recovery_resume_retained": true,
+    "local_auto_search_terminal_guard_retained": true,
+    "upstream_restart_guard_retained": true,
+    "terminal_guard_is_first_loop_branch": true
+  },
+  "generated_custom_assignments_checked": 40,
+  "generated_custom_assignments_changed": [],
+  "upstream_production_frontend_changes": [],
+  "passed": true
+}

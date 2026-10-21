@@ -1,0 +1,15 @@
+path	custom_status	upstream_status
+alas.py	M	M
+config/template.json	M	M
+docs/modules/campaign.md	M	M
+docs/modules/combat.md	M	M
+docs/modules/entry/alas.md	M	M
+module/combat/auto_search_combat.py	M	M
+module/config/argument/args.json	M	M
+module/config/argument/argument.yaml	M	M
+module/config/config_generated.py	M	M
+module/config/i18n/en-US.json	M	M
+module/config/i18n/ja-JP.json	M	M
+module/config/i18n/zh-CN.json	M	M
+module/config/i18n/zh-MIAO.json	M	M
+module/config/i18n/zh-TW.json	M	M
