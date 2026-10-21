@@ -120,7 +120,7 @@ Node.js >= 22.12（推荐 24），首次准备用 `npm ci --prefix frontend`。
 - 新增选择器使用 `FormControls.tsx` 的 `Select`，配置字段使用 `FieldInput`，不要在各页面单独绘制箭头、勾选等图标。
 - 控制台固定文案在 `src/i18n.ts`（五种语言）；游戏任务配置的名称与说明翻译在 `module/config/i18n/`，二者独立，别改错位置。
 - 主题与背景偏好只存浏览器（localStorage / IndexedDB），不写入服务端部署配置；上传背景保存在 IndexedDB（最大 200 MB）。
-- 旧版浅色仪表盘的资源卡片由 `styles/legacy.css` 单独设为纯白，覆盖外层和 `.resource-card-body` 内层，适用于独立与合并卡片。
+- 旧版仪表盘资源卡外层统一使用 `1px solid var(--border)` 细边框，独立卡与合并卡共用，不给内层或合并子项重复加框。旧版浅色由 `styles/legacy.css` 单独设为纯白，覆盖外层和 `.resource-card-body` 内层；深色及玻璃材质沿用原底色。
 - 旧版浅色普通材质的总览左列只承载布局，外层 `.instance-page-rail` 背景透明，让调度器、日志入口与任务计划之间的间隙显示页面底色或壁纸；卡片底色、新版与其他材质沿用原规则。
 - 旧版总览中的任务计划作为独立卡片绘制完整四边外框，边宽与颜色统一沿用原顶边的 `1px solid var(--border)`；新版右栏及任务配置页沿用各自结构。
 - 旧版统计页五个栏目统一使用 `.legacy-stats-card` 外层容器；体力变化的标题、时间范围、图例和画布收在同一卡片中，画布取消重复的内层圆角边框。
