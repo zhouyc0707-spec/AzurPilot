@@ -24,6 +24,9 @@ let storeState: AnnouncementStoreState = {
 }
 
 const listeners = new Set<() => void>()
+let inFlight: Promise<void> | undefined
+let pollingConsumers = 0
+let pollingTimer: ReturnType<typeof setInterval> | undefined
 
 function notifyListeners() {
   listeners.forEach(fn => fn())
@@ -56,11 +59,11 @@ export function getAnnouncementSnapshot(): AnnouncementStoreState {
   return storeState
 }
 
-export async function fetchAnnouncement(force = false) {
+export function fetchAnnouncement(force = false): Promise<void> {
+  // 外壳、主页与公告页共享同一请求；手动刷新也复用正在进行的查询。
+  if (inFlight) return inFlight
   storeState = { ...storeState, loading: true }
-  notifyListeners()
-  try {
-    const result = await api.request('announcement.get', { force })
+  inFlight = Promise.resolve().then(() => api.request('announcement.get', { force })).then(result => {
     storeState = {
       ...storeState,
       data: result,
@@ -68,14 +71,32 @@ export async function fetchAnnouncement(force = false) {
       error: '',
       lastReadId: readStoredId(),
     }
-  } catch (err) {
+  }, err => {
     storeState = {
       ...storeState,
       loading: false,
       error: (err as Error).message || '获取公告失败',
     }
-  }
+  }).finally(() => {
+    inFlight = undefined
+    notifyListeners()
+  })
   notifyListeners()
+  return inFlight
+}
+
+/** 只由首个已连接的使用者启动轮询，最后一个退出时清理。 */
+function retainPolling() {
+  if (pollingConsumers++ === 0) {
+    void fetchAnnouncement(false)
+    pollingTimer = setInterval(() => { void fetchAnnouncement(false) }, 120_000)
+  }
+  return () => {
+    if (--pollingConsumers === 0) {
+      clearInterval(pollingTimer)
+      pollingTimer = undefined
+    }
+  }
 }
 
 export function markAnnouncementAsRead() {
@@ -96,13 +117,7 @@ export function useAnnouncement() {
 
   useEffect(() => {
     if (connection !== 'ready') return
-    // 首屏拉取
-    void fetchAnnouncement(false)
-    // 后台定期检查（每 2 分钟）
-    const timer = setInterval(() => {
-      void fetchAnnouncement(false)
-    }, 120_000)
-    return () => clearInterval(timer)
+    return retainPolling()
   }, [connection])
 
   const refresh = useCallback(async (force = true) => {

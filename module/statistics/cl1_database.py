@@ -265,6 +265,80 @@ class Cl1Database:
             self._read_cache[cache_key] = (signature, now, data)
         return data
 
+    def get_latest_ap_resources(self, instance: str, month: str) -> Dict[str, dict]:
+        """只读总览所需的最新海里数、行动力资产，不展开整月统计。
+
+        两个字段分别取最新非空值，真实零值有效；同一时间按原始顺序取最后一条。
+        兼容树中的旧值只回退读取行动力快照族，原始历史与其他统计族不受影响。
+
+        Returns:
+            dict: 无行动力快照返回空字典；否则返回 distance、asset 对应记录，
+                从未记录的字段对应空字典，保持原有资源卡的空值显示。
+        """
+        from module.persistence.snapshots import FAMILIES, MONTH_FIELDS, load_row
+        from module.persistence.values import read_value
+
+        with self.store.transaction(write=False) as conn:
+            scope = (instance, month)
+            parent = conn.execute(
+                'SELECT field_mask FROM cl1_months WHERE instance=? AND month=?', scope,
+            ).fetchone()
+            if parent is None:
+                return {}
+            present = bool(parent['field_mask'] & (1 << MONTH_FIELDS.index('ap_snapshots')))
+            extra = conn.execute(
+                "SELECT mode,value_set_id FROM cl1_compat_fields WHERE instance=? AND month=? AND name='ap_snapshots'",
+                scope,
+            ).fetchone()
+            if not present and extra is None:
+                return {}
+            fields = FAMILIES['ap_snapshots'][1]
+            compatible = conn.execute(
+                "SELECT 1 FROM action_point_snapshots WHERE instance=? AND month=? "
+                "AND (entry_kind!='record' OR compat_value_set_id IS NOT NULL) LIMIT 1", scope,
+            ).fetchone() if present else None
+            if extra is not None or compatible is not None:
+                timeline = [load_row(conn, row, fields) for row in conn.execute(
+                    'SELECT * FROM action_point_snapshots WHERE instance=? AND month=? ORDER BY ordinal', scope,
+                )] if present else []
+                if extra is not None:
+                    value = read_value(conn, extra['value_set_id'])
+                    if extra['mode'] == 'value':
+                        timeline = value
+                    else:
+                        if not present:
+                            timeline = {}
+                        timeline.update(value)
+                if not timeline:
+                    return {}
+                # 与旧时间线保持相同排序及异常语义，不把不可读历史悄悄变成零。
+                try:
+                    timeline = sorted(timeline, key=lambda row: row.get('ts', ''))
+                except Exception:
+                    pass
+                result = {'distance': {}, 'asset': {}}
+                for row in timeline:
+                    for field, best in result.items():
+                        if row.get(field) is not None and (not best or (row.get('ts') or '') >= (best.get('ts') or '')):
+                            result[field] = row
+                return result
+            if not conn.execute(
+                'SELECT 1 FROM action_point_snapshots WHERE instance=? AND month=? LIMIT 1', scope,
+            ).fetchone():
+                return {}
+            result = {}
+            timestamp_mask = 1 << next(index for index, field in enumerate(fields) if field[0] == 'ts')
+            for field in ('distance', 'asset'):
+                mask = 1 << next(index for index, definition in enumerate(fields) if definition[0] == field)
+                row = conn.execute(
+                    f'SELECT * FROM action_point_snapshots WHERE instance=? AND month=? '
+                    f'AND (field_mask & ?) != 0 AND {field} IS NOT NULL '
+                    "ORDER BY CASE WHEN (field_mask & ?) != 0 THEN COALESCE(ts,'') ELSE '' END DESC, ordinal DESC LIMIT 1",
+                    (*scope, mask, timestamp_mask),
+                ).fetchone()
+                result[field] = load_row(conn, row, fields) if row is not None else {}
+            return result
+
 
     def _empty_data(self, month: str) -> Dict[str, Any]:
         return {

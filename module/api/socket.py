@@ -12,7 +12,7 @@ import anyio
 from pydantic import ValidationError
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
-from module.api.protocol import ApiError, AuthParams, Request, SubscribeParams, failure, response
+from module.api.protocol import AnnouncementParams, ApiError, AuthParams, Request, SubscribeParams, failure, response
 from module.logger import logger
 from module.runtime.password_utils import REMOTE_ACCESS_HEADER, is_local_client
 
@@ -178,6 +178,7 @@ class Session:
         self.stock_update = {}
         self.notification_changed = asyncio.Event()
         self.notification_pending: list[dict] = []
+        self.announcement_task = None
 
     async def enqueue(self, message: dict):
         """将消息放入发送队列，遇到慢客户端时主动断开连接以实现背压保护。
@@ -245,6 +246,8 @@ class Session:
             # ASGI 服务器可能在客户端退出时取消整个会话作用域。
             # 屏蔽外层取消，确保收发任务实际结束后再归还连接槽位。
             with anyio.CancelScope(shield=True):
+                if self.announcement_task is not None:
+                    tasks.append(self.announcement_task)
                 for task in tasks:
                     task.cancel()
                 await asyncio.gather(*tasks, return_exceptions=True)
@@ -306,6 +309,14 @@ class Session:
                     self.preview_changed.set()
                     self.stock_changed.set()
                     result = {'topics': subscription.topics, 'instance': subscription.instance}
+                elif request.method == 'announcement.get':
+                    params = AnnouncementParams.model_validate(request.params)
+                    if self.announcement_task is not None and not self.announcement_task.done():
+                        raise ApiError('RATE_LIMITED', '公告正在刷新，请等待当前请求完成')
+                    # 仅只读公告可异步返回；配置保存、任务启停等仍保持原有顺序。
+                    self.remember_response(request_id)
+                    self.announcement_task = asyncio.create_task(self.announcement(request_id, params.force))
+                    continue
                 else:
                     async with self.gateway.workers:
                         result = await asyncio.to_thread(self.gateway.router.dispatch, request.method, request.params)
@@ -325,10 +336,31 @@ class Session:
                     logger.exception('WebSocket API 执行失败')
                 reply = failure(request_id, ApiError('INTERNAL_ERROR', '服务暂时无法完成请求，请检查服务日志'))
             if request_id:
-                self.responses[request_id] = True
-                if len(self.responses) > 128:
-                    self.responses.popitem(last=False)
+                self.remember_response(request_id)
             await self.enqueue(reply)
+
+    def remember_response(self, request_id):
+        """为已处理或正在后台处理的请求保留有界去重记录。"""
+        self.responses[request_id] = True
+        if len(self.responses) > 128:
+            self.responses.popitem(last=False)
+
+    async def announcement(self, request_id, force):
+        """公告独立等待外网结果，并通过原响应队列返回。"""
+        try:
+            result = await self.gateway.router.announcements.get_async(force)
+            if not self.authorized or (self.paired_token and not self.gateway.paired_authorized(self.paired_token)):
+                raise ApiError('UNAUTHORIZED', '配对已撤销，请重新配对')
+            reply = response(request_id, result)
+        except ApiError as exc:
+            reply = failure(request_id, exc)
+        except Exception:
+            logger.exception('公告后台查询失败')
+            reply = failure(request_id, ApiError('INTERNAL_ERROR', '公告暂时无法加载'))
+        try:
+            await self.enqueue(reply)
+        except WebSocketDisconnect:
+            pass
 
     async def producer(self):
         """定期采样订阅的主题（实例列表、总览与统计）并推送差异。"""

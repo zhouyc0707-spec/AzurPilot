@@ -17,27 +17,6 @@ from module.runtime.single_task import is_run_once_allowed, is_single_task, sing
 STATES = {1: 'running', 2: 'stopped', 3: 'error', 4: 'updating'}
 
 
-def timeline_latest(timeline: list[dict], field: str) -> dict:
-    """获取时间线中指定字段按时间最近的一个非空值所在记录。
-
-    时间线末尾的数据点未必包含该字段，因此向前查找最新记录。
-
-    Args:
-        timeline: 时间线记录列表。
-        field: 目标属性字段名称。
-
-    Returns:
-        dict: 匹配到的最新记录字典；若不存在则返回空字典。
-    """
-    best = None
-    for row in timeline:
-        if row.get(field) is None:
-            continue
-        if best is None or (row.get('ts') or '') >= (best.get('ts') or ''):
-            best = row
-    return best or {}
-
-
 def monthly_statistics_resources(instance: str) -> list[dict]:
     """获取大世界总览本月累计统计资源（海里数与行动力资产）。
 
@@ -48,14 +27,14 @@ def monthly_statistics_resources(instance: str) -> list[dict]:
         list[dict]: 格式化后的资源字典列表。
     """
     from module.config.time_source import now as current_time
-    from module.statistics.opsi_month import get_ap_timeline
+    from module.statistics.cl1_database import db as cl1_db
 
     today = current_time()
-    timeline = get_ap_timeline(today.year, today.month, instance)
-    if not timeline:
+    latest = cl1_db.get_latest_ap_resources(instance, today.strftime('%Y-%m'))
+    if not latest:
         return []
-    distance = timeline_latest(timeline, 'distance')
-    asset = timeline_latest(timeline, 'asset')
+    distance = latest['distance']
+    asset = latest['asset']
     return [
         {'name': 'Distance', 'label': '海里数', 'value': distance.get('distance'),
          'limit': None, 'total': None, 'record': str(distance.get('ts', '')).replace('T', ' ')[:19]},

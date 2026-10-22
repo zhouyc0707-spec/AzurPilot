@@ -1,5 +1,6 @@
 """公告服务与 API 分发回归测试。"""
-import time
+import asyncio
+import threading
 import unittest
 from unittest.mock import Mock, patch
 
@@ -59,6 +60,57 @@ class AnnouncementServiceTest(unittest.TestCase):
         with patch('module.base.api_client.ApiClient.get_announcement', return_value=mock_data):
             res = router.dispatch('announcement.get', {'force': True})
             self.assertEqual(res, mock_data)
+
+    def test_empty_and_failed_fetches_are_cached_until_completion_ttl(self):
+        for outcome in (None, RuntimeError('offline')):
+            with self.subTest(outcome=outcome):
+                service = AnnouncementService(ttl=2)
+                with patch('module.base.api_client.ApiClient.get_announcement',
+                           side_effect=[outcome, {'announcementId': 'recovered'}]) as fetch, \
+                        patch('module.api.announcement_service.time.monotonic', return_value=10) as clock:
+                    self.assertIsNone(service.get())
+                    clock.return_value = 11
+                    self.assertIsNone(service.get())
+                    self.assertEqual(fetch.call_count, 1)
+                    clock.return_value = 12
+                    self.assertEqual(service.get(), {'announcementId': 'recovered'})
+                    self.assertEqual(fetch.call_count, 2)
+
+    def test_failed_refresh_keeps_old_announcement(self):
+        with patch('module.base.api_client.ApiClient.get_announcement',
+                   side_effect=[{'announcementId': 'old'}, RuntimeError('offline')]) as fetch:
+            self.assertEqual(self.service.get(), {'announcementId': 'old'})
+            self.assertEqual(self.service.get(force=True), {'announcementId': 'old'})
+            self.assertEqual(self.service.get(), {'announcementId': 'old'})
+            self.assertEqual(fetch.call_count, 2)
+
+
+class AnnouncementAsyncTest(unittest.IsolatedAsyncioTestCase):
+    async def test_inflight_is_shared_and_disconnect_does_not_cancel_other_clients(self):
+        service = AnnouncementService()
+        started, release = threading.Event(), threading.Event()
+
+        def slow_fetch(**kwargs):
+            started.set()
+            if not release.wait(3):
+                raise AssertionError('测试未释放查询')
+            return {'announcementId': 'shared'}
+
+        with patch('module.base.api_client.ApiClient.get_announcement', side_effect=slow_fetch) as fetch:
+            first = asyncio.create_task(service.get_async())
+            try:
+                self.assertTrue(await asyncio.to_thread(started.wait, 2))
+                second = asyncio.create_task(service.get_async(force=True))
+                await asyncio.sleep(0)
+                first.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await first
+                self.assertFalse(second.done())
+                release.set()
+                self.assertEqual(await asyncio.wait_for(second, 2), {'announcementId': 'shared'})
+                self.assertEqual(fetch.call_count, 1)
+            finally:
+                release.set()
 
 
 if __name__ == '__main__':

@@ -154,6 +154,8 @@ flowchart TD
     N --> O{method?}
     O -- auth.login --> P[验证密码 置 authorized]
     O -- events.subscribe --> Q[原子替换订阅 清空缓存]
+    O -- announcement.get --> A1[登记 ID 并启动独立公告等待] --> K
+    A1 -. 公告结果 .-> S
     O -- 其他 --> R[Semaphore(8) + to_thread 走 dispatch]
     P & Q & R --> S[response/failure 入发送队列] --> K
     F -.-> T[producer 分频采样重主题<br/>overview 1s/instances 2s<br/>指纹未变不推送]
@@ -166,7 +168,7 @@ flowchart TD
 1. **升级前校验**：Origin 存在时其 scheme 必须是 http/https 且 netloc 与 Host 头一致，否则 1008 拒绝——这一步发生在 `accept()` 之前，跨站脚本无法借浏览器发起跨站 WebSocket。
 2. **认证判定**：`Session.authorized = 本机直连 or 密码为空`。本机判定由 `is_local_client` 完成：来源地址、Host 头、Origin 三者都必须是 `127.0.0.1/::1/localhost`，且未命中远程访问隧道标记头 `x-azurpilot-remote-access`（隧道流量同样来自回环，靠标记头区分）。
 3. **登录退避**：`auth.login` 用 `secrets.compare_digest` 比对；失败按来源 IP 记数，锁定 `min(60, 次数×2)` 秒。
-4. **业务执行**：除 `auth.login` 与 `events.subscribe` 外，所有方法经 `asyncio.to_thread` 在工作线程执行（阻塞 IO 不阻塞事件循环），`Semaphore(8)` 限制全局并发。
+4. **业务执行**：普通方法按连接接收顺序经 `asyncio.to_thread` 执行，`Semaphore(8)` 限制全局并发。`auth.login`、`events.subscribe` 在会话内处理；只读 `announcement.get` 在认证、参数校验、限流及请求 ID 登记后独立等待公告结果，其他请求可以先返回。每连接最多一个在途公告请求，断线取消会话等待，完成时再次检查授权；配置保存、任务启停等仍按原有顺序执行。
 5. **订阅推送**：`producer` 以各 topic 间隔（overview 1s、instances 2s、emulator 1s）采样缓存状态，序列化指纹与上次相同则跳过。`emulator` 含服务器当前时间，供设置页每秒更新倒计时；它不访问模拟器。日志、截图与任务通知都不轮询：worker 日志队列每接收一条日志就通过 `log_hub` 唤醒 `log_producer`，截图由 `preview` hub 唤醒，任务通知由 `notify_hub` 唤醒独立的 `notification_producer`。快照循环跳过这些推送主题，避免复用前一主题的采样动作。用户切换实例时，旧订阅尚未完成的结果按对象身份比对丢弃；通知是全局一次性事件，不按当前实例过滤。
 6. **发送**：所有出站消息经单条发送队列；事件按实际发送顺序获得单调递增 `seq`。`send_json` 带 10 秒超时，写死循环即断开。
 
@@ -291,8 +293,9 @@ API 模块自身的行为参数来自部署配置 `config/deploy.yaml`（经 `St
 
 一个 uvicorn 事件循环承载全部会话；阻塞操作一律离开事件循环：
 
-- **Session 的六个 asyncio 任务**（`run()` 启动）：`reader`（收请求）、`writer`（发消息）、`producer`（overview/instances 分频采样）、`log_producer`（日志到达即推送）、`preview_producer`（截图推送）、`stock_producer`（交易所事件即时推送）。任一任务结束即触发全会话收尾；收尾用 `anyio.CancelScope(shield=True)` 屏蔽外层取消，保证归还连接计数前收发任务真正结束——ASGI 服务器可能在客户端退出时取消整个会话作用域。
+- **Session 的常驻 asyncio 任务**（`run()` 启动）：`reader`（收请求）、`writer`（发消息）、`producer`（overview/instances 分频采样）、`log_producer`（日志到达即推送）、`preview_producer`（截图推送）、`stock_producer`（交易所事件即时推送）、`notification_producer`（任务通知）。任一常驻任务结束即触发全会话收尾；收尾用 `anyio.CancelScope(shield=True)` 屏蔽外层取消，并取消、等待在途公告任务，保证归还连接计数前收发任务真正结束。
 - **业务线程**：`asyncio.to_thread` 派发，`Gateway.workers = Semaphore(8)` 同时约束 dispatch 与订阅采样的并发总量，防止一次大批量统计查询耗尽默认线程池。
+- **公告线程**：外网查询独占一个线程，多个页面及连接共享在途结果，不占用普通业务 worker。成功、空结果和失败都从请求完成时缓存 90 秒；失败或 304 保留已有公告。强制刷新可跳过已完成的缓存，已有查询仍合并；一个浏览器断开不取消其他连接共用的查询。
 - **跨进程写保护**：`ConfigService.patch/delete` 持有 `self.lock`（RLock）+ `config_transaction` 文件锁（`.json.lock`，msvcrt/fcntl，等待上限 15 秒），与核心运行器的配置写回互斥。
 - **实例生命周期锁**：`start/stop/delete` 全部走 `ProcessManager._get_lifecycle_lock(instance)`，与 worker 线程内的状态变更互斥。
 - **线程通知**：preview 帧由 worker 子进程编码、父进程线程转发到 `hub`，再用 `loop.call_soon_threadsafe` 唤醒 `preview_producer`——跨线程只传「有新帧」信号，帧本体在 hub 里，订阅者自取。

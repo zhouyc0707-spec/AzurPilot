@@ -21,6 +21,8 @@ frontend/ 是 AzurPilot 的 React 浏览器控制台，覆盖主页与实例导�
 
 frontend/README.md 与 frontend/API.md 已经是本前端的详细文档：前者覆盖界面行为、主题材质、启动开发与迁移边界，后者定义消息协议。本文不重复其内容，只作为模块文档体系的索引篇，说明目录分工、构建测试入口与生成产物红线。
 
+公告加载不作为首屏就绪条件：`app/announcement.ts` 让外壳、主页和公告页共享一次在途查询和一个两分钟轮询；最后一个已连接使用者离开时清理轮询，重连恢复查询。手动刷新与正在进行的查询合并，已有正文和已读状态保留。后端只让 `announcement.get` 独立等待外网结果，避免公告超时阻塞实例、配置架构和总览；响应仍使用原请求 ID，其他操作顺序不变。回归入口为 `src/app/announcement.test.ts`、`tests/test_announcement_service.py` 和 `tests/test_announcement_socket.py`。
+
 注意：项目中的 **1280×720 是游戏截图识别的约束，不适用于 WebUI 布局**。前端按普通响应式网页开发，支持移动端折叠菜单，e2e 视口为 1440×1100。
 
 任务侧栏由 `TaskNav` 按设备布局分流，旧版和新版主题一致：宽度大于 950px 且支持悬停时，分类的二级任务使用 `TaskNavFlyout` 在主侧栏右侧展开，选中任务、点击外部或按 Escape 收起；窄屏和触屏使用 `TaskNavTree` 内嵌折叠。旧版保留自身配色、圆角与选中样式，树状高度动画仅作用于 `.task-group` 内，避免右侧浮层内容被隐藏。
