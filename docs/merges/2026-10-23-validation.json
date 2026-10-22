@@ -1,0 +1,95 @@
+{
+  "python_groups": [
+    {
+      "scope": "设备与截图工具",
+      "run": 38,
+      "passed": 38,
+      "logs": [
+        "device-tools-tests.log",
+        "native-device-tests.log"
+      ]
+    },
+    {
+      "scope": "装备/META/演习/战术学院",
+      "run": 113,
+      "passed": 113,
+      "log": "gameplay-equipment-tests.log"
+    },
+    {
+      "scope": "活动/导航/战役恢复",
+      "run": 142,
+      "passed": 142,
+      "log": "campaign-gameplay-tests.log"
+    },
+    {
+      "scope": "活动候选/API/演习维护保存",
+      "run": 73,
+      "passed": 72,
+      "skipped": 1,
+      "reason": "Windows符号链接权限",
+      "log": "config-api-targeted-tests.log"
+    },
+    {
+      "scope": "仓库识别及恢复",
+      "run": 79,
+      "passed": 79,
+      "log": "storage-targeted-tests.log"
+    },
+    {
+      "scope": "本地入口/筛选/明石/首屏优化重叠",
+      "run": 112,
+      "passed": 112,
+      "log": "local-overlap-tests.log"
+    },
+    {
+      "scope": "套餐借用及硬保护/配方/派遣",
+      "run": 76,
+      "passed": 76,
+      "log": "island-material-tests.log"
+    }
+  ],
+  "supplemental_pytest": {
+    "passed": 13,
+    "skipped": 1,
+    "subtests_passed": 3,
+    "note": "13项与前述食品测试重叠，不重复计数；上游ALAS专用测试缺少生产模块，仅该模块不存在时明确跳过，不计通过",
+    "log": "island-shop-name-tests.log"
+  },
+  "frontend_targeted": {
+    "passed": 62,
+    "files": 6
+  },
+  "frontend_typecheck": "pass",
+  "frontend_build": "pass",
+  "browser_mock": {
+    "passed": 10,
+    "themes": [
+      "light",
+      "legacy-light"
+    ],
+    "servers": [
+      "cn",
+      "en",
+      "jp",
+      "tw"
+    ],
+    "real_game_actions": false
+  },
+  "python_syntax": {
+    "files": 2678,
+    "errors": 0,
+    "existing_warnings": 12,
+    "warning_files_changed": []
+  },
+  "ruff": {
+    "changed_python_files": 116,
+    "result": "pass"
+  },
+  "config_generator_repeat": "no_diff",
+  "button_generator_modules": 65,
+  "api_contract_export": "no_diff",
+  "git_diff_check": "pass",
+  "data_schema_migration": false,
+  "upstream_tip_verified": "5e2366b5ac9d5addafd429b24fa2ded7ab5bd4d9",
+  "evidence_directory": "D:\\Codex\\reports\\upstream-dev-20261023"
+}

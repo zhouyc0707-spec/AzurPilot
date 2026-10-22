@@ -18,6 +18,7 @@ from deploy.atomic import atomic_write
 from module.api.protocol import ApiError
 from module.combat.emotion_state import EmotionRecoveryState
 from module.config.deep import deep_get
+from module.config.config_updater import campaign_event_options, refresh_campaign_events
 from module.config.redirect_utils.utils import meta_assist_limit_redirect, sea_miles_interval_redirect
 from module.config.time_source import now as current_time
 from module.config.transaction import config_transaction
@@ -313,6 +314,7 @@ class ConfigService:
 
             for task, reason in shop_warnings:
                 logger.warning(f'{task}：{reason}，已暂停任务，请检查购买配置后重新启用')
+        refresh_campaign_events(merged, self.args)
         return merged, hashlib.sha256(raw).hexdigest()
 
     def schema(self, language='zh-CN'):
@@ -340,7 +342,7 @@ class ConfigService:
             name (str): 实例名称。
 
         Returns:
-            dict: 包含 instance, revision, values 的字典。
+            dict: 包含 instance、revision、values 与实例活动候选 options 的字典。
         """
         data, revision = self.read(name)
         # 内部身份不属于参数契约，编辑界面只接收参数组。
@@ -352,7 +354,9 @@ class ConfigService:
             report = get_planner_report(data)
             if report is not None:
                 planner['PlannerReport'] = json.dumps(report, ensure_ascii=False, sort_keys=True)
-        return {'instance': name, 'revision': revision, 'values': data}
+        options = {f'{task}.Campaign.Event': candidates
+                   for task, candidates in campaign_event_options(data, self.args).items()}
+        return {'instance': name, 'revision': revision, 'values': data, 'options': options}
 
     def export(self, name):
         """配置导出携带方案，排除调度运行变量和资源历史。"""
@@ -535,6 +539,11 @@ class ConfigService:
                         pending = False
                     if not pending:
                         scheduler['NextRun'] = exercise_now.isoformat(sep=' ')
+            # 同一批可能同时修改包名，必须以最终服务器校验显式选择的活动。
+            for task, options in campaign_event_options(data, self.args).items():
+                if options and f'{task}.Campaign.Event' in seen and data[task]['Campaign']['Event'] not in options:
+                    raise ApiError('INVALID_PARAMS', f'{task}.Campaign.Event: 请选择当前服务器的活动')
+            refresh_campaign_events(data, self.args)
             # 按最终配置校准；同一批先改心情再改恢复条件，也使用最终条件。
             now = current_time() if any(group in ('Emotion', 'PublicEmotion') and
                                         any(arg.endswith('Value') for arg in args)

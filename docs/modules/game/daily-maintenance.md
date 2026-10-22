@@ -141,6 +141,8 @@ module/
 
 游戏提示处理器返回 `True` 只表示本帧已点击关闭；学院流程重置空课程确认计时并继续截图，不把关闭提示当成任务完成，不清除学员或技能选择进度。完成课程处理后，必须正向识别返回 `REWARD_CHECK` 才结束循环，随后按实际读取的课程时间排程。相关离线回归见 `tests/test_tactical_game_tips.py`。
 
+页面识别复用 `ui_page_appear(page_tactical)`，兼容英服备用标题 `TACTICAL_CHECK_2`；页面相关计时器同时重置或清除两种标题模板。
+
 选教材是核心决策点：`_tactical_books_get()` 轮询至教材数量稳定（15 次失败抛 `ScriptError`）→ 先选中第一本 → 按当前技能进度做**经验溢出过滤**（OCR `current/total`，10 级满级总经验 5800，`current + 教材经验 > total + 允许溢出量` 的教材被剔除）→ `BOOK_FILTER` 按配置排序 → 点击最优教材开课；过滤器无命中则取消本次课程。技能满级时（OCR 结果含 `MA`，即 `NEXT:MAX`），`Tactical_SkillAutoSwitch` 开启则自动切到下一个未满级技能；`AddNewStudent_Enable` 开启时从船坞选一名等级在 `AddNewStudent_MinLevel` ~ `AddNewStudent_MaxLevel` 之间的舰娘（等级限制为 0 表示该方向不限，`MaxLevel` 默认 0；阵营过滤自然跳过 META 舰）开始新课程。
 
 排程：OCR 各槽位剩余时间得 `tactical_finish`，`task_delay(target=...)` 精确到课程完成时刻；教材耗尽则延迟到次日服务器刷新。

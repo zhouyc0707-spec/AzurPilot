@@ -1,0 +1,188 @@
+{
+  "base": "ea067052a",
+  "before": "ed451aa8c",
+  "upstream": "5e2366b5a",
+  "working_tree": "D:\\Codex\\workspace\\AzurPilot-upstream-dev-20261022",
+  "custom_paths": 883,
+  "upstream_changed_paths": 1901,
+  "overlap_paths": 40,
+  "exclusive_paths_checked": 843,
+  "exclusive_existing_blob_checks": 836,
+  "exclusive_deletion_checks": 7,
+  "exclusive_unexpected_changes": [],
+  "allowed_document_changes": [
+    {
+      "path": "定制化修改清单.md",
+      "before_blob": "3520b1c5dc5ed81db8466c391c0c674ac6fc73ba",
+      "current_blob": "58513d0630af7a8e4cfc2f9bda0f46a52c27a293"
+    }
+  ],
+  "reviewed_exclusive_file_changes": [
+    {
+      "path": "tests/test_island_character_filter.py",
+      "before_blob": "0baba18256a169d88a9ed9cf73d6511a234a7041",
+      "current_blob": "0e5d78b1aaa862dfba374bd3dfe5e835ab470cfd",
+      "review_reason": "适配上游共享角色筛选状态循环：入口可以限时重试；未确认筛选弹窗时仍只允许点击入口，STAMINA/CONFIRM 等内部选项一律不能点击。保留原防穿透保护，调整已不适用的入口严格一次断言。"
+    },
+    {
+      "path": "tests/test_island_planned_food_materials.py",
+      "before_blob": "f056e3e2a463f3409bd4240d50c10d855161b9b7",
+      "current_blob": "59b2e5950916bde8a89f6a385f036c2d074c2f88",
+      "review_reason": "适配已获用户确认的套餐先用再补行为，保留原方法并更新实际扣料数；新增未达目标不能借用与订单/菜单/最低库存硬保护测试。"
+    }
+  ],
+  "configuration_custom_leaf_count": 1331,
+  "configuration_removed_leaf_count": 18,
+  "configuration_unexpected_change_count": 0,
+  "configuration_unexpected_restore_count": 0,
+  "configuration_reviewed_change_count": 0,
+  "generated_custom_attributes_checked": 40,
+  "generated_custom_attributes_changed": [],
+  "generated_removed_attributes_restored": [],
+  "python_paths_checked": 453,
+  "python_syntax_errors": [],
+  "python_custom_entities_checked": 6504,
+  "python_exact_comparisons": 6481,
+  "python_missing_entities_count": 0,
+  "python_changed_local_only_entities_count": 0,
+  "python_semantic_overlap_count": 23,
+  "python_restored_deleted_entities_count": 0,
+  "config_reviews_used": [],
+  "python_reviews_used": [
+    {
+      "path": "module/island/island_shop_base.py",
+      "entity": "IslandShopBase._limit_planned_food_batch"
+    },
+    {
+      "path": "tests/test_island_character_filter.py",
+      "entity": "CharacterFilterTest"
+    },
+    {
+      "path": "tests/test_island_character_filter.py",
+      "entity": "CharacterFilterTest.test_select_filter_does_not_click_through_missing_dialog"
+    },
+    {
+      "path": "tests/test_island_planned_food_materials.py",
+      "entity": "FoodMaterialTests"
+    },
+    {
+      "path": "tests/test_island_planned_food_materials.py",
+      "entity": "FoodMaterialTests.test_custom_meal_reserve_remains_effective_above_seven"
+    },
+    {
+      "path": "tests/test_island_planned_food_materials.py",
+      "entity": "FoodMaterialTests.test_custom_meal_material_reserve_is_preserved_and_actual_deduction_syncs_once"
+    }
+  ],
+  "mechanical_preservation_passed": true,
+  "semantic_review_required": true,
+  "configuration": {
+    "module/config/argument/argument.yaml": {
+      "custom_leaf_count": 101,
+      "removed_leaf_count": 0,
+      "unexpected_changes": [],
+      "reviewed_changes": [],
+      "unexpectedly_restored_removed_leaves": []
+    },
+    "module/config/argument/task.yaml": {
+      "custom_leaf_count": 1,
+      "removed_leaf_count": 0,
+      "unexpected_changes": [],
+      "reviewed_changes": [],
+      "unexpectedly_restored_removed_leaves": []
+    },
+    "module/config/argument/default.yaml": {
+      "custom_leaf_count": 0,
+      "removed_leaf_count": 0,
+      "unexpected_changes": [],
+      "reviewed_changes": [],
+      "unexpectedly_restored_removed_leaves": []
+    },
+    "module/config/argument/override.yaml": {
+      "custom_leaf_count": 0,
+      "removed_leaf_count": 0,
+      "unexpected_changes": [],
+      "reviewed_changes": [],
+      "unexpectedly_restored_removed_leaves": []
+    },
+    "module/config/argument/gui.yaml": {
+      "custom_leaf_count": 57,
+      "removed_leaf_count": 3,
+      "unexpected_changes": [],
+      "reviewed_changes": [],
+      "unexpectedly_restored_removed_leaves": []
+    },
+    "module/config/argument/dashboard.yaml": {
+      "custom_leaf_count": 0,
+      "removed_leaf_count": 0,
+      "unexpected_changes": [],
+      "reviewed_changes": [],
+      "unexpectedly_restored_removed_leaves": []
+    },
+    "module/config/argument/args.json": {
+      "custom_leaf_count": 127,
+      "removed_leaf_count": 0,
+      "unexpected_changes": [],
+      "reviewed_changes": [],
+      "unexpectedly_restored_removed_leaves": []
+    },
+    "config/template.json": {
+      "custom_leaf_count": 40,
+      "removed_leaf_count": 0,
+      "unexpected_changes": [],
+      "reviewed_changes": [],
+      "unexpectedly_restored_removed_leaves": []
+    },
+    "module/config/i18n/zh-CN.json": {
+      "custom_leaf_count": 201,
+      "removed_leaf_count": 3,
+      "unexpected_changes": [],
+      "reviewed_changes": [],
+      "unexpectedly_restored_removed_leaves": []
+    },
+    "module/config/i18n/zh-MIAO.json": {
+      "custom_leaf_count": 201,
+      "removed_leaf_count": 3,
+      "unexpected_changes": [],
+      "reviewed_changes": [],
+      "unexpectedly_restored_removed_leaves": []
+    },
+    "module/config/i18n/en-US.json": {
+      "custom_leaf_count": 201,
+      "removed_leaf_count": 3,
+      "unexpected_changes": [],
+      "reviewed_changes": [],
+      "unexpectedly_restored_removed_leaves": []
+    },
+    "module/config/i18n/ja-JP.json": {
+      "custom_leaf_count": 201,
+      "removed_leaf_count": 3,
+      "unexpected_changes": [],
+      "reviewed_changes": [],
+      "unexpectedly_restored_removed_leaves": []
+    },
+    "module/config/i18n/zh-TW.json": {
+      "custom_leaf_count": 201,
+      "removed_leaf_count": 3,
+      "unexpected_changes": [],
+      "reviewed_changes": [],
+      "unexpectedly_restored_removed_leaves": []
+    }
+  },
+  "semantic_review": {
+    "module/api/config_service.py": "规划派生、参数迁移、演习维护保存唤醒与按最终服务器刷新活动共存；API回归及双主题浏览器通过。",
+    "module/combat/combat.py": "保留本地战斗结算先取新帧及正常退出；接入共享装备处理器，默认关闭。",
+    "module/config/config_generated.py": "由源定义重生成，40个本地属性完整保留。",
+    "module/config/config_updater.py": "旧迁移与配置保护不变；实例活动刷新抽为共用函数，1331个定制leaf不变。",
+    "module/exercise/exercise.py": "维护开关、星期和选敌保留；默认关闭的装备调用在其他阶段融合。",
+    "module/island/island_select_character.py": "保留残留筛选弹窗识别/退出助手，吸收限时新帧筛选和WorkerJuu刷新等待。",
+    "module/island/island_shop_base.py": "用户确认目标达标先用再补；订单/菜单/最低库存硬保护，两阶段同源；76项回归通过。",
+    "module/os_shop/shop.py": "数量加减按钮就绪等待与本地实际成交记账共存，明石缓存/去重文件保持。",
+    "module/private_quarters/private_quarters.py": "仅修正TW单项tuple常量，精力与入房定制方法AST保留。",
+    "module/tactical/tactical_class.py": "EN备用标题适配与本地关提示后继续流程共存。",
+    "module/ui/ui.py": "同时导入岛屿页面与tactical页面；保留本地入口稳定/弹窗保护，加入复刻选择页返回。",
+    "tests/test_island_shop_production.py": "采用与用户决定一致的上游套餐边界断言；本地配方批次/在制账目测试共同保留。"
+  },
+  "semantic_review_complete": true,
+  "semantic_entities_reviewed": 23
+}

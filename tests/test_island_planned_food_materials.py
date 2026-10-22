@@ -1,4 +1,4 @@
-"""验证食品使用真实耗材计数与原套餐保留线，不改用户的手工槽位。"""
+"""验证食品实读耗材、套餐目标借用与订单等硬性库存保护。"""
 
 import unittest
 from unittest.mock import patch
@@ -95,11 +95,11 @@ class FoodMaterialTests(unittest.TestCase):
         self.ui._reserved_targets = {'cheese': 11}
         self.ui.meal_compositions = {'wake_up_call': {'required': ['iced_coffee', 'cheese'], 'numbers': [1, 1]}}
         with patch('module.island.manufacture_selector.read_selected_recipe_inventory', return_value=stocks):
-            self.assertEqual(self.ui._limit_planned_food_batch('wake_up_call', 30), 9)
-        self.quantity_setter.assert_called_once_with(self.ui, 9)
-        self.ui._sync_planned_food_materials('wake_up_call', 9)
-        self.assertEqual(self.ui.warehouse_counts['cheese'], 11)
-        self.assertEqual(self.ui._planned_food_dispatched['wake_up_call'], 9)
+            self.assertEqual(self.ui._limit_planned_food_batch('wake_up_call', 30), 12)
+        self.quantity_setter.assert_called_once_with(self.ui, 12)
+        self.ui._sync_planned_food_materials('wake_up_call', 12)
+        self.assertEqual(self.ui.warehouse_counts['cheese'], 8)
+        self.assertEqual(self.ui._planned_food_dispatched['wake_up_call'], 12)
 
     def test_filled_target_does_not_set_a_zero_quantity_or_start_more_food(self):
         stocks = self.inventory('latte', product=8)
@@ -116,11 +116,31 @@ class FoodMaterialTests(unittest.TestCase):
         self.ui._reserved_targets = {'cheese': 6}
         self.ui.meal_compositions = {'wake_up_call': {'required': ['iced_coffee', 'cheese'], 'numbers': [1, 1]}}
         with patch('module.island.manufacture_selector.read_selected_recipe_inventory', return_value=stocks):
-            self.assertEqual(self.ui._limit_planned_food_batch('wake_up_call', 7), 4)
-        self.ui._sync_planned_food_materials('wake_up_call', 4)
-        self.assertEqual(self.ui.warehouse_counts['cheese'], 6)
-        self.assertEqual(self.ui._planned_food_dispatched['wake_up_call'], 4)
+            self.assertEqual(self.ui._limit_planned_food_batch('wake_up_call', 7), 7)
+        self.ui._sync_planned_food_materials('wake_up_call', 7)
+        self.assertEqual(self.ui.warehouse_counts['cheese'], 3)
+        self.assertEqual(self.ui._planned_food_dispatched['wake_up_call'], 7)
         self.assertEqual(self.ui._planned_food_materials, {})
+
+    def test_meal_target_does_not_release_order_menu_or_minimum_stock(self):
+        stocks = self.inventory('wake_up_call')
+        stocks[3006]['stock'] = 10
+        self.ui._reserved_targets = {'cheese': 10}
+        self.ui._planner_protection = {'cheese': 10}
+        self.ui.meal_compositions = {'wake_up_call': {'required': ['iced_coffee', 'cheese'], 'numbers': [1, 1]}}
+        with patch('module.island.manufacture_selector.read_selected_recipe_inventory', return_value=stocks):
+            self.assertEqual(self.ui._limit_planned_food_batch('wake_up_call', 7), 0)
+        self.quantity_setter.assert_not_called()
+
+    def test_meal_material_below_production_target_cannot_be_borrowed(self):
+        stocks = self.inventory('wake_up_call')
+        stocks[3006]['stock'] = 9
+        self.ui._reserved_targets = {'cheese': 10}
+        self.ui._planner_protection = {'cheese': 2}
+        self.ui.meal_compositions = {'wake_up_call': {'required': ['iced_coffee', 'cheese'], 'numbers': [1, 1]}}
+        with patch('module.island.manufacture_selector.read_selected_recipe_inventory', return_value=stocks):
+            self.assertEqual(self.ui._limit_planned_food_batch('wake_up_call', 7), 0)
+        self.quantity_setter.assert_not_called()
 
     def test_actual_milk_ledger_updates_child_constraint_without_double_deduction(self):
         stocks = self.inventory('latte')

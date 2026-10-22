@@ -234,7 +234,9 @@ class CharacterFilterTest(unittest.TestCase):
 
         self.assertFalse(stub.select_character_filter())
 
-        self.assertEqual(device.clicks, [ENTRY])
+        # 入口可以限时重试，但没有确认弹窗时不得点击其内部选项。
+        self.assertGreaterEqual(device.count(ENTRY), 1)
+        self.assertEqual(set(device.clicks), {ENTRY})
 
     def test_back_to_postmanage_closes_filter_instead_of_spinning(self):
         """核心回归：卡在筛选弹窗时，退出流程必须点得动，而不是空转到设备级卡死。"""

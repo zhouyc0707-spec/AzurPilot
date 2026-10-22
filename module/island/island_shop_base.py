@@ -653,9 +653,12 @@ class IslandShopBase(Island, WarehouseOCR):
             if local:
                 self.warehouse_counts[local] = data['stock']
             if data['cost'] > 0:
-                reserved = max(getattr(self, '_planner_protection', {}).get(local, 0),
-                               self._reserved_targets.get(local, 0) if product in self.meal_compositions else 0)
-                number = min(number, max(data['stock'] - reserved, 0) // data['cost'])
+                if product in self.meal_compositions:
+                    usable = self._get_usable_stock(local, data['stock'])
+                else:
+                    reserved = getattr(self, '_planner_protection', {}).get(local, 0)
+                    usable = max(data['stock'] - reserved, 0)
+                number = min(number, usable // data['cost'])
         if number > 0 and not set_manufacture_quantity(self, number):
             raise GameStuckError(f'{self._item_cn(product)}下单前实际生产次数无法确认')
         self._planned_food_materials = inventory
@@ -1236,9 +1239,10 @@ class IslandShopBase(Island, WarehouseOCR):
     def _get_usable_stock(self, material, material_stock):
         """获取套餐制作时指定原材料的可用库存。
 
-        保留线内商品（_reserved_targets）只能消耗仓库库存中超出自身
-        目标的部分，避免套餐消耗其尚未达标的保底库存；其余材料直接用
-        仓库库存。在产数量不计入可用量（做套餐查原料时在产不算）。
+        保留线内商品（_reserved_targets）只有在库存低于自身目标时才完全
+        禁止作为套餐原料；达到目标后允许先消耗，再由套餐分解补充回目标。
+        订单、经营菜单和显式最低库存由 _planner_protection 始终硬性保留，
+        不随生产目标达标而释放。在产数量不计入可用量。
 
         Args:
             material (str): 原料名称。
@@ -1247,8 +1251,10 @@ class IslandShopBase(Island, WarehouseOCR):
         Returns:
             int: 允许被套餐消耗的可用库存数量。
         """
-        protected = max(self._reserved_targets.get(material, 0),
-                        getattr(self, '_planner_protection', {}).get(material, 0))
+        if material in self._reserved_targets:
+            if material_stock < self._reserved_targets[material]:
+                return 0
+        protected = getattr(self, '_planner_protection', {}).get(material, 0)
         return max(0, material_stock - protected)
 
     def get_max_producible(self, product, requested_quantity, skip_zero_materials=False):
@@ -1276,9 +1282,9 @@ class IslandShopBase(Island, WarehouseOCR):
                 quantity_per = composition.get('quantity_per', 1)
                 if quantity_per == 0:
                     continue
-                # 保留线内的产品只能消耗"仓库超额库存"（见 _get_usable_stock），
-                # 否则套餐会在前置项目因材料不足被跳过时，把其本就不够的
-                # 保底库存吃掉。
+                # 保留线内的产品低于目标时不能消耗（见 _get_usable_stock），
+                # 避免套餐吃掉前置项目尚未达标的保底库存；达到目标后允许
+                # 先消耗并由套餐分解补回。
                 usable_stock = self._get_usable_stock(material, material_stock)
                 max_by_material = usable_stock // quantity_per
                 if max_by_material <= 0:
@@ -1289,7 +1295,7 @@ class IslandShopBase(Island, WarehouseOCR):
                     else:
                         # 排产阶段 或 有但不满足一批：严格处理
                         if material in self._reserved_targets:
-                            logger.info(f"[岛屿]   {self._item_cn(product)} 原材料 {self._item_cn(material)} 无超额库存（仓库未超出目标 {self._reserved_targets[material]}），暂不消耗其保底库存")
+                            logger.info(f"[岛屿]   {self._item_cn(product)} 原材料 {self._item_cn(material)} 无可用库存（仓库 {material_stock}，生产目标 {self._reserved_targets[material]}），保留未达标目标与订单、菜单和最低库存")
                         else:
                             logger.info(f"[岛屿]   {self._item_cn(product)} 缺少原材料: {self._item_cn(material)} (库存: {material_stock})")
                         return 0

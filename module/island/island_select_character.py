@@ -6,6 +6,7 @@
 from module.island_select_character.assets import *
 from module.base.button import *
 from module.base.utils import color_similar, color_similarity_2d, crop, get_color
+from module.base.timer import Timer
 import numpy as np
 from module.ocr.ocr import Digit, DigitCounter
 from module.ui.ui import UI
@@ -594,46 +595,51 @@ class SelectCharacter(UI):
         return False
 
     def select_character_filter(self):
-        """打开「筛选」并选「剩余体力」，确认后校验弹窗确实关闭。
+        """切换角色选择面板中的筛选与排序方式为按体力排序。
 
-        原先点完「确定」直接返回 True。低帧率/云机下这次点击可能不生效，弹窗会一直
-        留在屏幕上；而退出流程依赖的模板（角色页、岗位详情、产品选择…）都认不出这个
-        弹窗，只能空转到 15 秒超时——画面长时间不变还会升级成设备级卡死并重启游戏
-        （2026-09-26 18:31 实例：卡死截图正是这个筛选弹窗）。这里改为等弹窗出现、
-        选择并确认后再校验，未关闭就重试。
-
-        注意不要用 wait_until_appear / wait_until_disappear：它们没有超时，弹窗不出现
-        就会一直等下去。这里一律用有界的 self.loop。
+        角色页标题会先于底部筛选按钮和弹窗完成渲染。这里以最新截图驱动
+        完整状态流程，直到筛选弹窗关闭，而不是点击一次后固定等待并盲点。
 
         Returns:
-            bool: 筛选已应用且弹窗确认关闭返回 True。
+            bool: 是否成功完成筛选切换操作。
         """
-        if not self.is_character_filter_visible():
-            if not self.appear_then_click(SELECT_CHARACTER_FILTER):
-                return False
-            # 等弹窗真正出现再点，避免点到弹窗背后的角色卡
-            opened = False
-            for _ in self.loop(timeout=4, skip_first=False):
-                if self.is_character_filter_visible():
-                    opened = True
-                    break
-            if not opened:
-                logger.warning("[岛屿] 角色筛选弹窗未出现")
-                return False
+        self.interval_clear([
+            SELECT_CHARACTER_FILTER,
+            SELECT_CHARACTER_FILTER_STAMINA,
+            SELECT_CHARACTER_FILTER_CONFIRM,
+        ])
+        filter_clicked = False
+        stamina_clicked = False
+        confirm_clicked = False
+        retry_timer = Timer(2, count=4).start()
 
-        # 选一次「剩余体力」；选中后按钮外观变化、模板可能不再命中，所以随后一律点
-        # 「确定」直到弹窗消失（两个按钮都能关掉弹窗）。
-        clicked_stamina = False
-        for _ in self.loop(timeout=8, skip_first=False):
-            if not self.is_character_filter_visible():
-                return True
-            if not clicked_stamina and self.appear(SELECT_CHARACTER_FILTER_STAMINA, offset=30):
-                self.device.click(SELECT_CHARACTER_FILTER_STAMINA)
-                clicked_stamina = True
+        for _ in self.loop(timeout=15, skip_first=False):
+            popup_visible = self.is_character_filter_visible()
+            if popup_visible:
+                if not stamina_clicked:
+                    # 弹窗已由确认按钮或体力选项任一命中确认，选项本身颜色会随
+                    # 选中状态变化，因此这里直接点击固定位置，避免二次匹配失败。
+                    self.device.click(SELECT_CHARACTER_FILTER_STAMINA)
+                    stamina_clicked = True
+                    retry_timer.reset()
+                    continue
+
+                if not confirm_clicked or retry_timer.reached():
+                    if self.appear_then_click(SELECT_CHARACTER_FILTER_CONFIRM, offset=(10, 10)):
+                        confirm_clicked = True
+                        retry_timer.reset()
                 continue
-            self.device.click(SELECT_CHARACTER_FILTER_CONFIRM)
-        logger.warning("[岛屿] 角色筛选弹窗未能确认关闭")
-        return self.close_character_filter()
+
+            if confirm_clicked:
+                return True
+
+            if not filter_clicked or retry_timer.reached():
+                if self.appear_then_click(SELECT_CHARACTER_FILTER, offset=(10, 10)):
+                    filter_clicked = True
+                    retry_timer.reset()
+
+        logger.warning("[岛屿] 角色体力筛选界面未完成，无法继续识别角色")
+        return False
 
     @staticmethod
     def parse_character_filter(character_list):
@@ -677,8 +683,12 @@ class SelectCharacter(UI):
             logger.info("[岛屿] 仅选择 WorkerJuu，先应用体力排序")
             if not self.select_character_filter():
                 return None
-            screenshot = self.device.screenshot()
-            return self.find_specific_character(screenshot, "WorkerJuu")
+            for _ in self.loop(timeout=8, skip_first=False):
+                position = self.find_specific_character(self.device.image, "WorkerJuu")
+                if position is not None:
+                    return position
+            logger.warning("[岛屿] 体力筛选完成后仍未识别到 WorkerJuu")
+            return None
 
         # 计算需要识别的角色集合（包含列表角色+最终回退的WorkerJuu）
         target_names = list(character_list)

@@ -200,8 +200,9 @@ export function TaskConfig() {
         </div>
       </div>
       {task === 'Alas' && group === 'EmulatorManagement' && <EmulatorRuntimeStatus instance={instance}/>}
-      {visible.map(([arg, field]) => {
+      {visible.map(([arg, definition]) => {
         const path = `${task}.${group}.${arg}`
+        const field = {...definition, option: config.options?.[path] ?? definition.option}
         const edit = edits[path]
         const value = edit ? edit.value : config.values[task]?.[group]?.[arg] ?? field.value
         const label = t(`${group}.${arg}.name`)

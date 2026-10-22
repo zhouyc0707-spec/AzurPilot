@@ -78,7 +78,7 @@ module/island_farm/ 等 16 个目录  # 薄壳：仅 button_extract 生成的 as
 | 组件 | 基类 | 职责 |
 | --- | --- | --- |
 | `Island` | `SelectCharacter` | 岛屿全局基类：`goto_management`/`goto_postmanage`/`island_map_goto`、岗位详情状态机（`post_open`/`post_get_and_add`/`confirm_post_add_order`）、`select_product`（滑动选品）、材料 OCR 与商店补货（`ensure_select_product_material`）、`warehouse_filter`、`buy_shop_item` |
-| `SelectCharacter` | `UI` | 角色网格（前两行）身份/工作/选中状态识别，`WorkerJuu` 体力无限兜底，滚动列表严格查找 |
+| `SelectCharacter` | `UI` | 角色网格（前两行）身份/工作/选中状态识别，`WorkerJuu` 体力无限兜底；角色选择器自行等待筛选界面稳定并完成体力排序，再查找默认位于列表末尾的 `WorkerJuu` |
 | `WarehouseOCR` | — | 6x2 仓库网格上按模板定位物品并 OCR 数量（`ocr_item_quantity`） |
 | `IslandShopBase` | `Island, WarehouseOCR` | 店铺框架：`Meal1~8` 槽位需求、套餐分解、保留线排产、循环填岗 |
 | `IslandUI` | `UI` | 岛屿手机页的运输/管理入口，覆盖 `ui_additional` 处理维护公告与信息弹窗 |
@@ -157,6 +157,8 @@ module/island_farm/ 等 16 个目录  # 薄壳：仅 button_extract 生成的 as
 
 离线回归入口：`tests/test_island_post_list.py`（匿名实拍空卡、标题实际定位及误匹配、压暗／遮挡与两帧确认）、`tests/test_island_empty_post_inspection.py`（跳过巡检后仍进入排产）及 `tests/test_island_ranch_planner_collection.py`（规划牧场续派和阶段收取）。
 
+角色体力筛选复用一个限时截图循环：先确认筛选弹窗，再选择体力与提交，确认弹窗关闭后等待角色列表刷新并识别 WorkerJuu；角色标题提前出现时不盲点底部按钮。本地残留弹窗识别与关闭辅助仍供退出流程使用。
+
 ### 店铺排产（IslandShopBase）
 
 ```mermaid
@@ -177,7 +179,7 @@ flowchart TD
 
 餐饮的手工、自动规划、季节优先和常驻生产统一通过 `get_product_production_limit()` 查询 ALAS 配方 `production_limit`，取消原来的统一 7 次限制。普通食品通常最多 12 次，佛跳墙 8 次，季节食品 5 次；这些是一个岗位一次下单的上限，实际批次仍受库存缺口、套餐原料保留线、特殊材料和游戏界面实读限制。未能唯一映射的定制商品保守沿用 `UNKNOWN_PRODUCT_PRODUCE_LIMIT = 7` 并记录日志，现有五家餐饮商品都能对应配方。`_MAX_FILL_LOOP` 继续限制填岗迭代次数。
 
-切换备选餐品后重新按实际品种计算上限，不沿用首选品种的截断数量。派遣预览与岗位复检只验证本次已经限制过的请求数量，实读少产时按实际数量扣料、记录在制品和减少需求；这些共用确认方法继续支持原料与工坊派遣。无旧模板的通用食品在关闭规划时也确认完整配方和实际次数后下单。套餐（`meal_compositions`）下单时实时 `deduct_materials` 扣减原料账目；「保留线」记录已处理槽位的最高目标，防止套餐把尚未达标产品的保底库存当原料吃掉。排产多次失败时先切严格模式（真零库存才跳过），仍失败则把缺口产品加入 `force_skip` 本轮不再停留。
+切换备选餐品后重新按实际品种计算上限，不沿用首选品种的截断数量。派遣预览与岗位复检只验证本次已经限制过的请求数量，实读少产时按实际数量扣料、记录在制品和减少需求；这些共用确认方法继续支持原料与工坊派遣。无旧模板的通用食品在关闭规划时也确认完整配方和实际次数后下单。套餐（`meal_compositions`）下单时实时 `deduct_materials` 扣减原料账目；「生产目标线」记录已处理槽位的最高目标，未达标时不作为套餐原料；达标后可以先消耗、随后补回目标，避免等值库存死锁。订单直接需求、下一架经营菜单和显式最低库存由 `_planner_protection` 始终硬性扣除，预测与实际下单前均复用 `_get_usable_stock()`，不能把生产目标达标当作释放这些保留量。排产多次失败时先切严格模式（真零库存才跳过），仍失败则把缺口产品加入 `force_skip` 本轮不再停留。
 
 数量行为的回归入口为 `tests/test_island_food_recipe_limits.py`、`tests/test_island_shop_production.py`、`tests/test_island_food_dispatch.py` 和 `tests/test_island_planned_food_materials.py`，覆盖各店配方、12／8／5 分批、少产记账、在制去重、套餐扣料、季节优先与备选下单。
 
