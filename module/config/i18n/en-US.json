@@ -3790,8 +3790,8 @@
       "2": "2"
     },
     "RunAt18": {
-      "name": "Run at 18:00",
-      "help": "Disabled by default. When enabled, daily runs move from midnight to 18:00 server time. Runs due before 18:00 are postponed."
+      "name": "Run at 18:00 on maintenance day",
+      "help": "Disabled by default. Uses the Early exercise weekday: that day runs at 18:00 server time, all other days at 00:00. When disabled, every day runs at 00:00. Does not require early exercise or the exercise task to be enabled."
     }
   },
   "Exercise": {
@@ -3815,7 +3815,7 @@
     },
     "MaintenanceWeekday": {
       "name": "Early exercise weekday",
-      "help": "Uses the game server time zone. Only this morning round is moved; afternoon rounds and other days use the normal settings.",
+      "help": "Uses the game server time zone. Only this morning round is moved; afternoon rounds and other days use the normal settings. Hard mode also uses this weekday when Run at 18:00 on maintenance day is enabled.",
       "mon": "Monday",
       "tue": "Tuesday",
       "wed": "Wednesday",

@@ -4,17 +4,20 @@
 但使用独立的战役入口和额外的限制条件（如每日出击次数、舰队锁定等）。
 通过 OCR 识别剩余出击次数，循环执行直到用尽。
 
-配置路径: Hard.HardStage (关卡选择), Hard.HardFleet (舰队选择), Hard.RunAt18 (18点运行)
+配置路径: Hard.HardStage (关卡选择), Hard.HardFleet (舰队选择), Hard.RunAt18 (维护日18点运行)
 """
 
 import importlib
+from datetime import timedelta
 
 from campaign.campaign_hard.campaign_hard import Campaign
 from module.campaign.run import CampaignRun
 from module.config.time_source import now as current_time
-from module.config.utils import server_time_offset
+from module.config.transaction import config_transaction
+from module.config.utils import filepath_config, server_time_offset
 from module.handler.fast_forward import to_map_file_name
 from module.hard.assets import *
+from module.hard.schedule import hard_run_time
 from module.logger import logger
 from module.ocr.ocr import Digit
 
@@ -35,19 +38,41 @@ class CampaignHard(CampaignRun):
     equipment_has_take_on = False
     campaign: Campaign
 
+    def _schedule(self, completed=False):
+        """短事务内按最新维护设置判断门禁或安排次日，避免覆盖运行中的设置修改。"""
+        with config_transaction(filepath_config(self.config.config_name)):
+            self.config.update()
+            next_run = self.config.cross_get('Hard.Scheduler.NextRun')
+            if completed:
+                if next_run != self._hard_next_run:
+                    logger.info('[困难战役] 执行期间排程已修改，保留最新设置')
+                    return False
+            else:
+                self._hard_next_run = next_run
+            weekday = self.config.cross_get(
+                'Exercise.Exercise.MaintenanceWeekday', default=self.config.Exercise_MaintenanceWeekday
+            )
+            offset = server_time_offset()
+            server_now = current_time() - offset
+            day = server_now + timedelta(days=1) if completed else server_now
+            target = hard_run_time(day, self.config.Hard_RunAt18, weekday)
+            if completed or server_now < target:
+                self.config.task_delay(target=target + offset)
+                return True
+        return False
+
     def run(self):
         """执行困难关卡出击主流程。
 
         流程包括：覆写困难模式配置、加载战役与地图模块、导航至困难关卡界面、
-        OCR 识别剩余次数并循环出击，完成后退出自动搜索并按配置延迟到服务器零点或18点。
+        OCR 识别剩余次数并循环出击，维护星期可延后至18点，其余日期按服务器零点安排。
 
         Pages:
             in: 任意页面
             out: 延后时保留当前页面，否则为 page_campaign 或关卡选择界面
         """
         logger.hr('困难战役', level=1)
-        if self.config.Hard_RunAt18 and (current_time() - server_time_offset()).hour < 18:
-            self.config.task_delay(server_update='18:00')
+        if self._schedule():
             self.config.task_stop()
 
         name = to_map_file_name(self.config.Hard_HardStage)
@@ -87,5 +112,5 @@ class CampaignHard(CampaignRun):
         # self.campaign.equipment_take_off_when_finished()
 
         # 调度器
-        self.config.task_delay(server_update='18:00' if self.config.Hard_RunAt18 else True)
+        self._schedule(completed=True)
         self.config.task_call('Reward', force_call=False)

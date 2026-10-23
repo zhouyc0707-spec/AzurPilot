@@ -106,7 +106,7 @@ module/
 
 演习配置提供「维护前提前演习」（`Exercise_MaintenanceAdvance`，默认开启）和「提前演习星期」（`Exercise_MaintenanceWeekday`，`mon` 至 `sun`，默认周四）两个选项。保留五次策略开启此功能时，所选星期上午这轮（下一补次数点为服务器时间 12:00）固定从 09:00 开始执行，打到剩余五次；关闭后完全按原延迟小时数排程，所选星期仍保留。不会修改用户保存的延迟小时数。执行门禁和下次运行时间共用 `_get_exercise_start_time()`，凌晨或九点前检查会精确安排到九点，九点后进入则直接补跑。所选日中午、傍晚和其他日期继续按原延迟配置排程，激进清空及赛季强制清空保持原语义。
 
-页面保存开关或星期的新值后，配置服务在同次保存中将已启用演习任务的下次运行提前为立即检查，已有更早待运行时间不后移；现有执行判断再按新设置重排，未到执行时间不进行演习。不启用已关闭的任务，也不覆盖同批明确修改的 `Exercise.Scheduler.NextRun`。九点是任务成为可运行的时间，仍受调度器当前任务和账号可用状态影响，不强制打断其他任务。针对性回归：`uv run python -m unittest tests.test_exercise_schedule tests.test_exercise_config_schedule tests.test_exercise_opponent_selection`，使用固定时间、临时配置和模拟战斗，不执行真实演习；新旧主题页面保存回归见 `frontend/e2e/exercise-maintenance-options.spec.ts`。
+页面保存开关或星期的新值后，配置服务在同次保存中将已启用演习任务的下次运行提前为立即检查，已有更早待运行时间不后移；现有执行判断再按新设置重排，未到执行时间不进行演习。不启用已关闭的任务，也不覆盖同批明确修改的 `Exercise.Scheduler.NextRun`。该星期同时供困难图「维护日18点运行」使用；修改星期时，开启此功能的困难任务也会重新检查门禁，演习提前开关本身不影响困难任务。困难的具体规则见[战役模块](../campaign.md)。九点是演习成为可运行的时间，仍受调度器当前任务和账号可用状态影响，不强制打断其他任务。针对性回归：`uv run python -m unittest tests.test_exercise_schedule tests.test_exercise_config_schedule tests.test_exercise_opponent_selection`，使用固定时间、临时配置和模拟战斗，不执行真实演习；新旧主题页面保存回归见 `frontend/e2e/exercise-maintenance-options.spec.ts`。
 
 ### 建造（module/gacha）
 

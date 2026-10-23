@@ -341,9 +341,11 @@ stateDiagram-v2
 | `TaskBalancer.Enable` / `CoinLimit` / `TaskCall` | 混合 | false / 10000 / Main | 金币不足时切换到指定任务 |
 | `GemsFarming.*` | 混合 | — | 换旗舰/先锋、普通船筛选、装备码、情绪策略、先锋等级区间 |
 | `Emotion.Mode` / `Fleet1Value` 等 | 混合 | — | 心情计算模式与各舰队心情记录 |
-| `Hard.RunAt18` | bool | `false` | 困难图改为服务器时间 18:00 运行；关闭时沿用零点调度 |
+| `Hard.RunAt18` | bool | `false` | 仅演习所选维护星期在服务器18:00运行，其他日期为00:00；关闭则每天00:00 |
 
-开启 `Hard.RunAt18` 后，若困难图在服务器时间 18:00 前被调起，只将任务延后到当天 18:00，不进入困难关卡；18:00 后到期则正常执行剩余次数，完成后安排到下一次 18:00。旧配置自动补齐为关闭，保留原有零点调度。
+`Hard.RunAt18` 在页面上显示为「维护日18点运行」，默认关闭。开启后共用 `Exercise.Exercise.MaintenanceWeekday`（默认周四），但不依赖演习任务或 `Exercise.MaintenanceAdvance` 开关；只有所选服务器星期18点前被调起时延期，不加载关卡或访问设备，其余日期从零点正常执行。完成后按下一服务器日期计算运行时间，例如周三完成排到周四18点，周四完成排到周五零点。日期跨月、跨年仍按星期判断，不采用每天18点的更新时间串。`module/hard/schedule.py::hard_run_time()` 是这项日期规则的纯函数，回归见 `tests/test_hard_schedule.py`。
+
+页面保存困难开关的新值，或在该开关开启时修改共享维护星期，会在同一配置事务内唤醒已启用困难任务重新检查时间门禁；不启用关闭的任务，不推迟已待运行时间，也不覆盖同批显式设置的 `Hard.Scheduler.NextRun`。任务入口与结束分别在短配置事务内重读设置、计算排程，不在游戏操作期间持锁；运行中改星期或开关，结束时使用最新规则，期间被外部修改的 `NextRun` 优先保留。关闭困难开关恢复每天零点规则，不修改演习设置；临时离线后的到期任务可正常补跑，仍受调度器当前任务及账号可用状态影响。事务回归见 `tests/test_hard_config_schedule.py`、`tests/test_hard_schedule_concurrency.py`。
 
 关键关联：`GemsFarming`/`ThreeOilLowCost` 共用同一组 `GemsFarming.*` 参数；`StopCondition_MapAchievement` 与 `can_use_auto_search_continue()` 联动（非 `non_stop` 时禁用续战，因为自动搜索菜单里读不到地图信息）；活动类配置 `MAP_CHAPTER_SWITCH_*`、`STAGE_ENTRANCE` 由地图文件 `Config` 注入而非用户设置。
 

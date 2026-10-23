@@ -515,6 +515,8 @@ class ConfigService:
             seen = set()
             edited_groups = {}
             exercise_schedule_changed = False
+            hard_schedule_changed = False
+            maintenance_weekday_changed = False
             for change in changes:
                 task, group, arg = self.validate(change.path, change.value)
                 if change.path in seen:
@@ -523,22 +525,31 @@ class ConfigService:
                 if change.path in ('Exercise.Exercise.MaintenanceAdvance',
                                     'Exercise.Exercise.MaintenanceWeekday'):
                     exercise_schedule_changed |= deep_get(data, change.path) != change.value
+                if change.path == 'Exercise.Exercise.MaintenanceWeekday':
+                    maintenance_weekday_changed |= deep_get(data, change.path) != change.value
+                if change.path == 'Hard.Hard.RunAt18':
+                    hard_schedule_changed |= deep_get(data, change.path) != change.value
                 data.setdefault(task, {}).setdefault(group, {})[arg] = change.value
                 if change.path in OPSI_EXPLORE_PROGRESS:
                     self._reset_opsi_explore_progress(data, change.path)
                 edited_groups.setdefault((task, group), set()).add(arg)
-            if exercise_schedule_changed and 'Exercise.Scheduler.NextRun' not in seen:
-                scheduler = data['Exercise']['Scheduler']
+            hard_schedule_changed |= maintenance_weekday_changed and deep_get(data, 'Hard.Hard.RunAt18', False)
+            schedule_now = None
+            for task, changed in (('Exercise', exercise_schedule_changed), ('Hard', hard_schedule_changed)):
+                if not changed or f'{task}.Scheduler.NextRun' in seen:
+                    continue
+                scheduler = data[task]['Scheduler']
                 if scheduler.get('Enable') is True:
-                    # 只唤醒演习重新检查时间门禁，不提前消费，也不推迟已经待运行的任务。
-                    exercise_now = current_time().replace(microsecond=0)
+                    # 只唤醒重新检查各自时间门禁；不提前消费，不推迟已待运行任务。
+                    if schedule_now is None:
+                        schedule_now = current_time().replace(microsecond=0)
                     try:
                         scheduled = datetime.fromisoformat(scheduler.get('NextRun', ''))
-                        pending = scheduled.astimezone() <= exercise_now.astimezone()
+                        pending = scheduled.astimezone() <= schedule_now.astimezone()
                     except (TypeError, ValueError):
                         pending = False
                     if not pending:
-                        scheduler['NextRun'] = exercise_now.isoformat(sep=' ')
+                        scheduler['NextRun'] = schedule_now.isoformat(sep=' ')
             # 同一批可能同时修改包名，必须以最终服务器校验显式选择的活动。
             for task, options in campaign_event_options(data, self.args).items():
                 if options and f'{task}.Campaign.Event' in seen and data[task]['Campaign']['Event'] not in options:
