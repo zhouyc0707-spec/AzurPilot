@@ -13,6 +13,7 @@ import { MonitorPanel } from '../components/MonitorPanel'
 import { defaultResourceKeys, ResourceCards } from '../components/ResourceCards'
 import { InstanceActions } from '../components/InstanceActions'
 import { LegacyRail } from '../components/LegacyRail'
+import { MaintenanceWeekday } from '../components/MaintenanceWeekday'
 import { Statistics } from './Statistics'
 import { readOverviewPanel, setOverviewPanel, subscribeOverviewPanel } from '../app/overviewPanelPrefs'
 
@@ -72,6 +73,7 @@ export function Overview() {
           title={ui(panel === 'stats' ? 'overview.showLogs' : 'overview.showStats')}
           onClick={() => {setOverviewPanel(panel === 'stats' ? 'logs' : 'stats')}}
         >{ui(panel === 'stats' ? 'monitor.logs' : 'overview.statCard')}</button>
+        <MaintenanceWeekday instance={instance}/>
         {actions}
       </section>
     </LegacyRail>

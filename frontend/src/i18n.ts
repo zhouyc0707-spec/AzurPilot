@@ -20,6 +20,8 @@ export const languages: Record<Language, string> = {
 }
 
 const zhCN = {
+  'overview.maintenanceDay': '维护日',
+  'overview.maintenanceHint': '每周重复，与演习提前和困难图维护日18点运行共用；仅已开启的功能生效。',
   ...resourceZhCN,
   ...legacyStatsZhCN,
   'task.runOnce': '执行一次：{task}',
@@ -638,6 +640,8 @@ export type UiKey = keyof typeof zhCN
 export type UiTranslator = (key: UiKey, params?: TranslationParams) => string
 
 const enUS: Record<UiKey, string> = {
+  'overview.maintenanceDay': 'Maintenance',
+  'overview.maintenanceHint': 'Repeats weekly and shares the weekday with early exercises and 18:00 hard mode. Only enabled features apply.',
   ...resourceEnUS,
   ...legacyStatsEnUS,
   'task.runOnce': 'Run once: {task}',
@@ -831,6 +835,8 @@ const enUS: Record<UiKey, string> = {
 }
 
 const jaJP: Record<UiKey, string> = {
+  'overview.maintenanceDay': 'メンテ曜日',
+  'overview.maintenanceHint': '毎週繰り返す曜日を演習の前倒しとハード海域の18時実行で共有します。有効な機能にのみ適用されます。',
   ...resourceJaJP,
   ...legacyStatsJaJP,
   'task.runOnce': '1回実行：{task}',
@@ -1085,6 +1091,8 @@ const jaJP: Record<UiKey, string> = {
 }
 
 const zhTW: Record<UiKey, string> = {
+  'overview.maintenanceDay': '維護日',
+  'overview.maintenanceHint': '每週重複，與演習提前和困難關卡維護日18點執行共用；僅已開啟的功能生效。',
   ...resourceZhTW,
   ...legacyStatsZhTW,
   'task.runOnce': '執行一次：{task}',
