@@ -82,8 +82,8 @@ class IslandShopBase(Island, WarehouseOCR):
         self.warehouse_counts = {}  # 仓库识别到的产品
         self.to_post_products = {}
         self.current_totals = {}
-        # 保留线目标 {产品: 断点前槽位最高目标}，
-        # 排产时这些产品的仓库库存只能消耗超出自身目标的部分
+        # 生产目标 {产品: 断点前槽位最高目标}，
+        # 未达标时不能借作套餐原料；达标后先用再补，硬保留量另行扣除。
         self._reserved_targets = {}
 
         # 特殊材料（子类可覆盖）
@@ -793,9 +793,9 @@ class IslandShopBase(Island, WarehouseOCR):
     def _compute_base_demands(self, check_materials=False, force_skip=None):
         """计算基础需求：严格按槽位顺序处理，找到第一个有缺口的槽位即停止。
 
-        保留线：取本轮已迭代槽位中各产品的最高目标（无缺口时覆盖全部
-        槽位，全部达标时保留线取最大目标），扣除后 current_totals 为
-        超额库存，可作为原料被后续槽位消费。
+        生产目标线取已迭代槽位中各产品的最高目标（无缺口时覆盖全部槽位）。
+        current_totals 保持仓库、在制品和本轮派遣的完整总量，套餐补料时
+        统一判断达标借用与硬保留，不能提前扣除目标而重复补充已有原料。
 
         Args:
             check_materials (bool): False（默认）需求计算，原料为0不阻断，留给
@@ -839,12 +839,6 @@ class IslandShopBase(Island, WarehouseOCR):
             max_targets[name] = max(max_targets.get(name, 0), target)
         # 记录保留线目标，供排产阶段限制套餐对其库存的消耗
         self._reserved_targets = dict(max_targets)
-        for name, max_target in max_targets.items():
-            current = self.current_totals.get(name, 0)
-            if current < max_target:
-                self.current_totals[name] = 0
-            else:
-                self.current_totals[name] = current - max_target
 
     def get_priority_production(self):
         """返回基础需求之前安排的产品及数量，由店铺声明季节规则。
@@ -931,7 +925,7 @@ class IslandShopBase(Island, WarehouseOCR):
             self._compute_base_demands()
 
             logger.info(f"[岛屿] 待完成备餐: {self._inv_cn(self.to_post_products)}")
-            logger.info(f"[岛屿] 当前剩余库存: {self._inv_cn(self.current_totals)}")
+            logger.info(f"[岛屿] 补料规划总量（含在制）: {self._inv_cn(self.current_totals)}")
             # ============ 处理套餐分解 ============
             if self.to_post_products:
                 self.to_post_products = self.process_meal_requirements(self.to_post_products)
@@ -1191,9 +1185,10 @@ class IslandShopBase(Island, WarehouseOCR):
                 # 注意：原材料需求需要扣除库存（因为之前没扣过）
                 raw_material_needed = material_needs[base_product]
 
-                # 检查原材料库存
-                current_stock = self.current_totals.get(base_product, 0)
-                logger.info(f"[岛屿]     原材料需求: +{raw_material_needed}, 当前库存: {current_stock}")
+                # 在制品只抵消补料，实际下单仍由 get_max_producible 检查现货。
+                current_stock = self._get_usable_stock(
+                    base_product, self.current_totals.get(base_product, 0))
+                logger.info(f"[岛屿]     原材料需求: +{raw_material_needed}, 规划可用量（含在制）: {current_stock}")
 
                 # 计算原材料净需求
                 net_raw_needed = max(0, raw_material_needed - current_stock)
@@ -1217,8 +1212,9 @@ class IslandShopBase(Island, WarehouseOCR):
         for material, material_quantity in material_needs.items():
             logger.info(f"[岛屿]   处理剩余原材料 {self._item_cn(material)}: 需求={material_quantity}")
 
-            current_stock = self.current_totals.get(material, 0)
-            logger.info(f"[岛屿]     当前总库存: {current_stock}")
+            current_stock = self._get_usable_stock(
+                material, self.current_totals.get(material, 0))
+            logger.info(f"[岛屿]     规划可用量（含在制）: {current_stock}")
 
             net_needed = max(0, material_quantity - current_stock)
             if net_needed > 0:
@@ -1237,19 +1233,20 @@ class IslandShopBase(Island, WarehouseOCR):
         return result
 
     def _get_usable_stock(self, material, material_stock):
-        """获取套餐制作时指定原材料的可用库存。
+        """按生产目标和硬保留量计算套餐原材料的可用数量。
 
         保留线内商品（_reserved_targets）只有在库存低于自身目标时才完全
-        禁止作为套餐原料；达到目标后允许先消耗，再由套餐分解补充回目标。
+        禁止作为套餐原料；达到目标后允许先消耗，再按目标缺口补回。
         订单、经营菜单和显式最低库存由 _planner_protection 始终硬性保留，
-        不随生产目标达标而释放。在产数量不计入可用量。
+        不随生产目标达标而释放。补料规划传入完整总量以避免重复生产；
+        实际下单只传仓库现货，不把尚未收获的在制品当作可消耗库存。
 
         Args:
             material (str): 原料名称。
-            material_stock (int): 仓库实际库存数量。
+            material_stock (int): 待判断数量；规划为含在制的总量，下单为仓库现货。
 
         Returns:
-            int: 允许被套餐消耗的可用库存数量。
+            int: 应用目标借用和硬保留规则后的数量。
         """
         if material in self._reserved_targets:
             if material_stock < self._reserved_targets[material]:

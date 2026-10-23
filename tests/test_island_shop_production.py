@@ -128,17 +128,16 @@ class IslandShopProductionTests(unittest.TestCase):
 
         ui.run()
         self.assertEqual(ui.orders, [
-            ('strawberry_lemon', 7, None),
             ('honey_lemon', 7, None),
         ])
-        self.assertEqual(ui.shop.to_post_products, {'sunny_honey': 7})
+        self.assertEqual(len(ui.shop.get_idle_posts()), 1)
 
-        # 模拟两个原料岗位收获完成，下一轮应能制作剩余 7 个阳光蜜水。
-        ui.stock['strawberry_lemon'] += 7
+        # 已达标的草莓柠檬不提前补料；缺少的蜂蜜柠檬水收获后先做套餐，再补目标。
         ui.stock['honey_lemon'] += 7
         ui.orders.clear()
         ui.run()
-        self.assertEqual(ui.orders, [('sunny_honey', 7, None)])
+        self.assertEqual(ui.orders, [('sunny_honey', 7, None),
+                                     ('strawberry_lemon', 7, None)])
 
     def test_teahouse_protects_material_below_target(self):
         ui = ShopUI(

@@ -185,7 +185,9 @@ flowchart TD
 
 切换备选餐品后重新按实际品种计算上限，不沿用首选品种的截断数量。派遣预览与岗位复检只验证本次已经限制过的请求数量，实读少产时按实际数量扣料、记录在制品和减少需求；这些共用确认方法继续支持原料与工坊派遣。无旧模板的通用食品在关闭规划时也确认完整配方和实际次数后下单。套餐（`meal_compositions`）下单时实时 `deduct_materials` 扣减原料账目；「生产目标线」记录已处理槽位的最高目标，未达标时不作为套餐原料；达标后可以先消耗、随后补回目标，避免等值库存死锁。订单直接需求、下一架经营菜单和显式最低库存由 `_planner_protection` 始终硬性扣除，预测与实际下单前均复用 `_get_usable_stock()`，不能把生产目标达标当作释放这些保留量。排产多次失败时先切严格模式（真零库存才跳过），仍失败则把缺口产品加入 `force_skip` 本轮不再停留。
 
-数量行为的回归入口为 `tests/test_island_food_recipe_limits.py`、`tests/test_island_shop_production.py`、`tests/test_island_food_dispatch.py` 和 `tests/test_island_planned_food_materials.py`，覆盖各店配方、12／8／5 分批、少产记账、在制去重、套餐扣料、季节优先与备选下单。
+套餐补料与实际用料采用相同的目标借用和硬保留规则。`_compute_base_demands()` 只记录生产目标线，不从 `current_totals` 中扣除目标；分解套餐时对完整总量应用 `_get_usable_stock()`，只补实际缺少的配套原料，避免已达标原料为补额外库存先占满岗位。完整总量中的在制品和本轮已确认派遣只用于避免重复补料，实际制作套餐仍只使用 `warehouse_counts` 中的现货；消耗后的目标缺口按原槽位顺序补回。手工菜品优先级不变，前置目标本身未达标时仍先补齐。
+
+数量行为的回归入口为 `tests/test_island_food_recipe_limits.py`、`tests/test_island_shop_production.py`、`tests/test_island_food_dispatch.py`、`tests/test_island_planned_food_materials.py` 和 `tests/test_island_meal_material_planning.py`，覆盖各店配方、12／8／5 分批、少产记账、在制去重、套餐缺料与单空岗排产、先用后补、硬保留、季节优先与备选下单。
 
 ### 子玩法速览
 
