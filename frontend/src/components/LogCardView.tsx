@@ -6,6 +6,7 @@ import {
   useState,
   useMemo,
   useEffect,
+  useLayoutEffect,
   useRef,
   useCallback,
   memo,
@@ -319,13 +320,14 @@ export interface CardRange {
 
 function aggregateSlice(
   entries: LogEntry[],
-  startIndex = 0
+  startIndex = 0,
+  stopAt?: (index: number) => boolean
 ): { cards: CardItem[]; ranges: CardRange[] } {
   const cards: CardItem[] = []
   const ranges: CardRange[] = []
   let index = startIndex
 
-  while (index < entries.length) {
+  while (index < entries.length && !stopAt?.(index)) {
     const cardStart = index
     const entry = entries[index]
     const raw = entry.text.replace(/[\r\n]+$/, '')
@@ -726,89 +728,78 @@ function aggregateSlice(
   return { cards, ranges }
 }
 
-// 增量聚合缓存状态
-let lastEntries: LogEntry[] = []
-let lastRanges: CardRange[] = []
-let lastCards: CardItem[] = []
+/** 每个日志视图独立缓存，实例、筛选视图之间不会互相驱逐结果。 */
+export function createAggregationCache() {
+  return {entries: [] as LogEntry[], ranges: [] as CardRange[], cards: [] as CardItem[]}
+}
+const defaultAggregationCache = createAggregationCache()
 
 export function clearAggregationCache(): void {
-  lastEntries = []
-  lastRanges = []
-  lastCards = []
+  Object.assign(defaultAggregationCache, createAggregationCache())
 }
 
-export function getAggregationCacheInfo(): {
-  cachedCardsCount: number
-  cachedEntriesCount: number
-} {
+export function getAggregationCacheInfo() {
   return {
-    cachedCardsCount: lastCards.length,
-    cachedEntriesCount: lastEntries.length,
+    cachedCardsCount: defaultAggregationCache.cards.length,
+    cachedEntriesCount: defaultAggregationCache.entries.length,
   }
 }
 
-export function aggregateEntriesToCards(entries: LogEntry[]): CardItem[] {
-  if (!entries || entries.length === 0) {
-    lastEntries = []
-    lastRanges = []
-    lastCards = []
-    return []
+export function aggregateEntriesToCards(
+  entries: LogEntry[], cache = defaultAggregationCache
+): CardItem[] {
+  const previous = cache.entries
+  if (entries === previous) return cache.cards
+  const sameEntry = (a: LogEntry, b: LogEntry) => a === b || (
+    a.id === b.id && a.text === b.text && a.level === b.level
+  )
+  const removed = entries.length ? previous.findIndex(entry => entry.id === entries[0].id) : -1
+  const retained = previous.length - removed
+  // 只复用完整、未变更的旧后缀；搜索变化、倒序新增、重置与同 id 内容变化回退全量解析。
+  const overlaps = removed >= 0 && entries.length >= retained &&
+    previous.slice(removed).every((entry, index) => sameEntry(entry, entries[index]))
+  if (overlaps && removed === 0 && entries.length === previous.length) {
+    cache.entries = entries
+    return cache.cards
   }
 
-  // 1. 同一数组引用直接复用上次结果
-  if (entries === lastEntries) {
-    return lastCards
-  }
-
-  // 2. 检查前缀匹配与增量复用
-  const prevLen = lastEntries.length
-  let canReuse = false
-
-  if (prevLen > 0 && entries.length >= prevLen) {
-    let isPrefixMatch = true
-    for (let i = 0; i < prevLen; i++) {
-      const e = entries[i]
-      const cached = lastEntries[i]
-      if (e !== cached && (e.id !== cached.id || e.text !== cached.text)) {
-        isPrefixMatch = false
-        break
-      }
+  let result: {cards: CardItem[]; ranges: CardRange[]}
+  if (overlaps && cache.ranges.length > 4) {
+    // 尾部四块重新解析，允许尚未闭合的地图、属性块和三行横幅吸收新增记录。
+    const safeRanges = cache.ranges.slice(0, -4)
+      .filter(range => range.start >= removed)
+      .map(range => ({...range, start: range.start - removed, end: range.end - removed}))
+    const boundaries = new Set(safeRanges.map(range => range.start))
+    // 头部可能截断多行块；先解析残块，直到重新落在一个确定的旧块边界。
+    const head = aggregateSlice(entries, 0, index => boundaries.has(index))
+    const headEnd = head.ranges.at(-1)?.end ?? 0
+    const reused = safeRanges.filter(range => range.start >= headEnd)
+    const tail = reused.length ? aggregateSlice(entries, reused.at(-1)!.end) : {cards: [], ranges: []}
+    result = {
+      cards: [...head.cards, ...reused.map(range => range.card), ...tail.cards],
+      ranges: [...head.ranges, ...reused, ...tail.ranges],
     }
-
-    if (isPrefixMatch) {
-      if (entries.length === prevLen) {
-        // 前缀与长度完全一致，直接复用已有卡片
-        return lastCards
-      }
-      canReuse = true
-    }
+  } else {
+    result = aggregateSlice(entries)
   }
+  cache.entries = entries
+  cache.cards = result.cards
+  cache.ranges = result.ranges
+  return cache.cards
+}
 
-  // 末尾安全保留裕量：丢弃最后 4 张卡片重新聚合，防止多行块（地图、横幅、属性清单）跨追加边界未闭合
-  const REUSE_TAIL_MARGIN = 4
-  const safeCardIndex = canReuse && lastRanges.length > REUSE_TAIL_MARGIN
-    ? lastRanges.length - REUSE_TAIL_MARGIN
-    : 0
-
-  if (canReuse && safeCardIndex > 0) {
-    const reusedRanges = lastRanges.slice(0, safeCardIndex)
-    const reusedCards = lastCards.slice(0, safeCardIndex)
-    const startEntryIndex = reusedRanges[reusedRanges.length - 1].end
-
-    const tailResult = aggregateSlice(entries, startEntryIndex)
-
-    lastCards = reusedCards.concat(tailResult.cards)
-    lastRanges = reusedRanges.concat(tailResult.ranges)
-    lastEntries = entries.slice()
-    return lastCards
+/** 高度仅对当前窗口内同一条记录有效，裁剪、重置或内容替换时一并失效。 */
+export function pruneMeasurements<T extends {id: number}>(
+  measured: Map<number, number>, previous: T[], current: T[],
+  same: (before: T, after: T) => boolean = (before, after) => before === after
+): void {
+  const before = new Map(previous.map(item => [item.id, item]))
+  const live = new Map(current.map(item => [item.id, item]))
+  for (const id of measured.keys()) {
+    const oldItem = before.get(id)
+    const currentItem = live.get(id)
+    if (!oldItem || !currentItem || !same(oldItem, currentItem)) measured.delete(id)
   }
-
-  // 3. 全量重新聚合
-  const fullResult = aggregateSlice(entries, 0)
-  lastCards = fullResult.cards
-  lastRanges = fullResult.ranges
-  lastEntries = entries.slice()
-  return lastCards
 }
 
 // ==========================================
@@ -2049,19 +2040,28 @@ export interface LogCardViewProps {
   entries: LogEntry[]
   search: string
   scrollRef?: RefObject<HTMLDivElement | null>
+  active?: boolean
 }
 
-export function LogCardView({
+export const LogCardView = memo(function LogCardView({
   entries,
   search,
   scrollRef,
+  active = true,
 }: LogCardViewProps) {
-  const cards = useMemo(() => aggregateEntriesToCards(entries), [entries])
+  const aggregation = useRef(createAggregationCache())
+  const cards = useMemo(() => aggregateEntriesToCards(entries, aggregation.current), [entries])
   const containerRef = useRef<HTMLDivElement>(null)
   const isVirtual = cards.length >= VIRTUAL_THRESHOLD
 
   // 动态测量的高度缓存 (按 card.id 记录实际渲染的高度)
   const heightCacheRef = useRef<Map<number, number>>(new Map())
+  const measuredCards = useRef<CardItem[]>([])
+  useMemo(() => {
+    pruneMeasurements(heightCacheRef.current, measuredCards.current, cards,
+      (before, after) => before.type === after.type && before.rawText === after.rawText)
+    measuredCards.current = cards
+  }, [cards])
   const [, setMeasureVersion] = useState(0)
   const measureRafRef = useRef<number | null>(null)
 
@@ -2084,7 +2084,7 @@ export function LogCardView({
 
   // 监听外部滚动容器的滚动与 Resize
   useEffect(() => {
-    if (!isVirtual) return
+    if (!active || !isVirtual) return
     const scrollEl = getScrollElement()
     if (!scrollEl) return
 
@@ -2126,48 +2126,56 @@ export function LogCardView({
       if (scrollRafId !== null) safeCancelRaf(scrollRafId)
       resizeObserver?.disconnect()
     }
-  }, [getScrollElement, isVirtual])
+  }, [getScrollElement, isVirtual, active])
 
-  // ResizeObserver 用于观察可见卡片实际高度变动（折叠/展开/动态排版）
+  // 每次提交后核对可见节点，及时解绑移出虚拟窗口的元素；隐藏时停止测量。
   const cardObserverRef = useRef<ResizeObserver | null>(null)
-  useEffect(() => {
-    if (!isVirtual || typeof ResizeObserver === 'undefined') return
-
-    cardObserverRef.current = new ResizeObserver((observerEntries) => {
-      let changed = false
-      for (const entry of observerEntries) {
-        const el = entry.target as HTMLElement
-        const idAttr = el.getAttribute('data-card-id')
-        if (!idAttr) continue
-        const cardId = parseInt(idAttr, 10)
-        const measured = entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height
-        if (measured > 0) {
-          const prev = heightCacheRef.current.get(cardId)
-          if (prev === undefined || Math.abs(prev - measured) >= 2) {
+  const cardNodes = useRef(new Set<Element>())
+  useLayoutEffect(() => {
+    if (!active || !isVirtual) {
+      cardObserverRef.current?.disconnect()
+      cardObserverRef.current = null
+      cardNodes.current.clear()
+      if (measureRafRef.current !== null) safeCancelRaf(measureRafRef.current)
+      measureRafRef.current = null
+      return
+    }
+    if (typeof ResizeObserver === 'undefined') return
+    if (!cardObserverRef.current) {
+      cardObserverRef.current = new ResizeObserver(observerEntries => {
+        let changed = false
+        for (const entry of observerEntries) {
+          if (!cardNodes.current.has(entry.target)) continue
+          const cardId = Number((entry.target as HTMLElement).dataset.cardId)
+          const measured = entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height
+          const previous = heightCacheRef.current.get(cardId)
+          if (measured > 0 && (previous === undefined || Math.abs(previous - measured) >= 2)) {
             heightCacheRef.current.set(cardId, measured)
             changed = true
           }
         }
-      }
-      if (changed) {
-        requestMeasureUpdate()
-      }
-    })
-
-    return () => {
-      cardObserverRef.current?.disconnect()
-      cardObserverRef.current = null
-      if (measureRafRef.current !== null) {
-        safeCancelRaf(measureRafRef.current)
-        measureRafRef.current = null
+        if (changed) requestMeasureUpdate()
+      })
+    }
+    const live = new Set(containerRef.current?.querySelectorAll('[data-card-id]') ?? [])
+    for (const node of cardNodes.current) {
+      if (!live.has(node)) cardObserverRef.current.unobserve(node)
+    }
+    for (const node of live) {
+      const id = Number((node as HTMLElement).dataset.cardId)
+      if (!cardNodes.current.has(node) || !heightCacheRef.current.has(id)) {
+        cardObserverRef.current.unobserve(node)
+        cardObserverRef.current.observe(node)
       }
     }
-  }, [isVirtual, requestMeasureUpdate])
-
-  // 绑定 DOM 节点到 ResizeObserver
-  const registerCardRef = useCallback((node: HTMLDivElement | null) => {
-    if (!node || !cardObserverRef.current) return
-    cardObserverRef.current.observe(node)
+    cardNodes.current = live
+  })
+  useEffect(() => () => {
+    cardObserverRef.current?.disconnect()
+    cardObserverRef.current = null
+    cardNodes.current.clear()
+    if (measureRafRef.current !== null) safeCancelRaf(measureRafRef.current)
+    measureRafRef.current = null
   }, [])
 
   // 1. 卡片数量较少（如 < 40 张）：直接全量渲染，零计算开销
@@ -2217,10 +2225,10 @@ export function LogCardView({
       }}
     >
       {visibleCards.map((card) => (
-        <div key={card.id} data-card-id={card.id} ref={registerCardRef} className="log-card-virtual-item">
+        <div key={card.id} data-card-id={card.id} className="log-card-virtual-item">
           {renderCardItem(card, search)}
         </div>
       ))}
     </div>
   )
-}
+})

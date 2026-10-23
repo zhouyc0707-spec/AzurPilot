@@ -10,7 +10,7 @@ import { api } from '../api/client'
 import type { Logs as LogsData, LogEntry } from '../api/types'
 import { useApp, useConnection } from '../app/context'
 import { Empty } from '../components/ui'
-import { LogCardView, findVisibleRange, renderTokens, safeRaf, safeCancelRaf, OVERSCAN_BUFFER_PX } from './LogCardView'
+import { LogCardView, findVisibleRange, renderTokens, safeRaf, safeCancelRaf, OVERSCAN_BUFFER_PX, pruneMeasurements } from './LogCardView'
 
 export const LOG_LINE_RE = /^([A-Z]{4,8})\s+(?:(\d{4}-\d{2}-\d{2})\s+)?(\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?)\s*│\s*([\s\S]*)$/
 export const RULE_RE = /^[═─]{3,}\s*(.*?)\s*[═─]{3,}$/
@@ -44,7 +44,37 @@ export function queueLogEvent(
   } else {
     buffer.entries.push(...data.entries)
   }
+  // 隐藏面板可长时间不刷新 React，但接收缓冲仍受同一个窗口上限约束。
+  if (buffer.entries.length > LOG_ENTRY_LIMIT) buffer.entries = mergeLogEntries([], buffer.entries)
   buffer.cursor = data.cursor
+}
+
+/** 事件流自身回退才表示换代，快照提前读到的新游标不能让稍晚的逐条推送误重置。 */
+export function advanceLogEventCursor(
+  state: {cursor: number | null; eventCursor: number | null}, data: Pick<LogsData, 'cursor' | 'reset'>
+) {
+  const restarted = state.eventCursor !== null && data.cursor < state.eventCursor
+  return {
+    cursor: restarted ? data.cursor : Math.max(state.cursor ?? 0, data.cursor),
+    eventCursor: data.cursor,
+    reset: data.reset || restarted,
+    restarted,
+  }
+}
+
+/** 恢复请求只补缺失记录；较晚的推送优先，游标确实回退才丢弃上一代日志。 */
+export function prepareLogSnapshot(
+  known: LogEntry[], snapshot: LogsData,
+  state: {requestCursor: number | null; currentCursor: number | null; newerEvent: boolean; generationChanged: boolean}
+): {entries: LogEntry[]; reset: boolean; cursor: number} | null {
+  if (state.generationChanged || (state.newerEvent && state.requestCursor !== null && snapshot.cursor < state.requestCursor)) return null
+  const reset = !state.newerEvent && state.currentCursor !== null && snapshot.cursor < state.currentCursor
+  const ids = new Set(known.map(entry => entry.id))
+  return {
+    entries: reset ? snapshot.entries : snapshot.entries.filter(entry => !ids.has(entry.id)),
+    reset,
+    cursor: reset ? snapshot.cursor : Math.max(state.currentCursor ?? 0, snapshot.cursor),
+  }
 }
 
 /** 跟随步长：远时按上限匀速，近时按距离收比例，新日志逐帧滚入而不跳到末尾。 */
@@ -180,7 +210,7 @@ function loadLogViewMode(): 'cards' | 'classic' {
   return 'cards'
 }
 
-export function LogPanel({active = true, logs}: {active?: boolean; logs?: LogsData | null}) {
+export const LogPanel = memo(function LogPanel({active = true, logs}: {active?: boolean; logs?: LogsData | null}) {
   const {instance = ''} = useParams()
   const [entries, setEntries] = useState<LogEntry[]>([])
   const [search, setSearch] = useState('')
@@ -197,6 +227,14 @@ export function LogPanel({active = true, logs}: {active?: boolean; logs?: LogsDa
   /* 已渲染到的最大日志 id：大于它的增量行做入场动画（初始加载不播）。 */
   const freshFrom = useRef<number | null>(null)
   const loadedInstance = useRef(instance)
+  const activeRef = useRef(active)
+  activeRef.current = active
+  const entriesRef = useRef(entries)
+  entriesRef.current = entries
+  const logCursor = useRef<number | null>(null)
+  const logEventCursor = useRef<number | null>(null)
+  const logRevision = useRef(0)
+  const logGeneration = useRef(0)
 
   /** 流式日志微批处理缓冲队列，防止高频 WebSocket 推送造成密集 React 重绘 */
   const logBuffer = useRef<LogBufferState & { rafId: number | null }>({
@@ -205,6 +243,16 @@ export function LogPanel({active = true, logs}: {active?: boolean; logs?: LogsDa
     cursor: null,
     rafId: null,
   })
+
+  const receiveLogEvent = useRef<(data: LogsData) => void>(() => {})
+  receiveLogEvent.current = data => {
+    const next = advanceLogEventCursor({cursor: logCursor.current, eventCursor: logEventCursor.current}, data)
+    if (next.restarted) logGeneration.current++
+    logCursor.current = next.cursor
+    logEventCursor.current = next.eventCursor
+    logRevision.current++
+    queueLogEvent(logBuffer.current, {...data, reset: next.reset, cursor: next.cursor})
+  }
 
   const flushBuffer = useRef(() => {})
   flushBuffer.current = () => {
@@ -229,6 +277,25 @@ export function LogPanel({active = true, logs}: {active?: boolean; logs?: LogsDa
   }
 
   useEffect(() => {
+    const buf = logBuffer.current
+    if (buf.rafId !== null) safeCancelRaf(buf.rafId)
+    buf.rafId = null
+    if (active) flushBuffer.current()
+  }, [active])
+
+  useEffect(() => {
+    if (loadedInstance.current !== instance) {
+      loadedInstance.current = instance
+      const buf = logBuffer.current
+      buf.entries = []
+      buf.reset = false
+      buf.cursor = null
+      logCursor.current = null
+      logEventCursor.current = null
+      logGeneration.current++
+      setFloor(0)
+      setEntries([])
+    }
     setLevel(loadLogLevel(instance))
     setDescending(loadLogDescending(instance))
   }, [instance])
@@ -262,18 +329,28 @@ export function LogPanel({active = true, logs}: {active?: boolean; logs?: LogsDa
       safeCancelRaf(buf.rafId)
       buf.rafId = null
     }
-    buf.entries = []
-    buf.reset = false
-    buf.cursor = null
-
-    // 同实例从交易页恢复时先沿用日志和本地清空位置，后台请求只补齐新记录。
-    if (loadedInstance.current !== instance) {
-      loadedInstance.current = instance
-      setFloor(0)
-      setEntries([])
-    }
+    // 同实例恢复时保留已有窗口和未显示的微批数据，请求只补齐新记录。
+    const requestCursor = logCursor.current
+    // 首次订阅/重连之前已有快照时，以请求前游标判断重启；响应不会推进事件游标。
+    if (logEventCursor.current === null) logEventCursor.current = requestCursor
+    const requestRevision = logRevision.current
+    const requestGeneration = logGeneration.current
     void api.request('logs.get', {instance}).then(value => {
-      if (active) setEntries(previous => mergeLogEntries(previous, value.entries))
+      if (!active) return
+      const known = buf.reset ? buf.entries : [...entriesRef.current, ...buf.entries]
+      const snapshot = prepareLogSnapshot(known, value, {
+        requestCursor, currentCursor: logCursor.current,
+        newerEvent: requestRevision !== logRevision.current,
+        generationChanged: requestGeneration !== logGeneration.current,
+      })
+      if (!snapshot) return
+      if (snapshot.reset) {
+        logGeneration.current++
+        logEventCursor.current = null
+      }
+      logCursor.current = snapshot.cursor
+      queueLogEvent(buf, snapshot)
+      if (activeRef.current) flushBuffer.current()
     }).catch(error => notify(error.message, true))
     return () => {
       active = false
@@ -281,16 +358,13 @@ export function LogPanel({active = true, logs}: {active?: boolean; logs?: LogsDa
         safeCancelRaf(buf.rafId)
         buf.rafId = null
       }
-      buf.entries = []
-      buf.reset = false
-      buf.cursor = null
     }
   }, [connection, instance, notify, external])
 
   useEffect(() => {
     if (!logs || logs.instance !== instance) return
-    queueLogEvent(logBuffer.current, logs)
-    flushBuffer.current()
+    receiveLogEvent.current(logs)
+    if (activeRef.current) flushBuffer.current()
   }, [logs, instance])
 
   useEffect(() => {
@@ -301,9 +375,9 @@ export function LogPanel({active = true, logs}: {active?: boolean; logs?: LogsDa
       if (data.instance !== instance) return
 
       const buf = logBuffer.current
-      queueLogEvent(buf, data)
+      receiveLogEvent.current(data)
 
-      if (buf.rafId === null) {
+      if (activeRef.current && buf.rafId === null) {
         buf.rafId = safeRaf(() => {
           buf.rafId = null
           flushBuffer.current()
@@ -318,9 +392,6 @@ export function LogPanel({active = true, logs}: {active?: boolean; logs?: LogsDa
         safeCancelRaf(buf.rafId)
         buf.rafId = null
       }
-      buf.entries = []
-      buf.reset = false
-      buf.cursor = null
     }
   }, [instance, external])
 
@@ -348,24 +419,30 @@ export function LogPanel({active = true, logs}: {active?: boolean; logs?: LogsDa
   }, [entries, follow, active, descending])
 
   const searchLower = search.trim().toLowerCase()
-  const visible = entries.filter(entry =>
+  const visible = useMemo(() => entries.filter(entry =>
     entry.id > floor &&
     (level === 'ALL' || entry.level === level) &&
     (!searchLower || entry.text.toLowerCase().includes(searchLower))
-  )
+  ), [entries, floor, level, searchLower])
   // 倒序只反转渲染顺序；相邻行的居中标题判断是对称的（前后都要求是分割线），不受影响。
-  const ordered = descending ? [...visible].reverse().slice(0, LOG_ENTRY_LIMIT) : visible.slice(-LOG_ENTRY_LIMIT)
+  const ordered = useMemo(() => descending ? [...visible].reverse() : visible, [visible, descending])
 
   /* 经典视图行数超过阈值时只渲染视口附近的行，其余用占位高度撑住滚动条。 */
   const virtualLines = viewMode === 'classic' && ordered.length >= VIRTUAL_LINE_THRESHOLD
   const lineHeights = useRef(new Map<number, number>())
+  const measuredEntries = useRef<LogEntry[]>([])
+  useMemo(() => {
+    pruneMeasurements(lineHeights.current, measuredEntries.current, ordered,
+      (before, after) => before.text === after.text && before.level === after.level)
+    measuredEntries.current = ordered
+  }, [ordered])
   const lineNodes = useRef(new Map<Element, number>())
   const lineObserver = useRef<ResizeObserver | null>(null)
   const [lineVersion, setLineVersion] = useState(0)
   const [lineScroll, setLineScroll] = useState({top: 0, client: 0})
 
   useEffect(() => {
-    if (!virtualLines) return
+    if (!active || !virtualLines) return
     const container = scroll.current
     if (!container) return
     const sync = () => setLineScroll({top: container.scrollTop, client: container.clientHeight})
@@ -389,11 +466,17 @@ export function LogPanel({active = true, logs}: {active?: boolean; logs?: LogsDa
       if (rafId !== null) safeCancelRaf(rafId)
       observer?.disconnect()
     }
-  }, [virtualLines])
+  }, [virtualLines, active])
 
   /* 只观察窗口内已渲染的行：高度实测后替换占位值，未渲染的行继续用估算高度。 */
   useLayoutEffect(() => {
-    if (!virtualLines || typeof ResizeObserver === 'undefined') return
+    if (!active || !virtualLines) {
+      lineObserver.current?.disconnect()
+      lineObserver.current = null
+      lineNodes.current.clear()
+      return
+    }
+    if (typeof ResizeObserver === 'undefined') return
     const container = scroll.current
     if (!container) return
     if (!lineObserver.current) {
@@ -413,7 +496,9 @@ export function LogPanel({active = true, logs}: {active?: boolean; logs?: LogsDa
     const live = new Set<Element>()
     for (const node of container.querySelectorAll('[data-line-id]')) {
       live.add(node)
-      lineNodes.current.set(node, Number((node as HTMLElement).dataset.lineId))
+      const id = Number((node as HTMLElement).dataset.lineId)
+      lineNodes.current.set(node, id)
+      if (!lineHeights.current.has(id)) lineObserver.current.unobserve(node)
       lineObserver.current.observe(node)
     }
     for (const node of [...lineNodes.current.keys()]) {
@@ -499,7 +584,7 @@ export function LogPanel({active = true, logs}: {active?: boolean; logs?: LogsDa
       <div className={`log-content ${viewMode === 'cards' ? 'log-cards-mode' : ''}`} ref={scroll} aria-label={ui('log.content')}>
         {visible.length ? (
           viewMode === 'cards' ? (
-            <LogCardView entries={ordered} search={search} scrollRef={scroll} />
+            <LogCardView key={instance} entries={ordered} search={search} scrollRef={scroll} active={active} />
           ) : (
             <>
               {virtualLines && lineStart > 0 && <div style={{height: lineLayout.offsets[lineStart]}} aria-hidden="true" />}
@@ -537,4 +622,4 @@ export function LogPanel({active = true, logs}: {active?: boolean; logs?: LogsDa
       </div>
     </section>
   )
-}
+})

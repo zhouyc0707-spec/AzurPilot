@@ -7,6 +7,7 @@ import { useApp, useConnection } from '../app/context'
 import { ErrorBox, Loading, Modal } from '../components/ui'
 import { LegacyApChart } from '../components/LegacyApChart'
 import { ResourceCards } from '../components/ResourceCards'
+import { createLegacyStatisticsRefresh } from './legacyStatisticsRefresh'
 import '../styles/legacy-stats.css'
 
 /** 面板自动刷新间隔，与旧界面各板块的 60 秒周期刷新一致。 */
@@ -152,61 +153,110 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
   const [commissionPeriod, setCommissionPeriod] = useState<'day' | 'week' | 'month'>('month')
   const [recentPage, setRecentPage] = useState(0)
 
-  const load = useCallback((silent: boolean) => {
-    if (connection !== 'ready') {
-      setBusy(false)
-      setPending(false)
-      return Promise.resolve()
-    }
-    if (!silent) setBusy(true)
-    const request = api.request('statistics.legacy', {instance, month: meowMonth ?? null})
-    const resources = api.request('overview.get', {instance})
-    return Promise.all([request, resources]).then(([report, overviewData]) => {
-      setData(report)
-      setOverview(overviewData)
-      setError('')
-    }).catch((error: Error) => {
-      if (!silent) setError(error.message)
-    }).finally(() => {
-      setBusy(false)
-      setPending(false)
-    })
-  }, [connection, instance, meowMonth])
+  // 切实例的这一帧不沿用上一实例的历史月份，旧查询的回调由清理函数失效。
+  const requestMonth = loadedInstance.current === instance ? meowMonth : undefined
+  const reportRefresh = useMemo(() => createLegacyStatisticsRefresh(
+    () => api.request('statistics.legacy', {instance, month: requestMonth ?? null}),
+  ), [instance, requestMonth])
+  const overviewVersion = useRef(0)
+  const resourceRefresh = useMemo(() => createLegacyStatisticsRefresh(async () => {
+    const version = overviewVersion.current
+    return {version, overview: await api.request('overview.get', {instance})}
+  }), [instance])
 
-  /* 只在切换实例（或首次进入）时清空内容：切月份走静默重取，页面 DOM 保持不变，
-     否则整块内容会被替换成 Loading，滚动位置随之回到顶部（看起来像整页刷新）。 */
+  const load = useCallback((silent: boolean) => {
+    if (connection !== 'ready' || document.hidden) return
+    reportRefresh.refresh(!silent)
+    if (!embedded) resourceRefresh.refresh()
+  }, [connection, embedded, reportRefresh, resourceRefresh])
+
+  /* 切月份保留原报表和图表状态；仅切实例时清空，避免显示另一实例的数据。 */
   useEffect(() => {
     if (loadedInstance.current === instance) return
     loadedInstance.current = instance
     setData(undefined)
+    setOverview(undefined)
     setError('')
     setMeowMonth(undefined)
   }, [instance])
 
   useEffect(() => {
-    void load(true)
-  }, [load])
-
-  /* 旧界面各板块 60 秒自刷新一次，仪表盘更快；这里统一按 60 秒静默重取。 */
-  useEffect(() => {
-    if (connection !== 'ready') return
-    const timer = setInterval(() => void load(true), AUTO_REFRESH_MS)
-    return () => clearInterval(timer)
-  }, [connection, load])
-
-  /* 后端统计更新推送（大世界/委托落库后）时静默刷新，避免整页 Loading 闪烁。 */
-  useEffect(() => {
-    if (connection !== 'ready') return
+    setBusy(false)
+    if (connection !== 'ready') {
+      setPending(false)
+      return
+    }
+    const callbacks = {
+      onData: (report: LegacyStatisticsReport) => { setData(report); setError('') },
+      onError: (error: unknown, explicit: boolean) => {
+        if (explicit) setError((error as Error).message)
+      },
+      onBusy: setBusy,
+      onIdle: () => setPending(false),
+    }
+    const resume = () => {
+      if (document.hidden) { reportRefresh.deactivate(); return }
+      reportRefresh.activate(callbacks)
+      reportRefresh.refresh()
+    }
+    resume()
     let timer: ReturnType<typeof setTimeout> | undefined
     const unsubscribe = api.onEvent(event => {
-      if (event.topic !== 'statistics' && event.topic !== 'overview') return
+      if (document.hidden || event.topic !== 'statistics') return
       const payload = event.data as {instance?: string} | undefined
       if (payload?.instance && payload.instance !== instance) return
       clearTimeout(timer)
-      timer = setTimeout(() => void load(true), 300)
+      timer = setTimeout(() => reportRefresh.refresh(), 300)
     })
-    return () => { unsubscribe(); clearTimeout(timer) }
-  }, [connection, instance, load])
+    const visibility = () => { clearTimeout(timer); resume() }
+    document.addEventListener('visibilitychange', visibility)
+    const interval = setInterval(() => {
+      if (!document.hidden) reportRefresh.refresh()
+    }, AUTO_REFRESH_MS)
+    return () => {
+      reportRefresh.deactivate()
+      unsubscribe()
+      clearTimeout(timer)
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', visibility)
+    }
+  }, [connection, instance, reportRefresh])
+
+  // 总览推送已经包含最新资源；嵌入总览时由外层显示资源，省去整套重复读取。
+  useEffect(() => {
+    if (embedded || connection !== 'ready') return
+    const callbacks = {
+      onData: (result: {version: number; overview: Overview}) => {
+        if (result.version === overviewVersion.current) setOverview(result.overview)
+      },
+      onError: () => {},
+      onBusy: () => {},
+      onIdle: () => {},
+    }
+    const resume = () => {
+      if (document.hidden) { resourceRefresh.deactivate(); return }
+      resourceRefresh.activate(callbacks)
+      resourceRefresh.refresh()
+    }
+    resume()
+    const unsubscribe = api.onEvent(event => {
+      if (document.hidden || event.topic !== 'overview') return
+      const snapshot = event.data as Overview
+      if (snapshot.instance !== instance) return
+      overviewVersion.current += 1
+      setOverview(snapshot)
+    })
+    document.addEventListener('visibilitychange', resume)
+    const interval = setInterval(() => {
+      if (!document.hidden) resourceRefresh.refresh()
+    }, AUTO_REFRESH_MS)
+    return () => {
+      resourceRefresh.deactivate()
+      unsubscribe()
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', resume)
+    }
+  }, [connection, embedded, instance, resourceRefresh])
 
   const commission = data?.commission
   const periodSummary = commission?.periods[commissionPeriod]
@@ -281,7 +331,7 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
     {/* 区域二：各统计板块，间距由 .legacy-stats-section 统一收口 */}
     <div className="legacy-stats-charts">
       <section className="legacy-stats-section legacy-stats-card legacy-ap-card">
-        <LegacyApChart instance={instance} series={data.apChart.series} onRefresh={() => void load(false)} refreshing={busy}/>
+        <LegacyApChart key={instance} instance={instance} series={data.apChart.series} onRefresh={() => void load(false)} refreshing={busy}/>
       </section>
 
       {/* 大世界数据收集：只显示本月有记录的侵蚀等级，行序为 1 / 5 / 3。 */}

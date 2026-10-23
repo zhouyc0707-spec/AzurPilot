@@ -11,6 +11,8 @@ import {
   buildLineLayout,
   mergeLogEntries,
   queueLogEvent,
+  prepareLogSnapshot,
+  advanceLogEventCursor,
   type LogBufferState,
 } from './LogPanel'
 
@@ -210,5 +212,97 @@ describe('LogPanel 日志解析与渲染', () => {
 
     expect(layout.heights).toEqual([LINE_HEIGHT_ESTIMATE])
     expect(layout.total).toBe(LINE_HEIGHT_ESTIMATE)
+  })
+})
+
+
+describe('隐藏日志的有界微批缓冲', () => {
+  const line = (id: number) => ({id, text: `日志 ${id}`, level: 'INFO'})
+  it('长时间隐藏后只保留窗口上限，恢复时一次合并得到最新窗口', () => {
+    const previous = Array.from({length: 1000}, (_, index) => line(index + 1))
+    const buffer: LogBufferState = {entries: [], reset: false, cursor: null}
+    for (let id = 1001; id <= 3200; id++) queueLogEvent(buffer, {entries: [line(id)], cursor: id})
+    expect(buffer.entries).toHaveLength(LOG_ENTRY_LIMIT)
+    const resumed = mergeLogEntries(previous, buffer.entries, buffer.reset)
+    expect(resumed.map(entry => entry.id)).toEqual(Array.from({length: 1000}, (_, index) => index + 2201))
+  })
+
+  it('隐藏期间重置与重叠推送在恢复后正确覆盖，不混入旧实例日志', () => {
+    const buffer: LogBufferState = {entries: [line(80)], reset: false, cursor: 80}
+    queueLogEvent(buffer, {entries: [line(1)], cursor: 1, reset: true})
+    queueLogEvent(buffer, {entries: [{...line(1), text: '最新'}, line(2)], cursor: 2})
+    expect(mergeLogEntries([line(79)], buffer.entries, buffer.reset)).toEqual([{...line(1), text: '最新'}, line(2)])
+    expect(buffer.cursor).toBe(2)
+  })
+})
+
+
+describe('日志恢复快照与推送竞态', () => {
+  const line = (id: number, text = `日志 ${id}`) => ({id, text, level: 'INFO'})
+  const snapshot = (cursor: number, entries: ReturnType<typeof line>[]) => ({instance: 'alas', cursor, entries, reset: true})
+  it('同代全量快照 reset=true 不清除已有400条以外的窗口', () => {
+    const result = prepareLogSnapshot([line(1), line(500)], snapshot(501, [line(500), line(501)]), {
+      requestCursor: 500, currentCursor: 500, newerEvent: false, generationChanged: false,
+    })
+    expect(result).toEqual({entries: [line(501)], reset: false, cursor: 501})
+  })
+  it('服务重启造成游标回退时清除旧代，即使有相同id', () => {
+    const result = prepareLogSnapshot([line(1, '旧'), line(500)], snapshot(2, [line(1, '新'), line(2)]), {
+      requestCursor: 500, currentCursor: 500, newerEvent: false, generationChanged: false,
+    })
+    expect(result).toEqual({entries: [line(1, '新'), line(2)], reset: true, cursor: 2})
+  })
+  it('快照落后较晚推送时只补旧记录，保留新推送内容和游标', () => {
+    const result = prepareLogSnapshot([line(502, '较晚推送')], snapshot(502, [line(501), line(502, '旧快照')]), {
+      requestCursor: 500, currentCursor: 503, newerEvent: true, generationChanged: false,
+    })
+    expect(result).toEqual({entries: [line(501)], reset: false, cursor: 503})
+  })
+  it('推送已确认新代后，丢弃仍在路上的上一代快照', () => {
+    expect(prepareLogSnapshot([line(1)], snapshot(500, [line(499), line(500)]), {
+      requestCursor: 500, currentCursor: 1, newerEvent: true, generationChanged: true,
+    })).toBeNull()
+  })
+  it('存在较晚推送时，旧于请求起点的快照不能反向重置视图', () => {
+    expect(prepareLogSnapshot([line(501)], snapshot(100, [line(100)]), {
+      requestCursor: 500, currentCursor: 501, newerEvent: true, generationChanged: false,
+    })).toBeNull()
+  })
+})
+
+
+describe('快照与逐条事件的独立游标', () => {
+  const line = (id: number) => ({id, text: `日志 ${id}`, level: 'INFO'})
+  it('快照先到102，事件101/102/103后到时不重置历史或清空位置', () => {
+    let state = {cursor: 102, eventCursor: 100}
+    let entries = Array.from({length: 102}, (_, index) => line(index + 1))
+    const buffer: LogBufferState = {entries: [], reset: false, cursor: null}
+    for (const cursor of [101, 102, 103]) {
+      const next = advanceLogEventCursor(state, {cursor, reset: false})
+      expect(next.restarted).toBe(false)
+      expect(next.reset).toBe(false)
+      expect(next.cursor).toBeGreaterThanOrEqual(102)
+      queueLogEvent(buffer, {entries: [line(cursor)], reset: next.reset, cursor: next.cursor})
+      state = next
+    }
+    entries = mergeLogEntries(entries, buffer.entries, buffer.reset)
+    expect(entries).toHaveLength(103)
+    expect(entries[0].id).toBe(1)
+    expect(buffer.cursor).toBe(103)
+  })
+  it('事件流自身从500回退到2时重置历史与最大游标', () => {
+    expect(advanceLogEventCursor({cursor: 502, eventCursor: 500}, {cursor: 2, reset: true})).toEqual({
+      cursor: 2, eventCursor: 2, reset: true, restarted: true,
+    })
+  })
+  it('正常窗口缺口的reset仍生效，但不误判为换代', () => {
+    expect(advanceLogEventCursor({cursor: 500, eventCursor: 100}, {cursor: 550, reset: true})).toEqual({
+      cursor: 550, eventCursor: 550, reset: true, restarted: false,
+    })
+  })
+  it('快照确认换代后清空事件游标，稍后较旧新代增量不会再次清空窗口', () => {
+    expect(advanceLogEventCursor({cursor: 10, eventCursor: null}, {cursor: 9, reset: false})).toEqual({
+      cursor: 10, eventCursor: 9, reset: false, restarted: false,
+    })
   })
 })

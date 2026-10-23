@@ -14,7 +14,10 @@ function deferred() {
   const promise = new Promise<void>((yes, no) => {resolve = yes; reject = no})
   return {promise, resolve, reject}
 }
-afterEach(() => vi.useRealTimers())
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.useRealTimers()
+})
 
 describe('即时配置队列', () => {
   it('新读取只清理此前确认的输入，不能清理读取期间完成的新修改', async () => {
@@ -65,6 +68,93 @@ describe('即时配置队列', () => {
 
     await vi.advanceTimersByTimeAsync(2000)
     expect(queue.getSnapshot().edits.serial).toBeUndefined()
+  })
+
+  it('单次保存只在静默期满和显示期满结算，不产生零延时空转', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(1_000_000)
+    const timers = vi.spyOn(globalThis, 'setTimeout')
+    const memory = storage()
+    const writes = vi.spyOn(memory, 'setItem')
+    const removals = vi.spyOn(memory, 'removeItem')
+    const queue = new EditQueue('test', {ready: () => true, send: vi.fn().mockResolvedValue(undefined)}, memory)
+    const listener = vi.fn()
+    queue.subscribe(listener)
+    queue.change('serial', 'edited')
+    await queue.settled()
+
+    await vi.advanceTimersByTimeAsync(699)
+    expect(queue.savedVisible(queue.getSnapshot().edits.serial)).toBe(false)
+    expect(listener).toHaveBeenCalledTimes(3)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(queue.savedVisible(queue.getSnapshot().edits.serial)).toBe(true)
+    expect(listener).toHaveBeenCalledTimes(4)
+
+    await vi.advanceTimersByTimeAsync(799)
+    expect(queue.getSnapshot().edits.serial).toBeDefined()
+    expect(listener).toHaveBeenCalledTimes(4)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(queue.getSnapshot().edits.serial).toBeUndefined()
+    expect(listener).toHaveBeenCalledTimes(5)
+    expect(writes).toHaveBeenCalledTimes(2)
+    expect(removals).toHaveBeenCalledTimes(3)
+    expect(timers.mock.calls.map(([, delay]) => delay)).toEqual([700, 800])
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('字段错开保存时各自按时显示，读取回执不能提前结束最短展示时间', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(1_000_000)
+    const timers = vi.spyOn(globalThis, 'setTimeout')
+    const queue = new EditQueue('test', {ready: () => true, send: vi.fn().mockResolvedValue(undefined)}, storage())
+    queue.change('first', 'one')
+    await queue.settled()
+    await vi.advanceTimersByTimeAsync(750)
+    queue.change('second', 'two')
+    await queue.settled()
+    await vi.advanceTimersByTimeAsync(250)
+    queue.reconcile(queue.confirmed())
+    expect(queue.savedVisible(queue.getSnapshot().edits.first)).toBe(true)
+    expect(queue.savedVisible(queue.getSnapshot().edits.second)).toBe(false)
+
+    await vi.advanceTimersByTimeAsync(449)
+    expect(queue.savedVisible(queue.getSnapshot().edits.second)).toBe(false)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(queue.savedVisible(queue.getSnapshot().edits.second)).toBe(true)
+    await vi.advanceTimersByTimeAsync(50)
+    expect(queue.getSnapshot().edits.first).toBeUndefined()
+    expect(queue.getSnapshot().edits.second).toBeDefined()
+    queue.reconcile(queue.confirmed())
+    expect(queue.getSnapshot().edits.second).toBeDefined()
+
+    await vi.advanceTimersByTimeAsync(749)
+    expect(queue.getSnapshot().edits.second).toBeDefined()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(queue.getSnapshot().edits.second).toBeUndefined()
+    expect(timers.mock.calls.every(([, delay]) => Number(delay) > 0)).toBe(true)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('显示期间继续修改时重新计时，旧的清理时间不删除新回执', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(1_000_000)
+    const queue = new EditQueue('test', {ready: () => true, send: vi.fn().mockResolvedValue(undefined)}, storage())
+    queue.change('serial', 'first')
+    await queue.settled()
+    const oldConfirmed = queue.confirmed()
+    await vi.advanceTimersByTimeAsync(1000)
+    queue.change('serial', 'second')
+    await queue.settled()
+    queue.reconcile(oldConfirmed)
+
+    await vi.advanceTimersByTimeAsync(500)
+    expect(queue.getSnapshot().edits.serial.value).toBe('second')
+    expect(queue.savedVisible(queue.getSnapshot().edits.serial)).toBe(false)
+    await vi.advanceTimersByTimeAsync(200)
+    expect(queue.savedVisible(queue.getSnapshot().edits.serial)).toBe(true)
+    await vi.advanceTimersByTimeAsync(800)
+    expect(queue.getSnapshot().edits.serial).toBeUndefined()
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   it('输入时立即发送，旧响应不会撤销后续输入，并串行提交最终值', async () => {

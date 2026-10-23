@@ -81,7 +81,7 @@ export class EditQueue {
     for (const [path, sequence] of Object.entries(confirmed)) {
       const edit = edits[path]
       if (edit?.status !== 'saved' || edit.sequence !== sequence) continue
-      if (this.idle(edit)) continue
+      if (Date.now() - (edit.readyAt ?? 0) < SAVED_QUIET_MS + SAVED_VISIBLE_MS) continue
       delete edits[path]
     }
     this.state = {...this.state, edits}
@@ -91,13 +91,15 @@ export class EditQueue {
 
   /** 按当前条目算出最近一个到期时刻：静默期满或显示够久，到点后重新结算。 */
   private schedule() {
-    if (this.settleTimer) return
+    // 新回执可能比已有条目的显示结束更早进入显示期，重新取最近的截止时间。
+    clearTimeout(this.settleTimer)
+    this.settleTimer = undefined
     const now = Date.now()
     let due = Infinity
     for (const edit of Object.values(this.state.edits)) {
       if (edit.status !== 'saved') continue
       const readyAt = edit.readyAt ?? now
-      due = Math.min(due, readyAt + (now - readyAt < SAVED_QUIET_MS ? SAVED_QUIET_MS : SAVED_VISIBLE_MS))
+      due = Math.min(due, readyAt + SAVED_QUIET_MS + (now - readyAt < SAVED_QUIET_MS ? 0 : SAVED_VISIBLE_MS))
     }
     if (due === Infinity) return
     const wait = Math.max(0, due - Date.now())

@@ -2,7 +2,7 @@
  * @fileoverview 实例运行总览页面（资源卡、调度器计划与实时日志）。
  */
 
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { Activity, useEffect, useState, useSyncExternalStore } from 'react'
 import { useParams } from 'react-router-dom'
 import { api } from '../api/client'
 import type { Overview as OverviewData } from '../api/types'
@@ -23,6 +23,24 @@ function loadResourceSelection(instance: string) {
     if (Array.isArray(saved) && saved.every(item => typeof item === 'string')) return [...new Set(saved)]
   } catch { /* 损坏偏好使用默认搭配。 */ }
   return defaultResourceKeys
+}
+
+/** 首次访问才加载面板；隐藏时暂停副作用，往返时保留筛选、图表和滚动状态。 */
+function LegacyOverviewPanels({instance, panel}: {instance: string; panel: 'logs' | 'stats'}) {
+  const [visited, setVisited] = useState({logs: panel === 'logs', stats: panel === 'stats'})
+  if (!visited[panel]) setVisited({...visited, [panel]: true})
+  return <>
+    {visited.logs && <Activity name="总览日志" mode={panel === 'logs' ? 'visible' : 'hidden'}>
+      <div className={`instance-page-panel ${panel === 'logs' ? 'panel-rise' : ''}`}>
+        <MonitorPanel instance={instance}/>
+      </div>
+    </Activity>}
+    {visited.stats && <Activity name="总览统计" mode={panel === 'stats' ? 'visible' : 'hidden'}>
+      <div className={`instance-page-panel ${panel === 'stats' ? 'panel-drop' : ''}`}>
+        <div className="instance-panel-stats"><Statistics embedded/></div>
+      </div>
+    </Activity>}
+  </>
 }
 
 export function Overview() {
@@ -79,12 +97,7 @@ export function Overview() {
     </LegacyRail>
     <div className="instance-page-main">
       <ResourceCards resources={data.resources} selected={selectedResources}/>
-      {/* 换面板时重挂一次，让内容列的淡入重放；方向类决定从哪一侧滑入。 */}
-      <div className={`instance-page-panel ${panel === 'stats' ? 'panel-drop' : 'panel-rise'}`} key={panel}>
-        {panel === 'stats'
-          ? <div className="instance-panel-stats"><Statistics embedded/></div>
-          : <MonitorPanel instance={instance}/>}
-      </div>
+      <LegacyOverviewPanels key={instance} instance={instance} panel={panel}/>
     </div>
   </div>
 

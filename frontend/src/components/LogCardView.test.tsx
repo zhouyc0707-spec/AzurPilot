@@ -3,6 +3,8 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import {
   aggregateEntriesToCards,
   clearAggregationCache,
+  createAggregationCache,
+  pruneMeasurements,
   getAggregationCacheInfo,
   renderTokens,
   clearTokenCache,
@@ -614,4 +616,95 @@ describe('LogCardView 块级聚合器与卡片组件', () => {
       })
     })
   })
+})
+
+
+describe('滚动日志窗口与独立缓存', () => {
+  const line = (id: number, text = `记录 ${id}`, level = 'INFO') => ({id, text, level})
+  const parseFresh = (entries: ReturnType<typeof line>[]) => aggregateEntriesToCards(entries, createAggregationCache())
+
+  it('1000 条窗口逐条淘汰时复用中段对象，只重新聚合尾部', () => {
+    const cache = createAggregationCache()
+    const entries = Array.from({length: 1000}, (_, index) => line(index + 1))
+    const oldCards = aggregateEntriesToCards(entries, cache)
+    const next = [...entries.slice(1), line(1001)]
+    const cards = aggregateEntriesToCards(next, cache)
+    expect(cards).toEqual(parseFresh(next))
+    expect(cards.filter(card => oldCards.includes(card))).toHaveLength(995)
+    expect(cache.entries).toHaveLength(1000)
+    expect(cache.ranges[0].start).toBe(0)
+    expect(cache.ranges.at(-1)?.end).toBe(1000)
+  })
+
+  it('头部截断地图、矩阵、横幅和属性块时，与重新解析完全一致', () => {
+    const messages = [
+      '[地图-显示] A  B  C', ' 1 -- -- --', ' 2 -- -- --', ' 3 -- -- --',
+      '块间隔', '-- -- -- --', '-- -- -- --', '-- -- -- --', '-- -- -- --',
+      '块间隔', '═'.repeat(40), '任务启动', '═'.repeat(40),
+      '块间隔', 'Fuel: 100', 'Ammo: 20', 'Coin: 99',
+      ...Array.from({length: 10}, (_, index) => `尾部记录 ${index}`),
+    ]
+    const entries = messages.map((text, index) => line(index + 1, text))
+    for (let cut = 1; cut < 18; cut++) {
+      const cache = createAggregationCache()
+      aggregateEntriesToCards(entries, cache)
+      const next = [...entries.slice(cut), line(100)]
+      expect(aggregateEntriesToCards(next, cache)).toEqual(parseFresh(next))
+    }
+  })
+
+  it('连续追加形成跨批次地图与横幅、表格和异常堆栈时不漏行', () => {
+    const messages = [
+      ...Array.from({length: 30}, (_, index) => `之前 ${index}`),
+      '[地图-显示] A  B  C', ' 1 -- -- --', ' 2 -- -- --', ' 3 -- -- --',
+      '后续', '═'.repeat(40), '任务启动', '═'.repeat(40),
+      'Fuel: 100', 'Ammo: 20', 'Coin: 99',
+      '┌────┬────┐\n│名字│数量│\n│燃油│100│\n└────┴────┘',
+      'Traceback (most recent call last):\n  File "a.py", line 1\nValueError: test',
+      '-- -- -- --', '-- -- -- --', '-- -- -- --', '完成',
+    ]
+    const cache = createAggregationCache()
+    let window: ReturnType<typeof line>[] = []
+    for (let index = 0; index < messages.length; index++) {
+      window = [...window, line(index + 1, messages[index])].slice(-20)
+      expect(aggregateEntriesToCards(window, cache)).toEqual(parseFresh(window))
+    }
+  })
+
+  it('过滤、倒序、同 id 等级修正以及清空均按当前可见内容解析', () => {
+    const cache = createAggregationCache()
+    const entries = Array.from({length: 20}, (_, index) => line(index + 1))
+    const variants = [entries, entries.filter(entry => entry.id % 2 === 0),
+      [...entries].reverse(), [...entries.slice(0, 10), {...entries[10], level: 'WARNING'}, ...entries.slice(11)],
+      [], [line(1, '重启后的日志')]]
+    for (const next of variants) expect(aggregateEntriesToCards(next, cache)).toEqual(parseFresh(next))
+  })
+
+  it('不同实例的同 id 日志不共用缓存', () => {
+    const a = createAggregationCache()
+    const b = createAggregationCache()
+    const first = aggregateEntriesToCards([line(1, '实例甲')], a)
+    aggregateEntriesToCards([line(1, '实例乙')], b)
+    expect(aggregateEntriesToCards([line(1, '实例甲')], a)).toBe(first)
+    expect(b.cards[0].rawText).toBe('实例乙')
+  })
+
+  it('高度缓存移除已淘汰或替换的记录，保留未变记录', () => {
+    const old = [line(1), line(2), line(3)]
+    const next = [old[1], line(3, '替换的多行记录'), line(4)]
+    const measured = new Map([[1, 20], [2, 25], [3, 500], [999, 50]])
+    pruneMeasurements(measured, old, next)
+    expect([...measured]).toEqual([[2, 25]])
+    pruneMeasurements(measured, next, [])
+    expect(measured.size).toBe(0)
+  })
+})
+
+
+it('尾部重新聚合但内容未变时保留实测高度，内容变更后重新测量', () => {
+  const before = [{id: 1, rawText: '原内容'}, {id: 2, rawText: '原内容'}]
+  const current = [{id: 1, rawText: '原内容'}, {id: 2, rawText: '变更内容'}]
+  const heights = new Map([[1, 23], [2, 45]])
+  pruneMeasurements(heights, before, current, (a, b) => a.rawText === b.rawText)
+  expect([...heights]).toEqual([[1, 23]])
 })

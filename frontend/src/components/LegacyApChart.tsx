@@ -60,6 +60,8 @@ export function LegacyApChart({instance, series, onRefresh, refreshing = false}:
   const [visible, setVisible] = useState<boolean[]>(DEFAULT_VISIBLE)
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<ReturnType<typeof echarts.init> | undefined>(undefined)
+  // Activity 隐藏会销毁图表实例，但保留 React 状态与 ref，回来时恢复缩放。
+  const zoomRef = useRef({start: 0, end: 100})
 
   const byKey = useMemo(() => {
     const map = new Map<string, LegacySeries>()
@@ -109,8 +111,19 @@ export function LegacyApChart({instance, series, onRefresh, refreshing = false}:
     if (!container) return
     const chart = echarts.init(container, undefined, {renderer: 'canvas'})
     chartRef.current = chart
-    const observer = new ResizeObserver(() => chart.resize())
+    const resize = () => {
+      if (container.clientWidth > 0 && container.clientHeight > 0) chart.resize()
+    }
+    const observer = new ResizeObserver(resize)
     observer.observe(container)
+    const frame = requestAnimationFrame(resize)
+    const saveZoom = () => {
+      const zoom = (chart.getOption().dataZoom as {start?: number; end?: number}[] | undefined)?.[0]
+      if (typeof zoom?.start === 'number' && typeof zoom.end === 'number') {
+        zoomRef.current = {start: zoom.start, end: zoom.end}
+      }
+    }
+    chart.on('datazoom', saveZoom)
     // 双击恢复完整缩放范围，保留当前时间范围和图例选择。
     chart.getZr().on('dblclick', () => chart.dispatchAction({type: 'dataZoom', start: 0, end: 100}))
     /* zrender 会给画布挂 wheel 监听并 stopPropagation，指针停在图表上时整页就滚不动
@@ -122,6 +135,8 @@ export function LegacyApChart({instance, series, onRefresh, refreshing = false}:
     }
     container.addEventListener('wheel', keepPageScroll, {capture: true})
     return () => {
+      saveZoom()
+      cancelAnimationFrame(frame)
       container.removeEventListener('wheel', keepPageScroll, {capture: true})
       observer.disconnect()
       chart.dispose()
@@ -192,7 +207,7 @@ export function LegacyApChart({instance, series, onRefresh, refreshing = false}:
       /* 滚轮默认交给页面滚动，只有按住 Ctrl 滚轮才缩放图表：旧图表是滚轮即缩放，
          但画布占掉大半屏之后，指针停在图表上就整页滚不动。上游统计图表同样用
          zoomOnMouseWheel: 'ctrl'。拖拽平移与双击恢复缩放范围保持可用。 */
-      dataZoom: [{type: 'inside', filterMode: 'none', zoomOnMouseWheel: 'ctrl', moveOnMouseWheel: false}],
+      dataZoom: [{type: 'inside', filterMode: 'none', zoomOnMouseWheel: 'ctrl', moveOnMouseWheel: false, ...zoomRef.current}],
       // 涨跌配色：正数红、负数绿、持平灰；体力被隐藏时不参与着色（避免着色到别的序列）
       visualMap: visible[0] ? {
         show: false, dimension: 2, seriesIndex: 0,
