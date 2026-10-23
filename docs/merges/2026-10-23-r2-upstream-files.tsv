@@ -1,0 +1,5 @@
+status	path
+M	docs/modules/os/index.md
+M	module/os/tasks/explore_cleanup.py
+M	tests/test_opsi_explore_cleanup.py
+M	tests/test_opsi_smart_explore.py

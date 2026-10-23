@@ -1,0 +1,3 @@
+sha	parents	date	subject
+90d520ce3e4aac5727a89d41831ef523253e55af	5e2366b5ac9d5addafd429b24fa2ded7ab5bd4d9	2026-10-23T11:34:00+08:00	fix(opsi): 修复普通海域补扫重启后反复报错
+8f18582984bef8fb972325c4371bcb77cf017156	5e2366b5ac9d5addafd429b24fa2ded7ab5bd4d9 90d520ce3e4aac5727a89d41831ef523253e55af	2026-10-23T11:43:56+08:00	fix(opsi): 修复普通海域补扫重启后反复报错 (#1322)

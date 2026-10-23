@@ -1,0 +1,46 @@
+{
+  "base": "5e2366b5a",
+  "before": "2b086b1f2",
+  "upstream": "8f1858298",
+  "working_tree": "D:\\Codex\\workspace\\AzurPilot-upstream-dev-20261022",
+  "custom_paths": 912,
+  "upstream_changed_paths": 4,
+  "overlap_paths": 2,
+  "exclusive_paths_checked": 910,
+  "exclusive_existing_blob_checks": 903,
+  "exclusive_deletion_checks": 7,
+  "exclusive_unexpected_changes": [],
+  "allowed_document_changes": [
+    {
+      "path": "定制化修改清单.md",
+      "before_blob": "7221f19e1b94e987eef7370de2491402f8aa31f9",
+      "current_blob": "026a9c6687a461342428584bcade03c9b5a8f78a"
+    }
+  ],
+  "reviewed_exclusive_file_changes": [],
+  "configuration_custom_leaf_count": 1341,
+  "configuration_removed_leaf_count": 18,
+  "configuration_unexpected_change_count": 0,
+  "configuration_unexpected_restore_count": 0,
+  "configuration_reviewed_change_count": 0,
+  "generated_custom_attributes_checked": 40,
+  "generated_custom_attributes_changed": [],
+  "generated_removed_attributes_restored": [],
+  "python_paths_checked": 466,
+  "python_syntax_errors": [],
+  "python_custom_entities_checked": 6673,
+  "python_exact_comparisons": 6672,
+  "python_missing_entities_count": 0,
+  "python_changed_local_only_entities_count": 0,
+  "python_semantic_overlap_count": 1,
+  "python_restored_deleted_entities_count": 0,
+  "config_reviews_used": [],
+  "python_reviews_used": [],
+  "mechanical_preservation_passed": true,
+  "semantic_review_required": true,
+  "semantic_review": {
+    "tests/test_opsi_explore_cleanup.py:CleanupTests": "保留本地全图节点覆盖、动态相机更新及显式单队清理断言；合入上游重启续扫用例。共享类内的方法差异互不覆盖。",
+    "docs/modules/os/index.md": "仅替换普通海域补扫 attempts 的恢复说明；本地导航、雷达预检、完整扫描、明石及事件续查说明均保留。"
+  },
+  "semantic_review_passed": true
+}

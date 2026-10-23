@@ -1,0 +1,23 @@
+{
+  "test_command": "python -B -m unittest tests.test_opsi_explore_cleanup tests.test_opsi_smart_explore tests.test_scheduler_recovery tests.test_opsi_task_context tests.test_opsi_map_scan_coverage tests.test_opsi_hazard1_radar_precheck",
+  "tests": 151,
+  "passed": 151,
+  "skipped": 0,
+  "failed": 0,
+  "test_log": "D:\\Codex\\reports\\upstream-dev-20261023-r2\\targeted-tests.log",
+  "changed_python_ast_parsed": [
+    "module/os/tasks/explore_cleanup.py",
+    "tests/test_opsi_explore_cleanup.py",
+    "tests/test_opsi_smart_explore.py"
+  ],
+  "ruff_command": "ruff check module/os/tasks/explore_cleanup.py tests/test_opsi_explore_cleanup.py tests/test_opsi_smart_explore.py --select E9,F63,F7,F82 --ignore F821,F722",
+  "ruff_passed": true,
+  "diff_check_passed": true,
+  "frontend_changed": false,
+  "frontend_build_required": false,
+  "configuration_schema_changed": false,
+  "asset_definition_changed": false,
+  "api_contract_changed": false,
+  "real_game_actions_executed": false,
+  "independent_review": "无阻断性缺陷，无待决强冲突；恢复上限及代理身份语义保持原规则。"
+}
