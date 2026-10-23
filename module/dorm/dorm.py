@@ -367,7 +367,8 @@ class RewardDorm(UI):
     @cached_property
     def _dorm_food_ocr(self):
         """获取后宅 6 个食物槽位的数字库存 OCR 识别对象。"""
-        grids = self._dorm_food.crop((54, 41, 101, 66), name='FOOD_AMOUNT')
+        # 五位库存右对齐，旧左界会把 38600 的首位裁掉；只扩至数字左缘，避免纳入食物图案。
+        grids = self._dorm_food.crop((40, 41, 101, 66), name='FOOD_AMOUNT')
         return Digit(grids.buttons, letter=(255, 255, 255), threshold=128, name='OCR_DORM_FOOD')
 
     def _dorm_has_food(self, button):
