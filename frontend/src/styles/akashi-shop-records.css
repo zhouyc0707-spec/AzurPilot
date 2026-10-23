@@ -1,0 +1,26 @@
+.akashi-record-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.akashi-record-actions .legacy-button {display: inline-flex; align-items: center; gap: 5px}
+.modal.akashi-record-modal {width: 1040px; max-height: calc(100dvh / var(--ui-scale, 1) - 30px); overflow-y: auto}
+.akashi-record-modal .panel-heading {gap: 12px}
+.akashi-record-modal .panel-heading h2 {overflow-wrap: anywhere}
+.akashi-record-summary {display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin: 12px 0}
+.akashi-record-summary > div {display: flex; flex-direction: column; gap: 3px}
+.akashi-record-summary strong {font-size: 28px; color: var(--accent, var(--theme-accent))}
+.akashi-record-summary small {font-size: 14px; font-weight: normal}
+.akashi-record-summary dl {display: grid; gap: 6px; margin: 0; font-size: 13px}
+.akashi-record-summary dl > div {display: flex; flex-wrap: wrap; gap: 6px 12px}
+.akashi-record-summary dt {color: var(--muted, var(--theme-muted))}
+.akashi-record-summary dd {margin: 0; overflow-wrap: anywhere}
+.akashi-record-boxes {display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 10px 0; font-size: 14px}
+.akashi-record-note, .akashi-record-empty {font-size: 13px; line-height: 1.7}
+.akashi-record-image {display: block; width: 100%; height: auto; border: 1px solid var(--border, var(--theme-border)); border-radius: 8px}
+
+@media (max-width: 600px) {
+  .akashi-record-actions {flex-basis: 100%; margin-left: 0}
+}

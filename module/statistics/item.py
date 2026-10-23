@@ -831,8 +831,11 @@ class ItemGrid:
                 amount_images, item_names=item_names, direct_ocr=True, trim=amount_trim,
                 amount_max=self.amount_max, amount_default_max=self.amount_default_max
             )
-            for item, a in zip(self.items, amount_list):
+            amount_validity = getattr(self.amount_ocr, 'last_batch_validity', ())
+            for index, (item, a) in enumerate(zip(self.items, amount_list)):
                 item.amount = a
+                # 在后续货币／价格过滤前保留对应可信度，避免未知数量进入截图纪录。
+                item.amount_valid = index < len(amount_validity) and amount_validity[index]
         if cost:
             cost_list = [self.match_cost_template(item) for item in self.items]
             self.items = [item for item, c in zip(self.items, cost_list) if c is not None]

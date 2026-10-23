@@ -281,6 +281,12 @@ class MeowScreenshotFolderParams(InstanceParams):
     month: StrictStr = Field(pattern=r'^[0-9]{4}-(0[1-9]|1[0-2])$')
 
 
+class AkashiRecordParams(InstanceParams):
+    """仅查询本月或历史猫王，不接受任意图片路径。"""
+
+    scope: Literal['monthly', 'history']
+
+
 class ResourceFlowsParams(InstanceParams):
     """资源管理只读区间与明细分页，不触发设备操作。"""
     days: StrictInt = Field(default=7, ge=1, le=365)

@@ -178,6 +178,13 @@ class AkashiShop(OSStatus, OSShopUI, Selector, MapEventHandler):
                 return None
             items = self.os_shop_get_items_in_akashi()
             if items and all(item.is_known_item() for item in items):
+                from module.os_shop.akashi_record import observe_record
+                if observe_record(self, items, can_recheck=attempt < 2):
+                    self.device.screenshot()
+                    continue
+                session = getattr(self, '_akashi_shop_session', None)
+                if isinstance(session, dict):
+                    session['record_checked'] = True
                 items = self.items_filter_in_akashi_shop(items)
                 return items.pop() if items else None
             if attempt < 2:

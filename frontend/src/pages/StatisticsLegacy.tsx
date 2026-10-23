@@ -281,7 +281,7 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
     {/* 区域二：各统计板块，间距由 .legacy-stats-section 统一收口 */}
     <div className="legacy-stats-charts">
       <section className="legacy-stats-section legacy-stats-card legacy-ap-card">
-        <LegacyApChart series={data.apChart.series} onRefresh={() => void load(false)} refreshing={busy}/>
+        <LegacyApChart instance={instance} series={data.apChart.series} onRefresh={() => void load(false)} refreshing={busy}/>
       </section>
 
       {/* 大世界数据收集：只显示本月有记录的侵蚀等级，行序为 1 / 5 / 3。 */}

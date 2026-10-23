@@ -104,6 +104,7 @@ class Router:
             'statistics.refreshLoot': Method(p.InstanceParams, self.refresh_loot, True),
             'statistics.report': Method(p.StatisticsReportParams, self.statistics_report),
             'statistics.legacy': Method(p.LegacyStatisticsParams, self.statistics_legacy),
+            'statistics.akashiRecord': Method(p.AkashiRecordParams, self.akashi_record),
             'statistics.meowScreenshotFolder.open': Method(p.MeowScreenshotFolderParams,
                                                           self.meow_screenshot_folder_open, True),
             'statistics.resourceFlows': Method(p.ResourceFlowsParams, self.resource_flows),
@@ -268,6 +269,11 @@ class Router:
         """
         from module.api.legacy_stats_service import report
         return report(self.configs, params.instance, params.month)
+
+    def akashi_record(self, params: p.AkashiRecordParams):
+        """按当前实例服务器读取明石商店纪录及其完整截图。"""
+        from module.api.akashi_record_service import report
+        return report(self.configs, params.instance, params.scope)
 
     def meow_screenshot_folder_open(self, params: p.MeowScreenshotFolderParams):
         """在脚本服务所在机器打开指定物品和月份的截图归档。"""

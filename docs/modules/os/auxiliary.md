@@ -60,6 +60,7 @@ module/os_shop/
 ├── shop.py           # OSShop：购买循环/数量处理/补给采购
 ├── port_shop.py      # PortShop：港口货架扫描
 ├── akashi_shop.py    # AkashiShop：明石货架（按服务器 @Config.when 分支）
+├── akashi_record.py  # 购买前完整货架确认与猫王纪录采集
 ├── selector.py       # Selector：货架过滤策略适配层
 ├── ui.py             # OS_SHOP_SCROLL（AdaptiveScroll 实例）
 ├── item.py / preset.py
@@ -141,6 +142,12 @@ META 战后换装只借用普通信标编队：最后一场即使是档案战斗
 | `PortShop` | 港口货架 `ItemGrid`（按钮网格 + 滚动），`OS_SHOP_SCROLL = AdaptiveScroll(...)` 适配背景多变的商店界面 |
 | `AkashiShop` | 明石商店货架定义按 `@Config.when(SERVER='tw'/'en'/None)` 三分支——三服货架布局不同 |
 | `Selector` | 策略适配层：把「侵蚀等级偏好、紫币保留、数量上限」等配置翻译成对货架条目的过滤与排序；港口/明石共用 |
+
+明石猫王在每次进店的首次购买选择前采集，适用于全部大世界任务。行动力总量是未经过购买过滤的所有 `ActionPoint20/50/100` 商品规格乘以 `amount` 的总和；同类多格分别累计，不乘默认 `count=-1`，也不受余额影响。每格必须正向确认为已知商品或现有 Empty 模板匹配的空位，行动力数量还须通过 OCR 有效性检查；缺失格、未知商品或异常价格不能按无库存处理。
+
+低于本月纪录的完整货架不增加截图；可能刷新或追平纪录时，清除本店商品缓存，用新截图独立完成名称、数量、货币和价格识别，两帧完整签名一致后保存确认帧的 1280×720 全店原图。确认复用现有最多三帧的重拍预算，不完整或不稳定时只跳过纪录，继续原购买流程。一次进店只确认一次，任何购买尝试后均禁止补记残余货架；截图或落库失败也不阻断购买。
+
+纪录按实例、游戏服务器及服务器自然月隔离，同分保留最新遇到的商店；历史猫王从历月冠军中选取。存储、旧图回收及只读展示见[统计模块](../infra/statistics.md)。回归见 `tests/test_akashi_shop_record_capture.py`；空位目前覆盖真实模板和合成完整货架，尚未完成实际商店空位的实机验收。
 
 ### os_simulator
 

@@ -6,6 +6,7 @@ import { GridComponent, TooltipComponent, DataZoomComponent, VisualMapComponent 
 import { CanvasRenderer } from 'echarts/renderers'
 import type { LegacySeries } from '../api/types'
 import { useApp } from '../app/context'
+import { AkashiShopRecords } from './AkashiShopRecords'
 import '../styles/legacy-ap-chart.css'
 
 echarts.use([LineChart, GridComponent, TooltipComponent, DataZoomComponent, VisualMapComponent, CanvasRenderer])
@@ -46,7 +47,8 @@ function parseTime(value: string): number {
  * 着色（涨红跌绿），辅助序列共用右侧一条 Y 轴，支持按住 Ctrl 滚轮缩放、拖拽平移
  * 和双击恢复完整缩放范围。与旧界面的差异见 `定制化修改清单.md`。
  */
-export function LegacyApChart({series, onRefresh, refreshing = false}: {
+export function LegacyApChart({instance, series, onRefresh, refreshing = false}: {
+  instance: string
   series: LegacySeries[]
   onRefresh: () => void
   refreshing?: boolean
@@ -215,6 +217,7 @@ export function LegacyApChart({series, onRefresh, refreshing = false}: {
         aria-label={ui('stats.refresh')} title={ui('stats.refresh')}>
         <RefreshCw size={15}/>
       </button>
+      <AkashiShopRecords instance={instance}/>
     </div>
     <div className="legacy-ap-series" style={{color: palette.series}}>
       {SERIES_ORDER.map((key, index) => <span className="legacy-ap-series-item" key={key}

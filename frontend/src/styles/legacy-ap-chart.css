@@ -5,6 +5,7 @@
 
 .legacy-ap-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   margin: 10px 0 6px;

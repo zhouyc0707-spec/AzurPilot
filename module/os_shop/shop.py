@@ -153,6 +153,9 @@ class OSShop(PortShop, AkashiShop):
                 logger.info('[大世界商店] 大世界商店+购买完成')
                 return count
             else:
+                session = getattr(self, '_akashi_shop_session', None)
+                if isinstance(session, dict):
+                    session['purchase_attempted'] = True
                 if not self.os_shop_buy_execute(button):
                     logger.warning(f'[大世界商店] 物品 {button.name} 无法购买，停止本轮选择')
                     continue

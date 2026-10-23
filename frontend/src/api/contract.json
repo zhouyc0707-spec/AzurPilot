@@ -2575,6 +2575,35 @@
         "type": "object"
       }
     },
+    "statistics.akashiRecord": {
+      "mutates": false,
+      "params": {
+        "additionalProperties": false,
+        "description": "仅查询本月或历史猫王，不接受任意图片路径。",
+        "properties": {
+          "instance": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Instance",
+            "type": "string"
+          },
+          "scope": {
+            "enum": [
+              "monthly",
+              "history"
+            ],
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instance",
+          "scope"
+        ],
+        "title": "AkashiRecordParams",
+        "type": "object"
+      }
+    },
     "statistics.meowScreenshotFolder.open": {
       "mutates": true,
       "params": {

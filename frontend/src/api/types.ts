@@ -82,6 +82,22 @@ export interface LogEntry { id: number; level: string; text: string }
 export interface Logs { instance: string; cursor: number; reset: boolean; entries: LogEntry[] }
 export interface Preview { instance: string; image: string | null; capturedAt: string | null }
 export interface Statistics { instance: string; resource: string; points: {time: string; value: number}[]; truncated: boolean }
+/** 明石商店购买前的在售行动力纪录，仅在点击查看时读取完整截图。 */
+export interface AkashiShopRecord {
+  totalAp: number
+  boxes: Record<string, number>
+  time: string
+  month: string
+  server: string
+  image: string | null
+  imageMissing?: boolean
+}
+export interface AkashiShopRecordResult {
+  instance: string
+  scope: 'monthly' | 'history'
+  month: string
+  record: AkashiShopRecord | null
+}
 export interface StatPoint {time: string; value: number; source?: string}
 export interface StatSeries {key: string; label: string; icon?: string; points: StatPoint[]}
 export interface StatPointCompact {t: number; v: number; s?: string}
@@ -269,6 +285,7 @@ export interface Results {
   'statistics.resources': Statistics
   'statistics.report': StatisticsReportWire
   'statistics.legacy': LegacyStatisticsReport
+  'statistics.akashiRecord': AkashiShopRecordResult
   'statistics.meowScreenshotFolder.open': {
     opened: boolean
     path: string | null

@@ -641,6 +641,16 @@ export function createMockState({ empty = false } = {}) {
         return { instance: name, image: `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`, capturedAt: get(name).previewAt ?? null }
       }
       case 'statistics.refreshLoot': return { refreshed: true }
+      case 'statistics.akashiRecord': {
+        // 公开示例画面，不读取用户截图或统计；demo-alt 用于验证空纪录。
+        const month = new Date().toISOString().slice(0, 7)
+        if (name === 'demo-alt') return {instance: name, scope: params.scope, month, record: null}
+        const totalAp = params.scope === 'history' ? 480 : 340
+        const boxes = params.scope === 'history' ? {'20': 4, '50': 4, '100': 2} : {'20': 2, '50': 2, '100': 2}
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><rect width="1280" height="720" fill="#eaf0f6"/><rect x="30" y="30" width="1220" height="660" rx="24" fill="#fff" stroke="#abb8cb"/><text x="70" y="100" fill="#283c57" font-size="35">明石商店 · 示例画面</text>${Object.entries(boxes).map(([ap, count], index) => `<rect x="${85 + index * 385}" y="160" width="340" height="400" rx="20" fill="#e2e8fa"/><text x="${115 + index * 385}" y="280" fill="#514ba2" font-size="30">${ap} 点行动力箱</text><text x="${115 + index * 385}" y="360" fill="#283c57" font-size="28">数量：${count}</text>`).join('')}<text x="70" y="640" fill="#283c57" font-size="28">在售行动力合计：${totalAp} 点（模拟数据）</text></svg>`
+        return {instance: name, scope: params.scope, month, record: {totalAp, boxes,
+          time: new Date().toISOString(), month, server: 'cn', image: `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`}}
+      }
       case 'meowfficer.scoreReport': {
         // demo-alt 用来验证「还没跑过评分任务」的空状态，其余实例都给一份示例报告。
         if (name === 'demo-alt') fail('NOT_FOUND', '评分报告尚未生成，请先在「工具 → 指挥喵评分」运行一次任务')

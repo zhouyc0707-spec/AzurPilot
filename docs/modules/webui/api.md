@@ -55,6 +55,7 @@ module/api/
 ├── config_service.py      实例白名单、配置读取与跨进程事务写
 ├── runtime_service.py     实例状态/总览/增量日志/被动截图适配层
 ├── statistics_service.py  分类统计报告的聚合（含只读仓库快照）
+├── akashi_record_service.py 明石猫王纪录及受控截图的只读查询
 ├── resource_service.py    资源账本、收支聚合、库存与明细分页的只读查询
 ├── meowfficer_service.py  指挥喵评分报告的只读读取与清理
 ├── update_service.py      Git 快照/提交历史与后台 fetch/apply（模块级单例）
@@ -69,6 +70,8 @@ module/api/
 仓库报告使用 `statistics.report(category='storage', days=7)` 只读查询最近完整快照及时间窗口内成功扫描的历史序列。序列的可选 `icon` 在逐点与共用时间轴两种格式中保留，物品图标由 `/storage-items/` 静态挂载提供。主动扫描沿用 `tasks.run(task='StorageStatistics')` 与实例运行互斥；页面刷新不启动扫描。
 
 其他分类报表在同一请求内共用统计协调锁，避免每个指标扫描全部历史。普通统计不调用加密校验或 OS 凭据，旧密文须先完成无损迁移。`CategorySection` 仅按 `statistics` 事件更新，同一分类最多保留一个正在执行的请求；期间收到的多次通知合并为一次后续刷新。运行概览事件不触发统计查询，SQLite WAL 的修改也纳入更新指纹；切换实例或参数后忽略旧响应。
+
+`statistics.akashiRecord(instance, scope)` 是明石猫王的只读 RPC，`scope` 仅接受 `monthly` 或 `history`。接口先核验实例白名单，从实例包名确定游戏服务器，再读取服务器自然月冠军或历史冠军；无纪录时返回 `record: null`。图片只在请求时通过已认证的 `/api/v1/ws` 返回 `data:image/png;base64,...`，不公开静态目录或本地路径，也不接受任意文件路径。图片缺失或无法读取时保留纪录数值，返回 `image: null`、`imageMissing: true`；读取不会启动游戏、截图或采购。冠军保留与更新规则见[统计模块](../infra/statistics.md)。
 
 旧版收获表的 `statistics.meowScreenshotFolder.open(instance, item, month)` 是本机目录打开操作，按有副作用接口登记，演示模式禁用。`item` 仅接受六种高价值分类键，`month` 为 `YYYY-MM`；保存根目录只读自实例配置，不接受请求中的路径。返回 `opened/path/requestedPath/scope/item/month`，`scope` 区分打开月份、回退分类及目录缺失；打开失败抛出 `FOLDER_OPEN_FAILED`。前端正常打开月份目录时保持静默，回退、缺失或失败时用提示反馈，不重载统计。目录与归档对应关系见 [统计模块](../infra/statistics.md)。
 

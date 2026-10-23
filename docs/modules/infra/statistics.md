@@ -24,6 +24,14 @@ AzurPilot 在执行任务时天然经过大量战斗结算与资源画面。这�
 
 ## 2. 模块职责
 
+### 明石猫王纪录
+
+`akashi_shop_records.py` 保存各实例、各游戏服务器的月度在售行动力冠军。自然月及观测时间按游戏服务器时区计算，平纪录保留最新观测；历史冠军从该实例、该服务器保留的历月冠军中按总量及时间选取，不维护另一个历史指针。仅记录购买前已完整确认的货架，不从实际购买量或旧购买日志反推；采集与双帧独立 OCR 规则见[大世界辅助模块](../os/auxiliary.md)。
+
+元数据复用 `config/azurpilot.db` 的 `cl1_compat_fields` 扩展字段 `akashi_shop_champion`，按实例、月份保存服务器映射，无新增表或迁移。截图保存为 `screenshots/akashi_shop_records/<实例SHA256>/<YYYY-MM>/<UUID>.png`，保留未经裁剪的 1280×720 RGB 原图。先通过临时文件和原子替换写图，再在总库事务中发布引用；失败不覆盖旧纪录。提交成功后，只回收同月被替换且不再被任何冠军引用的旧图，历月冠军及其截图保留。
+
+WebUI 通过只读 `statistics.akashiRecord` 按需取得纪录及图片，截图缺失时仍显示已保存的数值，不触发游戏或重新进店。回归入口为 `tests/test_akashi_shop_records.py`、`tests/test_akashi_shop_record_capture.py`。
+
 ### 仓库统计任务
 
 入口为 `alas.py::storage_statistics()` → `module/storage/statistics.py`，默认关闭；可从统计页「仓库」分类手动运行，也可启用原生定时任务。任务复用 `StorageUI` 导航到材料页，不打开物品或消耗材料。
@@ -96,6 +104,7 @@ AzurPilot 在执行任务时天然经过大量战斗结算与资源画面。这�
 module/statistics/
 ├── azurstats.py              # AzurStats：掉落记录提交、指挥喵 farming 汇总
 ├── cl1_database.py           # Cl1Database：月度统计库（单例 db）
+├── akashi_shop_records.py    # 明石在售行动力月冠军、历史查询及完整现场
 ├── cl1_data_submitter.py     # CL1 遥测提交器
 ├── daily_summary.py          # DailySummaryService：日报触发与生成
 ├── daily_summary_store.py    # DailySummaryStore：日报事件库
