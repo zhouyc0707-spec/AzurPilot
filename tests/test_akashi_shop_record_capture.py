@@ -1,5 +1,8 @@
 """隔离验证明石猫王仅记录购买前完整、独立确认的货架。"""
 
+import base64
+import io
+import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,6 +19,7 @@ from module.os_shop.akashi_shop import AkashiShop
 from module.os_shop.assets import PORT_SUPPLY_CHECK
 from module.os_shop.item import OSShopItemGrid
 from module.os_shop.shop import OSShop
+from module.statistics.akashi_shop_records import AkashiShopRecords
 from tests.test_opsi_akashi_inventory import AkashiInventoryFixture as _InventoryFixture
 
 
@@ -310,6 +314,120 @@ class AkashiRecordSignatureTests(AkashiCaptureFixture):
         self.assertTrue(observe_record(runner, items[:-1], can_recheck=True))
         self.assertFalse(observe_record(runner, items, can_recheck=False))
         self.store.record.assert_not_called()
+
+
+class RealAkashiShelfTests(unittest.TestCase):
+    """用移除 HUD 的真实六商品货架验证完整链路，不操作设备。"""
+
+    fixture = Path(__file__).parent / 'fixtures' / 'akashi_shop_records' / 'cn_six_goods.png'
+
+    def make_runner(self):
+        runner = AkashiShop.__new__(AkashiShop)
+        runner.config = SimpleNamespace(config_name='testpilot', SERVER='cn',
+                                        SHOP_EXTRACT_TEMPLATE=False)
+        runner._akashi_shop_session = {}
+        runner.device = SimpleNamespace(image=np.array(Image.open(self.fixture).convert('RGB')))
+        # 仅回放货架；导航状态与货币已读状态不由去除 HUD 的夹具模拟。
+        runner.appear = Mock(return_value=True)
+        runner.os_shop_get_coins = Mock()
+        runner.device.screenshot = Mock(side_effect=lambda: setattr(
+            runner.device, 'image', runner.device.image.copy()))
+        runner.items_filter_in_akashi_shop = Mock(side_effect=lambda items: list(items))
+        grid = OSShopItemGrid(ButtonGrid((233, 224), (193.2, 228), (98, 98), (4, 2)), {})
+        directory = Path(__file__).resolve().parents[1] / 'assets' / 'shop'
+        grid.load_template_folder(str(directory / 'os'))
+        grid.load_cost_template_folder(str(directory / 'os_cost'))
+        runner.__dict__['os_akashi_shop_items'] = grid
+        return runner, grid
+
+    def test_real_ocr_reads_six_goods_and_accepts_two_unframed_shelf_backgrounds(self):
+        runner, grid = self.make_runner()
+        items = grid.predict(runner.device.image)
+        self.assertEqual([(item.name, item.amount) for item in items], [
+            ('PurpleCoins', 10), ('ActionPoint20', 1), ('ActionPoint100', 2),
+            ('RepairPack', 1), ('TuningSampleOffence', 1), ('TuningSampleCombat', 1),
+        ])
+        self.assertTrue(all(item.amount_valid for item in items))
+        self.assertEqual([item.price for item in items], [800, 800, 8000, 600, 1, 1])
+        self.assertEqual([item.area for item in items], [button.area for button in grid.grids.buttons[:6]])
+        for button in grid.grids.buttons[6:]:
+            empty = grid.item_class(runner.device.image, button)
+            self.assertFalse(empty.is_valid)
+            maximum = max(cv2.minMaxLoc(cv2.matchTemplate(
+                empty.image, template, cv2.TM_CCOEFF_NORMED))[1]
+                for name, template in grid.templates.items() if name.startswith('Empty'))
+            self.assertLess(maximum, .2)
+        issues = []
+        total, boxes, signature = observation(runner, items, issues=issues)
+        self.assertEqual((total, boxes), (220, {'20': 1, '50': 0, '100': 2}))
+        self.assertEqual(len(signature), 8)
+        self.assertEqual(issues, [])
+
+    def test_missing_real_goods_never_match_empty_shelf_backgrounds(self):
+        runner, grid = self.make_runner()
+        items = grid.predict(runner.device.image)
+        for index in range(len(items)):
+            with self.subTest(slot=index + 1):
+                issues = []
+                self.assertIsNone(observation(runner, items[:index] + items[index + 1:], issues=issues))
+                self.assertTrue(issues)
+
+    def test_black_unknown_slot_and_unread_action_point_box_cannot_be_empty(self):
+        for background in ('black', 'ActionPoint20', 'ActionPoint100'):
+            with self.subTest(background=background):
+                runner, grid = self.make_runner()
+                items = grid.predict(runner.device.image)
+                left, top, right, bottom = grid.grids.buttons[6].area
+                if background == 'black':
+                    runner.device.image[top:bottom, left:right] = 0
+                else:
+                    directory = Path(__file__).resolve().parents[1] / 'assets' / 'shop' / 'os'
+                    icon = np.array(Image.open(directory / f'{background}.png').convert('RGB'))
+                    runner.device.image[top:bottom, left:right] = cv2.resize(
+                        icon, (right - left, bottom - top), interpolation=cv2.INTER_CUBIC)
+                issues = []
+                self.assertIsNone(observation(runner, items, issues=issues))
+                self.assertTrue(issues)
+
+    def test_cn_shelf_backgrounds_do_not_validate_unverified_server(self):
+        runner, grid = self.make_runner()
+        items = grid.predict(runner.device.image)
+        runner.config.SERVER = 'en'
+        self.assertIsNone(observation(runner, items))
+
+    def test_two_real_ocr_frames_save_220_ap_and_serve_the_same_full_fixture(self):
+        from module.api.akashi_record_service import report
+        from module.api.config_service import ConfigService
+        from tests.test_api import fixture
+
+        runner, grid = self.make_runner()
+        grid.predict = Mock(wraps=grid.predict)
+        with tempfile.TemporaryDirectory(prefix='akashi-shelf-replay-') as temporary:
+            configs = ConfigService(fixture(temporary))
+            store = AkashiShopRecords(configs.directory)
+            with patch('module.os_shop.akashi_record.AkashiShopRecords', return_value=store):
+                selected = runner.os_shop_get_item_to_buy_in_akashi()
+            self.assertIsNotNone(selected)
+            self.assertEqual(grid.predict.call_count, 2)
+            runner.device.screenshot.assert_called_once()
+            runner.items_filter_in_akashi_shop.assert_called_once()
+            records = store.records('testpilot', 'cn')
+            self.assertEqual(records['monthly']['totalAp'], 220)
+            self.assertEqual(records['monthly']['boxes'], {'20': 1, '50': 0, '100': 2})
+            self.assertEqual(records['monthly'], records['history'])
+            for scope in ('monthly', 'history'):
+                record = report(configs, 'testpilot', scope)['record']
+                self.assertEqual(record['totalAp'], 220)
+                content = base64.b64decode(record['image'].split(',', 1)[1])
+                with Image.open(io.BytesIO(content)) as image:
+                    self.assertEqual(image.size, (1280, 720))
+                    np.testing.assert_array_equal(np.array(image), runner.device.image)
+
+    def test_fixture_excludes_fleet_and_hud_pixels(self):
+        runner, _ = self.make_runner()
+        outside = runner.device.image.copy()
+        outside[180:650, 200:965] = 0
+        self.assertFalse(np.any(outside))
 
 
 if __name__ == '__main__':
