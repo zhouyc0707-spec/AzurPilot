@@ -1985,6 +1985,7 @@ class IslandBusiness(Island):
                 return char_name
 
         # 当前视野没有目标时沿用从顶部开始的有界搜索及排序回退。
+        self._set_character_sort(ascending=False)
         self._swipe_up_reset()
 
         max_swipes = 5
@@ -2001,6 +2002,7 @@ class IslandBusiness(Island):
 
         # 滑动多次未找到，切换排序后从头搜索
         self.select_character_filter()
+        self._set_character_sort(ascending=False)
         self.device.sleep(0.5)
         self._swipe_up_reset()
 

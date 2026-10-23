@@ -2,7 +2,7 @@
 
 import unittest
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 import numpy as np
 
@@ -184,6 +184,7 @@ class BusinessCharacterNavigationTests(unittest.TestCase):
         business.character_priority = ['Helena', 'Eugen']
         business.character_templates = {'Helena': TEMPLATE_HELENA, 'Eugen': TEMPLATE_EUGEN}
         business.select_character_filter = Mock(return_value=True)
+        business._set_character_sort = Mock(return_value=True)
         business.selected_area_relative = (86, 26, 119, 42)
         return business
 
@@ -199,6 +200,7 @@ class BusinessCharacterNavigationTests(unittest.TestCase):
         self.assertEqual(device.screenshots, 2)
         self.assertEqual(device.clicks[0][:2], (500, 260))
         business.select_character_filter.assert_not_called()
+        business._set_character_sort.assert_not_called()
 
     def test_current_view_selected_character_is_not_toggled_off(self):
         device = ResourceDevice()
@@ -241,6 +243,7 @@ class BusinessCharacterNavigationTests(unittest.TestCase):
         self.assertEqual(business._find_and_select_character(), 'Helena')
         self.assertEqual(device.swipes, ['BusinessCharSwipeReset'])
         business.select_character_filter.assert_not_called()
+        business._set_character_sort.assert_called_once_with(ascending=False)
 
     def test_missing_current_character_falls_back_to_top_search(self):
         device = ResourceDevice()
@@ -260,6 +263,8 @@ class BusinessCharacterNavigationTests(unittest.TestCase):
         self.assertEqual(device.swipes.count('BusinessCharSwipeReset'), 2)
         self.assertEqual(device.swipes.count('BusinessCharSwipe'), 10)
         business.select_character_filter.assert_called_once()
+        self.assertEqual(business._set_character_sort.call_args_list,
+                         [call(ascending=False), call(ascending=False)])
 
 
 if __name__ == '__main__':

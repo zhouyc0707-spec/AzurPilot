@@ -11,7 +11,7 @@
 4. 只点击确认按钮右侧安全段（与选餐页确认按钮等其它页面按钮不重叠）。
 
 角色筛选测试额外覆盖云手机角色页先出现标题、底部筛选按钮稍后渲染的时序，
-并确认默认位于列表末尾的 WorkerJuu 必须先完成体力筛选，不能绕过筛选直接查找。
+并确认工作啾可见时省去筛选，快速查找失败时仍保留筛选及其失败保护。
 """
 import unittest
 from types import MethodType
@@ -260,26 +260,30 @@ class CharacterConfirmHelperTest(unittest.TestCase):
         )
         self.assertGreaterEqual(device.screenshot_count, 3)
 
-    def test_workerjuu_requires_filter_before_lookup(self):
-        """WorkerJuu 默认在列表末尾，必须先完成体力筛选再查找。"""
+    def test_visible_workerjuu_skips_filter(self):
+        """当前已可靠识别工作啾时，不再打开筛选或切换排序。"""
         device = FilterFlowDevice(self.clock)
         stub = self.bind_filter_helper(device)
         stub.select_character_filter = Mock(return_value=True)
-        stub.find_specific_character = Mock(return_value=(0, 0))
+        stub._visible_worker_juu = Mock(return_value=(0, 0))
+        stub._set_character_sort = Mock()
 
         self.assertEqual(stub._select_first_available_character(["WorkerJuu"]), (0, 0))
-        stub.select_character_filter.assert_called_once_with()
-        stub.find_specific_character.assert_called()
+        stub.select_character_filter.assert_not_called()
+        stub._set_character_sort.assert_not_called()
 
     def test_workerjuu_lookup_is_skipped_when_filter_fails(self):
-        """筛选界面失败时不能绕过筛选直接查找，避免误报可用位置。"""
+        """快速查找及筛选都失败后停止，不绕过失败继续选人。"""
         device = FilterFlowDevice(self.clock)
         stub = self.bind_filter_helper(device)
         stub.select_character_filter = Mock(return_value=False)
-        stub.find_specific_character = Mock(return_value=(0, 0))
+        stub._visible_worker_juu = Mock(return_value=None)
+        stub._set_character_sort = Mock(return_value=False)
+        stub._wait_worker_juu = Mock()
 
         self.assertIsNone(stub._select_first_available_character(["WorkerJuu"]))
-        stub.find_specific_character.assert_not_called()
+        stub.select_character_filter.assert_called_once_with()
+        stub._wait_worker_juu.assert_not_called()
 
 
 if __name__ == "__main__":

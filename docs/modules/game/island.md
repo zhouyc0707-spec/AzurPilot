@@ -78,7 +78,7 @@ module/island_farm/ 等 16 个目录  # 薄壳：仅 button_extract 生成的 as
 | 组件 | 基类 | 职责 |
 | --- | --- | --- |
 | `Island` | `SelectCharacter` | 岛屿全局基类：`goto_management`/`goto_postmanage`/`island_map_goto`、岗位详情状态机（`post_open`/`post_get_and_add`/`confirm_post_add_order`）、`select_product`（滑动选品）、材料 OCR 与商店补货（`ensure_select_product_material`）、`warehouse_filter`、`buy_shop_item` |
-| `SelectCharacter` | `UI` | 角色网格（前两行）身份/工作/选中状态识别，`WorkerJuu` 体力无限兜底；角色选择器自行等待筛选界面稳定并完成体力排序，再查找默认位于列表末尾的 `WorkerJuu` |
+| `SelectCharacter` | `UI` | 角色网格（前两行）身份/工作/选中状态识别；仅派工作啾时优先识别当前可见空闲工作啾，未找到再借鉴 ALAS 切升序，最后用体力降序兜底；工作啾不做体力 OCR |
 | `WarehouseOCR` | — | 6x2 仓库网格上按模板定位物品并 OCR 数量（`ocr_item_quantity`） |
 | `IslandShopBase` | `Island, WarehouseOCR` | 店铺框架：`Meal1~8` 槽位需求、套餐分解、保留线排产、循环填岗 |
 | `IslandUI` | `UI` | 岛屿手机页的运输/管理入口，覆盖 `ui_additional` 处理维护公告与信息弹窗 |
@@ -157,7 +157,11 @@ module/island_farm/ 等 16 个目录  # 薄壳：仅 button_extract 生成的 as
 
 离线回归入口：`tests/test_island_post_list.py`（匿名实拍空卡、标题实际定位及误匹配、压暗／遮挡与两帧确认）、`tests/test_island_empty_post_inspection.py`（跳过巡检后仍进入排产）及 `tests/test_island_ranch_planner_collection.py`（规划牧场续派和阶段收取）。
 
-角色体力筛选复用一个限时截图循环：先确认筛选弹窗，再选择体力与提交，确认弹窗关闭后等待角色列表刷新并识别 WorkerJuu；角色标题提前出现时不盲点底部按钮。本地残留弹窗识别与关闭辅助仍供退出流程使用。
+仅选择工作啾时，先在最新角色页截图中匹配可见且空闲的工作啾；找不到再用 ALAS 的升降序箭头资源切到升序，仍未找到才走原体力筛选并恢复降序。箭头必须互斥匹配，未知状态及筛选遮挡时不盲点；排序点击后截图确认方向，连续两帧工作啾位置相同后才返回，不以固定休眠猜测列表就绪。工作啾体力按无限值999处理，跳过 OCR；普通角色保留原优先级、体力门槛与降序。随后继续复检选中状态，并由安全确认流程识别进入选品页；不直接点击假定的第一格。
+
+角色体力筛选仍使用限时截图循环：先确认筛选弹窗，再选择体力与提交，确认弹窗关闭后等待角色列表刷新；角色标题提前出现时不盲点底部按钮。残留弹窗识别与关闭辅助仍供退出流程使用。角色选择回归见 `tests/test_island_worker_juu_selection.py`、`tests/test_island_character_confirm_helpers.py` 和 `tests/test_island_character_filter.py`。升降序资源来源为 [ALAS dock.py](https://github.com/LmeSzinc/AzurLaneAutoScript/blob/4d88c22d875de3192f8cae2f993e4fe0593114e0/module/island_handler/dock.py)，CN／EN 使用各自图片，JP／TW 沿用来源的 CN 回退。
+
+普通生产角色、咖啡特殊角色的滚动搜索以及经营的回顶搜索会恢复降序，避免工作啾留下的升序改变有界搜索范围；每日采集仍保留自己的生活等级升序，不套用这项恢复。各角色的优先级和体力门槛保持原值。
 
 ### 店铺排产（IslandShopBase）
 

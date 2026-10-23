@@ -4,13 +4,22 @@
 通过颜色识别判断角色工作状态、体力值与选中状态，支持 OCR 读取体力数值。
 """
 from module.island_select_character.assets import *
+from module.island.assets import ISLAND_SELECT_CHARACTER_CHECK
 from module.base.button import *
 from module.base.utils import color_similar, color_similarity_2d, crop, get_color
 from module.base.timer import Timer
+import cv2
 import numpy as np
 from module.ocr.ocr import Digit, DigitCounter
 from module.ui.ui import UI
 from module.logger import logger
+
+
+def _match_sort_arrow(image, button):
+    """小箭头使用固定阈值，避免高分辨率全局降阈值混淆升降序。"""
+    button.ensure_template()
+    area = np.asarray(button.area) + (-20, -5, 20, 5)
+    return cv2.matchTemplate(crop(image, area), button.image, cv2.TM_CCOEFF_NORMED).max() > 0.9
 
 
 class SelectCharacter(UI):
@@ -178,9 +187,8 @@ class SelectCharacter(UI):
         # 2. 识别是否工作中
         is_working = self._check_working_status(screenshot, button)
 
-        # 3. 识别当前体力值
-        stamina = self._get_stamina_value(screenshot, button)
-        # WorkerJuu 体力无限，视为始终满足；指定角色按岗位体力门槛校验。
+        # 工作啾体力无限，直接使用游戏中的 999，不再为它调用体力 OCR。
+        stamina = 999 if character_name == "WorkerJuu" else self._get_stamina_value(screenshot, button)
         has_stamina = character_name == "WorkerJuu" or stamina >= self.dispatch_stamina_min
 
         # 4. 识别是否已选中
@@ -657,6 +665,53 @@ class SelectCharacter(UI):
             return []
         return [str(char).strip() for char in character_list if str(char).strip()]
 
+    def _set_character_sort(self, ascending):
+        """只在角色页明确识别到相反箭头时切换排序，不盲点未知状态。"""
+        desired, opposite = ((SELECT_CHARACTER_SORT_ASC, SELECT_CHARACTER_SORT_DESC) if ascending
+                             else (SELECT_CHARACTER_SORT_DESC, SELECT_CHARACTER_SORT_ASC))
+        clicked = False
+        confirmed = 0
+        retry = Timer(2).clear()
+        for _ in self.loop(timeout=4, skip_first=False):
+            if self.is_character_filter_visible():
+                return False
+            if not self.appear(ISLAND_SELECT_CHARACTER_CHECK, offset=1):
+                continue
+            # 箭头很小，保持严格阈值；点击区域含当前排序名称，只用坐标不匹配文字。
+            matches = _match_sort_arrow(self.device.image, desired)
+            reverse = _match_sort_arrow(self.device.image, opposite)
+            if matches and not reverse:
+                confirmed += 1
+                if not clicked or confirmed >= 2:
+                    return True
+                continue
+            confirmed = 0
+            if reverse and not matches:
+                if retry.reached():
+                    self.device.click(SELECT_CHARACTER_SORT_CLICK)
+                    clicked = True
+                    retry.reset()
+        return False
+
+    def _visible_worker_juu(self):
+        """当前角色页中可用的工作啾；弹窗遮挡或页面未知时不读取背景网格。"""
+        if self.is_character_filter_visible() or not self.appear(ISLAND_SELECT_CHARACTER_CHECK, offset=1):
+            return None
+        for character in self.recognize_target_characters(self.device.image, ["WorkerJuu"]):
+            if not character['is_working']:
+                return character['grid_position']
+        return None
+
+    def _wait_worker_juu(self, timeout):
+        """排序后用连续两帧同位置的工作啾确认列表已更新。"""
+        previous = None
+        for _ in self.loop(timeout=timeout, skip_first=False):
+            position = self._visible_worker_juu()
+            if position is not None and position == previous:
+                return position
+            previous = position
+        return None
+
     def _select_first_available_character(self, character_list):
         """从指定角色列表中选择第一个空闲且体力充沛的角色网格坐标。
 
@@ -680,13 +735,24 @@ class SelectCharacter(UI):
             return None
 
         if character_list == ["WorkerJuu"]:
-            logger.info("[岛屿] 仅选择 WorkerJuu，先应用体力排序")
+            self.device.screenshot()
+            position = self._visible_worker_juu()
+            if position is not None:
+                logger.info("[岛屿] 当前列表已识别工作啾，直接选择")
+                return position
+            if self._set_character_sort(ascending=True):
+                position = self._wait_worker_juu(timeout=2)
+                if position is not None:
+                    logger.info("[岛屿] 升序列表已识别工作啾，跳过体力筛选")
+                    return position
+            logger.info("[岛屿] 快速查找未确认工作啾，回退体力筛选")
             if not self.select_character_filter():
                 return None
-            for _ in self.loop(timeout=8, skip_first=False):
-                position = self.find_specific_character(self.device.image, "WorkerJuu")
-                if position is not None:
-                    return position
+            # 工作啾在体力降序中排前面，不能沿用快速路径留下的升序。
+            self._set_character_sort(ascending=False)
+            position = self._wait_worker_juu(timeout=8)
+            if position is not None:
+                return position
             logger.warning("[岛屿] 体力筛选完成后仍未识别到 WorkerJuu")
             return None
 
@@ -695,6 +761,8 @@ class SelectCharacter(UI):
         if "WorkerJuu" not in target_names:
             target_names.append("WorkerJuu")
 
+        # 普通角色继续沿用原降序和优先级，不受上个工作啾岗位切换升序的影响。
+        self._set_character_sort(ascending=False)
         screenshot = self.device.screenshot()
         target_characters = self.recognize_target_characters(screenshot, target_names)
 
@@ -716,6 +784,7 @@ class SelectCharacter(UI):
         logger.info("[岛屿] 应用体力筛选")
         if not self.select_character_filter():
             return None
+        self._set_character_sort(ascending=False)
         screenshot = self.device.screenshot()
         target_characters = self.recognize_target_characters(screenshot, target_names)
 
@@ -928,7 +997,7 @@ class SelectCharacter(UI):
                                                     max_swipes=5, search_area=None):
         """滚动查找指定角色（模仿经营模块的选角逻辑）。
 
-        只接受指定角色且体力大于 stamina_threshold；不切换排序、不回退其他角色。
+        只接受指定角色且体力大于 stamina_threshold；恢复降序，不更改排序字段，不回退其他角色。
         找到后返回角色状态字典，未找到或体力不达标返回 None。
 
         Args:
@@ -950,6 +1019,8 @@ class SelectCharacter(UI):
                 logger.info(f"[岛屿] {char_name} 本轮已判定不可用，跳过检测")
                 return None
 
+        # 清除工作啾快速路径可能留下的升序，保留原有有界搜索顺序。
+        self._set_character_sort(ascending=False)
         # 先回到列表顶部，从头开始搜索
         self._swipe_character_list_to_top()
 
@@ -1007,7 +1078,7 @@ class SelectCharacter(UI):
     def select_specific_character_with_scroll(self, character_list, stamina_threshold=50, max_swipes=5):
         """只选择指定角色（支持向下滚动查找，模仿经营模块选角逻辑）。
 
-        体力不达标或未找到时返回 False，不切换排序、不回退其他角色、不重复尝试。
+        体力不达标或未找到时返回 False，不更改排序字段、不回退其他角色、不重复尝试。
         点击后校验是否选中，最多点击 5 次（纯计数有限循环）。
 
         Args:
