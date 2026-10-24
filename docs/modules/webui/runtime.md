@@ -274,7 +274,8 @@ worker 启停:  API/MCP ──lifecycle lock──> ProcessManager.start/stop_by
 任务事件:  worker alas.run() ──TaskEvent/ExitEvent(run_id)──> 同一队列
            ──_consume_worker_message(校验 run_id)──> current_task / exit_result
 
-预览:  worker 截图入口 publish(image) ──编码线程 JPEG(quality=85)──>
+预览:  已授权的实例预览订阅 ──PreviewHub 观看需求──> 每轮共享 Event
+       worker 正常截图 publish(image) ──有人观看且间隔≥0.5s──> 复制/JPEG(quality=85)──>
        _preview_queue(≤2) ──预览转发线程(校验 runId)──> hub.publish ──回调──>
        socket.preview_producer ──event('preview')──> 浏览器（每实例仅最新一帧）
 
@@ -283,10 +284,12 @@ worker 启停:  API/MCP ──lifecycle lock──> ProcessManager.start/stop_by
        ──restart_event──> gui.py 父监督器 ──依赖同步──> 重建 WebUI ──restart_processes──> 恢复实例
 ```
 
+观看需求按连接和实例登记，普通 `hub.subscribe` 帧监听器、缓存读取不算观看。多连接共用每实例一份预览，最后一人退出才清除开关；worker 重启时新 Event 继承现有需求并关闭旧 Event。浏览器切回日志、页面隐藏／后台、切实例或断连会撤销对应需求。无人观看时在复制前直接返回，编码前和跨进程提交前也复查开关并丢弃尾帧；有人观看时预览最高两帧／秒，不改变游戏截图和识别频率。Event 为直接共享同步对象，不在每次截图时请求 Manager RPC。
+
 预览是可丢帧的被动通道。复制预览副本或后台 JPEG 编码发生 `MemoryError` 时只丢当前预览帧，
 下次截图继续尝试；不能因额外预览分配失败中止已经取得有效截图的游戏任务。
 实际截图后端、识别与保存的内存异常仍沿原任务异常路径处理，不由预览通道吞掉。
-定向回归见 `tests.test_console_runtime.RuntimeTests` 的复制/编码失败与下一帧恢复用例。
+定向回归见 `tests.test_console_runtime.RuntimeTests` 的复制／编码失败与下一帧恢复，以及 `tests.test_preview_demand` 的观看生命周期、限频和真实 spawn 共享开关用例。
 
 ## 9. 状态模型
 

@@ -101,8 +101,14 @@ export function MonitorPanel({instance, actions}: {instance: string; actions?: R
   const [frame, setFrame] = useState<Preview>()
   const {setPreviewEnabled, ui} = useApp()
   useEffect(() => {
-    setPreviewEnabled(view === 'preview')
-    return () => setPreviewEnabled(false)
+    const update = () => setPreviewEnabled(view === 'preview' && document.visibilityState === 'visible')
+    update()
+    document.addEventListener('visibilitychange', update)
+    // Activity 隐藏和页面离开都会清理 effect；恢复时重新按当前可见性订阅。
+    return () => {
+      document.removeEventListener('visibilitychange', update)
+      setPreviewEnabled(false)
+    }
   }, [view, setPreviewEnabled])
   useEffect(() => api.onEvent(event => {
     if (event.topic === 'preview' && (event.data as Preview).instance === instance) setFrame(event.data as Preview)

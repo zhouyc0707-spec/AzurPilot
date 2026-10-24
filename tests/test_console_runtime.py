@@ -5,6 +5,7 @@ import io
 import multiprocessing
 import queue
 import tempfile
+import threading
 import unittest
 from datetime import datetime
 from pathlib import Path
@@ -24,7 +25,9 @@ def emit_screenshot(output):
     """独立进程中运行真实统一截图入口，用假后端代替模拟器。"""
     from module.runtime.preview import initialize
     from module.device.screenshot import Screenshot
-    initialize('preview-test', output, lambda _: None, 'test-run')
+    demand = multiprocessing.Event()
+    demand.set()
+    initialize('preview-test', output, lambda _: None, 'test-run', demand)
     device = Screenshot.__new__(Screenshot)
     device.config = SimpleNamespace(Emulator_ScreenshotMethod='test', Emulator_ScreenshotDedithering=False, Error_SaveError=False)
     device.__dict__['screenshot_methods'] = {'test': lambda: np.full((720, 1280, 3), (235, 30, 10), dtype=np.uint8)}
@@ -162,7 +165,10 @@ class RuntimeTests(unittest.TestCase):
         device._screenshot_interval = Mock()
         device.check_screen_size = device.check_screen_black = lambda: True
         pending = queue.Queue(maxsize=1)
-        with patch.object(preview, '_images', pending):
+        demand = threading.Event()
+        demand.set()
+        with patch.object(preview, '_images', pending), patch.object(preview, '_demand', demand), \
+                patch.object(preview, '_next_frame_at', 0.0):
             self.assertIs(frame, device.screenshot())
             self.assertTrue(pending.empty())
             recovered = np.full((720, 1280, 3), 100, np.uint8)
@@ -186,11 +192,14 @@ class RuntimeTests(unittest.TestCase):
         pixels = np.full((720, 1280, 3), (235, 30, 10), dtype=np.uint8)
         images = SimpleNamespace(get=Mock(side_effect=[(pixels, 'failed'), (pixels, 'recovered'), EncoderDone()]))
         output = queue.Queue(maxsize=2)
+        demand = threading.Event()
+        demand.set()
         with patch.object(preview, '_images', None), patch.object(preview.queue, 'Queue', return_value=images), \
+                patch.object(preview, '_demand', None), patch.object(preview, '_next_frame_at', 0.0), \
                 patch.object(preview.threading, 'Thread') as thread, \
                 patch('module.runtime.worker_events.initialize'), \
                 patch('PIL.Image.fromarray', side_effect=[MemoryError('模拟预览编码分配失败'), Image.fromarray(pixels)]):
-            preview.initialize('pilot', output, lambda _: None, 'test-run')
+            preview.initialize('pilot', output, lambda _: None, 'test-run', demand)
             with self.assertRaises(EncoderDone):
                 thread.call_args.kwargs['target']()
         frame = output.get_nowait()

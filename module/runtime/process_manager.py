@@ -10,7 +10,7 @@ import threading
 import time
 import uuid
 from collections.abc import Sequence
-from multiprocessing import Process
+from multiprocessing import Event, Process
 from typing import Dict, List, Union
 
 import inflection
@@ -246,9 +246,11 @@ class ProcessManager:
                         self._renderable_queue = State.manager.Queue()
                         self._queue_lock = threading.Lock()
                     self._preview_queue = State.manager.Queue(maxsize=2)
+                    preview_demand = Event()
                     self._program_queue = State.manager.Queue(maxsize=2)
                     from module.runtime.preview import hub
                     from module.persistence.database import current_directory
+                    hub.bind_worker(self.config_name, preview_demand)
                     hub.publish(self.config_name, {"instance": self.config_name, "image": None, "capturedAt": None})
                     args = (
                         self.config_name,
@@ -260,6 +262,7 @@ class ProcessManager:
                         account_key,
                         self._program_queue,
                         str(current_directory()),
+                        preview_demand,
                     )
                     process = Process(
                         target=ProcessManager.run_process,
@@ -949,6 +952,7 @@ class ProcessManager:
         account_key=None,
         program_queue=None,
         business_directory=None,
+        preview_demand=None,
     ) -> None:
         """工作子进程的主入口点函数。
 
@@ -963,6 +967,7 @@ class ProcessManager:
             run_id: 运行轮次 ID。
             account_key: 解密注入的账号密钥。
             business_directory: 父进程实际使用的普通总库目录。
+            preview_demand: 当前实例的跨进程预览观看开关。
         """
         from module.runtime.worker_events import initialize
 
@@ -976,7 +981,7 @@ class ProcessManager:
         try:
             if business_directory is not None:
                 prepare_statistics(business_directory)
-            result = ProcessManager._run_process(config_name, func, q, e, preview_queue, run_id)
+            result = ProcessManager._run_process(config_name, func, q, e, preview_queue, run_id, preview_demand)
         except SystemExit as exc:
             if exc.code in (None, 0):
                 result = WorkerResult.UPDATE if e is not None and e.is_set() else WorkerResult.FINISHED
@@ -987,7 +992,7 @@ class ProcessManager:
             q.put(ExitEvent(run_id, result))
 
     @staticmethod
-    def _run_process(config_name: str, func: str, q, e, preview_queue, run_id) -> WorkerResult:
+    def _run_process(config_name: str, func: str, q, e, preview_queue, run_id, preview_demand=None) -> WorkerResult:
         """子进程执行具体业务的核心流程。
 
         Args:
@@ -997,6 +1002,7 @@ class ProcessManager:
             e: 退出事件。
             preview_queue: 预览帧输出队列。
             run_id: 运行轮次 ID。
+            preview_demand: 当前实例的跨进程预览观看开关。
 
         Returns:
             WorkerResult: 执行最终结果状态。
@@ -1033,7 +1039,7 @@ class ProcessManager:
         set_func_logger(func=q.put)
         if preview_queue is not None:
             from module.runtime.preview import initialize
-            initialize(config_name, preview_queue, q.put, run_id)
+            initialize(config_name, preview_queue, q.put, run_id, preview_demand)
 
         if os.environ.get("DEMO") == "1":
             logger.info("[WebUI-进程] 日志3")

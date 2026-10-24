@@ -168,7 +168,7 @@ INTERNAL_ERROR 不向浏览器返回堆栈；参数校验详情不回显输入�
 
 任务条目新增 `state: running | pending | waiting`，兼容保留 `pending` 字段。运行中由工作进程在任务进入和 finally 退出时发送明确的状态事件，等待/待执行按核心校准时间与 NextRun 比较；运行任务优先展示，停止或异常进程不会残留运行状态。
 
-`module/device/screenshot.py` 的统一入口在截图后投递 RGB 图像。`module/runtime/preview.py` 在后台编码 JPEG，通过有界跨进程队列交给父进程，再通知 WebSocket。所有已注册截图后端共用这条路径；未安装通道的独立脚本不额外编码。运行批次标识隔离重启前后的任务状态与截图。没有新截图时保留原帧和采集时间，API 不会启动截图任务。
+`module/device/screenshot.py` 的统一入口复用游戏正常截图。只有已授权的实例 `preview` 订阅存在时，`module/runtime/preview.py` 才最高每秒两帧地复制并后台编码 JPEG，经有界跨进程队列交给父进程，再通知 WebSocket。切回日志、React Activity 隐藏或浏览器转入后台时，前端取消预览订阅，恢复可见后重新订阅；最后一位观看者退出即停止图片复制、编码和传输。普通监听器与 `preview.capture` 缓存读取不激活生成。所有已注册截图后端共用此路径；运行批次标识隔离重启前后的状态与截图。没有新截图时保留原帧及采集时间，API 不会主动启动截图任务。
 
 ## 分类统计
 

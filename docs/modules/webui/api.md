@@ -209,7 +209,8 @@ flowchart TD
         → 与 cache 不同才 event(seq++) → 发送队列 → 浏览器
 
 预览路径（preview，事件驱动）
-  worker 进程截图 → module/runtime/preview 后台编码 JPEG（quality=85）
+  已授权的实例 preview 订阅 → Hub 观看需求 → worker 共享开关
+  worker 正常截图 → 有需求且距上帧≥0.5s → 复制并后台编码 JPEG（quality=85）
         → 有界跨进程队列 → ProcessManager 线程校验 runId 后 hub.publish
         → 回调 loop.call_soon_threadsafe 唤醒 preview_producer
         → hub.get 取最新帧 → event('preview') → 浏览器
@@ -222,7 +223,7 @@ flowchart TD
         → 客户端游标落后则返回 reset
 ```
 
-预览链路是**纯被动**的：API 层任何接口都不会启动截图任务，没有新帧时前端拿到的就是上一帧及其采集时间。这保证了「看一眼截图」永远不消耗设备资源。
+预览链路是**纯被动**的：API 层任何接口都不会启动截图任务，没有新帧时前端拿到的就是上一帧及其采集时间，不为浏览器额外抓取设备画面。只有已授权且订阅该实例 `preview` 的连接计为观看者，订阅替换、实例切换、授权失效和会话收尾均更新需求；普通帧监听器不计数。无人观看不复制、编码或传输预览，有人观看最高每秒两帧。`preview.capture` 仍只读缓存，不激活生成；多个连接共享同一份预览，不能因其中一个退出而停止其他人的画面。
 
 ## 9. 状态模型
 

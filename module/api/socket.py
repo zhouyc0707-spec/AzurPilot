@@ -216,6 +216,10 @@ class Session:
             message = await self.queue.get()
             if message.get('previewSlot'):
                 message, self.preview_pending = self.preview_pending, None
+                if (not self.authorized
+                        or (self.paired_token and not self.gateway.paired_authorized(self.paired_token))):
+                    self._sync_preview_demand()
+                    continue
                 if (not message or 'preview' not in self.subscription.topics
                         or message['data']['instance'] != self.subscription.instance):
                     continue
@@ -251,6 +255,8 @@ class Session:
                 for task in tasks:
                     task.cancel()
                 await asyncio.gather(*tasks, return_exceptions=True)
+                from module.runtime.preview import hub
+                hub.set_viewer(self, None)
                 with contextlib.suppress(RuntimeError):
                     await self.ws.close()
 
@@ -293,6 +299,7 @@ class Session:
                 elif self.paired_token and not self.gateway.paired_authorized(self.paired_token):
                     self.authorized = False
                     self.paired_token = ''
+                    self._sync_preview_demand()
                     raise ApiError('UNAUTHORIZED', '配对已撤销，请重新配对')
                 elif not self.authorized:
                     raise ApiError('UNAUTHORIZED', '请先登录')
@@ -301,6 +308,7 @@ class Session:
                     if any(topic not in ('instances', 'notifications') for topic in subscription.topics):
                         self.gateway.router.configs.path(subscription.instance)
                     self.subscription = subscription
+                    self._sync_preview_demand()
                     self.cache.clear()
                     self.log_cursor = 0
                     self.logs_initialized = False
@@ -524,6 +532,14 @@ class Session:
         finally:
             hub.unsubscribe(changed)
 
+    def _sync_preview_demand(self):
+        """只把已授权、订阅了当前实例预览的连接计为观看者。"""
+        from module.runtime.preview import hub
+        authorized = self.authorized and (
+            not self.paired_token or self.gateway.paired_authorized(self.paired_token))
+        instance = self.subscription.instance if authorized and 'preview' in self.subscription.topics else None
+        hub.set_viewer(self, instance)
+
     async def preview_producer(self):
         """预览帧生产者协程。
 
@@ -533,21 +549,26 @@ class Session:
         loop = asyncio.get_running_loop()
 
         def changed(instance):
-            if instance == self.subscription.instance and not loop.is_closed():
+            if (instance == self.subscription.instance and 'preview' in self.subscription.topics
+                    and not loop.is_closed()):
                 with contextlib.suppress(RuntimeError):
                     loop.call_soon_threadsafe(self.preview_changed.set)
 
         hub.subscribe(changed)
+        self._sync_preview_demand()
         try:
             while True:
                 await self.preview_changed.wait()
                 self.preview_changed.clear()
+                self._sync_preview_demand()
                 subscription = self.subscription
-                if not self.authorized or 'preview' not in subscription.topics:
+                if (not self.authorized or 'preview' not in subscription.topics
+                        or (self.paired_token and not self.gateway.paired_authorized(self.paired_token))):
                     continue
                 frame = hub.get(subscription.instance)
                 await self.event('preview', frame)
         finally:
+            hub.set_viewer(self, None)
             hub.unsubscribe(changed)
 
     async def notification_producer(self):
