@@ -693,25 +693,6 @@ class SelectCharacter(UI):
                     retry.reset()
         return False
 
-    def _visible_worker_juu(self):
-        """当前角色页中可用的工作啾；弹窗遮挡或页面未知时不读取背景网格。"""
-        if self.is_character_filter_visible() or not self.appear(ISLAND_SELECT_CHARACTER_CHECK, offset=1):
-            return None
-        for character in self.recognize_target_characters(self.device.image, ["WorkerJuu"]):
-            if not character['is_working']:
-                return character['grid_position']
-        return None
-
-    def _wait_worker_juu(self, timeout):
-        """排序后用连续两帧同位置的工作啾确认列表已更新。"""
-        previous = None
-        for _ in self.loop(timeout=timeout, skip_first=False):
-            position = self._visible_worker_juu()
-            if position is not None and position == previous:
-                return position
-            previous = position
-        return None
-
     def _select_first_available_character(self, character_list):
         """从指定角色列表中选择第一个空闲且体力充沛的角色网格坐标。
 
@@ -735,33 +716,21 @@ class SelectCharacter(UI):
             return None
 
         if character_list == ["WorkerJuu"]:
-            self.device.screenshot()
-            position = self._visible_worker_juu()
-            if position is not None:
-                logger.info("[岛屿] 当前列表已识别工作啾，直接选择")
-                return position
-            if self._set_character_sort(ascending=True):
-                position = self._wait_worker_juu(timeout=2)
-                if position is not None:
-                    logger.info("[岛屿] 升序列表已识别工作啾，跳过体力筛选")
-                    return position
-            logger.info("[岛屿] 快速查找未确认工作啾，回退体力筛选")
             if not self.select_character_filter():
                 return None
-            # 工作啾在体力降序中排前面，不能沿用快速路径留下的升序。
-            self._set_character_sort(ascending=False)
-            position = self._wait_worker_juu(timeout=8)
-            if position is not None:
-                return position
-            logger.warning("[岛屿] 体力筛选完成后仍未识别到 WorkerJuu")
-            return None
+            if not self._set_character_sort(ascending=False):
+                logger.warning("[岛屿] 未确认体力降序，暂不选择工作啾")
+                return None
+            # 工作啾体力无限，体力降序时位于首位，无需再扫描头像或读取体力。
+            logger.info("[岛屿] 已确认体力降序，直接选择第一位工作啾")
+            return (0, 0)
 
         # 计算需要识别的角色集合（包含列表角色+最终回退的WorkerJuu）
         target_names = list(character_list)
         if "WorkerJuu" not in target_names:
             target_names.append("WorkerJuu")
 
-        # 普通角色继续沿用原降序和优先级，不受上个工作啾岗位切换升序的影响。
+        # 普通角色继续沿用原降序和优先级。
         self._set_character_sort(ascending=False)
         screenshot = self.device.screenshot()
         target_characters = self.recognize_target_characters(screenshot, target_names)
@@ -1019,7 +988,7 @@ class SelectCharacter(UI):
                 logger.info(f"[岛屿] {char_name} 本轮已判定不可用，跳过检测")
                 return None
 
-        # 清除工作啾快速路径可能留下的升序，保留原有有界搜索顺序。
+        # 恢复降序，保留原有有界搜索顺序。
         self._set_character_sort(ascending=False)
         # 先回到列表顶部，从头开始搜索
         self._swipe_character_list_to_top()
