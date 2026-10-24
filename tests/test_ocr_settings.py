@@ -104,8 +104,8 @@ class TestOcrSettingsCache(unittest.TestCase):
 
     def test_debug_images_are_instance_local_with_shared_model_and_queue(self):
         settings = OcrSettings('onnx', 'cpu', False, 'standard')
-        diagnostic = AlOcr(name='cn', settings=settings)
-        scanning = AlOcr(name='cn', settings=settings, save_debug_images=False)
+        diagnostic = AlOcr(name='cn', settings=settings, save_debug_images=True)
+        scanning = AlOcr(name='cn', settings=settings)
         with patch.object(AlOcr, '_save_debug_image') as save:
             self.assertEqual(diagnostic.ocr('first'), '测试文本')
             self.assertEqual(scanning.ocr('second'), '测试文本')
@@ -117,11 +117,12 @@ class TestOcrSettingsCache(unittest.TestCase):
         self.factory.assert_called_once()
 
     def test_disabled_debug_images_do_not_hide_model_failure(self):
-        scanning = AlOcr(name='cn', config=make_config(), save_debug_images=False)
+        scanning = AlOcr(name='cn', config=make_config())
         scanning.init()
         scanning.model.before_infer = Mock(side_effect=RuntimeError('推理失败'))
-        with self.assertRaisesRegex(RuntimeError, '推理失败'):
-            scanning.ocr_for_single_lines(['image'])
+        for infer, image in ((scanning.ocr, 'image'), (scanning.ocr_for_single_lines, ['image'])):
+            with self.subTest(method=infer.__name__), self.assertRaisesRegex(RuntimeError, '推理失败'):
+                infer(image)
 
     def test_backend_device_vendor_and_version_each_separate_cache_entries(self):
         base = OcrSettings('onnxruntime', 'cpu', False, 'standard')
@@ -142,8 +143,8 @@ class TestOcrSettingsCache(unittest.TestCase):
         self.assertEqual([entry.args[1] for entry in self.factory.call_args_list], choices)
         self.default_config.assert_not_called()
 
-    def test_recognition_and_detection_use_one_snapshot_despite_config_mutation(self):
-        config = make_config(device='cpu', version='lite')
+    def test_ncnn_recognition_and_detection_use_one_snapshot_despite_config_mutation(self):
+        config = make_config(backend='ncnn', device='cpu', version='lite')
 
         def create(name, settings):
             config.ocr_device = 'gpu'
@@ -152,13 +153,57 @@ class TestOcrSettingsCache(unittest.TestCase):
 
         self.factory.side_effect = create
         ocr = AlOcr(name='cn', config=config)
-        self.assertEqual(ocr.det(None), [])
+        with patch.object(ocr, '_ensure_det_loaded', wraps=ocr._ensure_det_loaded) as load_det:
+            self.assertEqual(ocr.det(None), [])
 
         rec_settings = self.factory.call_args.args[1]
-        det_settings = self.det_factory.call_args.args[1]
+        det_settings = load_det.call_args.args[0]
         self.assertIs(rec_settings, det_settings)
         self.assertEqual(det_settings.device, 'cpu')
         self.assertEqual(det_settings.model_version, 'lite')
+        self.det_factory.assert_not_called()
+
+    def test_onnx_detection_does_not_load_rec_only_and_preserves_detection_debug(self):
+        boxes = al_ocr.np.array([[[0, 0], [20, 0], [20, 10], [0, 10]]])
+        result = al_ocr.RapidOCROutput(boxes=boxes, txts=('测试文本',), scores=(0.95,))
+        model = Mock(return_value=result)
+        self.det_factory.side_effect = None
+        self.det_factory.return_value = model
+        ocr = AlOcr(name='cn', config=make_config())
+        expected = [('测试文本', boxes[0].tolist(), 0.95)]
+
+        with patch('module.ocr.al_ocr.DET_DEBUG', True), patch.object(ocr, '_save_det_debug') as save:
+            self.assertEqual(ocr.det('image'), expected)
+
+        self.factory.assert_not_called()
+        self.assertIsNone(ocr.model)
+        model.assert_called_once_with('image', use_det=True, use_rec=True)
+        save.assert_called_once_with('image', expected)
+        self.assertEqual(ocr.ocr('line'), '测试文本')
+        self.factory.assert_called_once()
+
+    def test_onnx_detection_only_reset_replaces_closed_model(self):
+        ocr = AlOcr(name='cn', config=make_config())
+        self.assertEqual(ocr.det(None), [])
+        old_det = ocr._det_model
+
+        self.assertEqual(al_ocr.reset_ocr_model(), 1)
+        self.assertTrue(old_det.closed)
+        self.assertEqual(ocr.det(None), [])
+
+        self.assertIsNot(ocr._det_model, old_det)
+        self.factory.assert_not_called()
+        self.assertEqual(self.det_factory.call_count, 2)
+
+    def test_onnx_detection_failure_is_not_hidden_by_skipping_rec_only_model(self):
+        self.det_factory.side_effect = None
+        self.det_factory.return_value = Mock(side_effect=RuntimeError('检测失败'))
+        ocr = AlOcr(name='cn', config=make_config())
+
+        with self.assertRaisesRegex(RuntimeError, '检测失败'):
+            ocr.det(None)
+
+        self.factory.assert_not_called()
 
     def test_ncnn_detection_stays_shared_across_recognition_versions(self):
         first = AlOcr(name='cn', config=make_config(backend='ncnn', version='lite'))
@@ -172,15 +217,37 @@ class TestOcrSettingsCache(unittest.TestCase):
         self.assertEqual(al_ocr.release_ocr_models(names=['det']), 1)
         self.assertFalse(first.model.closed)
 
+    def test_ncnn_detected_box_is_cropped_and_read_by_independent_recognizer(self):
+        image = al_ocr.np.zeros((20, 40, 3), dtype=al_ocr.np.uint8)
+        boxes = al_ocr.np.array([[[3, 4], [23, 4], [23, 14], [3, 14]]])
+        detector = Mock(return_value=al_ocr.TextDetOutput(boxes=boxes))
+        recognizer = Mock(return_value=SimpleNamespace(txts=['测试文本'], scores=[0.95]))
+        recognizer.load_image.return_value = image
+        self.factory.side_effect = None
+        self.factory.return_value = recognizer
+        self.ncnn_det_factory.side_effect = None
+        self.ncnn_det_factory.return_value = detector
+        ocr = AlOcr(name='cn', config=make_config(backend='ncnn'))
+
+        self.assertEqual(ocr.det(image), [('测试文本', boxes[0].tolist(), 0.95)])
+
+        detector.assert_called_once_with(image, use_det=True, use_cls=False, use_rec=False)
+        recognizer.load_image.assert_called_once_with(image)
+        recognizer.assert_called_once()
+        self.assertEqual(recognizer.call_args.args[0].shape, (10, 20, 3))
+        self.det_factory.assert_not_called()
+
     def test_reset_reloads_default_config_and_replaces_closed_models_on_same_instance(self):
         self.default_config.side_effect = [make_config(device='cpu'), make_config(device='gpu')]
         ocr = AlOcr(name='cn')
+        ocr.ocr(None)
         ocr.det(None)
         old_rec, old_det = ocr.model, ocr._det_model
 
         self.assertEqual(al_ocr.reset_ocr_model(), 2)
         self.assertTrue(old_rec.closed)
         self.assertTrue(old_det.closed)
+        ocr.ocr(None)
         ocr.det(None)
 
         self.assertIsNot(ocr.model, old_rec)

@@ -720,7 +720,7 @@ class AlOcr:
         model: 识别模型实例（懒加载）。
         _det_model: 检测模型实例（懒加载）。
     """
-    def __init__(self, *, config=None, settings=None, save_debug_images=True, **kwargs):
+    def __init__(self, *, config=None, settings=None, save_debug_images=False, **kwargs):
         """初始化 AlOcr 识别器实例。
 
         可传入当前配置或固定设置；省略时在首次使用时读取默认配置。
@@ -728,7 +728,7 @@ class AlOcr:
         Args:
             config (AzurLaneConfig | None): 配置对象，与 settings 互斥。
             settings (OcrSettings | None): 固定设置快照，与 config 互斥。
-            save_debug_images (bool): 是否保存单行字图；只影响本识别器，不影响共享模型。
+            save_debug_images (bool): 是否保存单行字图，默认关闭；只影响本识别器，不影响共享模型。
             **kwargs: 附加关键字参数，支持 name 参数指定模型名称。
 
         Raises:
@@ -882,7 +882,9 @@ class AlOcr:
             list[tuple[str, list, float]]: (文本, 边框顶点列表, 置信度) 元组列表。
         """
         settings = self._get_settings()
-        self._ensure_loaded(settings)
+        # ONNX 检测流水线已含识别模型，只有 NCNN 混合路径需要额外加载识别器。
+        if settings.backend == 'ncnn':
+            self._ensure_loaded(settings)
         self._ensure_det_loaded(settings)
 
         try:

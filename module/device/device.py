@@ -82,6 +82,12 @@ class Device(Screenshot, Control, AppControl, Input):
             initialize_runtime: 是否执行常规运行时初始化，包括配置修正、
                 基准测试和控制预热。仅供受限的收尾操作关闭。
         """
+        # 在连接和识别开始前限制图像并行开销；保留用户已有的更低线程上限。
+        opencv_threads = cv2.getNumThreads()
+        if opencv_threads > 4:
+            cv2.setNumThreads(4)
+            logger.info(f'[设备-图像] OpenCV 并行线程 {opencv_threads} -> 4')
+
         # 初始化模拟器管理平台
         self._platform = None
 

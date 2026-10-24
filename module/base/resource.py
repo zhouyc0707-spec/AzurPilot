@@ -203,15 +203,17 @@ def release_resources(next_task=''):
             models = []
         elif next_task:
             # 释放除 'azur_lane' 以外的 OCR 模型
-            models = ['cnocr', 'jp', 'tw']
+            models = ['azur_lane_jp', 'ppocr_v6', 'cnocr', 'jp', 'tw']
         else:
-            models = ['azur_lane', 'cnocr', 'jp', 'tw']
+            models = ['azur_lane', 'azur_lane_jp', 'ppocr_v6', 'cnocr', 'jp', 'tw']
         for model in models:
             del_cached_property(OCR_MODEL, model)
 
         if models:
             cache_model_names = {
                 'azur_lane': 'azur_lane',
+                'azur_lane_jp': 'azur_lane_jp',
+                'ppocr_v6': 'ppocr_v6',
                 'cnocr': 'cn',
                 'jp': 'jp',
                 'tw': 'tw',
