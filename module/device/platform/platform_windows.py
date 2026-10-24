@@ -4,6 +4,7 @@
 from __future__ import annotations
 import ctypes
 import json
+import mmap
 import os
 import re
 import subprocess
@@ -64,6 +65,16 @@ MUMU12_DEEP_PROCESS_NAMES = (
     'mumuplayerservice.exe', 'mumuvmmheadless.exe', 'mumuvmmsvc.exe',
     'nemuplayer.exe', 'nemuheadless.exe',
 )
+
+
+def _mumu_supports_hidden_start(exe):
+    """只读检测原生隐藏启动参数，旧版或无法读取时沿用管理入口。"""
+    try:
+        with open(exe, 'rb') as executable:
+            with mmap.mmap(executable.fileno(), 0, access=mmap.ACCESS_READ) as data:
+                return data.find(b'start-hidden') >= 0
+    except (OSError, ValueError):
+        return False
 
 
 def run_mumu_manager(exe, args, timeout=15):
@@ -291,7 +302,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             ConnectionAttr.__init__(self, config)
 
     @classmethod
-    def execute(cls, command, wait=False, timeout=30):
+    def execute(cls, command, wait=False, timeout=30, cwd=None):
         """
         执行外部命令。
 
@@ -299,6 +310,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             command (str): 要执行的命令
             wait (bool): 是否同步等待命令完成（默认False异步执行）
             timeout (int): 同步执行时的超时秒数（默认30秒）
+            cwd (str | None): 启动目录；指定时与模拟器快捷方式的起始位置一致。
 
         Returns:
             subprocess.Popen: 异步执行时返回子进程对象
@@ -316,7 +328,8 @@ class PlatformWindows(PlatformBase, EmulatorManager):
                     shell=True,
                     timeout=timeout,
                     close_fds=True,
-                    creationflags=subprocess.CREATE_NO_WINDOW
+                    creationflags=subprocess.CREATE_NO_WINDOW,
+                    cwd=cwd,
                 )
                 logger.info(f'[设备-Windows] 命令完成，返回码: {result.returncode}')
                 return result
@@ -342,6 +355,7 @@ class PlatformWindows(PlatformBase, EmulatorManager):
                 close_fds=True,
                 creationflags=creationflags,
                 env=environment,
+                cwd=cwd,
             )
             # 等待 cmd.exe 退出，确保目标进程已脱离 Alas 进程树
             try:
@@ -388,13 +402,25 @@ class PlatformWindows(PlatformBase, EmulatorManager):
             # NemuPlayer.exe -m nemu-12.0-x64-default
             self.execute(f'"{exe}" -m {instance.name}')
         elif instance == Emulator.MuMuPlayer12:
+            index = instance.MuMuPlayer12_id
+            if index is None:
+                raise EmulatorUnknown(f'无法从名称 {instance.name} 获取MuMu实例索引')
+            engine = re.fullmatch(r'MuMuPlayer(?:Global)?-(12\.0|15\.0)-\d+', instance.name)
+            directory = os.path.dirname(exe)
+            if (os.path.basename(exe).lower() == 'mumunxmain.exe'
+                    and os.path.basename(directory).lower() == 'nx_main' and engine
+                    and _mumu_supports_hidden_start(exe)
+                    and self._mumu12_other_instance_running(exe, index) is False):
+                # 与 MuMu 创建的实例快捷方式使用相同目标、参数和起始目录。
+                # 冷启动补充原生隐藏到托盘参数，避免总界面跟着实例窗口显示。
+                # 多开或状态未知时仍走管理入口，保留 GUI 单例的并发保护。
+                logger.info(f'[设备-Windows] 按快捷方式模式启动MuMu实例: {instance.name}')
+                self.execute(f'"{exe}" -v {index} --engine_series={engine[1]} --start-hidden', cwd=directory)
+                return
             # MuMuManager.exe api -v 0 launch_player
-            # 通过 MuMuManager 启动而非 MuMuPlayer.exe/MuMuNxMain.exe
-            # MuMuNxMain.exe 为 GUI 单例，若同时启动两个实例，第二个启动请求会被转发到正在初始化的 MuMuNxMain.exe 并被静默丢弃
-            # 而 MuMuManager 会在后台服务中排队处理请求
-            if instance.MuMuPlayer12_id is None:
-                logger.warning(f'[设备-Windows] 无法从名称 {instance.name} 获取MuMu实例索引')
-            self.execute(f'"{Emulator.single_to_console(exe)}" api -v {instance.MuMuPlayer12_id} launch_player')
+            # 旧布局、不支持原生参数、多开或状态不明确时沿用管理入口。
+            manager = os.path.join(directory, 'MuMuManager.exe')
+            self.execute(f'"{manager}" api -v {index} launch_player')
         elif instance == Emulator.LDPlayer14 or instance == Emulator.LDPlayer9:
             # ldconsole.exe launch --index 0 --mini
             # 雷电9及以上版本支持 `--mini` 启动为最小化窗口，`--hide` 启动为无前端窗口

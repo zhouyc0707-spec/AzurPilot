@@ -243,7 +243,9 @@ flowchart TD
 
 ### 模拟器启动（Windows）
 
-`emulator_start()` 是「先停后启 + 启动监视」的完整流程：停实例（MuMu12 走 MuMuManager 同步 `shutdown_player` 并轮询确认实例真正关闭）→ 清理僵死残留进程（多开时跳过）→ 按类型发启动命令（MuMu12 用 `MuMuManager api launch_player`，雷电用 `ldconsole launch --index N --mini`）→ `emulator_start_watch()` 每 0.5s 轮询「设备出现在 ADB 列表 → shell 可用 → 游戏包存在」，等待时长按 `failures` 参数从 `EMULATOR_START_WATCH_TIMEOUTS`（60→90→120→180→300s）阶梯取值。整个过程由 `emulator_op_exclusive` 装饰器持有的**类级互斥锁**保护：拿不到锁直接抛 `EmulatorOpBusy`，避免两个恢复流程一个在启动、一个在关闭互相踩踏。MuMu12 的 `deep=True` 深度重启会额外结束全部 MuMu 进程（含虚拟机服务）——这是设备较差时「连续重启都起不来」的最后一招。
+`emulator_start()` 是「先停后启 + 启动监视」的完整流程：停实例（MuMu12 走 MuMuManager 同步 `shutdown_player` 并轮询确认实例真正关闭）→ 清理僵死残留进程（多开时跳过）→ 按类型发启动命令（新版 MuMu 优先直启对应实例程序，旧版用 `MuMuManager api launch_player`，雷电用 `ldconsole launch --index N --mini`）→ `emulator_start_watch()` 每 0.5s 轮询「设备出现在 ADB 列表 → shell 可用 → 游戏包存在」，等待时长按 `failures` 参数从 `EMULATOR_START_WATCH_TIMEOUTS`（60→90→120→180→300s）阶梯取值。整个过程由 `emulator_op_exclusive` 装饰器持有的**类级互斥锁**保护：拿不到锁直接抛 `EmulatorOpBusy`，避免两个恢复流程一个在启动、一个在关闭互相踩踏。MuMu12 的 `deep=True` 深度重启会额外结束全部 MuMu 进程（含虚拟机服务）——这是设备较差时「连续重启都起不来」的最后一招。
+
+现代布局 `nx_main/MuMuNxMain.exe` 在实例名可识别安卓12／15、程序包含原生 `start-hidden` 参数且确认没有其他实例运行时，采用 MuMu 实例快捷方式的启动模式：目标为该主程序，参数为 `-v <实例号> --engine_series=<安卓版本> --start-hidden`，起始目录为 `nx_main`，总界面隐藏到托盘，仅显示指定实例窗口。原生参数以只读内存映射检测，不修改程序或 MuMu 设置。实例号无法解析时停止启动，不能默认打开零号；旧布局、不支持参数、多开或状态未知时仍调用同目录的 `MuMuManager.exe`，保留原 GUI 单例并发兼容。配置中的发现路径、状态查询、IPC、关闭确认和残留清理沿用原实现。启动仍通过现有 `execute()` 脱离启动器进程树及 Job；完成后原有实例窗口最小化行为继续执行。命令、起始目录、原生参数检测及兼容分支的离线回归见 `tests/test_mumu_direct_start.py`。
 
 ## 7. 调用关系
 
