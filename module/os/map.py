@@ -1034,10 +1034,6 @@ class OSMap(MapEventResumeMixin, OSFleet, Map, GlobeCamera, StorageHandler, Stra
         self.hp_reset()
         auto_search_time_limit_timer = Timer(self.config.OpsiGeneral_AutoSearchTimeLimit * 60, count=1).start()
         for _ in self.loop():
-            stop_event = getattr(self.config, 'stop_event', None)
-            if self.is_running_cl1_leveling and stop_event is not None and stop_event.is_set():
-                logger.info('[大世界-侵蚀1练级] 收到停止请求，中断自律并在地图结束任务')
-                self.interrupt_auto_search(goto_main=False, drop=drop)
             # 结束条件
             if not unlock_checked and unlock_check_timer.reached():
                 logger.critical("[大世界] 当前海域未解锁自律，请先完成剧情任务。")
@@ -1132,8 +1128,6 @@ class OSMap(MapEventResumeMixin, OSFleet, Map, GlobeCamera, StorageHandler, Stra
 
         Args:
             goto_main (bool): 是否跳转到主页面。
-                False 时先关闭自律并处理奖励及弹窗，确认地图和关闭状态稳定后退出。
-            end_task (bool): 返回地图后是否结束任务；False 仅返回调用方。
             drop (DropImage, optional): 保留中断自律时结算的奖励。
 
         Raises:
@@ -1147,29 +1141,27 @@ class OSMap(MapEventResumeMixin, OSFleet, Map, GlobeCamera, StorageHandler, Stra
         is_loading = False
         pause_interval = Timer(0.5, count=1)
         in_main_timer = Timer(3, count=6)
-        in_map_timer = Timer(1, count=6).start()
+        in_map_timer = Timer(1, count=6)
         while 1:
             if skip_first_screenshot:
                 skip_first_screenshot = False
             else:
                 self.device.screenshot()
 
-            # 停止信号也可能在守护循环检查后或正常抢占收尾期间到达。
-            stop_event = getattr(self.config, 'stop_event', None)
-            if (goto_main and stop_event is not None and stop_event.is_set()
-                    and self.is_running_cl1_leveling):
-                goto_main = False
-
             # 结束条件
             if self.is_in_main():
                 logger.info("[大世界-搜索] 自动搜索已中断")
                 self.config.task_stop()
-            # 冷却只限制点击；奖励透出地图按钮时仍须等待，不能穿透到结束判定。
-            if self.appear(AUTO_SEARCH_REWARD, offset=(50, 50)):
-                if self.appear(AUTO_SEARCH_REWARD, offset=(50, 50), interval=3):
-                    if drop:
-                        drop.add(self.device.image)
-                    self.device.click(AUTO_SEARCH_REWARD)
+            if not goto_main and self.is_in_map() and in_map_timer.reached():
+                logger.info("[大世界-搜索] 自动搜索已中断")
+                if end_task:
+                    self.config.task_stop()
+                return
+
+            if self.appear(AUTO_SEARCH_REWARD, offset=(50, 50), interval=3):
+                if drop:
+                    drop.add(self.device.image)
+                self.device.click(AUTO_SEARCH_REWARD)
                 self.interval_clear(GOTO_MAIN)
                 in_main_timer.reset()
                 in_map_timer.reset()
@@ -1201,40 +1193,15 @@ class OSMap(MapEventResumeMixin, OSFleet, Map, GlobeCamera, StorageHandler, Stra
                 in_main_timer.reset()
                 continue
             if self.ui_additional():
-                in_map_timer.reset()
                 continue
             if self.handle_map_event(drop=drop):
-                in_map_timer.reset()
                 continue
-            if not goto_main:
-                if self.is_in_map():
-                    search_on = self.match_template_color(AUTO_SEARCH_OS_MAP_OPTION_ON, offset=(5, 120))
-                    search_off = (
-                        self.match_template_color(AUTO_SEARCH_OS_MAP_OPTION_OFF, offset=(5, 120))
-                        or self.match_template_color(AUTO_SEARCH_OS_MAP_OPTION_OFF_DISABLED, offset=(5, 120))
-                    )
-                    if search_on and not search_off:
-                        if self.match_template_color(AUTO_SEARCH_OS_MAP_OPTION_ON, offset=(5, 120), interval=3):
-                            self.device.click(AUTO_SEARCH_OS_MAP_OPTION_ON)
-                        in_map_timer.reset()
-                        continue
-                    if search_off and not search_on:
-                        if in_map_timer.reached():
-                            logger.info('[大世界-搜索] 已确认地图且自律关闭，中断结束')
-                            if end_task:
-                                self.config.task_stop()
-                            return
-                    else:
-                        # 过渡、遮挡或 ON/OFF 同时命中均不能证明自律已关闭。
-                        in_map_timer.reset()
-                else:
-                    in_map_timer.reset()
             # 仅在检测到时打印一次
             if not is_loading:
                 if self.is_combat_loading():
                     is_loading = True
                     in_main_timer.clear()
-                    in_map_timer.reset()
+                    in_map_timer.clear()
                     continue
                 # page_main 的随机背景可能触发 EXP_INFO_*，不检查它们
                 if in_main_timer.reached():
@@ -1246,7 +1213,7 @@ class OSMap(MapEventResumeMixin, OSFleet, Map, GlobeCamera, StorageHandler, Stra
             elif self.is_combat_executing():
                 is_loading = False
                 in_main_timer.clear()
-                in_map_timer.reset()
+                in_map_timer.clear()
                 continue
 
     def os_auto_search_run(self, drop=None, strategic=False, interrupt=None):
