@@ -43,7 +43,7 @@ from module.ocr.ocr import Ocr
 from module.os_handler.assets import (AUTO_SEARCH_REWARD, EXCHANGE_CHECK, RESET_FLEET_PREPARATION, RESET_TICKET_POPUP)
 from module.raid.assets import *
 from module.ui.assets import *
-from module.ui.page import (Page, page_academy, page_campaign, page_event, page_island,
+from module.ui.page import (Page, page_academy, page_campaign, page_campaign_menu, page_event, page_island,
                             page_island_management, page_island_phone, page_main, page_main_white, page_sp,
                             page_tactical)
 from module.ui_white.assets import *
@@ -377,10 +377,10 @@ class UI(InfoHandler):
         nav_timeout = Timer(30, count=60).start()
         island_entry_confirm = Timer(1, count=2)
         last_navigation_page = None
-        popup_retry_page = None
-        popup_retry_confirm = Timer(0.4, count=2)
-        popup_retry_area = None
-        popup_retry_used = set()
+        navigation_retry_page = None
+        navigation_retry_confirm = Timer(0.4, count=2)
+        navigation_retry_area = None
+        navigation_retry_used = set()
         while 1:
             GOTO_MAIN.clear_offset()
             if skip_first_screenshot:
@@ -404,21 +404,21 @@ class UI(InfoHandler):
                 nav_timeout.reset()
                 island_entry_confirm.clear()
                 # 只恢复本次被打断的导航；每个源页最多提前重试一次，避免反复解除限频。
-                popup_retry_page = None
+                navigation_retry_page = None
                 if (last_navigation_page is not None
-                        and last_navigation_page.check_button.name not in popup_retry_used
+                        and last_navigation_page.check_button.name not in navigation_retry_used
                         and not self.get_interval_timer(last_navigation_page.check_button, interval=5).reached()):
-                    popup_retry_page = last_navigation_page
-                popup_retry_confirm.clear()
-                popup_retry_area = None
+                    navigation_retry_page = last_navigation_page
+                navigation_retry_confirm = Timer(0.4, count=2)
+                navigation_retry_area = None
                 continue
 
             # 取消按钮处于冷却时弹窗仍可能可见，不能把其背景当作已恢复的页面。
             guild_popup_visible = (self.appear(GUILD_POPUP_CONFIRM, offset=self._popup_offset)
                                    and self.appear(GUILD_POPUP_CANCEL, offset=self._popup_offset))
             if guild_popup_visible:
-                popup_retry_confirm.clear()
-                popup_retry_area = None
+                navigation_retry_confirm.clear()
+                navigation_retry_area = None
 
             # 其他页面：按 A* 路径点击导航
             clicked = False
@@ -431,37 +431,37 @@ class UI(InfoHandler):
                 if page == page_island and page.parent in (page_island_management, page_island_phone):
                     if not self.appear(page.check_button, offset=offset):
                         island_entry_confirm.clear()
-                        if page is popup_retry_page:
-                            popup_retry_confirm.clear()
-                            popup_retry_area = None
+                        if page is navigation_retry_page:
+                            navigation_retry_confirm.clear()
+                            navigation_retry_area = None
                         continue
                     if not self.ui_island_entry_ready(island_entry_confirm, page.links[page.parent]):
-                        if page is popup_retry_page:
-                            popup_retry_confirm.clear()
-                            popup_retry_area = None
+                        if page is navigation_retry_page:
+                            navigation_retry_confirm.clear()
+                            navigation_retry_area = None
                         continue
-                if page is popup_retry_page:
+                if page is navigation_retry_page:
                     if self.get_interval_timer(page.check_button, interval=5).reached():
                         # 原冷却已到期时回到既有导航，不因新增就绪检测延长等待。
-                        popup_retry_page = None
+                        navigation_retry_page = None
                     else:
                         button = page.links[page.parent]
                         if (not self.appear(page.check_button, offset=offset)
                                 or not self.match_template_color(button, offset=offset)):
-                            popup_retry_confirm.clear()
-                            popup_retry_area = None
+                            navigation_retry_confirm.clear()
+                            navigation_retry_area = None
                             continue
                         current_area = tuple(button.button)
-                        if current_area != popup_retry_area:
-                            popup_retry_confirm.clear()
-                            popup_retry_area = current_area
-                        popup_retry_confirm.start()
-                        if not popup_retry_confirm.reached():
+                        if current_area != navigation_retry_area:
+                            navigation_retry_confirm.clear()
+                            navigation_retry_area = current_area
+                        navigation_retry_confirm.start()
+                        if not navigation_retry_confirm.reached():
                             continue
                         self.interval_clear(page.check_button)
-                        popup_retry_used.add(page.check_button.name)
-                        popup_retry_page = None
-                        logger.info(f'[UI] 弹窗关闭后入口已就绪，提前重试: {page} -> {page.parent}')
+                        navigation_retry_used.add(page.check_button.name)
+                        navigation_retry_page = None
+                        logger.info(f'[UI] 源页入口持续就绪，提前重试: {page} -> {page.parent}')
                 if self.appear(page.check_button, offset=offset, interval=5):
                     logger.info(f'[UI] 页面切换: {page} -> {page.parent}')
                     button = page.links[page.parent]
@@ -469,9 +469,15 @@ class UI(InfoHandler):
                     self.ui_button_interval_reset(button)
                     island_entry_confirm.clear()
                     last_navigation_page = page
-                    popup_retry_page = None
-                    popup_retry_confirm.clear()
-                    popup_retry_area = None
+                    navigation_retry_page = None
+                    navigation_retry_confirm.clear()
+                    navigation_retry_area = None
+                    # 新主界面出击按钮可能在转场中提前出现；首点未生效时，
+                    # 用连续新帧确认入口稳定两秒后补点一次，其余重试仍走五秒限频。
+                    if (page is page_main_white and page.parent is page_campaign_menu
+                            and page.check_button.name not in navigation_retry_used):
+                        navigation_retry_page = page
+                        navigation_retry_confirm = Timer(2, count=2)
                     clicked = True
                     break
             if clicked:
@@ -482,8 +488,8 @@ class UI(InfoHandler):
             if not guild_popup_visible and self.ui_additional(get_ship=get_ship):
                 nav_timeout.reset()
                 island_entry_confirm.clear()
-                popup_retry_confirm.clear()
-                popup_retry_area = None
+                navigation_retry_confirm.clear()
+                navigation_retry_area = None
                 continue
 
             # 导航超时：当前页面无法识别，调用 ui_get_current_page 触发恢复
@@ -507,9 +513,9 @@ class UI(InfoHandler):
                 nav_timeout.reset()
                 island_entry_confirm.clear()
                 last_navigation_page = None
-                popup_retry_page = None
-                popup_retry_confirm.clear()
-                popup_retry_area = None
+                navigation_retry_page = None
+                navigation_retry_confirm.clear()
+                navigation_retry_area = None
 
         # 重置页面连接
         Page.clear_connection()
