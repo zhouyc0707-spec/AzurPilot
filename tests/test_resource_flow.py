@@ -239,12 +239,14 @@ class ResourceFlowTests(unittest.TestCase):
 
     def test_opsi_partial_batch_records_executed_quantity(self):
         from module.os_shop.shop import OSShop
+        from module.shop.assets import AMOUNT_MINUS, AMOUNT_PLUS
 
         shop = object.__new__(OSShop)
         shop.config, shop.device = self.config, Mock()
         shop.get_currency_coins = Mock(return_value=300)
         shop.get_coins_no_limit = Mock(return_value=1000)
         shop.interval_clear = shop.ui_ensure_index = Mock()
+        shop.appear = Mock(side_effect=lambda button, **kwargs: button in (AMOUNT_MINUS, AMOUNT_PLUS))
         item = SimpleNamespace(price=10, count=100)
         with patch('module.os_shop.shop.OCR_SHOP_AMOUNT.ocr', return_value=1):
             self.assertTrue(shop.shop_buy_amount_handler(item))

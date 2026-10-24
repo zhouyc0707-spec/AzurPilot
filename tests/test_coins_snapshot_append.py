@@ -218,6 +218,94 @@ class TestCoinSnapshotAppend(unittest.TestCase):
         self.assertEqual(original, current)
         self.assertEqual(self.db.get_stats(INSTANCE, MONTH)['coins_month_start_residue'], residue)
 
+    @staticmethod
+    def champion():
+        return {'cn': {'server': 'cn', 'month': MONTH, 'totalAp': 220,
+                       'boxes': {'20': 1, '50': 0, '100': 2},
+                       'time': '2026-10-12T12:00:00+08:00', 'screenshot': 'isolated-record.png'}}
+
+    def compatibility_rows(self):
+        with self.db.store.transaction(write=False) as conn:
+            return tuple(tuple(tuple(row) for row in conn.execute(query)) for query in (
+                'SELECT * FROM typed_value_sets ORDER BY id',
+                'SELECT * FROM typed_value_nodes ORDER BY value_set_id,node_no',
+                'SELECT * FROM cl1_compat_fields ORDER BY instance,month,name',
+            ))
+
+    def test_champion_alone_or_with_residue_keeps_native_append_and_original_trees(self):
+        for with_residue in (False, True):
+            with self.subTest(with_residue=with_residue):
+                seed = copy.deepcopy(self.seed)
+                seed['akashi_shop_champion'] = self.champion()
+                if with_residue:
+                    seed['coins_month_start_residue'] = [self.coin(1200, 12)]
+                self.db.save_stats(INSTANCE, MONTH, seed)
+                original_trees = self.compatibility_rows()
+                original_coins = self.rows('coin_snapshots')
+                original_commissions = self.rows('commission_income')
+
+                with self.no_month_rewrite():
+                    self.db.add_coins_snapshot(INSTANCE, 900, 11)
+                    self.db.add_yellow_coin_snapshot(INSTANCE, 900)
+
+                self.assertEqual(original_trees, self.compatibility_rows())
+                self.assertEqual(original_coins, self.rows('coin_snapshots')[:1])
+                self.assertEqual(original_commissions, self.rows('commission_income'))
+                current = self.db.get_stats(INSTANCE, MONTH)
+                self.assertEqual(current['akashi_shop_champion'], seed['akashi_shop_champion'])
+                self.assertEqual(current.get('coins_month_start_residue'), seed.get('coins_month_start_residue'))
+                self.assertEqual([point['yellow_coins'] for point in current['coins_snapshots']], [1000, 900])
+
+    def test_each_independent_tree_is_validated_before_native_append(self):
+        for damaged in ('akashi_shop_champion', 'coins_month_start_residue'):
+            with self.subTest(damaged=damaged):
+                seed = copy.deepcopy(self.seed)
+                seed['akashi_shop_champion'] = self.champion()
+                seed['coins_month_start_residue'] = [self.coin(1200, 12)]
+                self.db.save_stats(INSTANCE, MONTH, seed)
+                with self.db.store.transaction() as conn:
+                    value_id = conn.execute('SELECT value_set_id FROM cl1_compat_fields WHERE name=?',
+                                            (damaged,)).fetchone()[0]
+                    conn.execute('DELETE FROM typed_value_nodes WHERE value_set_id=? AND parent_no IS NULL',
+                                 (value_id,))
+                before = self.rows('coin_snapshots'), self.rows('yellow_coin_snapshots')
+                for method, args in ((self.db.add_coins_snapshot, (900, 11)),
+                                     (self.db.add_yellow_coin_snapshot, (900,))):
+                    with self.no_month_rewrite(), self.assertRaises(ValueError):
+                        method(INSTANCE, *args)
+                    self.assertEqual(before, (self.rows('coin_snapshots'), self.rows('yellow_coin_snapshots')))
+
+    def test_champion_does_not_allow_other_compatibility_fields_into_fast_path(self):
+        self.seed['akashi_shop_champion'] = self.champion()
+        self.seed['private_extension'] = {'nested': [1, True, None]}
+        self.db.save_stats(INSTANCE, MONTH, self.seed)
+        with patch.object(self.db, '_get_stats_in_connection', wraps=self.db._get_stats_in_connection) as read:
+            self.db.add_coins_snapshot(INSTANCE, 900, 11)
+            self.assertTrue(read.called)
+        current = self.db.get_stats(INSTANCE, MONTH)
+        self.assertEqual(current['akashi_shop_champion'], self.seed['akashi_shop_champion'])
+        self.assertEqual(current['private_extension'], self.seed['private_extension'])
+
+    def test_champion_extra_mode_or_unreferenced_tree_rejects_native_guard(self):
+        from module.persistence.values import write_value
+
+        for case in ('extra_mode', 'unreferenced_tree'):
+            with self.subTest(case=case):
+                seed = copy.deepcopy(self.seed)
+                seed['akashi_shop_champion'] = self.champion()
+                self.db.save_stats(INSTANCE, MONTH, seed)
+                before = self.rows('coin_snapshots')
+                with self.db.store.transaction() as conn:
+                    if case == 'extra_mode':
+                        conn.execute("UPDATE cl1_compat_fields SET mode='extra' WHERE name='akashi_shop_champion'")
+                    else:
+                        write_value(conn, instance=INSTANCE, month=MONTH, value={'unreferenced': 1})
+                    self.assertIsNone(self.db._native_month_for_update(conn, INSTANCE, MONTH))
+                    self.assertFalse(self.db._try_append_coin_snapshot(
+                        conn, INSTANCE, MONTH, 'coins_snapshots', self.coin(900, 11, NOW.isoformat()),
+                    ))
+                self.assertEqual(before, self.rows('coin_snapshots'))
+
     def test_corrupt_month_start_residue_raises_without_modifying_records(self):
         self.seed['coins_month_start_residue'] = [self.coin(1200, 12)]
         self.db.save_stats(INSTANCE, MONTH, self.seed)

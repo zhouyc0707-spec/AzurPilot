@@ -678,6 +678,9 @@ class Cl1Database:
         """增加明石奇遇次数，返回事务提交后的累计值。"""
         month = month or datetime.now().strftime("%Y-%m")
         with self._stats_transaction() as conn:
+            encounters = self._try_update_cl1_akashi(conn, instance, month, 'akashi_encounters', 1)
+            if encounters is not None:
+                return encounters
             data = self._get_stats_in_connection(conn, instance, month)
             data["akashi_encounters"] = data.get("akashi_encounters", 0) + 1
             self._save_stats_in_connection(conn, instance, month, data)
@@ -690,8 +693,6 @@ class Cl1Database:
         """记录明石行动力购买条目"""
         month = datetime.now().strftime("%Y-%m")
         with self._stats_transaction() as conn:
-            data = self._get_stats_in_connection(conn, instance, month)
-
             entry = {
                 "ts": datetime.now().isoformat(),
                 "amount": amount,
@@ -699,6 +700,9 @@ class Cl1Database:
                 "count": count,
                 "source": source,
             }
+            if self._try_update_cl1_akashi(conn, instance, month, 'akashi_ap', amount, entry) is not None:
+                return
+            data = self._get_stats_in_connection(conn, instance, month)
 
             entries = data.get("akashi_ap_entries", [])
             entries.append(entry)
@@ -706,6 +710,79 @@ class Cl1Database:
 
             data["akashi_ap"] = data.get("akashi_ap", 0) + amount
             self._save_stats_in_connection(conn, instance, month, data)
+
+    def _try_update_cl1_akashi(self, conn, instance, month, field, delta, entry=None):
+        """规范明石统计只改计数和本次购买，避免持写锁重建全部月度历史。"""
+        from module.persistence.snapshots import FAMILIES, MONTH_FIELDS, save_row
+        from module.persistence.values import scalar
+
+        row = self._native_month_for_update(conn, instance, month)
+        if row is None or type(delta) is not int or not scalar(delta, 'I')[0]:
+            return None
+        mask = 1 << MONTH_FIELDS.index(field)
+        previous = row[field] if row['field_mask'] & mask else 0
+        if type(previous) is not int or not scalar(previous + delta, 'I')[0]:
+            return None
+        value = previous + delta
+        if entry is not None:
+            table, fields = FAMILIES['akashi_ap_entries']
+            if not all(scalar(entry[name], kind)[0] for name, _, kind in fields):
+                return None
+            last = conn.execute(
+                f'SELECT MAX(ordinal) FROM {table} WHERE instance=? AND month=?', (instance, month),
+            ).fetchone()[0]
+            entries_mask = 1 << MONTH_FIELDS.index('akashi_ap_entries')
+            if last is not None and not row['field_mask'] & entries_mask:
+                return None
+            save_row(conn, table, {'instance': instance, 'month': month, 'ordinal': 0 if last is None else last + 1},
+                     entry, fields, {'instance': instance, 'month': month}, entry=True)
+            mask |= entries_mask
+        conn.execute(
+            f'UPDATE cl1_months SET {field}=?, field_mask=field_mask | ? WHERE instance=? AND month=?',
+            (value, mask, instance, month),
+        )
+        return value
+
+    def _try_update_meow_akashi(self, conn, instance, month, hazard_level, field, delta):
+        """原生分级桶只更新明石计数；需要旧格式归一化时保留原处理路径。"""
+        from module.persistence.snapshots import HAZARD_FIELDS, MONTH_FIELDS, load_meow_samples, load_row, save_row
+        from module.persistence.values import scalar
+
+        row = self._native_month_for_update(conn, instance, month)
+        if row is None:
+            return None
+        mask = 1 << MONTH_FIELDS.index('meow_hazard_stats')
+        hazards = conn.execute(
+            'SELECT * FROM meow_hazard_counters WHERE instance=? AND month=?', (instance, month),
+        ).fetchall()
+        if hazards and not row['field_mask'] & mask:
+            return None
+        raw = {str(hazard['hazard_level']): load_row(conn, hazard, HAZARD_FIELDS, {
+            'round_times': load_meow_samples(conn, instance, month, 'round', hazard['hazard_level']),
+            'battle_times': load_meow_samples(conn, instance, month, 'battle', hazard['hazard_level']),
+        }) for hazard in hazards}
+        if self._normalize_meow_hazard_stats({'meow_hazard_stats': raw}) != raw:
+            return None
+        existed = str(hazard_level) in raw
+        bucket = self._ensure_meow_hazard_bucket(raw, hazard_level)
+        value = bucket[field] + delta
+        if not scalar(value, 'I')[0]:
+            return None
+        if existed:
+            conn.execute(
+                f'UPDATE meow_hazard_counters SET {field}=? WHERE instance=? AND month=? AND hazard_level=?',
+                (value, instance, month, hazard_level),
+            )
+        else:
+            bucket[field] = value
+            save_row(conn, 'meow_hazard_counters',
+                     {'instance': instance, 'month': month, 'hazard_level': hazard_level},
+                     bucket, HAZARD_FIELDS, {'instance': instance, 'month': month})
+        conn.execute(
+            'UPDATE cl1_months SET field_mask=field_mask | ? WHERE instance=? AND month=?',
+            (mask, instance, month),
+        )
+        return value
 
     def add_ap_snapshot(self, instance: str, ap_current: int | None, source: str = "cl1", distance: int = None,
                         ap_total: int = None, *, observed_at: datetime = None):
@@ -918,39 +995,46 @@ class Cl1Database:
             }
             self._save_stats_in_connection(conn, instance, month, data)
 
-    def _try_append_coin_snapshot(self, conn, instance, month, name, snapshot):
-        """规范原生序列只追加一条；复杂历史仍交由完整快照路径处理。
-
-        快路径不改写其他统计族，也不跨调用缓存余额。兼容树必须由原路径
-        完整校验；月份首条双方凭证记录也保留原来的月初残留判断。
-        """
-        from module.persistence.snapshots import FAMILIES, MONTH_FIELDS, save_row
+    def _native_month_for_update(self, conn, instance, month):
+        """仅允许原生月数据及不覆盖统计族的已知扩展进入增量写路径。"""
         from module.persistence.values import read_value
 
         month_row = conn.execute(
-            'SELECT field_mask FROM cl1_months WHERE instance=? AND month=?',
+            'SELECT * FROM cl1_months WHERE instance=? AND month=?',
             (instance, month),
         ).fetchone()
         if month_row is None:
-            return False
+            return None
+        compat_fields = conn.execute(
+            'SELECT name, mode, value_set_id FROM cl1_compat_fields WHERE instance=? AND month=?',
+            (instance, month),
+        ).fetchall()
+        independent_fields = {'coins_month_start_residue', 'akashi_shop_champion'}
+        if any(field['name'] not in independent_fields or field['mode'] != 'value' for field in compat_fields):
+            return None
         typed_values = conn.execute(
             'SELECT id FROM typed_value_sets WHERE instance=? AND month=?',
             (instance, month),
         ).fetchall()
-        if typed_values:
-            compat_fields = conn.execute(
-                'SELECT name, mode, value_set_id FROM cl1_compat_fields WHERE instance=? AND month=?',
-                (instance, month),
-            ).fetchall()
-            if (len(compat_fields) != 1 or compat_fields[0]['name'] != 'coins_month_start_residue'
-                    or compat_fields[0]['mode'] != 'value'):
-                return False
-            residue = compat_fields[0]
-            if {row['id'] for row in typed_values} != {residue['value_set_id']}:
-                # 其他兼容值仍由完整路径校验，不能绕过凭证族覆盖或未知字段。
-                return False
-            # 残留档案与显示序列互不覆盖；校验树而不重建，损坏仍向上报错。
-            read_value(conn, residue['value_set_id'])
+        if {row['id'] for row in typed_values} != {field['value_set_id'] for field in compat_fields}:
+            # 其他兼容值仍由完整路径校验，不能绕过统计族覆盖或未知字段。
+            return None
+        for field in compat_fields:
+            # 两项档案与原生统计族互不覆盖；逐树校验但不重建，损坏仍向上报错。
+            read_value(conn, field['value_set_id'])
+        return month_row
+
+    def _try_append_coin_snapshot(self, conn, instance, month, name, snapshot):
+        """规范原生序列只追加一条；复杂历史仍交由完整快照路径处理。
+
+        快路径不改写其他统计族，也不跨调用缓存余额。独立扩展逐树校验，
+        其他兼容值交由原路径完整处理；首条双方凭证保留月初残留判断。
+        """
+        from module.persistence.snapshots import FAMILIES, MONTH_FIELDS, save_row
+
+        month_row = self._native_month_for_update(conn, instance, month)
+        if month_row is None:
+            return False
 
         table, fields = FAMILIES[name]
         last = conn.execute(
@@ -1336,6 +1420,9 @@ class Cl1Database:
 
         month = month or datetime.now().strftime("%Y-%m")
         with self._stats_transaction() as conn:
+            count = self._try_update_meow_akashi(conn, instance, month, hazard_level, 'akashi_encounters', 1)
+            if count is not None:
+                return count
             data = self._get_stats_in_connection(conn, instance, month)
             hazard_stats = self._normalize_meow_hazard_stats(data)
             bucket = self._ensure_meow_hazard_bucket(hazard_stats, hazard_level)
@@ -1366,6 +1453,8 @@ class Cl1Database:
 
         month = datetime.now().strftime("%Y-%m")
         with self._stats_transaction() as conn:
+            if self._try_update_meow_akashi(conn, instance, month, hazard_level, 'akashi_ap', amount) is not None:
+                return
             data = self._get_stats_in_connection(conn, instance, month)
             hazard_stats = self._normalize_meow_hazard_stats(data)
             bucket = self._ensure_meow_hazard_bucket(hazard_stats, hazard_level)

@@ -428,6 +428,10 @@ stateDiagram-v2
 
 耄耋相接同样通过 `record_meow_akashi_encounter()` 返回写入 Future。`increment_meow_akashi_encounter(instance, hazard_level, month=None)` 保留侵蚀等级分桶，提交后才返回该桶累计次数；月份在事件入队时固定，回调打印实际次数或记录写入异常。任务的 `_meow_record_akashi_if_solved()` 消费已解决的明石标记，避免后续轮次重复计数。该链路原本已异步，本次语义是确认实际落库，不增加游戏主线程等待。
 
+明石计数和购买使用短增量事务：规范数据的 `increment_akashi_encounter()` 只更新 `cl1_months.akashi_encounters`；`add_akashi_ap_entry()` 在同一事务追加 `akashi_ap_purchases` 并更新 `akashi_ap` 与字段存在位。耄耋对应方法只更新分级桶，不重建行动力曲线、货币历史或其他月份。初次月份和需要兼容处理的旧格式仍走原读改写；分级数据若需要归一化，也沿用旧路径。原生快速路径只接受无兼容树或独立的 `coins_month_start_residue`／`akashi_shop_champion` 扩展，逐树校验后保留原值；其他兼容值不绕过完整校验。凭证快照复用同一守卫，避免新增猫王元数据导致每次采样重建整月。
+
+增量写入仍在 `BEGIN IMMEDIATE` 内完成，保持 `synchronous=FULL`、失败回滚、成功后清理只读缓存与按实际提交结果记录成功的语义。未更改奖励旁路记账、游戏点击及猫王截图的确认流程。并发、旧格式回退与历史行保持验证见 `tests/test_akashi_incremental_statistics.py`、`tests/test_statistics_transactions.py`。
+
 | 对象 | 保护方式 |
 | --- | --- |
 | `Cl1Database` | 每次读改写都在 `_stats_transaction()`（`BEGIN IMMEDIATE`）内完成，跨线程与跨进程串行化；不依赖调用方持锁。跨月结算在一个事务里同时写来源月与归档月 |
