@@ -146,6 +146,10 @@ flowchart BT
 
 按上游当前普通事件流程依次处理容器、奖励、明石、装置及记录塔；地图检索仍先执行本地主队雷达预检，失败再完整重扫及按配置执行其他舰队补查/强制移动。中断由既有任务恢复机制接管。主队预检、完整扫描、明石访问去重及原提示条等待继续生效，具体边界见下方注意事项。
 
+侵蚀一搜索期间收到停止信号时，按 `is_running_cl1_leveling` 识别独立任务或代理上下文，在守护循环中调用 `interrupt_auto_search(goto_main=False)`：必要时暂停并退出战斗，处理奖励和弹窗，关闭明确开启的自律，确认大世界地图与 OFF／OFF_DISABLED 互斥状态连续稳定后结束任务，不主动返回港区首页。奖励遮罩检测不受点击冷却限制；ON、未知或 ON／OFF 同时命中不视为完成，已处理弹窗及加载转换会重新计时。轮次末尾已完成收尾时仍直接走原任务切换检查，不额外开启退出流程。普通高优先级任务抢占与其他大世界任务保留原回主逻辑；全局「停止调度器后」若另选回主、关闭游戏或模拟器，仍由停止后的独立收尾执行。
+
+`interrupt_auto_search(goto_main=False, end_task=False)` 同样确认自律关闭后返回调用方，供低黄币等中断继续决策；不能误抛 `TaskEnd` 或把暂停当作已结束。离线回归见 `tests/test_opsi_soft_stop.py`、`tests/test_opsi_drop_capture.py` 和 `tests/test_soft_stop.py`。
+
 
 ### 智能调度的身份机制（tasks/task_context.py）
 
