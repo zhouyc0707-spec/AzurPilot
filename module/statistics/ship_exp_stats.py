@@ -20,6 +20,7 @@ from __future__ import annotations
 import math
 import time
 import sqlite3
+from copy import deepcopy
 from pathlib import Path
 from datetime import datetime, date
 from typing import Any
@@ -115,34 +116,47 @@ class ShipExpStats:
 
         # 记录战斗时间（根据来源分别统计）
         source = "meow" if source == "meow" else "cl1"
-        self._record_battle_time(duration, source=source)
+        self._record_battle_time(duration, source=source, save=source != "cl1")
 
         # 计算本场经验 (使用平均值，因为每个位置经验不同)
         # 旗舰 431 + 其他位置 288*5 = 1871, 平均 312
         avg_exp = self.AVG_EXP_PER_BATTLE
 
         # 每日经验效率用于侵蚀1练级预估，避免被耄耋相接耗时混入。
-        if source == "cl1" and record_daily_summary:
-            from module.statistics.daily_summary_store import get_daily_summary_store
-
-            get_daily_summary_store().record_cl1_battle_event(
-                instance=self._instance_name,
-                timestamp=current_time(),
-                duration_seconds=duration,
-                estimated_exp=avg_exp,
-            )
         if source == "cl1":
-            self._update_daily_stats(exp_gained=avg_exp, battle_duration=duration)
+            # 正常路径合并保存；后续统计异常时仍保留原本先保存的战斗样本。
+            sample_data = self.data.copy()
+            if 'daily_stats' in sample_data:
+                sample_data['daily_stats'] = deepcopy(sample_data['daily_stats'])
+            try:
+                if record_daily_summary:
+                    from module.statistics.daily_summary_store import get_daily_summary_store
+
+                    get_daily_summary_store().record_cl1_battle_event(
+                        instance=self._instance_name,
+                        timestamp=current_time(),
+                        duration_seconds=duration,
+                        estimated_exp=avg_exp,
+                    )
+                self._update_daily_stats(exp_gained=avg_exp, battle_duration=duration)
+            except Exception:
+                failed_data, self.data = self.data, sample_data
+                try:
+                    self._save()
+                finally:
+                    self.data = failed_data
+                raise
 
         logger.info(f'{source.upper()} 战斗已记录：{duration:.1f}s，经验：{avg_exp}')
         return duration
 
-    def _record_battle_time(self, duration: float, source: str = "cl1") -> None:
+    def _record_battle_time(self, duration: float, source: str = "cl1", *, save: bool = True) -> None:
         """记录单场战斗时间到样本列表中。
 
         Args:
             duration (float): 本场战斗时长（秒）。
             source (str): 战斗来源（"cl1" 或 "meow"）。默认为 "cl1"。
+            save (bool): 是否立即保存；侵蚀1战后由每日统计统一保存。
         """
         # 不同来源使用不同的键，避免侵蚀1与耄耋相接混合统计
         if source == "meow":
@@ -167,7 +181,8 @@ class ShipExpStats:
         if samples:
             self.data[key]['average'] = round(sum(samples) / len(samples), 2)
 
-        self._save()
+        if save:
+            self._save()
 
     def record_round_time(self, round_duration: float, *, round_count: float = 1) -> None:
         """记录完整练级耗时，按实际轮数加权保留最近100轮。

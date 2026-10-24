@@ -116,11 +116,12 @@ class PlainStatisticsCase(unittest.TestCase):
     def test_native_cl1_writes_complete_snapshot(self):
         database = Cl1Database(self.cl1)
         database.increment_battle_count('inst', 3)
-        database.add_ap_snapshot('inst', 131, source='cl1')
+        database.add_ap_snapshot('inst', 131, source='cl1', ap_total=331)
         database.add_commission_income('inst', {'Gem': 5})
         data = database.get_stats('inst', datetime.now().strftime('%Y-%m'))
         self.assertEqual(data['battle_count'], 3)
         self.assertEqual(data['ap_snapshots'][0]['ap'], 131)
+        self.assertEqual(data['ap_snapshots'][0]['ap_total'], 331)
         self.assertEqual(len(data['commission_income_entries']), 1)
         self.assertEqual(self.sql(database.db_path, 'SELECT battle_count FROM cl1_months'), [(3,)])
         self.assertFalse(self.cl1.exists())

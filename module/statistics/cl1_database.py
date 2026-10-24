@@ -670,6 +670,8 @@ class Cl1Database:
         """增加战斗次数"""
         month = datetime.now().strftime("%Y-%m")
         with self._stats_transaction() as conn:
+            if self._try_update_cl1_akashi(conn, instance, month, 'battle_count', delta) is not None:
+                return
             data = self._get_stats_in_connection(conn, instance, month)
             data["battle_count"] = data.get("battle_count", 0) + delta
             self._save_stats_in_connection(conn, instance, month, data)
@@ -712,7 +714,7 @@ class Cl1Database:
             self._save_stats_in_connection(conn, instance, month, data)
 
     def _try_update_cl1_akashi(self, conn, instance, month, field, delta, entry=None):
-        """规范明石统计只改计数和本次购买，避免持写锁重建全部月度历史。"""
+        """规范整数计数及明石购买只改目标行，避免持写锁重建全部月度历史。"""
         from module.persistence.snapshots import FAMILIES, MONTH_FIELDS, save_row
         from module.persistence.values import scalar
 
@@ -802,7 +804,9 @@ class Cl1Database:
         with self._stats_transaction() as conn:
             # 补齐必须先于本次读取。
             self.ensure_coins_history(instance, conn)
-            data = self._get_stats_in_connection(conn, instance, month)
+            native = self._ap_snapshot_append_context(conn, instance, month)
+            data = (self._get_stats_in_connection(conn, instance, month) if native is None
+                    else {'yellow_coin_snapshots': native[1]})
             now = observed_at
 
             # CL5 效率：1700 / 30 ≈ 56.67
@@ -829,10 +833,42 @@ class Cl1Database:
                 if ap_current is not None:
                     snapshot["ap"] = self._coerce_int(ap_current)
 
+            if native is not None:
+                from module.persistence.snapshots import FAMILIES, MONTH_FIELDS, save_row
+                from module.persistence.values import scalar
+
+                table, fields = FAMILIES['ap_snapshots']
+                if all(scalar(snapshot[name], kind)[0] for name, _, kind in fields if name in snapshot):
+                    save_row(conn, table, {'instance': instance, 'month': month, 'ordinal': native[0]},
+                             snapshot, fields, {'instance': instance, 'month': month}, entry=True)
+                    conn.execute('UPDATE cl1_months SET field_mask=field_mask | ? WHERE instance=? AND month=?',
+                                 (1 << MONTH_FIELDS.index('ap_snapshots'), instance, month))
+                    return
+                data = self._get_stats_in_connection(conn, instance, month)
             snapshots = data.get("ap_snapshots", [])
             snapshots.append(snapshot)
             data["ap_snapshots"] = snapshots
             self._save_stats_in_connection(conn, instance, month, data)
+
+    def _ap_snapshot_append_context(self, conn, instance, month):
+        """仅读取追加位置及同月最后一个黄币观测，不展开完整行动力历史。"""
+        from module.persistence.snapshots import FAMILIES, MONTH_FIELDS, load_row
+
+        row = self._native_month_for_update(conn, instance, month)
+        if row is None:
+            return None
+        last = conn.execute('SELECT MAX(ordinal) FROM action_point_snapshots WHERE instance=? AND month=?',
+                            (instance, month)).fetchone()[0]
+        if last is not None and last >= 2 ** 63 - 1:
+            return None
+        if last is not None and not row['field_mask'] & (1 << MONTH_FIELDS.index('ap_snapshots')):
+            return None
+        yellow = conn.execute('SELECT * FROM yellow_coin_snapshots WHERE instance=? AND month=? '
+                              'ORDER BY ordinal DESC LIMIT 1', (instance, month)).fetchone()
+        if yellow is not None and not row['field_mask'] & (1 << MONTH_FIELDS.index('yellow_coin_snapshots')):
+            return None
+        points = [] if yellow is None else [load_row(conn, yellow, FAMILIES['yellow_coin_snapshots'][1])]
+        return (0 if last is None else last + 1), points
 
     def ensure_coins_cleanup(self, instance: str, conn) -> None:
         """清掉月初残留的紫币读数，按版本号只执行一次。
@@ -1275,6 +1311,120 @@ class Cl1Database:
 
     # ========== 耄耋相接数据记录方法 ==========
 
+    def _try_update_meow_statistics(self, conn, instance, month, hazard_level, *, delta=None, kind=None, duration=None):
+        """规范计数和最多百条的样本原地更新；需旧格式归一化时整月回退。"""
+        from module.persistence.snapshots import HAZARD_FIELDS, MONTH_FIELDS, load_meow_samples, load_row, save_row
+        from module.persistence.values import scalar
+
+        row = self._native_month_for_update(conn, instance, month)
+        if row is None or (hazard_level is not None and type(hazard_level) is not int):
+            return False
+        valid_hazard = hazard_level in {2, 3, 4, 5, 6}
+        mask = 0
+        if kind is None:
+            raw_mask = 1 << MONTH_FIELDS.index('meow_battle_raw_count')
+            effective_mask = 1 << MONTH_FIELDS.index('meow_battle_count')
+            raw = row['meow_battle_raw_count'] if row['field_mask'] & raw_mask else 0
+            effective = row['meow_effective_rounds'] if row['field_mask'] & effective_mask else 0
+            if type(raw) is not int or type(effective) not in (int, float) or type(delta) not in (int, float):
+                return False
+            raw, effective = raw + 1, effective + delta
+            if not scalar(raw, 'I')[0] or not scalar(effective, 'R')[0]:
+                return False
+            mask |= raw_mask | effective_mask
+        else:
+            duration = round(duration, 2)
+            if not scalar(duration, 'R')[0]:
+                return False
+            field = 'meow_round_times' if kind == 'round' else 'meow_battle_times'
+            mask |= 1 << MONTH_FIELDS.index(field)
+            samples = load_meow_samples(conn, instance, month, kind, 0)
+            if samples and not row['field_mask'] & mask:
+                return False
+            if kind == 'round' and self._normalize_meow_round_times(samples) != samples:
+                return False
+            last = conn.execute('''SELECT MAX(ordinal) FROM meow_duration_samples
+                WHERE instance=? AND month=? AND kind=? AND bucket IN (0, ?)''',
+                                (instance, month, kind, hazard_level if valid_hazard else 0)).fetchone()[0]
+            if last is not None and last >= 2 ** 63 - 1:
+                return False
+
+        hazards = {}
+        bucket = None
+        if valid_hazard:
+            hazard_mask = 1 << MONTH_FIELDS.index('meow_hazard_stats')
+            stored = conn.execute('SELECT * FROM meow_hazard_counters WHERE instance=? AND month=?',
+                                  (instance, month)).fetchall()
+            if stored and not row['field_mask'] & hazard_mask:
+                return False
+            hazards = {str(item['hazard_level']): load_row(conn, item, HAZARD_FIELDS, {
+                'round_times': load_meow_samples(conn, instance, month, 'round', item['hazard_level']),
+                'battle_times': load_meow_samples(conn, instance, month, 'battle', item['hazard_level']),
+            }) for item in stored}
+            if self._normalize_meow_hazard_stats({'meow_hazard_stats': hazards}) != hazards:
+                return False
+            # 孤立或被存在位隐藏的分级样本不能随新样本一并显露。
+            hidden = conn.execute('''SELECT 1 FROM meow_duration_samples AS s
+                LEFT JOIN meow_hazard_counters AS h ON h.instance=s.instance AND h.month=s.month
+                    AND h.hazard_level=s.bucket
+                WHERE s.instance=? AND s.month=? AND s.bucket<>0 AND
+                    (h.hazard_level IS NULL OR (h.field_mask & CASE s.kind WHEN 'round' THEN 4 ELSE 8 END)=0)
+                LIMIT 1''', (instance, month)).fetchone()
+            if hidden is not None:
+                return False
+            existed = str(hazard_level) in hazards
+            bucket = self._ensure_meow_hazard_bucket(hazards, hazard_level)
+            if kind is None:
+                bucket['battle_raw_count'] = int(bucket['battle_raw_count'] or 0) + 1
+                bucket['effective_rounds'] = float(bucket['effective_rounds'] or 0) + delta
+                if not scalar(bucket['battle_raw_count'], 'I')[0] or not scalar(bucket['effective_rounds'], 'R')[0]:
+                    return False
+            mask |= hazard_mask
+
+        # 所有回退检查先于写操作，避免追加后再走整月路径重复累计。
+        if bucket is not None:
+            if existed:
+                if kind is None:
+                    conn.execute('''UPDATE meow_hazard_counters SET battle_raw_count=?, effective_rounds=?
+                        WHERE instance=? AND month=? AND hazard_level=?''',
+                                 (bucket['battle_raw_count'], bucket['effective_rounds'], instance, month, hazard_level))
+            else:
+                save_row(conn, 'meow_hazard_counters',
+                         {'instance': instance, 'month': month, 'hazard_level': hazard_level},
+                         bucket, HAZARD_FIELDS, {'instance': instance, 'month': month})
+        if kind is None:
+            conn.execute('''UPDATE cl1_months SET meow_battle_raw_count=?, meow_effective_rounds=?,
+                field_mask=field_mask | ? WHERE instance=? AND month=?''', (raw, effective, mask, instance, month))
+        else:
+            self._append_meow_sample(conn, instance, month, kind, 0, duration, hazard_level)
+            if valid_hazard:
+                self._append_meow_sample(conn, instance, month, kind, hazard_level, duration, None)
+            conn.execute('UPDATE cl1_months SET field_mask=field_mask | ? WHERE instance=? AND month=?',
+                         (mask, instance, month))
+        return True
+
+    @staticmethod
+    def _append_meow_sample(conn, instance, month, kind, bucket, duration, hazard_level):
+        """原地追加并仅删除超出百条的旧样本，保留其余样本行标识。"""
+        from module.persistence.snapshots import insert
+
+        scope = (instance, month, kind, bucket)
+        last = conn.execute('''SELECT MAX(ordinal) FROM meow_duration_samples
+            WHERE instance=? AND month=? AND kind=? AND bucket=?''', scope).fetchone()[0]
+        object_format = kind == 'round' and bucket == 0
+        insert(conn, 'meow_duration_samples', {
+            'instance': instance, 'month': month, 'kind': kind, 'bucket': bucket,
+            'ordinal': 0 if last is None else last + 1,
+            'entry_format': 'object' if object_format else 'number',
+            'hazard_present': int(object_format), 'field_mask': 3 if object_format else 1,
+            'compat_value_set_id': None, 'duration_seconds': duration,
+            'observed_hazard': hazard_level if object_format else None,
+        })
+        conn.execute('''DELETE FROM meow_duration_samples
+            WHERE instance=? AND month=? AND kind=? AND bucket=? AND ordinal IN (
+                SELECT ordinal FROM meow_duration_samples WHERE instance=? AND month=? AND kind=? AND bucket=?
+                ORDER BY ordinal DESC LIMIT -1 OFFSET 100)''', (*scope, *scope))
+
     def increment_meow_battle_count(
         self, instance: str, hazard_level: int = None, delta: float = None
     ):
@@ -1302,6 +1452,8 @@ class Cl1Database:
 
         month = datetime.now().strftime("%Y-%m")
         with self._stats_transaction() as conn:
+            if self._try_update_meow_statistics(conn, instance, month, hazard_level, delta=delta):
+                return
             data = self._get_stats_in_connection(conn, instance, month)
             data["meow_battle_raw_count"] = data.get("meow_battle_raw_count", 0) + 1
             data["meow_battle_count"] = data.get("meow_battle_count", 0) + delta
@@ -1334,6 +1486,8 @@ class Cl1Database:
 
         month = datetime.now().strftime("%Y-%m")
         with self._stats_transaction() as conn:
+            if self._try_update_meow_statistics(conn, instance, month, hazard_level, kind='round', duration=duration):
+                return
             data = self._get_stats_in_connection(conn, instance, month)
 
             normalized_times = self._normalize_meow_round_times(
@@ -1378,6 +1532,8 @@ class Cl1Database:
 
         month = datetime.now().strftime("%Y-%m")
         with self._stats_transaction() as conn:
+            if self._try_update_meow_statistics(conn, instance, month, hazard_level, kind='battle', duration=duration):
+                return
             data = self._get_stats_in_connection(conn, instance, month)
 
             if "meow_battle_times" not in data:
@@ -1795,6 +1951,107 @@ class Cl1Database:
         return now.strftime("%Y-%m"), (now.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
 
     @staticmethod
+    def _native_revenue_family(conn, instance, month, row, name):
+        """先核验收益族的字段存在性和原生格式，再允许本事务增量写入。"""
+        from module.persistence.snapshots import FAMILIES, MONTH_FIELDS
+
+        table, fields = FAMILIES[name]
+        last = conn.execute(
+            f'SELECT MAX(ordinal) FROM {table} WHERE instance=? AND month=?', (instance, month),
+        ).fetchone()[0]
+        if last is not None and (not row['field_mask'] & (1 << MONTH_FIELDS.index(name))
+                                 or last >= 2 ** 63 - 1):
+            return None
+        if conn.execute(
+            f'''SELECT 1 FROM {table} WHERE instance=? AND month=?
+                AND (entry_kind != 'record' OR compat_value_set_id IS NOT NULL) LIMIT 1''',
+            (instance, month),
+        ).fetchone() is not None:
+            return None
+        return table, fields, 0 if last is None else last + 1
+
+    @staticmethod
+    def _append_native_revenue(conn, instance, month, name, entry, family):
+        """只追加本次收益及其子项，沿用最后 5000 条的顺序和上限。"""
+        from module.persistence.snapshots import MONTH_FIELDS, save_children, save_row
+        from module.persistence.values import normalize
+
+        table, fields, ordinal = family
+        owner = {'instance': instance, 'month': month}
+        entry = normalize(entry, special=True)
+        row_id = save_row(conn, table, dict(owner, ordinal=ordinal), entry, fields, owner, entry=True)
+        save_children(conn, table, row_id, entry, owner)
+        conn.execute(
+            f'''DELETE FROM {table} WHERE id IN (
+                SELECT id FROM {table} WHERE instance=? AND month=?
+                ORDER BY ordinal DESC LIMIT -1 OFFSET 5000)''', (instance, month),
+        )
+        conn.execute('UPDATE cl1_months SET field_mask=field_mask | ? WHERE instance=? AND month=?',
+                     (1 << MONTH_FIELDS.index(name), instance, month))
+
+    def _try_add_commission_income(self, conn, instance, months, entry, now, completed_at, gem_duration, reward):
+        """只读所需收益族；钻石匹配与原规则共用，全部校验后才写入。"""
+        from module.persistence.snapshots import FAMILIES, MONTH_FIELDS, load_row, save_row
+
+        read_months = months if gem_duration is not None else months[:1]
+        rows = {month: self._native_month_for_update(conn, instance, month) for month in read_months}
+        if any(row is None for row in rows.values()):
+            return False, None
+        income = self._native_revenue_family(
+            conn, instance, months[0], rows[months[0]], 'commission_income_entries',
+        )
+        if income is None:
+            return False, None
+        removed, source_month = None, None
+        data = {}
+        if gem_duration is not None:
+            table, fields = FAMILIES['running_gem_commissions']
+            for month in months:
+                if self._native_revenue_family(conn, instance, month, rows[month], 'running_gem_commissions') is None:
+                    return False, None
+                data[month] = {}
+                if rows[month]['field_mask'] & (1 << MONTH_FIELDS.index('running_gem_commissions')):
+                    data[month]['running_gem_commissions'] = [load_row(conn, row, fields) for row in conn.execute(
+                        f'SELECT * FROM {table} WHERE instance=? AND month=? ORDER BY ordinal', (instance, month),
+                    )]
+            for commission in self._running_commissions_from_months(data, months):
+                if commission.get('duration') != gem_duration:
+                    continue
+                try:
+                    finish_time = datetime.fromisoformat(commission['finish_time'])
+                except (KeyError, TypeError, ValueError):
+                    logger.warning(f"钻石委托完成时间无效，跳过结算: {commission}")
+                    continue
+                if finish_time > completed_at:
+                    continue
+                removed, source_month = self._settle_running_in_months(
+                    data, months, now, reward, name=commission.get('name'),
+                    duration_hour=gem_duration, create_time=commission.get('create_time'),
+                )
+                break
+        if source_month is not None:
+            history = self._native_revenue_family(
+                conn, instance, months[0], rows[months[0]], 'gem_commission_entries',
+            )
+            if history is None:
+                return False, None
+        self._append_native_revenue(conn, instance, months[0], 'commission_income_entries', entry, income)
+        if source_month is not None:
+            self._append_native_revenue(conn, instance, months[0], 'gem_commission_entries',
+                                        data[months[0]]['gem_commission_entries'][0], history)
+            # 原结算会排序已访问的当前月与来源月；只替换这两个很短的运行列表。
+            for month in {months[0], source_month}:
+                if 'running_gem_commissions' not in data[month]:
+                    continue
+                conn.execute(f'DELETE FROM {table} WHERE instance=? AND month=?', (instance, month))
+                owner = {'instance': instance, 'month': month}
+                for ordinal, commission in enumerate(data[month]['running_gem_commissions']):
+                    save_row(conn, table, dict(owner, ordinal=ordinal), commission, fields, owner, entry=True)
+                conn.execute('UPDATE cl1_months SET field_mask=field_mask | ? WHERE instance=? AND month=?',
+                             (1 << MONTH_FIELDS.index('running_gem_commissions'), instance, month))
+        return True, removed
+
+    @staticmethod
     def _running_commissions_from_months(data, months):
         commissions = []
         seen = set()
@@ -1887,6 +2144,11 @@ class Cl1Database:
         }
         removed = None
         with self._stats_transaction() as conn:
+            handled, removed = self._try_add_commission_income(
+                conn, instance, months, entry, now, completed_at, gem_duration, items.get('Gem', 0),
+            )
+            if handled:
+                return removed
             read_months = months if gem_duration is not None else months[:1]
             data = {month: self._get_stats_in_connection(conn, instance, month) for month in read_months}
             entries = data[months[0]].get("commission_income_entries", [])
@@ -2060,6 +2322,17 @@ class Cl1Database:
             "items": items,
         }
         with self._stats_transaction() as conn:
+            row = self._native_month_for_update(conn, instance, month)
+            family = self._native_revenue_family(conn, instance, month, row, 'research_drop_entries') if row else None
+            if family is not None:
+                if entry['imgid'] and conn.execute(
+                    '''SELECT 1 FROM (SELECT imgid,field_mask FROM research_drops WHERE instance=? AND month=?
+                        ORDER BY ordinal DESC LIMIT 50) WHERE field_mask & 4 != 0 AND imgid=? LIMIT 1''',
+                    (instance, month, entry['imgid']),
+                ).fetchone() is not None:
+                    return None
+                self._append_native_revenue(conn, instance, month, 'research_drop_entries', entry, family)
+                return entry
             data = self._get_stats_in_connection(conn, instance, month)
             entries = data.get("research_drop_entries", [])
             if entry["imgid"] and any(

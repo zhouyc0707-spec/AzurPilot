@@ -97,9 +97,11 @@ def observe(config, resource, value, source=None, *, observed_at=None):
             if baseline and baseline['ts'] > stamp:
                 return
             if baseline:
+                # 显式给出 OR 已隐含的时间下界，避免索引遍历全部历史流水。
                 known = connection.execute('''SELECT COALESCE(SUM(amount), 0) FROM resource_flows
-                    WHERE instance=? AND resource=? AND (ts>? OR (ts=? AND id>?)) AND ts<=?''',
-                    (instance, resource, baseline['ts'], baseline['ts'], baseline['cursor'], stamp)).fetchone()[0]
+                    WHERE instance=? AND resource=? AND ts>=? AND (ts>? OR (ts=? AND id>?)) AND ts<=?''',
+                    (instance, resource, baseline['ts'], baseline['ts'], baseline['ts'],
+                     baseline['cursor'], stamp)).fetchone()[0]
                 residual = value - baseline['value'] - known
                 same_run = run_id is not None and baseline['run_id'] == run_id
                 # PT 跨活动归零不属于消费；读取任务也不能认领离线恢复和跨任务变化。
