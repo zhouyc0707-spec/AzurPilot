@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-from module.api.protocol import AuthParams, SubscribeParams
+from module.api.protocol import AuthParams, LauncherTicketParams, SubscribeParams
 from module.api.router import Method, Router
 
 
@@ -40,11 +40,14 @@ def main():
     """扫描后端路由参数模型并导出 generated.ts 与 contract.json 契约文件。"""
     registry = dict(Router(None, None).methods)
     registry['auth.login'] = Method(AuthParams, lambda _: None)
+    registry['auth.launcher'] = Method(LauncherTicketParams, lambda _: None, local_only=True)
     registry['events.subscribe'] = Method(SubscribeParams, lambda _: None)
     contracts, lines = {}, ['// 由 dev_tools.export_api_schema 生成，请勿手动编辑。', 'export interface Parameters {']
     for name, entry in registry.items():
         schema = entry.params.model_json_schema()
         contracts[name] = {'mutates': entry.mutates, 'params': schema}
+        if entry.local_only:
+            contracts[name]['localOnly'] = True
         lines.append(f'  "{name}": {typescript(schema, schema.get("$defs", {}))}')
     lines.append('}')
     from module.scheduler.models import (ProgramDocument, CardDefinition, PortDefinition, ResourceObservation,
@@ -58,10 +61,18 @@ def main():
     lines.append('}')
     directory = Path(__file__).resolve().parents[1] / 'frontend/src/api'
     directory.mkdir(parents=True, exist_ok=True)
-    # newline='\n'：.gitattributes 要求这两个产物用 LF，而 Python 的文本模式在
-    # Windows 上会把 \n 翻成 CRLF，生成后 git 一直把文件标成已修改（内容其实一样）。
     (directory / 'generated.ts').write_text('\n'.join(lines) + '\n', encoding='utf-8', newline='\n')
-    (directory / 'contract.json').write_text(json.dumps({'version': 1, 'methods': contracts, 'schedulerModels': models},
+    from module.api.launcher_protocol import (INCOMING_METHODS, AutostartState, LauncherCommand,
+                                             LauncherEvent, LauncherRequest, LauncherResponse)
+    launcher = {'version': 2, 'path': '/api/v2/launcher/ws',
+                'incoming': {key: model.model_json_schema() for key, model in INCOMING_METHODS.items()},
+                'outgoing': {'autostart.get': {'params': {}, 'result': AutostartState.model_json_schema()},
+                             'autostart.set': {'params': registry['launcher.autostart.set'].params.model_json_schema(),
+                                               'result': AutostartState.model_json_schema()}},
+                'request': LauncherRequest.model_json_schema(), 'response': LauncherResponse.model_json_schema(),
+                'command': LauncherCommand.model_json_schema(), 'event': LauncherEvent.model_json_schema()}
+    (directory / 'contract.json').write_text(json.dumps({'version': 1, 'methods': contracts, 'schedulerModels': models,
+                                                        'launcher': launcher},
                                                      ensure_ascii=False, indent=2) + '\n', encoding='utf-8', newline='\n')
 
 

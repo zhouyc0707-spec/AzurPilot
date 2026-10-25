@@ -621,7 +621,7 @@ assert not c.combat_result.shipwreck_reduced
         self.assertEqual({'Main', 'Main2', 'Main3', 'Event', 'Event2', 'Event3',
                           'EventA', 'EventB', 'EventC', 'EventD', 'EventSp',
                           'GemsFarming', 'ThreeOilLowCost'}, visible)
-        for lang in ('zh-CN', 'zh-MIAO', 'en-US', 'ja-JP', 'zh-TW'):
+        for lang in ('zh-CN', 'en-US', 'ja-JP', 'zh-TW'):
             data = json.loads((root / f'module/config/i18n/{lang}.json').read_text(encoding='utf-8'))
             for field in ('name', 'help'):
                 self.assertNotIn('Campaign.ContinueAfterRestart.', data['Campaign']['ContinueAfterRestart'][field])

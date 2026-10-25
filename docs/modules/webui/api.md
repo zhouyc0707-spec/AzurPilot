@@ -77,6 +77,8 @@ module/api/
 
 Windows 目录打开需确认对应 Explorer 窗口已前置；已经打开但无法确认前置时，同样用 `FOLDER_OPEN_FAILED` 返回明确的任务栏查看提示，保留已打开窗口供重试。前置前先临时关联输入线程，避免先直接请求前置遭拒触发注意提示；成功后仅向已确认的目标窗口发送 `FlashWindowEx(FLASHW_STOP)`，取消残留闪烁。该函数返回窗口调用前的活动状态，返回零不代表清理失败；清理提示的原生调用异常不改变已经核验的前置结果。后台图库共用此行为；Windows 以外的平台维持原有打开语义。[Windows 前台切换限制](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setforegroundwindow)由系统决定，辅助实现不修改全局焦点策略。
 
+统计报表与 `statistics.resourceFlows` 的标签、表头、备注保持中文（前端按中文名查图标、导出与筛选）。两者附带 `glossary`（`{中文名: {语言: 名称}}`，只含本次出现的物品名与任务名，来源为物品名称表、仓库目录与配置页 i18n）；固定文案由前端 `components/statisticsText.ts` 在显示前翻译，新增后端文案时需同步补齐该字典的英、日、繁三列。
+
 ## 4. 核心入口
 
 | 入口 | 用途 |
@@ -425,9 +427,9 @@ ws.send_json({'v':1,'type':'request','id':'2','method':'events.subscribe',
 ## 19. 调试方法
 
 - **健康检查**：`GET /healthz` 应返回 `{'status': 'ok', 'protocolVersion': 1}`；`GET /` 返回 503 说明前端未构建（在 `frontend/` 执行 `npm ci && npm run build`）。
-- **启动器通道**：`launcher_api.py` 实现 `/api/launcher/{status,startup,stream,report,trusted-login}` 与 `/launcher-login`，全部限定本机回环，非本机一律 403（控制台的启动器卡片读同一组端点，远端访问时即显示「只能在本机 WebUI 中设置」）。`launcher_routes.py` 组装这六条端点与本地通知扩展 `/api/notify`、`/api/notify_stream`，`create_app` 只注册一次并放在 SPA 兜底之前。可信登录种子页为 React 的 `azurpilot.access-password` 与 PyWebIO 的 `password` 写入同一凭据；密码中的 `<` 转义后再嵌入脚本，避免提前闭合脚本块。
-- **任务通知通道**：`notify_api.py` 统一处理 `/api/notify`（POST）与 `/api/notify_stream`（SSE），旧 `launcher_routes.api_notify`、`api_notify_stream` 和通知队列读取入口指向同一实现。两个路径均只允许本机，POST 还要求 `application/json` 和对象请求体。收到后将原报文及附加字段放入启动器队列（上限 100，满时丢弃最旧），另以 `instance/title/content` 三字段经 `notify_hub` 广播给已授权并订阅 `notifications` 的 WS 会话。路径和 SSE 报文兼容旧启动器；会话退出时退订广播，未订阅或断线期间不重放历史通知。
-- **浏览器通知与订阅**：前端 Notification API 依浏览器权限显示原生通知；首条通知到达后，等用户下一次点击页面才申请权限，获准后补发该条。通知 hook 位于 App 顶层，覆盖新旧主题和交易页，不随总览缓存页的显示／隐藏重复挂载。协议允许七个主题：`instances`、`overview`、`logs`、`preview`、`emulator`、`stock`、`notifications`；其中 `instances`、`notifications` 是全局主题，其他主题仍须有效实例。所有页面订阅通知，模拟器主题仍仅在实例系统设置页订阅。
+- **启动器通道**：V2 通过 `/api/v2/launcher/ws` 使用密钥、严格模型与一次性票据；已安装旧启动器的 HTTP/SSE 路由继续保留，并翻译到同一应用级连接和命令状态。前端统一调用 `launcher.*` 和订阅 `launcher`，无需识别启动器版本。`AP_*` 优先，旧 `ALAS_*` 兼容；MuMu 启动清理两套父进程标记和密钥。完整格式及边界见[启动器协议](launcher-protocol-v2.md)。
+- **旧登录与通知**：旧可信登录种子仍写 React/PyWebIO 两个凭据键，票据只消费一次且不能用于 V2 登录。通知 V2 限定三个字符串字段，旧 `/api/notify` 保留附加字段给 SSE，并仅将标准字段送到 V2 和浏览器；两种接收均限制回环、Origin、转发头、JSON 类型及 64 KiB 大小。队列每应用独立且最多100条，旧导入入口仍可供 PyWebIO 使用。
+- **浏览器通知与订阅**：保留原生通知申请、断线清理以及实例约束；新增 `launcher` 为本机全局主题，其余本地 `emulator`、按需 `preview` 订阅保持原规则。
 - **单测夹具**：`create_app(root=临时目录, password='...', manage_runtime=False, mount_mcp=False)` 是标准隔离模式，见 `tests/test_api.py` 的 `fixture()`。相关模块：`tests.test_api`（协议/认证/配置事务）、`tests.test_api_lifecycle`（真实 Manager 生命周期）、`tests.test_api_mcp_integration`（MCP 挂载与关闭顺序）、`tests.test_frontend_static`（MIME 与 SPA 回退）。
 - **契约差异**：前端类型对不上时先跑 `uv run python -m dev_tools.export_api_schema` 看 diff，再查是不是手改了生成物。
 - **日志**：业务异常在服务日志中带 `WebSocket API 执行失败` 标题（含完整堆栈）；订阅异常有 `订阅数据读取失败`。客户端只会看到无堆栈的 `INTERNAL_ERROR`。

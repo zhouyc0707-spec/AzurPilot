@@ -103,6 +103,23 @@ OCR_SELECT_PRODUCT_MATERIAL_COUNTER_AREAS = (
     (775, 536, 850, 562),
 )
 
+# 商店购买弹窗右上角的 ✕ 关闭按钮。各服务器位置相同，没有单独的模板图片，
+# 只在 ISLAND_SHOPPING_CHECK 确认弹窗打开时按固定坐标点击。
+ISLAND_SHOPPING_CLOSE = Button(
+    area=(970, 117, 1003, 150), color=(),
+    button=(970, 117, 1003, 150),
+    file={'cn': '', 'en': '', 'jp': '', 'tw': ''},
+    name='ISLAND_SHOPPING_CLOSE',
+)
+
+# ensure_select_product_material 的返回结果
+# READY：材料足够（或补货失败但已够本次派遣），可直接确认派遣
+# RESTOCKED：离开过产品选择页（补货成功或失败后返回），调用方需要重新选品
+# INSUFFICIENT：补货失败且材料不够一次派遣，调用方应跳过该岗位
+MATERIAL_READY = 'ready'
+MATERIAL_RESTOCKED = 'restocked'
+MATERIAL_INSUFFICIENT = 'insufficient'
+
 # select_product 中滑动操作的点击记录名称，提取为常量避免硬编码多处不一致
 SELECTION_UP_SWIPE_NAME = "SelectionUpSwipe"
 # select_product 最大滑动尝试次数，覆盖列表底部产品（海参等位于列表末尾）
@@ -1700,6 +1717,7 @@ class Island(SelectCharacter):
 
         Returns:
             bool: 购买成功返回 True，失败或超时返回 False。
+                岛币不足等原因导致点击购买后弹窗仍不关闭时，会先关闭弹窗再返回 False。
         """
         quantity = max(1, int(quantity))
         if tab_check is not None and tab_button is not None:
@@ -1723,7 +1741,8 @@ class Island(SelectCharacter):
         if self.appear(ISLAND_SHOPPING_CHECK, offset=(1, 1)):
             self.set_buy_number(quantity)
 
-        return self.confirm_island_shop_purchase(shop_check, item_name or item_button)
+        return self.confirm_island_shop_purchase(
+            shop_check, item_name or item_button, cancel_unaffordable=True)
 
     def handle_island_shop_reward_popup(self):
         """本帧购买成功弹窗仍可见时，按共享冷却关闭一次。"""
@@ -1732,8 +1751,14 @@ class Island(SelectCharacter):
             return True
         return False
 
-    def confirm_island_shop_purchase(self, shop_check, context):
+    def confirm_island_shop_purchase(self, shop_check, context, cancel_unaffordable=False):
         """确认付款、关闭成功弹窗，并正向确认已返回商店。
+
+        Args:
+            shop_check: 对应商店或磨坊的页面特征。
+            context: 用于日志的商品说明。
+            cancel_unaffordable: 种子和鱼苗补货只确认付款一次，三秒仍停在数量页则关闭；
+                磨坊加工保持原有受冷却保护的补点流程。
 
         Pages:
             in: 岛屿商店购买或磨坊加工数量弹窗
@@ -1741,6 +1766,9 @@ class Island(SelectCharacter):
         """
         success_seen = False
         payment_clicked = False
+        purchase_failed = False
+        confirm_timer = Timer(3, count=6)
+        close_timer = Timer(1)
         returned = Timer(0.5, count=2)
         for _ in self.loop(timeout=15, skip_first=False):
             # 成功弹窗优先于背景商店和共用确认按钮；冷却期间也必须继续截图。
@@ -1750,10 +1778,21 @@ class Island(SelectCharacter):
                 returned.clear()
                 continue
             if self.appear(ISLAND_SHOPPING_CHECK, offset=(1, 1)):
+                # 种苗补货失败时数量会被游戏重置，不能再次确认而误买另一份数量。
+                if (cancel_unaffordable and not success_seen and payment_clicked
+                        and not purchase_failed and confirm_timer.reached()):
+                    purchase_failed = True
+                    logger.warning(f"[岛屿] 点击购买后弹窗仍未关闭，可能岛币不足，放弃购买: {context}")
+                if purchase_failed:
+                    if close_timer.reached():
+                        self.device.click(ISLAND_SHOPPING_CLOSE)
+                        close_timer.reset()
                 # 已正向看到成功框后，数量页即使暂时重绘也不能再次付款。
-                if not success_seen and self.appear_then_click(ISLAND_SHOP_CONFIRM, interval=2):
+                elif (not success_seen and (not cancel_unaffordable or not payment_clicked)
+                        and self.appear_then_click(ISLAND_SHOP_CONFIRM, interval=2)):
                     if not payment_clicked:
                         self.interval_clear(ISLAND_SHOP_GET)
+                        confirm_timer.start()
                     payment_clicked = True
                 returned.clear()
                 continue
@@ -1762,7 +1801,7 @@ class Island(SelectCharacter):
             if (success_seen or payment_clicked) and self.appear(shop_check, offset=1):
                 returned.start()
                 if returned.reached():
-                    return True
+                    return not purchase_failed
                 continue
             returned.clear()
         logger.warning(f"[岛屿] 确认购买并返回商店超时: {context}")
@@ -1861,6 +1900,50 @@ class Island(SelectCharacter):
         if match:
             return int(match.group())
         return None
+
+    @staticmethod
+    def parse_select_product_material_required(counter_text):
+        """解析材料计数文本中斜杠右侧的单次派遣需求数。
+
+        Args:
+            counter_text (str): 规范化后的材料文本（如 "35/9" 或 "110/(2+6)"）。
+
+        Returns:
+            int: 需求数之和；没有斜杠或没有数字时返回 0，表示未知。
+        """
+        if '/' not in counter_text:
+            return 0
+        required_text = counter_text.split('/', 1)[1]
+        return sum(int(number) for number in re.findall(r'\d+', required_text))
+
+    @staticmethod
+    def plan_select_product_material(current, target, page_required, failed_quantity=None):
+        """根据库存、目标库存和此前购买失败的数量，决定材料是否补货。
+
+        补到 target 只是尽力而为：一旦这个数量买不起，库存已够页面显示的单次派遣
+        需求（page_required）时直接派遣；不够时只补差到单次需求，比失败数量还少才尝试。
+
+        Args:
+            current (int): 当前库存。
+            target (int): 目标库存（如种子的 seed_number）。
+            page_required (int): 页面显示的单次派遣需求，0 表示未识别。
+            failed_quantity (int, optional): 本次任务中已购买失败的最小数量。默认为 None。
+
+        Returns:
+            tuple[str, int]: (MATERIAL_READY | 'buy' | MATERIAL_INSUFFICIENT, 购买数量)。
+        """
+        if current >= target:
+            return MATERIAL_READY, 0
+        if failed_quantity is None or target - current < failed_quantity:
+            return 'buy', target - current
+        if page_required <= 0:
+            # 需求数没识别到：有库存就交给确认派遣按钮判断，没有库存只能跳过
+            return (MATERIAL_READY, 0) if current > 0 else (MATERIAL_INSUFFICIENT, 0)
+        if current >= page_required:
+            return MATERIAL_READY, 0
+        if page_required - current < failed_quantity:
+            return 'buy', page_required - current
+        return MATERIAL_INSUFFICIENT, 0
 
     @staticmethod
     def build_select_product_material_counter_text(current, result, prefix_text=None, allow_suffix_rebuild=True):
@@ -2032,12 +2115,7 @@ class Island(SelectCharacter):
             tuple[int | None, int]: (当前库存数量, 总需求数量)。
         """
         current, result = self.ocr_select_product_material_detail()
-
-        required = 0
-        if '/' in result:
-            required_text = result.split('/', 1)[1]
-            required_numbers = [int(number) for number in re.findall(r'\d+', required_text)]
-            required = sum(required_numbers)
+        required = self.parse_select_product_material_required(result)
 
         if current is None:
             logger.warning(f"[岛屿] 岗位派遣页材料数量识别失败: {result}")
@@ -2053,9 +2131,15 @@ class Island(SelectCharacter):
             bool: 返回成功为 True，超时为 False。
         """
         self.interval_clear([back_button])
+        close_timer = Timer(1)
         for _ in self.loop(timeout=15, skip_first=False):
             if self.appear(ISLAND_SHOP_GET, offset=(1, 1)):
                 self.handle_island_shop_reward_popup()
+                continue
+            if self.appear(ISLAND_SHOPPING_CHECK, offset=(1, 1)):
+                if close_timer.reached():
+                    self.device.click(ISLAND_SHOPPING_CLOSE)
+                    close_timer.reset()
                 continue
             if self.appear(ISLAND_SELECT_PRODUCT_CHECK, offset=1):
                 return True
@@ -2080,25 +2164,38 @@ class Island(SelectCharacter):
             tab_button (Button, optional): 商店页签点击按钮。默认为 None。
 
         Returns:
-            bool: True 表示发生过补货，调用方需要重新选择产品；False 表示库存已足够。
+            str: MATERIAL_READY 表示可直接确认派遣；MATERIAL_RESTOCKED 表示离开过产品选择页，
+                调用方需要重新选择产品；MATERIAL_INSUFFICIENT 表示补货失败且不够一次派遣，调用方应跳过岗位。
         """
         required_quantity = max(1, int(required_quantity))
         current_quantity, counter_text = self.ocr_select_product_material_detail(expected_quantity=required_quantity)
+        page_required = self.parse_select_product_material_required(counter_text)
         display_name = item_name or getattr(item_button, 'name', '材料')
-        logger.info(f"[岛屿] {self._item_cn(display_name)}页面材料: {counter_text}，当前库存: {current_quantity}，目标库存: {required_quantity}")
+        cn_name = self._item_cn(display_name)
+        logger.info(f"[岛屿] {cn_name}页面材料: {counter_text}，当前库存: {current_quantity}，目标库存: {required_quantity}")
 
-        if current_quantity >= required_quantity:
-            return False
+        # 本次任务中每种材料买不起的最小数量；Island.__init__ 在测试中可能被替换，按需创建
+        failed_quantities = getattr(self, '_material_buy_failed', None)
+        if failed_quantities is None:
+            failed_quantities = self._material_buy_failed = {}
+        failed_quantity = failed_quantities.get(display_name)
 
-        buy_quantity = required_quantity - current_quantity
-        logger.info(f"[岛屿] {self._item_cn(display_name)}数量不足，进入商店补买 {buy_quantity} 个")
-        if not self.goto_shop_from_select_product(
+        action, buy_quantity = self.plan_select_product_material(
+            current_quantity, required_quantity, page_required, failed_quantity)
+        if action == MATERIAL_READY:
+            if current_quantity < required_quantity:
+                logger.info(f"[岛屿] {cn_name}补货失败，现有库存够本次派遣（需要 {page_required}），直接派遣")
+            return MATERIAL_READY
+        if action == MATERIAL_INSUFFICIENT:
+            logger.warning(f"[岛屿] {cn_name}补货失败且库存不够本次派遣（{counter_text}），跳过该岗位")
+            return MATERIAL_INSUFFICIENT
+
+        logger.info(f"[岛屿] {cn_name}数量不足，进入商店补买 {buy_quantity} 个")
+        if self.goto_shop_from_select_product(
             shop_check=shop_check,
             tab_check=tab_check,
             tab_button=tab_button,
-        ):
-            return True
-        if not self.buy_shop_item(
+        ) and self.buy_shop_item(
             item_button=item_button,
             quantity=buy_quantity,
             shop_check=shop_check,
@@ -2106,9 +2203,13 @@ class Island(SelectCharacter):
             tab_check=tab_check,
             tab_button=tab_button,
         ):
-            return True
+            self.back_to_select_product_after_shop()
+            return MATERIAL_RESTOCKED
+
+        failed_quantities[display_name] = min(buy_quantity, failed_quantity or buy_quantity)
+        logger.warning(f"[岛屿] {cn_name}补买 {buy_quantity} 个失败，返回产品选择页按现有库存处理")
         self.back_to_select_product_after_shop()
-        return True
+        return MATERIAL_RESTOCKED
 
     def goto_mill(self, max_attempts=3):
         """前往磨坊并打开磨坊界面。

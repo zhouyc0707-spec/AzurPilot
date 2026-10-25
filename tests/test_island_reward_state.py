@@ -10,7 +10,7 @@ from module.island.island import (
     ISLAND_POST_VACANT_CHECK, ISLAND_POST_SELECT, ISLAND_WORKING,
     ISLAND_POSTMANAGE_CHECK,
     ISLAND_SELECT_PRODUCT_CHECK, ISLAND_SELECT_CHARACTER_CHECK,
-    ISLAND_SHOP_GET, ISLAND_SHOP_CONFIRM, ISLAND_SHOPPING_CHECK,
+    ISLAND_SHOP_GET, ISLAND_SHOP_CONFIRM, ISLAND_SHOPPING_CHECK, ISLAND_SHOPPING_CLOSE,
     ISLAND_SELECT_GOTO_BUY_SEED, ISLAND_SELECT_SEED,
     POST_GET, POST_CLOSE, POST_ADD, page_island_postmanage,
 )
@@ -190,6 +190,27 @@ class IslandRewardStateTests(unittest.TestCase):
         self.assertTrue(flow.run('confirm_island_shop_purchase', shop, '鱼苗'))
         self.assertEqual(flow.names(), ['ISLAND_SHOP_CONFIRM'])
 
+    def test_unaffordable_material_purchase_waits_then_closes_without_repaying(self):
+        shop = ISLAND_FRY_SHOP_CHECK
+        flow = FrameFlow([
+            *[[ISLAND_SHOPPING_CHECK, ISLAND_SHOP_CONFIRM, shop]] * 18,
+            *[[shop]] * 5,
+        ])
+        self.assertFalse(flow.run('confirm_island_shop_purchase', shop, '鱼苗', cancel_unaffordable=True))
+        self.assertEqual(flow.names(), ['ISLAND_SHOP_CONFIRM', 'ISLAND_SHOPPING_CLOSE'])
+        self.assertGreaterEqual(flow.clicks[1][2] - flow.clicks[0][2], 3)
+        self.assertGreaterEqual(flow.reads, 21)
+
+    def test_slow_success_before_material_cancel_keeps_reward_priority(self):
+        shop = ISLAND_FRY_SHOP_CHECK
+        flow = FrameFlow([
+            *[[ISLAND_SHOPPING_CHECK, ISLAND_SHOP_CONFIRM]] * 12,
+            *[[ISLAND_SHOP_GET, ISLAND_SHOP_CONFIRM, shop]] * 3,
+            *[[shop]] * 5,
+        ])
+        self.assertTrue(flow.run('confirm_island_shop_purchase', shop, '鱼苗', cancel_unaffordable=True))
+        self.assertEqual(flow.names(), ['ISLAND_SHOP_CONFIRM', 'ISLAND_SHOP_CONFIRM'])
+
     def test_shop_without_payment_or_success_does_not_report_purchase_success(self):
         flow = FrameFlow([[ISLAND_FRY_SHOP_CHECK]] * 7)
         self.assertFalse(flow.run('confirm_island_shop_purchase', ISLAND_FRY_SHOP_CHECK, '鱼苗'))
@@ -280,6 +301,15 @@ class IslandRewardStateTests(unittest.TestCase):
         self.assertTrue(flow.run('back_to_select_product_after_shop'))
         self.assertEqual(flow.reads, 5)
         self.assertEqual(flow.names(), ['ISLAND_SHOP_CONFIRM'])
+
+    def test_return_closes_purchase_before_accepting_visible_background(self):
+        flow = FrameFlow([
+            [ISLAND_SHOPPING_CHECK, ISLAND_SELECT_PRODUCT_CHECK],
+            [ISLAND_SELECT_PRODUCT_CHECK],
+        ])
+        self.assertTrue(flow.run('back_to_select_product_after_shop'))
+        self.assertEqual(flow.reads, 2)
+        self.assertEqual(flow.names(), ['ISLAND_SHOPPING_CLOSE'])
 
     def test_mill_back_ignores_background_management_until_success_closed(self):
         flow = FrameFlow([

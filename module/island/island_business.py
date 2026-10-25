@@ -1499,7 +1499,7 @@ class IslandBusiness(Island):
                     btn = Button(
                         area=button_rect, color=(),
                         button=button_rect,
-                        file={'cn': ''}
+                        file={'cn': '', 'en': '', 'jp': '', 'tw': ''}
                     )
                     self.device.click(btn)
                     self.device.sleep(1)
@@ -1530,7 +1530,7 @@ class IslandBusiness(Island):
                     btn = Button(
                         area=button_rect, color=(),
                         button=button_rect,
-                        file={'cn': ''}
+                        file={'cn': '', 'en': '', 'jp': '', 'tw': ''}
                     )
                     self.device.click(btn)
                     self.device.sleep(1)
@@ -1962,7 +1962,7 @@ class IslandBusiness(Island):
         """短距离向下滑动，滑动后立即点击安全区域消除惯性"""
         self.device.swipe_vector(vector=(0, -200), box=(58, 150, 838, 480),
                                  duration=(0.3, 0.5), name="BusinessCharSwipe")
-        self.device.click(Button(area=(), color=(), button=self.BUSINESS_INERTIA_STOP_AREA, file={'cn': ''}))
+        self.device.click(Button(area=(), color=(), button=self.BUSINESS_INERTIA_STOP_AREA, file={'cn': '', 'en': '', 'jp': '', 'tw': ''}))
         self.device.sleep(1.0)
 
     def _swipe_up_reset(self):
@@ -1970,7 +1970,7 @@ class IslandBusiness(Island):
         self.device.swipe_vector(vector=(0, 500), box=(58, 150, 838, 480),
                                  duration=(0.3, 0.5), name="BusinessCharSwipeReset")
         self.device.sleep(0.5)
-        self.device.click(Button(area=(), color=(), button=self.BUSINESS_INERTIA_STOP_AREA, file={'cn': ''}))
+        self.device.click(Button(area=(), color=(), button=self.BUSINESS_INERTIA_STOP_AREA, file={'cn': '', 'en': '', 'jp': '', 'tw': ''}))
         self.device.sleep(1.0)
 
     def _find_and_select_character(self):

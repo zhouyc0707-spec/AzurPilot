@@ -1,76 +1,86 @@
-"""任务推送通知的本地 HTTP 路由。
-
-调度器侧（module/notify/notify.py 的 notify_webui）向 /api/notify 发 POST，
-这里兵分两路：经 notify_hub 实时广播给已订阅的浏览器（弹 Windows 原生通知），
-同时放进队列供 /api/notify_stream 以 SSE 供外部启动器订阅。
-端点路径与报文格式是旧版 WebUI 传下来的对接面，外部启动器按它写死——改名即断连。
-"""
+"""新旧启动器通知入口：有界接收、标准字段广播、旧附加字段只进入旧 SSE。"""
 import asyncio
-import contextlib
 import json
 
+from pydantic import ValidationError
 from starlette.responses import JSONResponse, StreamingResponse
 from starlette.routing import Route
 
+from module.api.launcher_protocol import NotificationParams
+from module.api.launcher_api import _service
 from module.runtime.launcher import is_local_request
 from module.runtime.notify_hub import hub
 
-#: 通知流空闲多久发一次保活帧（秒）。
 STREAM_IDLE_TIMEOUT = 30
-
-#: 待推送通知队列上限；启动器离线时丢弃最旧，防止无人消费无限堆积。
 _NOTIFICATION_QUEUE_MAXSIZE = 100
-_notification_queue: asyncio.Queue = asyncio.Queue(maxsize=_NOTIFICATION_QUEUE_MAXSIZE)
+_notification_queue = asyncio.Queue(_NOTIFICATION_QUEUE_MAXSIZE)
+
+
+def _queue(request):
+    service = _service(request)
+    return service.legacy_control().notifications if service else _notification_queue
+
+
+async def _receive(request, *, legacy):
+    failure_key = 'success' if legacy else 'ok'
+    if not is_local_request(request):
+        return JSONResponse({failure_key: False, 'error': '通知接收只允许本机调用'}, status_code=403)
+    if request.headers.get('content-type', '').split(';')[0].strip().lower() != 'application/json':
+        return JSONResponse({failure_key: False, 'error': 'Content-Type 必须是 application/json'}, status_code=400)
+    try:
+        if hasattr(request, 'stream'):
+            body = bytearray()
+            async for chunk in request.stream():
+                body.extend(chunk)
+                if len(body) > 65536:
+                    return JSONResponse({failure_key: False, 'error': '通知超过大小限制'}, status_code=413)
+            data = json.loads(body)
+        else:
+            data = await request.json()
+        if not isinstance(data, dict):
+            raise ValueError('通知必须是对象')
+        standard = {key: data.get(key, '') for key in ('instance', 'title', 'content')} if legacy else data
+        notification = NotificationParams.model_validate(standard).model_dump()
+    except (ValidationError, ValueError, TypeError):
+        return JSONResponse({failure_key: False, 'error': '通知格式无效'}, status_code=400)
+    service = _service(request)
+    if service:
+        service.publish(notification, legacy=data if legacy else None)
+    else:
+        queue = _queue(request)
+        if queue.full():
+            queue.get_nowait()
+        queue.put_nowait(data if legacy else notification)
+    hub.publish(notification)
+    return JSONResponse({'success': True} if legacy else {'ok': True})
 
 
 async def notify(request):
-    """POST /api/notify — 接收调度器推送的通知，入队等待启动器取走。"""
-    if not is_local_request(request):
-        return JSONResponse({"success": False, "error": "通知接收只允许本机调用"}, status_code=403)
-    if request.headers.get("content-type", "").split(";")[0].strip().lower() != "application/json":
-        # 浏览器跨站请求发不出 application/json（预检不会通过），据此阻断恶意网页伪造推送。
-        return JSONResponse({"success": False, "error": "Content-Type 必须是 application/json"}, status_code=400)
-    try:
-        data = await request.json()
-    except Exception:
-        return JSONResponse({"success": False, "error": "请求体不是有效 JSON"}, status_code=400)
-    if not isinstance(data, dict):
-        return JSONResponse({"success": False, "error": "请求体必须是 JSON 对象"}, status_code=400)
-    notification = {
-        "instance": data.get("instance", ""),
-        "title": data.get("title", ""),
-        "content": data.get("content", ""),
-    }
-    if _notification_queue.full():
-        with contextlib.suppress(asyncio.QueueEmpty):
-            _notification_queue.get_nowait()
-    # 启动器沿用原报文及附加字段；浏览器只广播约定的三字段。
-    # 无 await 间隙，检查与写入不会和并发 POST 交错。
-    _notification_queue.put_nowait(data)
-    hub.publish(notification)
-    return JSONResponse({"success": True})
+    """保留旧通知字段和 Python 导入入口，不放宽 V2 严格模型。"""
+    return await _receive(request, legacy=True)
+
+
+async def notify_v2(request):
+    return await _receive(request, legacy=False)
 
 
 async def notify_stream(request):
-    """GET /api/notify_stream — 启动器订阅的通知流（SSE）。"""
     if not is_local_request(request):
-        return JSONResponse({"success": False, "error": "通知流只允许本机连接"}, status_code=403)
+        return JSONResponse({'success': False, 'error': '通知流只允许本机连接'}, status_code=403)
+    queue = _queue(request)
 
     async def events():
-        while True:
-            if await request.is_disconnected():
-                break
+        while not await request.is_disconnected():
             try:
-                notification = await asyncio.wait_for(_notification_queue.get(), timeout=STREAM_IDLE_TIMEOUT)
-                yield f"data: {json.dumps(notification, ensure_ascii=False)}\n\n"
+                payload = await asyncio.wait_for(queue.get(), STREAM_IDLE_TIMEOUT)
+                yield f'data: {json.dumps(payload, ensure_ascii=False)}\n\n'
             except asyncio.TimeoutError:
-                yield ": keepalive\n\n"
+                yield ': keepalive\n\n'
+    return StreamingResponse(events(), media_type='text/event-stream',
+                             headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
-    return StreamingResponse(events(), media_type="text/event-stream",
-                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
-
-def routes() -> list[Route]:
-    """任务通知的本地回环路由。"""
-    return [Route("/api/notify", notify, methods=["POST"]),
-            Route("/api/notify_stream", notify_stream)]
+def routes():
+    return [Route('/api/v2/internal/notifications', notify_v2, methods=['POST']),
+            Route('/api/notify', notify, methods=['POST']),
+            Route('/api/notify_stream', notify_stream)]

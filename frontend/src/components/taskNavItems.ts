@@ -2,8 +2,9 @@
 export const SCHEDULER_EDITOR = 'SchedulerProgram'
 export const MIND_CALCULATOR = 'MindCalculator'
 export const FLEET_TECHNOLOGY = 'FleetTechnology'
+export const FLEET_ROTATION = 'FleetRotation'
 export function taskNavItems(key: string | null, tasks: string[]) {
-  if (key === 'FleetManagement') return [...tasks, MIND_CALCULATOR, FLEET_TECHNOLOGY]
+  if (key === 'FleetManagement') return [...tasks, FLEET_ROTATION, MIND_CALCULATOR, FLEET_TECHNOLOGY]
   return key === 'Alas' ? [tasks[0]!, SCHEDULER_EDITOR, ...tasks.slice(1)] : tasks
 }
 
@@ -18,6 +19,6 @@ export function ownerTaskOfGroup(args: Record<string, Record<string, Record<stri
 }
 
 /** 独立 WebUI 页面使用界面翻译，其余取任务表里的显示名。 */
-export function taskLabel(task: string, ui: (key: 'nav.schedulerProgram' | 'mind.title' | 'fleetTech.nav') => string, t: (key: string) => string) {
-  return task === SCHEDULER_EDITOR ? ui('nav.schedulerProgram') : task === MIND_CALCULATOR ? ui('mind.title') : task === FLEET_TECHNOLOGY ? ui('fleetTech.nav') : t(`Task.${task}.name`)
+export function taskLabel(task: string, ui: (key: 'nav.schedulerProgram' | 'mind.title' | 'fleetTech.nav' | 'rotation.title') => string, t: (key: string) => string) {
+  return task === FLEET_ROTATION ? ui('rotation.title') : task === SCHEDULER_EDITOR ? ui('nav.schedulerProgram') : task === MIND_CALCULATOR ? ui('mind.title') : task === FLEET_TECHNOLOGY ? ui('fleetTech.nav') : t(`Task.${task}.name`)
 }

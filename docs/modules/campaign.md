@@ -17,6 +17,33 @@
 
 ## 2. 模块职责
 
+### 普通主线与活动的智能换船
+
+`CampaignRun` 为单次出击实例安装 `preflight_rotation()` 回调，`CampaignBase.run()`
+在读取地图战斗次数之后、原有 `emotion.check_reduce()` 之前执行。开关及规则位于
+`FleetInfo.FleetRotation`，默认关闭，不注册执行任务或调度状态。仅 Main/Main2–5、
+Event/Event2/A–D 的普通主线/活动目录参与；还检查实际地图模式及活动困难关卡名，
+不会对困难编成、作战档案、低耗换船任务或大世界复用港区舰位。
+
+策略按 `Fleet.Fleet1/Fleet2` 将出击角色映射到实际的1–6号舰队，使用本轮战斗数、
+出击顺序、双倍书和原有情绪控制线判断是否不足。零战斗的待命角色不换船。
+开启后，每次切换到受支持的刷图任务，先完成一次舰队扫描并校正实际心情；同一任务
+连续周回不重复这次入口扫描。Alas在派发任务时维护进程内的任务上下文，并把同一上下文
+交给CampaignRun；经过委托等其他任务再返回也会重扫。地图内的重启续接仍不插入扫描。
+
+账本心情不足时先从目标队舰位4、1实测并更新舰船信息，实际心情充足只校正记录；
+未知读数不作为换船依据，仍走原出击检查。候补按整队最低心情降序、同值按队号升序，
+且必须拥有全部待换的同号舰位并满足出击心情要求。每轮只使用一支来源队，勾选4、5、6
+即调用4↔4、5↔5、6↔6，不从同排另选最高心情角色。
+保存进度后先从目标队舰位1刷新前后排及详情，再刷新来源队，读取所有占用舰位的
+最低心情（含未换角色），校正关联任务并返回原关卡，再执行
+正常的心情预检和入场。没有跳过原停止条件、原心情检查或战后扣减。
+
+重启后仍在地图内的续接路径不调用该出击前回调，保留已核实的地图恢复语义。
+互换执行或清理无法确认时抛出 `FleetManagementError`，记录任务失败后结束调度器，等待用户核对编队；
+不进入自动重试、三次恢复或模拟器重启，也不修改任务开关和预定时间。单次执行同样返回失败。
+候补排序、部分完成记录及同名舰船限制见[退役与装备](game/retire-equipment.md)。
+
 ### 负责
 
 - 关卡名规范化：用户输入（`7-2`、`D3`、`TH1`）到地图文件名（`campaign_7_2`、`d3`）的转换，活动专属别名（`stage_name.py`）。
@@ -232,7 +259,7 @@ flowchart TD
 | [auto_search_combat.py](../../module/combat/auto_search_combat.py)、[combat.py](../../module/combat/combat.py)、[result.py](../../module/combat/result.py) | 普通战斗执行、严格开关检测与每场心情记录 |
 | [argument.yaml](../../module/config/argument/argument.yaml)、[override.yaml](../../module/config/argument/override.yaml) | 默认关闭的配置定义与不适用任务的隐藏覆盖 |
 | [args.json](../../module/config/argument/args.json)、[config_generated.py](../../module/config/config_generated.py)、[template.json](../../config/template.json) | 配置生成器维护的定义、Python 属性和模板 |
-| [zh-CN.json](../../module/config/i18n/zh-CN.json)、[zh-MIAO.json](../../module/config/i18n/zh-MIAO.json)、[en-US.json](../../module/config/i18n/en-US.json)、[ja-JP.json](../../module/config/i18n/ja-JP.json)、[zh-TW.json](../../module/config/i18n/zh-TW.json) | 五种语言的名称与限制说明 |
+| [zh-CN.json](../../module/config/i18n/zh-CN.json)、[en-US.json](../../module/config/i18n/en-US.json)、[ja-JP.json](../../module/config/i18n/ja-JP.json)、[zh-TW.json](../../module/config/i18n/zh-TW.json) | 四种语言的名称与限制说明 |
 | [test_campaign_restart_recovery.py](../../tests/test_campaign_restart_recovery.py)、[test_campaign_restart_tasks.py](../../tests/test_campaign_restart_tasks.py) | 隔离配置、恢复回放、跨任务编排及四服资源组合测试 |
 | 本文、[combat.md](combat.md)、[entry/alas.md](entry/alas.md) | 战役、战斗与调度的机制及验收边界 |
 
@@ -396,7 +423,7 @@ stateDiagram-v2
 
 1. **复制相近活动**：从结构最接近的 `event_*` 目录复制，逐关修改 `MAP` 网格/权重/刷新表、`Config` 机制开关、`Campaign` 策略函数；活动级共享调整放该目录的 `campaign_base.py`。
 2. **登记 Readme.md**：在 `campaign/Readme.md` 表格加一行（Aired Date | Directory | Event Name | CN/EN/JP/TW），复用旧地图的活动也必须登记（目录名可与首播日期不同）。
-3. **生成配置**：运行 `uv run -m module.config.config_updater`，为 `Campaign.Event` 生成各服务器选项与 i18n 键，随后补齐 `zh-CN`/`zh-MIAO`/`en-US`/`ja-JP`/`zh-TW` 翻译。
+3. **生成配置**：运行 `uv run -m module.config.config_updater`，为 `Campaign.Event` 生成各服务器选项与 i18n 键，随后补齐 `zh-CN`/`en-US`/`ja-JP`/`zh-TW` 翻译。
 4. **资源**：活动专属按钮/PT 图标经 `uv run -m dev_tools.button_extract` 提取进 `assets/{server}/campaign/`。
 5. **特殊 UI**（按需）：新章节侧边栏布局在 `campaign_ui.py` 加 `ASIDE_SWITCH_YYYYMMDD` 与 `campaign_set_chapter_*` 分支；新关卡名别名（如 `vsp`→`sp`）加进 `stage_name.py` 的别名字典；无「威胁：安全」指示器的活动在 `_apply_event_achievement_fallback` 处理。
 

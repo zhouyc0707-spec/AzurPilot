@@ -9,6 +9,7 @@ from module.config.config import TaskEnd
 from module.exception import (
     AutoSearchSetError,
     EmulatorNotRunningError,
+    FleetManagementError,
     GameBugError,
     GameNotRunningError,
     GamePageUnknownError,
@@ -26,7 +27,6 @@ class TestSchedulerRecovery(unittest.TestCase):
         self.logger = self.enterContext(patch('alas.logger'))
         self.notify = self.enterContext(patch('alas.handle_notify'))
         self.webui = self.enterContext(patch('alas.notify_webui'))
-        self.report = self.enterContext(patch('alas.ApiClient.submit_bug_log'))
         self.sleep = self.enterContext(patch('alas.time.sleep'))
         self.enterContext(patch('alas.del_cached_property'))
         self.enterContext(patch('module.config.utils.is_oobe_needed', return_value=False))
@@ -197,6 +197,43 @@ class TestSchedulerRecovery(unittest.TestCase):
         self.assertEqual(self.logger.error_context.call_args.kwargs['reason'], str(error))
         self.assertIs(self.logger.error_context.call_args.kwargs['exc'], error)
 
+    def test_fleet_management_failure_stops_scheduler_before_retry_or_restart(self):
+        for limit in (0, 3):
+            with self.subTest(restart_limit=limit):
+                script = self.make_script()
+                script.config.Error_TaskRestartLimit = limit
+                script.main = Mock(side_effect=FleetManagementError('交换结果尚未确认'))
+                script.failure_record['Main'] = 2
+                script._record_task_restart = Mock(return_value=False)
+                runtime = Mock(mode='native')
+                script.__dict__['_program_runtime'] = runtime
+
+                self.assertIs(self.run_tasks(script, ['Main', 'Commission']), False)
+
+                script.main.assert_called_once_with()
+                script.commission.assert_not_called()
+                script._record_task_restart.assert_not_called()
+                script._try_restart_emulator.assert_not_called()
+                script.config.task_call.assert_not_called()
+                script.config.task_delay.assert_not_called()
+                script.config.cross_set.assert_not_called()
+                script._stop_daily_summary_scheduler.assert_called_once_with()
+                runtime.task_finished.assert_called_once_with('Main', False)
+                self.assertFalse(script._watchdog_active)
+                self.assertEqual(script.failure_record['Main'], 2)
+
+    def test_fleet_management_failure_returns_false_and_resets_on_manual_next_run(self):
+        script = self.make_script()
+        script.fleet_scan = Mock(side_effect=FleetManagementError('舰位未确认'))
+        self.assertIs(script.run('FleetScan'), False)
+        self.assertTrue(script._fleet_management_failed)
+        script.save_error_log.assert_called_once_with()
+        script._try_restart_emulator.assert_not_called()
+        script.config.task_call.assert_not_called()
+
+        self.assertTrue(script.run('Commission'))
+        self.assertFalse(script._fleet_management_failed)
+
     def test_strict_restart_policy_for_task_exceptions(self):
         errors = (
             GameNotRunningError, GameStuckError, GameTooManyClickError,
@@ -231,7 +268,6 @@ class TestSchedulerRecovery(unittest.TestCase):
                 if strict and sensitive:
                     with self.assertRaises(SystemExit):
                         self.run_tasks(script, ['OpsiCrossMonth'])
-                    self.report.assert_called_once()
                 else:
                     self.run_tasks(script, ['OpsiCrossMonth'])
                 self.assertEqual(script.failure_record['OpsiCrossMonth'], 1)
@@ -302,7 +338,7 @@ class TestSchedulerRecovery(unittest.TestCase):
         self.run_tasks(script, [RuntimeError('故障一'), 'Restart', RuntimeError('故障二'), 'Restart', RuntimeError('故障三')])
 
         self.assertEqual(self.sleep.call_args_list, [call(20), call(40), call(80)])
-        self.report.assert_called_once()
+        script.save_error_log.assert_called_once()
 
     def test_ordinary_task_success_resets_global_backoff(self):
         script = self.make_script()

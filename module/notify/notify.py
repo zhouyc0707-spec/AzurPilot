@@ -145,12 +145,17 @@ def notify_webui(instance: str, title: str, content: str, **kwargs) -> bool:
         port = 25548
     try:
         payload = {"instance": instance, "title": title, "content": content}
+        # V2 保持严格三字段；旧扩展报文仍由兼容入口保留给旧启动器。
+        endpoint = '/api/notify' if kwargs else '/api/v2/internal/notifications'
         payload.update(kwargs)
-        requests.post(
-            f"http://127.0.0.1:{port}/api/notify",
+        response = requests.post(
+            f"http://127.0.0.1:{port}{endpoint}",
             json=payload,
             timeout=2,
         )
-        return True
+        if not kwargs and response.status_code == 404:
+            # 独立 PyWebIO 仍只有旧接收器；仅明确未命中时回退，避免重复通知。
+            response = requests.post(f'http://127.0.0.1:{port}/api/notify', json=payload, timeout=2)
+        return response.ok
     except Exception:
         return False

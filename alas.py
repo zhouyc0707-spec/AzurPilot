@@ -13,7 +13,6 @@ from cached_property import cached_property
 
 import module.config.server as server_config
 from module.base.decorator import del_cached_property
-from module.base.api_client import ApiClient
 from module.base.runtime_params import (
     WATCHDOG_CHECK_INTERVAL,
     WATCHDOG_TASK_TIMEOUT_DEFAULT,
@@ -1150,7 +1149,13 @@ class AzurLaneAutoScript:
         from module.runtime.preview import set_task
         command = inflection.underscore(command)
         self._storage_statistics_failed = False
+        self._fleet_management_failed = False
         set_task(inflection.camelize(command))
+        # 智能换船只在切换任务后刷新一次；同一任务连续出击复用本次扫描。
+        rotation_context = self.__dict__.setdefault('_fleet_rotation_context', {})
+        if rotation_context.get('task') != inflection.camelize(command):
+            rotation_context.clear()
+            rotation_context['task'] = inflection.camelize(command)
         try:
             # Restart 的职责就是把游戏从“未运行/未出首帧”恢复起来。
             # Android 虚拟屏在没有实际内容提交前不会产生可读帧；若这里先截图，
@@ -1187,11 +1192,18 @@ class AzurLaneAutoScript:
             logger.error(str(e))
             self._storage_statistics_failed = True
             return False
-        except MindCalculatorScanError as e:
+        except (MindCalculatorScanError, FleetManagementError) as e:
+            self._fleet_management_failed = isinstance(e, FleetManagementError)
             logger.error_context(
-                title='舰船科技扫描未完成' if command == 'fleet_tech_scan' else '心智单元船坞扫描未完成', reason=str(e), exc=e,
-                impact='本次扫描结束，保留上次完整舰船清单，不重启模拟器。',
-                action='查看错误截图和具体原因，确认船坞布局及控制方式后重新启动扫描。',
+                title=('舰队管理未完成' if isinstance(e, FleetManagementError) else
+                       '舰船科技扫描未完成' if command == 'fleet_tech_scan' else '心智单元船坞扫描未完成'),
+                reason=str(e), exc=e,
+                impact=('本次舰队任务结束并停止调度器，等待人工核对，不重启模拟器或重复换船；已操作但未核验的舰队参考记录会失效。'
+                        if isinstance(e, FleetManagementError) else
+                        '本次扫描结束，保留上次完整舰船清单，不重启模拟器。'),
+                action=('查看错误截图和游戏提示，核对当前编队后再启动任务。'
+                        if isinstance(e, FleetManagementError) else
+                        '查看错误截图和具体原因，确认船坞布局及控制方式后重新启动扫描。'),
                 level=50,
             )
             self.save_error_log()
@@ -1860,10 +1872,6 @@ class AzurLaneAutoScript:
         from module.event.maritime_escort import MaritimeEscort
         MaritimeEscort(config=self.config, device=self.device).run()
 
-    def opsi_ash_assist(self):
-        from module.os_ash.meta import AshBeaconAssist
-        AshBeaconAssist(config=self.config, device=self.device).run()
-
     def opsi_ash_beacon(self):
         from module.os_ash.meta import OpsiAshBeacon
         OpsiAshBeacon(config=self.config, device=self.device).run()
@@ -1935,7 +1943,9 @@ class AzurLaneAutoScript:
     def _run_campaign(self):
         """主线与普通活动槽位的战役调用；断点由公共 CampaignRun 保存。"""
         from module.campaign.run import CampaignRun
-        CampaignRun(config=self.config, device=self.device).run(
+        runner = CampaignRun(config=self.config, device=self.device)
+        runner._fleet_rotation_context = self.__dict__.setdefault('_fleet_rotation_context', {})
+        runner.run(
             name=self.config.Campaign_Name, folder=self.config.Campaign_Event, mode=self.config.Campaign_Mode)
 
     def main(self):
@@ -2651,6 +2661,12 @@ class AzurLaneAutoScript:
                     except Exception:
                         logger.warning('[AzurPilot] 每任务推送通知异常，已跳过')
 
+                # 换船结果未知时，任何后续出击或自动恢复都须先由用户核对编队。
+                if success is False and getattr(self, '_fleet_management_failed', False):
+                    logger.error('[AzurPilot] 舰队管理需要人工核对，调度器已停止，任务配置保持不变')
+                    self._stop_daily_summary_scheduler()
+                    return False
+
                 # 仓库识别不确定已由任务设置失败间隔；重启无法修复模板或数字。
                 if success is False and getattr(self, '_storage_statistics_failed', False):
                     logger.info('[AzurPilot] 仓库统计已延后，继续其他任务，保留上次完整快照')
@@ -2693,8 +2709,6 @@ class AzurLaneAutoScript:
                         title=f"诶呀！{self.config_name}出现了问题喵！",
                         content=f"因为 {task} 任务失败次数过多喵！",
                     )
-                    logger.warning("[AzurPilot] 任务连续失败次数过多，正在上报错误日志...")
-                    ApiClient.submit_bug_log(f"AzurPilot <{self.config_name}> crashed\nTask `{task}` failed {failed} or more times.")
                     exit(1)
 
                 deferred = self._record_task_restart(task, success)
@@ -2780,18 +2794,11 @@ class AzurLaneAutoScript:
                 )
 
                 # 不再因连续失败次数达到上限而退出，改为持续重试
-                # 上报错误日志（首次失败时上报，避免刷屏）
                 if consecutive_global_failures == 1:
                     try:
                         self.save_error_log()
-                        logger.warning("[AzurPilot] 首次全局异常，正在上报错误日志...")
-                        ApiClient.submit_bug_log(
-                            f"AzurPilot <{self.config_name}> 调度器发生异常。\n"
-                            f"调度器将自动重试恢复（永不退出）。\n"
-                            f"{traceback.format_exc()}"
-                        )
-                    except Exception as report_e:
-                        logger.warning(f'[AzurPilot] 错误日志上报失败: {report_e}')
+                    except Exception as save_e:
+                        logger.warning(f'[AzurPilot] 保存错误日志失败: {save_e}')
 
                 # 尝试重启模拟器
                 logger.warning("[AzurPilot] 尝试通过重启模拟器 + 强制执行 RESTART 任务来恢复...")

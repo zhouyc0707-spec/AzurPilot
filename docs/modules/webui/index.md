@@ -374,7 +374,7 @@ v1 只允许兼容性新增；删除方法或更改语义需要新版本路径�
 - **无跨连接事件重放**：重连后重新认证并重建订阅，服务不提供历史事件重放；日志靠游标增量，落后过多元数据会触发 reset。
 - **配额是硬限制**：32 个并发连接、单连接 30 请求/秒、单请求 1 MiB、单连接近 128 个请求 ID 去重——超限是拒绝而非排队。
 - **直连模式无热重载**：`EnableReload=false` 时没有监督器与重启通道，更新器拒绝执行需要重载的更新。
-- **迁移遗留未清理**：`module/webui/webui_prefs.py`（及 `config/webui_prefs.json`）在当前活跃代码中没有调用方——消费方随旧版总览面板功能移除。启动器命令通道由 `module/api/launcher_api.py` 实现，通知通道由 `module/api/notify_api.py` 实现；`launcher_routes.py` 保留旧导入入口，将两组端点一次性注册在 SPA 兜底前。通知保留原报文供启动器 SSE 消费，并经 `notify_hub` 和 WS `notifications` 主题给浏览器显示原生通知。
+- **启动器兼容入口**：`launcher_routes.py` 将 V2 WS、旧 HTTP/SSE 和通知端点一次性注册在 SPA 兜底之前；新旧控制共用应用级服务。旧通知附加字段与 PyWebIO 凭据种子保留，V2 仍独立鉴权及消费短时票据。完整边界见 [启动器协议](launcher-protocol-v2.md)。
 - **预览是被动快照**：API 不主动截图；worker 未运行或未产生新帧时保持最后画面或空。
 
 ## 18. 示例

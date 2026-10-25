@@ -307,7 +307,12 @@ class ConfigService:
                     merged['OpsiHazard1Leveling']['OpsiHazard1Leveling'][field] = legacy_opsi[field]
                 merged.get('OpsiGeneral', {}).get('OpsiGeneral', {}).pop(field, None)
         from module.config.redirect_utils.shop import migrate_shop_options
+        from module.config.redirect_utils.meta import migrate_meta_assist
 
+        try:
+            merged = migrate_meta_assist(data, merged)
+        except ValueError as exc:
+            raise ApiError('CONFIG_INVALID', str(exc)) from exc
         merged, shop_warnings = migrate_shop_options(data, merged)
         if shop_warnings:
             from module.logger import logger
@@ -469,6 +474,12 @@ class ConfigService:
             valid = isinstance(value, str) or (default is None and value is None)
         if not valid or (isinstance(value, str) and len(value) > 20000) or (type(value) is float and not math.isfinite(value)):
             raise ApiError('INVALID_PARAMS', f'参数类型或长度不正确：{path}')
+        if path == 'FleetInfo.FleetRotation.Rules':
+            from module.runtime.fleet_rotation import parse_rules
+            try:
+                parse_rules(value)
+            except ValueError as exc:
+                raise ApiError('INVALID_PARAMS', str(exc)) from exc
         rule = field.get('validate')
         if rule == 'datetime' or kind == 'datetime':
             try:

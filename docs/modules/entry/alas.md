@@ -192,7 +192,11 @@ flowchart TD
 
 - `True`：成功（含 `TaskEnd` 正常结束）。
 - `'recoverable'`：失败但已就地安排恢复（几乎总是 `task_call('Restart')`），不计入任务失败次数。
-- `False`：不可恢复失败，计入失败计数。
+- `False`：不可恢复失败，通常计入失败计数；仓库识别与舰队管理使用下述独立边界。
+
+`FleetManagementError` 表示编队操作或结果需要人工核对：`run()` 保存现场并返回 `False`，
+调度器记录任务结果、结束运行监护后直接停止，不执行任务重试计数、延期或模拟器重启，
+也不修改任务开关。单次任务仍返回失败，用户核对后可手动重新启动。仓库识别失败则沿用其既定延期，继续其他任务。
 
 每个异常分支的第一动作都是 `_check_sensitive_exit()`：严格重启开启（`Error_StrictRestart`）且该任务配置了 `Scheduler.Sensitive` 时，立即保存现场、推送通知并 `exit(1)`——敏感任务（默认 `OpsiCrossMonth`、`OpsiObscure`、`OpsiAbyssal`）出错不做任何自动重启，避免在错误状态上继续写入。是否敏感不是写死的常量，而是运行时读 `{Task}.Scheduler.Sensitive` 配置动态判断，用户可自行调整。
 
@@ -202,7 +206,7 @@ flowchart TD
 
 ### 全局异常兜底
 
-`loop()` 的最外层 `except` 是最后一道防线：上报错误日志（仅首次）、可选触发 LLM 错误分析、尽力重启模拟器、注入 `Restart`，然后按 `min(300, 20 × 2^(连续失败-1))` 秒指数退避后重试。调度器**永不因连续失败而退出**，退出只保留给代码 bug 与敏感任务。
+`loop()` 的最外层 `except` 是最后一道防线：保存错误日志（仅首次）、可选触发 LLM 错误分析、尽力重启模拟器、注入 `Restart`，然后按 `min(300, 20 × 2^(连续失败-1))` 秒指数退避后重试。普通连续失败仍沿用恢复上限与故障延期；代码 bug、敏感任务及待人工核对的舰队管理错误有独立停止边界。
 
 ## 7. 调用关系
 
@@ -226,7 +230,6 @@ flowchart TD
 | `module/llm.py` | 可选的异常 AI 分析（`Error_LlmAnalysis`） |
 | `module/base/backup.py` | 每日备份 |
 | `module/statistics/daily_summary.py` | 日报生成与推送 |
-| `module/base/api_client.ApiClient` | 崩溃日志上报 |
 
 ### 与 `TaskHandler` 的区别
 

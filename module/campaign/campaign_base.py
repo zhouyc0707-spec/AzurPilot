@@ -229,6 +229,9 @@ class CampaignBase(CampaignUI, Map, AutoSearchCombat):
             # 进入地图
             self.map_get_info()
             logger.attr('地图战斗次数', self._map_battle)
+            rotation = self.__dict__.get('_fleet_rotation_preflight')
+            if rotation is not None:
+                rotation(self._map_battle)
             self.emotion.check_reduce(self._map_battle)
             self.ENTRANCE.area = self.ENTRANCE.button
             self.enter_map(self.ENTRANCE, mode=self.config.Campaign_Mode)

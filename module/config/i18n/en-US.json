@@ -254,10 +254,6 @@
       "name": "META Battle",
       "help": ""
     },
-    "OpsiAshAssist": {
-      "name": "META Support",
-      "help": ""
-    },
     "OpsiExplore": {
       "name": "Monthly Exploration",
       "help": ""
@@ -1469,10 +1465,6 @@
     "TelemetryReport": {
       "name": "Telemetry data reporting",
       "help": "After being enabled, CL1 statistics (anonymous data such as the number of battles and Akashi encounter probability) will be reported anonymously to the server on a regular basis. For details on ID generation, please see the source code. For statistical information https://azurpilot.com/"
-    },
-    "BugReport": {
-      "name": "Bug log reporting",
-      "help": "When enabled, bug logs will be anonymously reported to the server when an exception is encountered to help improve ID generation. See the source code for details."
     }
   },
   "Backup": {
@@ -3888,6 +3880,10 @@
       "name": "META assist",
       "help": "Beacon assist three times a day"
     },
+    "Enable": {
+      "name": "Enable META assists",
+      "help": "Complete the three daily assists within META fights, sharing equipment settings with your current-season beacons."
+    },
     "Tier": {
       "name": "Find beacons with level above X",
       "help": "If you try several times and still can't find a beacon that meets the criteria, fight a random one."
@@ -3988,6 +3984,10 @@
     "DossierAutoAttackMode": {
       "name": "Dossier beacon auto combat",
       "help": "Automatically fight after the first battle at the Dossier beacon. Currently only available on CN Server."
+    },
+    "DossierSkipAssist": {
+      "name": "Pause assists while a Dossier is active",
+      "help": "Pause daily META assists while a Dossier is open, being analyzed, or in auto combat. Collect pending Dossier rewards before resuming assists.\nYou must enable this option when using automatic equipment switching."
     },
     "RequestAssist": {
       "name": "Request assist",
@@ -6986,10 +6986,32 @@
       "help": "Store groups, manual corrections, level toggle history and scan coverage per instance."
     }
   },
+  "FleetRotation": {
+    "_info": {
+      "name": "Smart ship rotation",
+      "help": "Normal main and event stages only; disabled by default."
+    },
+    "Enabled": {
+      "name": "Enable ship rotation",
+      "help": "Normal main and event stages only; disabled by default."
+    },
+    "Rules": {
+      "name": "Rotation rules",
+      "help": "Configure slots and sources for each fleet. Slots stay unchanged by default. Reserves rotate in number order."
+    },
+    "State": {
+      "name": "Rotation history",
+      "help": "Stores the last reserve and completed slots. Check the in-game formation before clearing."
+    }
+  },
   "FleetInfo": {
     "_info": {
       "name": "Fleet information",
       "help": "Stores fleet scan results. Existing reliable readings can passively reduce uncertainty in calibrated morale without additional scans or waits."
+    },
+    "UpdateEmotion": {
+      "name": "Update morale during scan",
+      "help": "Choose whether to read morale for this scan. When disabled, existing slot morale references are retained and recovery-phase learning is skipped."
     },
     "Result": {
       "name": "Scan result",

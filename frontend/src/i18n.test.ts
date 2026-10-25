@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { detectLanguage, translateUi } from './i18n'
+import { detectLanguage, isLanguage, localeForLanguage, translateUi } from './i18n'
 
 describe('WebUI i18n', () => {
   it('单次任务操作在全部语言中有完整文案并带目标名称', () => {
@@ -18,6 +18,9 @@ describe('WebUI i18n', () => {
 
   it('detects supported browser locales', () => {
     expect(detectLanguage(['zh-HK'])).toBe('zh-TW')
+    expect(detectLanguage(['zh-MIAO'])).toBe('zh-MIAO')
+    expect(isLanguage('zh-MIAO')).toBe(true)
+    expect(localeForLanguage('zh-MIAO')).toBe('zh-CN')
     expect(detectLanguage(['ja'])).toBe('ja-JP')
     expect(detectLanguage(['en-GB'])).toBe('en-US')
     expect(detectLanguage(['fr-FR'])).toBe('zh-CN')

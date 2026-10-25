@@ -488,6 +488,8 @@ class CampaignRun(CampaignEvent, ShopStatus):
             self.device.click_record_clear()
             try:
                 self.campaign._resume_after_restart = resume_map
+                from module.campaign.fleet_rotation import preflight_rotation
+                self.campaign._fleet_rotation_preflight = lambda battle: preflight_rotation(self, battle, mode)
                 resume_map = False
                 self.campaign.run()
             except ScriptEnd as e:

@@ -92,13 +92,13 @@ class FatalStartupError(Exception):
 #   ALAS_WEBUI=react         → 新前端（需要 Node.js 构建 frontend/ 静态资源）
 #   ALAS_WEBUI=<其它非空值>  → 旧界面（pywebio / legacy / old 等写法都接受）
 #   未设置 + 由启动器拉起     → 新前端：启动器（alas-launcher）会用环境变量
-#                              ALAS_WEBUI_TRUST_SECRET 拉起 WebUI，它要的控制流
+#                              AP_WEBUI_TRUST_SECRET（兼容旧 ALAS_*）拉起 WebUI，它要的控制流
 #                              （/api/launcher/*）与通知流（/api/notify_stream）
 #                              在新前端后端同样齐备（module/api/launcher_routes.py）
 #   未设置 + 手动启动         → 旧界面（保持原有默认）
-LAUNCHER_TRUST_SECRET_ENV = "ALAS_WEBUI_TRUST_SECRET"
+LAUNCHER_TRUST_SECRET_ENV = "AP_WEBUI_TRUST_SECRET"
 _EXPLICIT_WEBUI = os.environ.get("ALAS_WEBUI", "").strip().lower()
-_LAUNCHED_BY_LAUNCHER = bool(os.environ.get(LAUNCHER_TRUST_SECRET_ENV, "").strip())
+_LAUNCHED_BY_LAUNCHER = bool(os.environ.get(LAUNCHER_TRUST_SECRET_ENV, os.environ.get("ALAS_WEBUI_TRUST_SECRET", "")).strip())
 USE_REACT_FRONTEND = _EXPLICIT_WEBUI == "react" or (
     not _EXPLICIT_WEBUI and _LAUNCHED_BY_LAUNCHER
 )

@@ -9,9 +9,23 @@
 
 ## 1. 模块概述
 
-[资源管理](resource-management.md) 在所有主题均位于「资源统计」内的「资源趋势」旁边，路径为 `/i/:instance/statistics?view=management`；旧 `/resources` 链接统一自动跳转，不再保留一级资源管理入口。旧版独立统计页顶部提供「资源趋势／资源管理」切换，「资源趋势」继续使用本地整页统计；总览内嵌统计不显示切换条、不跟随外层 `view` 参数。切换主题后保留当前资源管理视图。由 `pages/ResourceManagement.tsx` 与 `resources/` 提供 ECharts 桑基图、库存与收支明细。图节点支持资源与任务筛选，明细支持分页和完整区间 CSV 导出；原调度的石油自动控制使用现有配置事务接口保存。五种语言、窄屏和空数据状态均沿用控制台组件与主题。
+[资源管理](resource-management.md) 在所有主题均位于「资源统计」内的「资源趋势」旁边，路径为 `/i/:instance/statistics?view=management`；旧 `/resources` 链接统一自动跳转，不再保留一级资源管理入口。旧版独立统计页顶部提供「资源趋势／资源管理」切换，「资源趋势」继续使用本地整页统计；总览内嵌统计不显示切换条、不跟随外层 `view` 参数。切换主题后保留当前资源管理视图。由 `pages/ResourceManagement.tsx` 与 `resources/` 提供 ECharts 桑基图、库存与收支明细。图节点支持资源与任务筛选，明细支持分页和完整区间 CSV 导出；原调度的石油自动控制使用现有配置事务接口保存。五种语言、窄屏和空数据状态均沿用控制台组件与主题。本地保留 `zh-MIAO` 的已保存偏好、原有字典与配置翻译；新增通用文案先继承简体中文，日期格式仍使用 `zh-CN`。
 
-所有主题在「舰队管理」下并列放置「舰队信息」、[心智单元计算器](mind-calculator.md) 与 [舰队科技](fleet-technology.md)，不再保留一级心智入口。计算器路径为 `/i/:instance/task/MindCalculator`，旧 `/mind-calculator` 链接统一自动跳转；舰队科技路径为 `/i/:instance/task/FleetTechnology`。这两个独立页面沿用 `components/taskNavItems.ts` 的 WebUI 导航机制，同时覆盖侧栏树、悬浮菜单及顶栏任务跳转，页面本身不注册为游戏任务，并隐藏任务右栏。舰队科技只在用户启动扫描时运行独立工具 `FleetTechScan`，人工编辑和心智清单同步只更新当前实例记录。「舰队信息」由 `pages/FleetInfoPage.tsx` 提供舰队卡片和扫描开关，调用 `tasks.run(FleetScan)`，只在该扫描运行时调用 `scheduler.stop`；其他任务运行、更新或连接不可用时禁用。启动前等待配置队列保存，扫描运行期间及结束后重读舰队信息；浏览页面不启动游戏，也不修改实例自启设置。
+所有主题在「舰队管理」下提供「舰队信息」、[心智单元计算器](mind-calculator.md)、[舰队科技](fleet-technology.md) 与智能换船。计算器路径为 `/i/:instance/task/MindCalculator`，旧 `/mind-calculator` 自动跳转；沿用 `components/taskNavItems.ts` 的 WebUI 页面导航机制，同时覆盖侧栏树、悬浮菜单及顶栏任务跳转，不注册新的游戏任务。「舰队信息」由 `pages/FleetInfoPage.tsx` 提供舰队卡片和扫描开关，调用 `tasks.run(FleetScan)`，只在该扫描运行时调用 `scheduler.stop`；其他任务运行、更新或连接不可用时禁用。启动前等待配置队列保存，再以最新修订保存 `FleetInfo.FleetInfo.UpdateEmotion`（扫描时更新心情）选项；关闭时保留已有舰位心情参考，不进行被动学习。扫描运行期间及结束后重读舰队信息，显示扫描确认的舰位，不为历史记录推断舰位。浏览页面不启动游戏，也不修改实例自启设置；手动指定舰位互换尚未提供独立按钮，智能换船使用下述策略页。
+
+舰队信息的[桌面截图](images/fleet-management-desktop.png)与[手机截图](images/fleet-management-mobile.png)
+来自隔离服务及合成记录，只验证舰位、未知心情和扫描选项展示，不代表实际账号操作。
+
+「舰队管理」另有 `/i/:instance/task/FleetRotation` 智能换船页面，属于独立配置页，
+不注册游戏任务，也不显示调度状态或启动任务按钮。顶部启用开关默认关闭；六支水面
+舰队的36个舰位默认均为“不变”，可逐位改为“换船”，并为每支目标队多选候补队。
+规则保存到 `FleetInfo.FleetRotation.Enabled/Rules`，不调用 `tasks.run`。页面显示已保存
+的上次来源与本轮进度，任务运行时只刷新进度，不覆盖尚未保存的规则编辑。
+清空记录按钮仅在任务停止时可用，不允许直接改写内部进度。当前效果见
+[桌面截图](images/fleet-rotation-desktop.png)与[手机截图](images/fleet-rotation-mobile.png)，
+均为隔离服务和合成配置。实际刷图触发由战役出击前策略负责。
+
+舰队科技路径为 `/i/:instance/task/FleetTechnology`，同样覆盖侧栏树、悬浮菜单及顶栏跳转并隐藏任务右栏；只在用户启动扫描时运行 `FleetTechScan`，人工编辑和心智清单同步仅更新当前实例记录。
 
 [心智单元计算器](mind-calculator.md) 的新旧入口共用舰船清单、待核对状态、导入导出与费用计算。该页隐藏任务右栏；自动船坞扫描属于独立游戏工具，仅支持国服且要求当前实例已停止，其余计算和文件处理无需操作游戏。
 
@@ -30,6 +44,8 @@ frontend/README.md 与 frontend/API.md 已经是本前端的详细文档：前�
 任务侧栏由 `TaskNav` 按设备布局分流，旧版和新版主题一致：宽度大于 950px 且支持悬停时，分类的二级任务使用 `TaskNavFlyout` 在主侧栏右侧展开，选中任务、点击外部或按 Escape 收起；窄屏和触屏使用 `TaskNavTree` 内嵌折叠。旧版保留自身配色、圆角与选中样式，树状高度动画仅作用于 `.task-group` 内，避免右侧浮层内容被隐藏。
 
 任务队列在旧版左列、新版右栏及配置页共用 `TaskQueue`：已启用的待运行和等待中任务提供「执行一次」，单次运行的任务提供「停止」。操作按钮与配置导航分开，点击不会进入配置页；启动前等待当前实例的配置保存完成，断线或请求处理中禁用操作，同实例运行时禁用其他任务的启动。调度器卡片按 `singleTask` 区分单次执行，单次任务结束后不连带启动调度器。
+
+移动端在 950px 及以下使用导航与调度抽屉。新版主题的调度栏必须使用固定定位，桌面 L 形容器中的相对定位仅限 951px 及以上，隐藏抽屉不得占用正文高度；看图模式把手也仅在桌面显示。新版首页在窄屏按公告、实例列表顺序单列排列，由首页内容区整体滚动。480px 及以下，新版总览的日志工具栏独占一行，避免覆盖日志与截图切换入口；统计表格搜索也另起一行，保留标题和导出操作的可读宽度。新版分类统计在 950px 及以下统一使用下拉菜单，完整列出分类名称，不裁切横排标签；编辑模式的合并页面开关保留在下拉旁边。桌面仍使用分段分类栏，紧凑主题按可用宽度改用下拉。相关回归位于 `frontend/e2e/mobile/mock.spec.ts`，使用触摸移动视口检查正文可见性、滚动可达性、抽屉与桌面断点切换，运行 `npm run test:e2e:mock --prefix frontend -- e2e/mobile/mock.spec.ts`。
 
 统计页各分类均保留历史展示与筛选，并提供导出入口：页面可导出本类数据，表格有各自的导出明细按钮，图表支持保存为图片。
 
@@ -140,6 +156,7 @@ Node.js >= 22.12（推荐 24），首次准备用 `npm ci --prefix frontend`。
 ## 19. 调试方法
 
 - 界面交互问题先用 mock 模式复现（无需 Python 与模拟器）；`AZURPILOT_MOCK_SCENARIO=empty` 从零实例测首次创建，`AZURPILOT_MOCK_PASSWORD` 可测登录与重连。
+- 模拟统计报告的逐点序列同真实接口使用 `{t, v, s?}`，时间为微秒整数；通过前端 `normalizeReport` 还原后再渲染，避免旧 `{time, value}` 夹具导致日期与指标显示 NaN。
 - e2e 失败先看截图输出在被 git 忽略的 `frontend/test-results/`；先确认跑的是哪套配置（主配置连临时 Python 后端，mock 配置连内存模拟服务）。
 - 类型报错疑似与后端契约不一致时，先重跑 `dev_tools.export_api_schema`，再排查是否有人手改了生成产物。
 

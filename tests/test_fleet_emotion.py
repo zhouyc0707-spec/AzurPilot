@@ -43,7 +43,7 @@ class FleetEmotionTests(unittest.TestCase):
             2: [{'name': '丙', 'level': 70, 'emotion': None}],
         })
 
-    def test_first_filter_combines_mood_and_vanguard_then_preserves_sort(self):
+    def test_picker_filter_sets_level_and_all_types_together(self):
         self._check_filter_transitions({'all'})
 
     def test_existing_multiple_ship_types_are_cleared(self):
@@ -57,12 +57,14 @@ class FleetEmotionTests(unittest.TestCase):
         runner.ui_ensure = Mock()
         runner.dock_favourite_set = Mock()
         runner.dock_sort_method_dsc_set = Mock()
-        runner._wait_dock_filter_loaded = Mock()
         runner._save_result = Mock()
         runner.dock_reset = Mock()
+        runner.loop = lambda **kwargs: iter([None])
+        runner.appear = Mock(return_value=True)
         events = []
         selected = {key: {value} for key, value in runner.dock_filter.settings_default.items()}
         selected['index'] = set(initial_indices)
+        selected['sort'] = {'mood'}
 
         def active(button, **kwargs):
             return any(b is button and option in selected[key]
@@ -85,22 +87,20 @@ class FleetEmotionTests(unittest.TestCase):
         runner.device.click = click
         runner.dock_filter_enter = lambda: events.append('enter')
         runner.dock_filter_confirm = lambda **kwargs: events.append(('confirm', copy.deepcopy(selected)))
-        with patch('module.retire.fleet_management.FleetManagementScanner') as scanner:
-            scanner.return_value.scan.return_value = {}
-            runner.run()
+        runner.dock_filter.reset_first = False
+        try:
+            runner._prepare_dock()
+        finally:
+            runner.dock_filter.reset_first = True
         confirms = [event[1] for event in events if isinstance(event, tuple) and event[0] == 'confirm']
-        self.assertEqual([c['index'] for c in confirms], [{'vanguard'}, {'main'}, {'ss'}])
-        self.assertEqual([c['sort'] for c in confirms], [{'mood'}] * 3)
-        for target in ('main', 'ss'):
-            index = events.index(('index', target))
-            self.assertEqual(events[index - 1], ('index', 'all'))
+        self.assertEqual([c['index'] for c in confirms], [{'all'}])
+        self.assertEqual([c['sort'] for c in confirms], [{'level'}])
         first_confirm = events.index(('confirm', confirms[0]))
-        self.assertLess(events.index(('sort', 'mood')), first_confirm)
-        self.assertLess(events.index(('index', 'vanguard')), first_confirm)
-        self.assertEqual(events.count('enter'), 3)
-        self.assertEqual(events.count(('sort', 'mood')), 1)
+        self.assertLess(events.index(('sort', 'level')), first_confirm)
+        if initial_indices != {'all'}:
+            self.assertLess(events.index(('index', 'all')), first_confirm)
+        self.assertEqual(events.count('enter'), 1)
         self.assertTrue(runner.dock_filter.reset_first)
-        runner.dock_reset.assert_called_once()
 
     def test_actual_multi_selected_filter_screenshot(self):
         from module.base.utils import load_image
@@ -116,12 +116,13 @@ class FleetEmotionTests(unittest.TestCase):
     def test_cleanup_on_failure_does_not_save_partial_result(self):
         runner = FleetManagement.__new__(FleetManagement)
         runner.config = SimpleNamespace(SERVER='cn')
+        runner.device = SimpleNamespace(has_cached_image=True)
         for name in ('ui_ensure', 'dock_favourite_set', 'dock_sort_method_dsc_set',
-                     'dock_reset', '_save_result'):
+                     'dock_reset', '_save_result', 'fleet_enter', '_open_slot', '_close_picker'):
             setattr(runner, name, Mock())
-        runner.dock_filter_set = Mock(side_effect=RuntimeError('筛选失败'))
-        with patch('module.retire.fleet_management.FleetManagementScanner'), self.assertRaises(RuntimeError):
-            runner.run()
+        runner._prepare_dock = Mock(side_effect=RuntimeError('筛选失败'))
+        with self.assertRaises(RuntimeError):
+            runner.run(update_emotion=False)
         self.assertTrue(runner.dock_filter.reset_first)
         runner.dock_reset.assert_called_once()
         runner._save_result.assert_not_called()

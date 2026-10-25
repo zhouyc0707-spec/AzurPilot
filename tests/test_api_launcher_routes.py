@@ -84,6 +84,7 @@ class LauncherApiTests(unittest.TestCase):
         self.app = create_app(root=fixture(self.temp.name), password='test-secret',
                               manage_runtime=False, mount_mcp=False)
         self.client = local_client(self.app)
+        self.service = self.app.state.gateway.router.launcher
         launcher_trust._reset()
         self.addCleanup(launcher_trust._reset)
         launcher_api._secret_failures.clear()
@@ -132,7 +133,7 @@ class LauncherApiTests(unittest.TestCase):
     def test_notify_is_queued_for_the_launcher_stream(self):
         response = self.client.post('/api/notify', json={'title': '测试', 'body': 'hello'})
         self.assertTrue(response.json()['success'])
-        queued = launcher_routes._notification_queue.get_nowait()
+        queued = self.service.legacy_control().notifications.get_nowait()
         self.assertEqual({'title': '测试', 'body': 'hello'}, queued)
 
     def test_notify_rejects_invalid_json(self):
@@ -142,7 +143,9 @@ class LauncherApiTests(unittest.TestCase):
         self.assertFalse(response.json()['success'])
 
     def test_report_updates_autostart_state(self):
-        payload = {'id': 'cmd-1', 'success': True, 'data': {'enabled': True}}
+        control = self.service.legacy_control()
+        asyncio.run(control.mark_connected())
+        payload = {'id': control.query_id, 'success': True, 'data': {'enabled': True}}
         self.assertTrue(self.client.post('/api/launcher/report', json=payload).json()['success'])
         self.assertTrue(self.client.get('/api/launcher/status').json()['autostart_enabled'])
 
@@ -156,7 +159,8 @@ class LauncherApiTests(unittest.TestCase):
                                   headers={'x-webui-launcher-secret': 'whatever'})
         self.assertEqual(403, denied.status_code)
 
-        launcher_trust.configure('launcher-secret', 'test-secret')
+        self.service.legacy_trust.secret = 'launcher-secret'
+        self.service.legacy_trust.webui_key = 'test-secret'
         wrong = self.client.post('/api/launcher/trusted-login',
                                  headers={'x-webui-launcher-secret': 'wrong'})
         self.assertEqual(403, wrong.status_code)
@@ -175,8 +179,9 @@ class LauncherApiTests(unittest.TestCase):
 
     def test_login_seed_escapes_password_for_both_frontend_keys(self):
         """危险密码仍只生成一个脚本块，并为新旧前端写入相同凭据。"""
-        launcher_trust.configure('launcher-secret', 'k</script><script>alert(1)</script>y')
-        token = launcher_trust.issue_token()
+        self.service.legacy_trust.secret = 'launcher-secret'
+        self.service.legacy_trust.webui_key = 'k</script><script>alert(1)</script>y'
+        token = self.service.legacy_trust.issue_token()
         seed = self.client.get('/launcher-login', params={'token': token})
         self.assertEqual(200, seed.status_code)
         self.assertEqual(1, seed.text.count('<script>'))
@@ -185,21 +190,21 @@ class LauncherApiTests(unittest.TestCase):
         self.assertIn(f"localStorage.setItem('azurpilot.access-password', {escaped});", seed.text)
         self.assertIn(f"localStorage.setItem('password', {escaped});", seed.text)
 
-    def test_legacy_secret_helpers_share_upstream_rate_limit(self):
-        """旧入口记录的失败必须被新HTTP处理器计入同一限流窗口。"""
-        launcher_trust.configure('launcher-secret', 'test-secret')
+    def test_legacy_login_rate_limit_is_isolated_per_application(self):
+        """真实 HTTP 失败计数属于本应用，不污染其他启动器或旧导入入口。"""
+        self.service.legacy_trust.secret = 'launcher-secret'
         for _ in range(launcher_routes._LAUNCHER_SECRET_MAX_FAILURES):
-            launcher_routes._launcher_secret_failure()
-        self.assertFalse(launcher_routes._launcher_secret_try_allowed())
+            self.client.post('/api/launcher/trusted-login', headers={'x-webui-launcher-secret': 'wrong'})
         response = self.client.post('/api/launcher/trusted-login', headers={
-            'x-webui-launcher-secret': 'launcher-secret',
-        })
+            'x-webui-launcher-secret': 'launcher-secret'})
         self.assertEqual(429, response.status_code)
+        self.assertTrue(launcher_routes._launcher_secret_try_allowed())
         self.assertIs(launcher_routes._LAUNCHER_SECRET_FAILURES, launcher_api._secret_failures)
 
     def test_launcher_login_rejects_bad_token_and_remote_client(self):
         self.assertEqual(403, self.client.get('/launcher-login', params={'token': 'bad'}).status_code)
-        launcher_trust.configure('launcher-secret', 'test-secret')
+        self.service.legacy_trust.secret = 'launcher-secret'
+        self.service.legacy_trust.webui_key = 'test-secret'
         token = self.client.post('/api/launcher/trusted-login',
                                  headers={'x-webui-launcher-secret': 'launcher-secret'}).json()['token']
         remote = remote_client(self.app)

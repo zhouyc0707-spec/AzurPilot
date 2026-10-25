@@ -269,12 +269,12 @@ def app():
     key, password_error = ensure_public_webui_password(key)
     # 由 alas-launcher 以信任密钥拉起时登记免密通道，否则整体关闭。
     from module.webui.launcher_trust import (
-        TRUST_SECRET_ENV,
+        environment_secret,
         configure as configure_launcher_trust,
         enabled as launcher_trust_enabled,
     )
 
-    configure_launcher_trust(os.environ.get(TRUST_SECRET_ENV), key)
+    configure_launcher_trust(environment_secret(), key)
     cdn: str | bool = args.cdn if args.cdn else State.deploy_config.CDN
     runs: List[str] | None = None
     if args.run:

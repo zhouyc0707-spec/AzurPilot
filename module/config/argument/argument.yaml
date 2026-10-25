@@ -575,7 +575,6 @@ DropRecord:
     value: do_not
     option: [do_not, save, upload, save_and_upload]
   TelemetryReport: true
-  BugReport: true
 Backup:
   Enable: true
   KeepDays:
@@ -640,7 +639,7 @@ YukikazeTaskManager:
       > OpsiAshBeacon
       > OpsiDaily > OpsiShop > OpsiVoucher > EventShop
       > OpsiAbyssal > OpsiStronghold > OpsiObscure > OpsiArchive
-      > Daily > LimitChallenge > Hard > OpsiAshBeacon > OpsiAshAssist > OpsiMonthBoss
+      > Daily > LimitChallenge > Hard > OpsiAshBeacon > OpsiMonthBoss
       > Sos > EventSp > EventA > EventB > EventC > EventD
       > RaidDaily > CoalitionSp > WarArchives > MaritimeEscort
       > IslandJuuEatery > IslandJuuCoffee > IslandGrill > IslandTeahouse > IslandRestaurant
@@ -1539,6 +1538,7 @@ Sos:
 # ==================== Opsi ====================
 
 OpsiAshAssist:
+  Enable: true
   Tier: 15
 OpsiGeneral:
   UseLogger: true
@@ -1578,6 +1578,7 @@ OpsiAshBeacon:
     value: null
     display: hide
   DossierAutoAttackMode: false
+  DossierSkipAssist: false
   RequestAssist: true
   EnsureFullyCollected: true
   AutoCollectShip: true
@@ -2618,7 +2619,17 @@ FleetTech:
     value: {}
     display: hide
 
+FleetRotation:
+  Enabled: false
+  Rules:
+    type: textarea
+    value: '{}'
+  State:
+    type: storage
+    value: {}
+
 FleetInfo:
+  UpdateEmotion: true
   Result:
     type: stored
     value: {}
@@ -2776,7 +2787,7 @@ Equipment:
   Config:
     type: textarea
     mode: yaml
-    value: |
+    value: |-
       flagship:
         before: null
         after: null

@@ -14,10 +14,9 @@ from starlette.responses import FileResponse, JSONResponse, PlainTextResponse, R
 from starlette.routing import Mount, Route, WebSocketRoute
 from starlette.staticfiles import StaticFiles
 
-from module.api import launcher_api
 from module.api.background_service import LIBRARY_DIR, gallery_add_bytes, proxy_fetch
 from module.api.config_service import ConfigService, ROOT
-from module.api.launcher_routes import routes as launcher_routes
+from module.api.launcher_routes import build_routes as build_launcher_routes
 from module.api.router import Router
 from module.api.runtime_service import RuntimeService
 from module.api.socket import Gateway
@@ -54,11 +53,9 @@ def create_app(*, root: Path = ROOT, password=None, manage_runtime=True, mount_m
         password = ensure_password_for_host(key, host, demo=is_demo_mode())
         if password and password != key:
             State.deploy_config.Password = password
-    # 启动器（alas-launcher）会用信任密钥拉起 WebUI：登记它与当前密码，
-    # 供 /api/launcher/trusted-login 签发免密令牌；手动启动时该环境变量缺省，
-    # 免密通道整体关闭。与旧界面（module/webui/app.py）的行为一致。
-    launcher_api.configure_trust(password)
+
     gateway = Gateway(Router(configs, runtime), password)
+    gateway.router.launcher.legacy_trust.webui_key = password
 
     @asynccontextmanager
     async def lifespan(application):
@@ -94,7 +91,10 @@ def create_app(*, root: Path = ROOT, password=None, manage_runtime=True, mount_m
                     await mcp_app.state.tools.close()
             finally:
                 try:
-                    await asyncio.to_thread(gateway.router.close)
+                    try:
+                        await gateway.router.launcher.close()
+                    finally:
+                        await asyncio.to_thread(gateway.router.close)
                 finally:
                     if manage_runtime:
                         try:
@@ -187,10 +187,8 @@ def create_app(*, root: Path = ROOT, password=None, manage_runtime=True, mount_m
               WebSocketRoute('/api/v1/ws', gateway.endpoint),
               Mount('/static/commission_rewards', StaticFiles(directory=commission_rewards_dir))]
     routes.extend(android_routes(configs, runtime))
-    # 启动器的控制/通知/免密端点必须排在静态资源之前：下面的 SPA 兜底会把
-    # 未匹配路径都当成前端路由返回 index.html（HTTP 200 + text/html），
-    # 启动器会因此拿到 HTML 而不是 SSE 流。
-    routes.extend(launcher_routes)
+    # 新旧启动器共用应用级状态，控制和通知必须先于 SPA 兜底。
+    routes.extend(build_launcher_routes(gateway.router.launcher))
     # 背景图库：图片直接由 StaticFiles 提供（与 research-items 等模板图同一套做法），
     # 上传走下面那个 POST；目录不存在时先建出来，免得挂载失败。
     LIBRARY_DIR.mkdir(parents=True, exist_ok=True)

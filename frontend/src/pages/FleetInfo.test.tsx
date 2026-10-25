@@ -29,4 +29,11 @@ describe('舰队信息心情兼容性', () => {
     expect(markup).toContain('旧对象')
     expect(markup).toContain('Lv.125 · 心情 未知')
   })
+
+  it('显示实际舰位，旧记录不按数组位置推断舰位', () => {
+    const markup = render({vanguard: {1: [{name: '花月', slot: 5, level: 105}, {name: '旧对象'}]}})
+    expect(markup).toContain('舰位 5 · 花月')
+    expect(markup).not.toContain('舰位 4')
+    expect(markup).not.toContain('舰位 6')
+  })
 })

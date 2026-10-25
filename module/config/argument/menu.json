@@ -91,7 +91,6 @@
     "tasks": [
       "OpsiGeneral",
       "OpsiAshBeacon",
-      "OpsiAshAssist",
       "OpsiExplore",
       "OpsiExploreCleanup",
       "OpsiShop",

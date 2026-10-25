@@ -22,8 +22,26 @@ def choose_fallback_repository() -> str:
 GITHUB_REPOSITORY = 'https://github.com/wess09/AzurPilot'
 
 
+class ErrorCodes:
+    """部署错误码：同时作为进程退出码返回，启动器按码分类展示。
+
+    码段与 gui.py 的 EXIT_*（70-76）互不重叠；新增码值必须同步
+    启动器（alas-launcher）的错误码映射表。
+    """
+
+    EXEC_UNKNOWN = 1
+    COMMAND_FAILED = 10      # execute() 通用命令执行失败
+    GIT_FETCH_FAILED = 11    # git fetch 主源与全部镜像重试穷尽
+    GIT_MERGE_FAILED = 12    # git pull/merge 合并失败
+    DEPS_SYNC_FAILED = 13    # 依赖同步（uv sync / pip）失败
+
+
 class ExecutionError(Exception):
-    pass
+    """部署流程执行失败；code 取 ErrorCodes，供上游结构化识别。"""
+
+    def __init__(self, code: int = ErrorCodes.EXEC_UNKNOWN, message: str = ''):
+        super().__init__(message or f'deploy failed with error code {code}')
+        self.code = code
 
 
 class ConfigModel:
@@ -236,7 +254,10 @@ class DeployConfig(DeployConfigTransaction, ConfigModel):
             else:
                 logger.info(f"[ failure ], error_code: {error_code}")
                 self.show_error(command)
-                raise ExecutionError
+                raise ExecutionError(
+                    ErrorCodes.COMMAND_FAILED,
+                    f'Command failed (exit {error_code}): {command}',
+                )
         else:
             logger.info(f"[ success ]")
             return True

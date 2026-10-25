@@ -1,135 +1,88 @@
-"""启动器信任免密登录的进程内状态与令牌逻辑。
-
-WebUI 若由 alas-launcher 以环境变量 ``ALAS_WEBUI_TRUST_SECRET`` 拉起，
-则对携带匹配密钥的回环请求签发短时令牌，允许其在本机窗口预置
-``localStorage["password"]`` 实现免密进入；其他浏览器不受影响。
-
-信任密钥与用户 WebUI 密码（--key / deploy.yaml Password）解耦：之后修改
-WebUI 密码或由 WebUI 自动生成密码，启动器依旧免密。手动 ``gui.py`` 启动时
-该环境变量缺省，免密通道整体关闭，维持原有登录行为。
-
-本模块只依赖标准库，便于独立单元测试。
-"""
-from module.base.runtime_params import TOKEN_TTL_SECONDS
+"""应用级启动器信任密钥和一次性登录票据。"""
+import os
 import secrets
 import threading
 import time
+from module.base.runtime_params import TOKEN_TTL_SECONDS
 
-#: 启动器注入信任密钥的环境变量名（与 alas-launcher 保持一致）
-TRUST_SECRET_ENV = "ALAS_WEBUI_TRUST_SECRET"
-
-_lock = threading.Lock()
-_secret: str | None = None       #: 启动器信任密钥，None 表示未启用
-_webui_key: str | None = None    #: 当前 WebUI 有效密码
-_tokens: dict[str, float] = {}   #: token -> 过期时间戳
+TRUST_SECRET_ENV = 'AP_WEBUI_TRUST_SECRET'
 
 
-def configure(secret: str | None, webui_key: str | None):
-    """WebUI 工厂启动时调用一次，登记信任密钥与当前有效 WebUI 密码。
-
-    Args:
-        secret: 启动器信任密钥，None/空表示未由启动器拉起。
-        webui_key: 当前生效的 WebUI 密码（可能为 None）。
-    """
-    global _secret, _webui_key
-    with _lock:
-        normalized = str(secret or "").strip() or None
-        _secret = normalized
-        _webui_key = str(webui_key) if webui_key is not None else None
-        # 重新配置时清空残留令牌，避免跨配置重放。
-        _tokens.clear()
+def environment_secret():
+    """新变量显式设置时优先，否则兼容已安装的旧启动器。"""
+    return os.environ.get(TRUST_SECRET_ENV, os.environ.get('ALAS_WEBUI_TRUST_SECRET'))
 
 
-def _enabled_locked() -> bool:
-    """已持有 ``_lock`` 时的免密可用性判定，供各函数内部复用。
+class LauncherTrust:
+    def __init__(self, secret=None):
+        self.secret = str(secret or '').strip()
+        self.lock = threading.Lock()
+        self.tokens = {}
 
-    单独抽出以便 ``enabled()`` 与 ``issue_token()`` 共享同一判定，避免
-    在已持锁时再次获取非重入锁导致死锁。
+    def check_secret(self, candidate):
+        return bool(self.secret and isinstance(candidate, str)
+                    and secrets.compare_digest(candidate.encode(), self.secret.encode()))
 
-    Returns:
-        bool: 免密可用返回 True，否则返回 False。
-    """
-    if not _secret:
-        return False
-    return bool(_webui_key is not None and str(_webui_key).strip())
+    def issue(self):
+        with self.lock:
+            now = time.monotonic()
+            self.tokens = {key: expiry for key, expiry in self.tokens.items() if expiry > now}
+            if len(self.tokens) >= 128:
+                self.tokens.pop(next(iter(self.tokens)))
+            token = secrets.token_urlsafe(32)
+            self.tokens[token] = now + TOKEN_TTL_SECONDS
+            return {'ticket': token, 'ttl': TOKEN_TTL_SECONDS}
 
+    def consume(self, token):
+        with self.lock:
+            return self.tokens.pop(token, 0) > time.monotonic()
 
-def enabled() -> bool:
-    """检查免密通道是否可用。
-
-    判定条件为既由启动器拉起，又确实配置了有效的 WebUI 密码。
-
-    Returns:
-        bool: 免密通道可用返回 True，否则返回 False。
-    """
-    with _lock:
-        return _enabled_locked()
-
-
-def check_secret(candidate: str | None) -> bool:
-    """使用常数时间比较候选密钥是否与信任密钥一致。
-
-    Args:
-        candidate: 待校验的密钥字符串。
-
-    Returns:
-        bool: 匹配成功返回 True，否则返回 False。
-    """
-    if candidate is None:
-        return False
-    with _lock:
-        secret = _secret
-    if not secret:
-        return False
-    return secrets.compare_digest(str(candidate), secret)
+    def clear(self):
+        with self.lock:
+            self.tokens.clear()
 
 
-def issue_token() -> str | None:
-    """签发一次性免密令牌，未启用时返回 None。
+class LegacyLauncherTrust(LauncherTrust):
+    """旧登录页面仍使用密码种子，但票据独立隔离、限量且只消费一次。"""
 
-    Returns:
-        str | None: 生成的随机令牌字符串；未启用时返回 None。
-    """
-    with _lock:
-        if not _enabled_locked():
-            return None
-        token = secrets.token_urlsafe(24)
-        _tokens[token] = time.time() + TOKEN_TTL_SECONDS
-        return token
+    webui_key = None
+
+    def enabled(self):
+        return bool(self.secret and self.webui_key and str(self.webui_key).strip())
+
+    def issue_token(self):
+        return self.issue()['ticket'] if self.enabled() else None
 
 
-def validate_token(token: str) -> bool:
-    """校验令牌是否存在且未过期，过期令牌会被自动清理。
-
-    Args:
-        token: 待验证的令牌字符串。
-
-    Returns:
-        bool: 令牌有效返回 True，否则返回 False。
-    """
-    if not token:
-        return False
-    now = time.time()
-    with _lock:
-        expire = _tokens.get(token)
-        if expire is None:
-            return False
-        if now > expire:
-            _tokens.pop(token, None)
-            return False
-    return True
+# 仅供 PyWebIO 的旧公共导入入口；React 应用使用自己的 LegacyLauncherTrust。
+_legacy_trust = LegacyLauncherTrust()
 
 
-def webui_key() -> str | None:
-    """返回当前有效 WebUI 密码，供种子页写入 localStorage。
+def configure(secret, webui_key):
+    _legacy_trust.clear()
+    _legacy_trust.secret = str(secret or '').strip()
+    _legacy_trust.webui_key = webui_key
 
-    Returns:
-        str | None: 当前 WebUI 密码。
-    """
-    with _lock:
-        return _webui_key
+
+def enabled():
+    return _legacy_trust.enabled()
+
+
+def check_secret(candidate):
+    return _legacy_trust.check_secret(candidate)
+
+
+def issue_token():
+    return _legacy_trust.issue_token()
+
+
+def validate_token(token):
+    return _legacy_trust.consume(token)
+
+
+def webui_key():
+    return _legacy_trust.webui_key
 
 
 def _reset():
-    """清空全部状态，仅供单元测试使用。"""
     configure(None, None)

@@ -170,7 +170,7 @@ flowchart LR
 3. `override.yaml` 经 `check_override` 后落位，规则见第 15 节。
 4. 每个有 `Scheduler.Command` 的任务：`Command.value` 设为任务名并 `display: hide`；非主线任务隐藏 `Campaign.Mode`。
 
-`generate_i18n` 对通过 `deep_load` 读取的普通翻译保留旧值；**新增的 name/help 缺翻译时值就是键路径本身**（如 `Main.Campaign.Name`），需人工补齐五语言，选项文案缺失时回落到选项值。活动名、游戏服务器名称等动态条目会重新生成，手改这些值不保证保留。zh-TW 额外套一张小的用词替换表（設置→設定、文件→檔案等），并非完整简繁转换，生成后仍需校对。活动名按「同语言服务器 > en > cn > jp > tw」取自 `campaign/Readme.md` 的活动表；zh-MIAO 没有对应服务器语言，直接按 en → cn → jp → tw 回退。`generate()` 还会把该活动表重新对齐列宽写回。
+`generate_i18n` 对通过 `deep_load` 读取的普通翻译保留旧值；**新增的 name/help 缺翻译时值就是键路径本身**（如 `Main.Campaign.Name`），需人工补齐四语言，选项文案缺失时回落到选项值。活动名、游戏服务器名称等动态条目会重新生成，手改这些值不保证保留。zh-TW 额外套一张小的用词替换表（設置→設定、文件→檔案等），并非完整简繁转换，生成后仍需校对。活动名按「同语言服务器 > en > cn > jp > tw」取自 `campaign/Readme.md` 的活动表。`generate()` 还会把该活动表重新对齐列宽写回。
 
 ### 运行时加载与保存
 
@@ -285,6 +285,8 @@ stateDiagram-v2
 | `Dashboard.*`（Oil/Coin/Gem 等） | 仪表盘资源，由 dashboard.yaml 定义、任务运行时写回 Value/Record |
 | `Storage.Storage` | 生成器给每个任务附加的 `storage` 类型组，WebUI 禁止编辑，运行时当作键值状态区使用 |
 
+META 支援并入 `OpsiAshBeacon`：菜单、参数与模板只保留一个调度任务，内部支援设置为 `OpsiAshBeacon.OpsiAshAssist.Enable/Tier`，共用 `OpsiAshBeacon.Equipment`。`DossierSkipAssist` 默认关闭，启用后先处理所选信标/档案，只有确认档案未开启且没有正在解析的档案时才支援；待领奖也属于已开启状态，必须先领奖，再用新截图确认回到解析入口后恢复支援。原「META支援完成后再开启档案」开关已从配置定义和运行逻辑删除，旧字段随配置加载更新被丢弃，不再阻挡开启档案，也不改变新开关的值。五语标签随配置一并生成并维护。
+
 ## 11. 异常与错误处理
 
 | 异常 | 原因 | 处理 |
@@ -324,7 +326,7 @@ stateDiagram-v2
 | 翻译 | `module/config/i18n/<lang>.json` | 普通译文生成时保留旧值；活动名、服务器名称等动态条目会重建（见第 6 节） |
 | 读盘基线 | `AzurLaneConfig._loaded_data` | 每次 load/save 后更新，用于判断外部修改 |
 | 绑定表 | `bound` dict | 每次 `bind()` 清空重建 |
-| NTP 偏移 | `network_time` 单例内存 | 启动校准、30 分钟刷新；失败退回本机时间并可环境变量禁用 |
+| NTP 偏移 | `network_time` 单例内存 | 首次读取时后台校准、30 分钟刷新；失败保留缓存或使用本机时间，可环境变量禁用 |
 
 ## 14. 生命周期
 
@@ -332,6 +334,12 @@ stateDiagram-v2
 - **运行**：任务开始前 `bind(task)` 重绑参数；任务中赋值即保存；任务边界与空闲等待中经 `should_reload()`（mtime）感知外部修改，alas.py 丢弃整个 config 缓存重建——**配置对象本身被整体替换而非增量更新**。
 - **销毁**：无显式析构；随进程退出。持锁期间崩溃由操作系统文件锁兜底释放。
 - 模板配置在构造后直接返回（不 load/bind），生命周期止于属性默认值容器。
+
+### 后台网络校时
+
+首次读取时间时启动后台 NTP 查询并立即使用本机时间；成功后原子发布校准时间快照，刷新失败保留上次成功结果。`refresh()` 与 `refresh_time()` 返回已有缓存的同步状态，不代表新请求已完成，`force=True` 也不等待网络。查询在锁外执行，同一时间源只允许一个 daemon 查询线程；成功后 30 分钟刷新，失败退避 10 分钟。`timestamp()`、`now()`、`status()` 不等待 DNS 或 UDP，校时不会写入或重置任务记录。手机本机时间不准或首次成功校准的偏差较大时，定时判断仍可能改变；应保持系统自动时间设置。
+
+线程创建或启动失败时同样保留缓存或使用本机时间，按失败退避间隔重试，不中断时间读取。fork 子进程首次读取时会重新创建锁、清除继承的查询标记和时间缓存，再独立发起后台校准；清除缓存是为了避免使用父进程尚未完整发布的时间快照，查询间隔和超时设置保持不变。
 
 ## 15. 扩展方式
 
@@ -384,7 +392,6 @@ META 的旧 `OpsiAshBeacon.OpsiAshBeacon.OneHitMode` 开关迁移到整数 `Assi
 - `save_callback` 成为无调用方的遗留代码，黄币保留「双向同步」的旧行为已不存在；文档与直觉若基于旧行为会产生误判。
 - `deep_iter_diff` / `deep_iter_patch` / `deep_values` / `deep_get_with_error` / `deep_exist` 目前没有调用方（热重载基于 mtime + 整体重建，不做差异比较）。
 - `is_hoarding_task`、`stop_event` 是类属性，依赖「一进程一实例」的部署形态。
-- zh-MIAO（喵语）同样参与 `LANGUAGES` 的生成循环：普通译文由人工补充并在生成时保留，活动名、游戏服务器名称等动态条目会重建。活动名无喵语服务器来源时使用 en → cn → jp → tw 回退，不能通过直接修改动态键来持久保留喵语译名。
 
 ## 18. 示例
 
@@ -425,6 +432,12 @@ self.config.task_delay(minute=30)         # 当前任务 30 分钟后再跑
 ```
 
 ## 19. 调试方法
+
+META 支援并入 `OpsiAshBeacon` 时，核心配置和 WebUI 只读合并共用
+`redirect_utils/meta.py`：迁移旧支援的启用值、最低等级，并保留两项启用任务中较早的既定检查时间。
+完整旧支援配置存于不参与调度的 `_legacyMetaAssist`，后续加载继续保留；已有新组以用户新设置为准。
+旧配置仅启用支援而关闭信标，或两阶段启用的装备方案不同，属于不能自动选择的行为冲突，
+迁移会拒绝发布并说明原因，原文件不改写。需先确认任务范围或统一装备方案，不能用默认值覆盖。
 
 - **生成验证**：`uv run -m module.config.config_updater` 后 `git diff` 审查产物；CI 的 button-config-check job 做同样的事。
 - **单元测试**：`uv run python -m unittest tests.test_config_batch tests.test_config_transaction`，覆盖批量修改、覆盖顺序、事务互斥与情绪时间戳联动。

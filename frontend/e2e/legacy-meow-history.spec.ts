@@ -487,3 +487,20 @@ test('旧版深色窄屏截图目录按钮留在收获表内，表格横向滚�
   await section.screenshot({path: testInfo.outputPath('旧版深色窄屏截图文件夹按钮.png')})
   expect(fixture.errors).toEqual([])
 })
+
+for (const theme of ['legacy-light', 'legacy-dark']) {
+  test(`${theme} 窄屏保留整页统计与资源管理入口，不套用新版分类下拉`, async ({page}) => {
+    await isolatedStatistics(page)
+    await page.setViewportSize({width: 390, height: 844})
+    await openStatistics(page, theme)
+    const navigation = page.locator('.legacy-statistics-navigation')
+    await expect(navigation.getByRole('tab', {name: '资源趋势', exact: true})).toBeVisible()
+    await expect(navigation.getByRole('tab', {name: '资源管理', exact: true})).toBeVisible()
+    await expect(page.locator('.statistics-category-picker')).toHaveCount(0)
+    await expect(page.locator('.legacy-ap-card')).toBeVisible()
+    await expect(page.getByRole('heading', {name: '大世界数据收集', exact: true})).toBeVisible()
+    await expect(page.getByRole('button', {name: '本月猫王', exact: true})).toBeVisible()
+    await expect(page.getByRole('button', {name: '历史猫王', exact: true})).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  })
+}

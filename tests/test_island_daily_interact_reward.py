@@ -96,6 +96,15 @@ class IslandDailyInteractRewardTests(unittest.TestCase):
         self.assertFalse(self.runner._handle_island_reward_once())
         self.assertEqual(len(self.clicks), 1)
 
+    def test_weekly_photo_does_not_click_camera_behind_reward_cooldown(self):
+        self.runner.loop = Mock(return_value=iter(range(5)))
+        self.runner._island_reward_visible = Mock(return_value=True)
+        self.runner._handle_island_reward_once = Mock(return_value=False)
+        self.runner.appear = Mock(return_value=True)
+        self.assertFalse(self.runner._run_weekly_photo_once())
+        self.runner.device.click.assert_not_called()
+        self.assertEqual(self.runner._handle_island_reward_once.call_count, 5)
+
     def test_reward_covering_phone_does_not_complete_navigation_early(self):
         self.set_timeline(lambda seconds: InteractFrame(reward='ISLAND_GET' if seconds < 1 else '', phone=True, back=True))
         self.runner.appear_then_click = Mock(side_effect=AssertionError('奖励仍在不应点击背景返回'))

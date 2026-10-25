@@ -18,9 +18,9 @@ class TestEmulatorProcessLifetime(unittest.TestCase):
     def test_launcher_capability_detaches_job_and_removes_private_environment(self):
         environment = {
             'PATH': 'fixture-path',
-            'ALAS_LAUNCHER_PID': '12345',
-            'ALAS_LAUNCHER_JOB_BREAKAWAY': '1',
-            'ALAS_WEBUI_TRUST_SECRET': 'test-only',
+            'AP_LAUNCHER_PID': '12345',
+            'AP_LAUNCHER_JOB_BREAKAWAY': '1',
+            'AP_WEBUI_TRUST_SECRET': 'test-only',
         }
         process = Mock()
         with patch.dict(os.environ, environment, clear=True), patch(
@@ -42,9 +42,9 @@ class TestEmulatorProcessLifetime(unittest.TestCase):
     def test_old_launcher_and_direct_launch_do_not_request_unsupported_breakaway(self):
         for capability in (None, '0', 'true'):
             with self.subTest(capability=capability):
-                environment = {'ALAS_LAUNCHER_PID': '12345', 'PATH': 'fixture-path'}
+                environment = {'AP_LAUNCHER_PID': '12345', 'PATH': 'fixture-path'}
                 if capability is not None:
-                    environment['ALAS_LAUNCHER_JOB_BREAKAWAY'] = capability
+                    environment['AP_LAUNCHER_JOB_BREAKAWAY'] = capability
                 with patch.dict(os.environ, environment, clear=True), patch(
                     'module.device.platform.platform_windows.subprocess.Popen',
                 ) as spawn:
@@ -61,7 +61,7 @@ class TestEmulatorProcessLifetime(unittest.TestCase):
         process.kill.assert_not_called()
 
     def test_breakaway_failure_does_not_silently_start_inside_launcher_job(self):
-        with patch.dict(os.environ, {'ALAS_LAUNCHER_JOB_BREAKAWAY': '1'}), patch(
+        with patch.dict(os.environ, {'AP_LAUNCHER_JOB_BREAKAWAY': '1'}), patch(
             'module.device.platform.platform_windows.subprocess.Popen',
             side_effect=OSError('test job rejects breakaway'),
         ) as spawn:
@@ -83,6 +83,23 @@ class TestEmulatorProcessLifetime(unittest.TestCase):
         with patch('module.device.platform.platform_windows.subprocess.run',
                    side_effect=subprocess.TimeoutExpired('manager', 7)):
             self.assertIsNone(PlatformWindows.execute('manager shutdown', wait=True, timeout=7))
+
+    def test_old_launcher_breakaway_survives_and_both_private_prefixes_are_removed(self):
+        environment = {'PATH': 'fixture', 'ALAS_LAUNCHER_PID': '123',
+                       'ALAS_LAUNCHER_JOB_BREAKAWAY': '1', 'ALAS_WEBUI_TRUST_SECRET': 'old',
+                       'AP_LAUNCHER_PID': '456', 'AP_WEBUI_TRUST_SECRET': 'new'}
+        with patch.dict(os.environ, environment, clear=True), patch(
+                'module.device.platform.platform_windows.subprocess.Popen') as spawn:
+            PlatformWindows.execute(self.COMMAND)
+        self.assertEqual(spawn.call_args.kwargs['env'], {'PATH': 'fixture'})
+        self.assertTrue(spawn.call_args.kwargs['creationflags'] & subprocess.CREATE_BREAKAWAY_FROM_JOB)
+
+    def test_explicit_new_capability_can_disable_old_breakaway(self):
+        with patch.dict(os.environ, {'AP_LAUNCHER_JOB_BREAKAWAY': '0',
+                                     'ALAS_LAUNCHER_JOB_BREAKAWAY': '1'}, clear=True), patch(
+                'module.device.platform.platform_windows.subprocess.Popen') as spawn:
+            PlatformWindows.execute(self.COMMAND)
+        self.assertEqual(spawn.call_args.kwargs['creationflags'], subprocess.CREATE_NO_WINDOW)
 
 
 if __name__ == '__main__':

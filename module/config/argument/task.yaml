@@ -326,9 +326,6 @@ Opsi:
     OpsiAshBeacon:
       - Scheduler
       - OpsiAshBeacon
-      - Equipment
-    OpsiAshAssist:
-      - Scheduler
       - OpsiAshAssist
       - Equipment
     OpsiExplore:
@@ -478,6 +475,7 @@ FleetManagement:
   tasks:
     FleetInfo:
       - FleetInfo
+      - FleetRotation
 
 # ==================== Run Params ====================
 

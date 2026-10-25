@@ -45,8 +45,9 @@ def __getattr__(name):
     raise AttributeError(f'{__name__!r} 没有属性 {name!r}')
 
 
-#: 应用工厂仅注册一次：通知扩展与上游启动器端点均在静态兜底之前。
-routes = [
-    *notify_api.routes(),
-    *launcher_api.routes(),
-]
+def build_routes(service=None):
+    """保持公共入口，应用工厂为每个实例绑定自己的启动器服务。"""
+    return [*notify_api.routes(), *launcher_api.routes(service)]
+
+
+routes = build_routes()

@@ -183,7 +183,9 @@ class GitManager(DeployConfig):
                     if i < max_retry - 1:
                         time.sleep(delay * random.uniform(0.5, 1.8))
                         ua = self.git_user_agent()
-        raise ExecutionError
+        raise ExecutionError(
+            11, f'git fetch {source} {branch}: 主源与全部镜像重试穷尽'
+        )
 
     def git_repository_init(
             self, repo, source='origin', branch='master', proxy='', ssl_verify=True

@@ -1,6 +1,6 @@
 """API 客户端模块。
 
-负责与 API 服务器进行 HTTP 交互，包括 Bug 日志上报、CL1 数据提交和公告获取，
+负责与 API 服务器进行 HTTP 交互，包括 CL1 数据提交和公告获取，
 支持主域名 (nanoda.work) 和备用域名 (nanoda.work) 的自动故障转移。
 """
 import threading
@@ -8,7 +8,6 @@ from typing import Any, Dict, List, Tuple, Optional
 
 import requests
 
-from module.base.device_id import get_device_id
 from module.logger import logger
 
 
@@ -20,7 +19,6 @@ class ApiClient:
     FALLBACK_DOMAIN = 'https://alas-apiv2.nanoda.work'
     
     # API端点路径
-    BUG_LOG_PATH = '/api/post/bug'
     CL1_DATA_PATH = '/api/telemetry'
     ANNOUNCEMENT_PATH = '/api/get/announcement'
 
@@ -135,51 +133,6 @@ class ApiClient:
                 last_error = str(e)
         
         return False, 0, last_error or 'Unknown error'
-    
-    @staticmethod
-    def _submit_bug_log(content: str, log_type: str):
-        """内部方法：提交 Bug 日志。
-        
-        注：服务端 API 若废弃则降级记录警告日志。
-
-        Args:
-            content (str): 日志文本内容。
-            log_type (str): 日志级别/类型。
-        """
-        try:
-            device_id = get_device_id()
-            data = {
-                'device_id': device_id,
-                'log_type': log_type,
-                'log_content': content,
-            }
-            
-            success, status_code, response_text = ApiClient._post_with_fallback(
-                ApiClient.BUG_LOG_PATH,
-                data,
-                timeout=5
-            )
-            
-            if success:
-                logger.info(f'[基础-API] Bug日志已提交: {content[:50]}...')
-            else:
-                logger.warning(f'[基础-API] 提交Bug日志失败: {response_text}')
-        except Exception as e:
-            logger.warning(f'[基础-API] 提交Bug日志失败: {e}')
-    
-    @classmethod
-    def submit_bug_log(cls, content: str, log_type: str = 'warning', enabled: bool = True):
-        """提交 Bug 日志（异步执行）。
-        
-        Args:
-            content (str): 日志内容。
-            log_type (str): 日志类型，默认为 'warning'。
-            enabled (bool): 是否启用上报，可传入 config.DropRecord_BugReport 配置值。
-        """
-        if not enabled:
-            return
-        from module.base.async_executor import async_executor
-        async_executor.submit(cls._submit_bug_log, content, log_type)
     
     @staticmethod
     def _submit_cl1_data(data: Dict[str, Any], timeout: int):

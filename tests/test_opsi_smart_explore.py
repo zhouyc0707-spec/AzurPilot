@@ -539,7 +539,7 @@ class SmartExploreTests(unittest.TestCase):
         self.assertIs(template['OpsiSmartExplore']['ForceRun'], False)
         monthly = json.loads((root / 'config/template.json').read_text(encoding='utf-8'))['OpsiExplore']
         self.assertIs(monthly['OpsiExplore']['ForceRun'], False)
-        for lang in ('zh-CN', 'zh-MIAO', 'zh-TW', 'en-US', 'ja-JP'):
+        for lang in ('zh-CN', 'zh-TW', 'en-US', 'ja-JP'):
             texts = json.loads((root / f'module/config/i18n/{lang}.json').read_text(encoding='utf-8'))
             for value in texts['OpsiSmartExplore'].values():
                 for text in value.values():

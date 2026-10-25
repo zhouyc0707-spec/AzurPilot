@@ -125,6 +125,8 @@ module/island_farm/ 等 16 个目录  # 薄壳：仅 button_extract 生成的 as
 
 新派遣通常按「打开空岗 → 委派 → 角色选择并确认 → 商品选择及材料检查 → 设置次数 → 确认」执行。种子、鱼苗等不足时由对应补货流程处理，数量按任务需求、材料和岗位上限决定，不统一假设都点最大。派遣成功后取得完成时间；餐饮可使用可靠预览省去回岗复检，其他路径继续实读岗位。全部安排完成后，将有效未来完成时间与约六小时复查候选交给 `task_delay()`，再应用全局岛屿时间对齐；牧场将计时器传给渔场统一调度。
 
+种子／鱼苗补货目标为尽力补齐：付款只确认一次，连续等待三秒且至少六帧仍停在购买数量页时，关闭购买弹窗并正向确认回到商店，返回选品页重新读库存。本轮记住该材料失败的最小购买量，现货够页面单次需求则直接派遣；不足时只尝试更少的实际缺口，再失败则跳过岗位。成功奖励和其点击冷却优先于背景页面，原手工数量、批次上限及库存复核保留。磨坊加工不套用岛币不足推断，保持原有确认补点与返回保护。
+
 ### 岗位领取与补货状态确认
 
 岗位领取、停留、关闭及追加派遣共用新截图状态循环：可见奖励优先于背景岗位或列表，`handle_island_reward_popup()` 只在实际点击安全区后返回 `True`，同一奖励的补点间隔为 2 秒；冷却期间仍截图观察，不点击背景。实际首次领取后清除上一笔奖励的冷却，不拖慢新的领取。奖励消失后，以岗位空闲、可委派、在产或完整列表等正向状态稳定至少 0.5 秒、覆盖至少 3 帧确认继续；迟到奖励清空稳定计时，不再固定等待后盲点两次安全区。关闭详情后用下一帧确认列表再结束；角色筛选残留、错误弹窗和超时沿原恢复路径处理。
@@ -196,7 +198,7 @@ flowchart TD
 | `island_farm.py` | 农田、果园、苗圃播种 | `IslandFarm` | 三区域独立阈值/默认作物；未达标作物每类最多占一岗；果园秋季限定（秋月梨/柿子）按 4x1 计种子；牛油果/菠萝可忽略；小天城（Amagi_chan）橡胶优先开关 |
 | `island_rancher.py` | 磨坊 + 牧场 | `IslandRancher` | 按岗位固定饲料种类补磨坊加工（小麦→鸡饲料等）；`run()` 末尾内联 `IslandFishery(...).run(ranch_finish_times=...)` 合并计时器 |
 | `island_fishery.py` | 渔场养殖 | `IslandFishery` | 鱼苗商店分淡水/海水/其他页签；按每苗产量反推购买数；体力门槛 98 |
-| `island_mine_forest.py` | 矿山/林场 | `IslandMineForest` | 仓库顺序不固定，自实现「OCR 中文品名 → 读数字」库存扫描；每岗产 4 个、各产物有最大连续次数；体力门槛 80 |
+| `island_mine_forest.py` | 矿山/林场 | `IslandMineForest` | 仓库顺序不固定，自实现「OCR 品名 → 读数字」库存扫描（`ITEM_CN_NAMES` 同时收录中文名与国际服英文名首词）；每岗产 4 个、各产物有最大连续次数；体力门槛 80 |
 | `island_grill.py` | 乌鱼烤肉店 | `IslandGrill` | 最薄的店铺：仅声明 8 菜品、2 套餐、2 岗位，全部逻辑走基类 |
 | `island_teahouse.py` | 白熊饮品 | `IslandTeahouse` | 季节高优先级饮品走固定坐标（不滑动不比色）；「迎春花茶优先生产」开关；为手动配置的季节饮品补注册防止 KeyError |
 | `island_restaurant.py` | 有鱼餐馆 | `IslandRestaurant` | 季节菜品自动切换槽位；覆盖 `select_product` 支持固定坐标季节菜 |
@@ -205,7 +207,7 @@ flowchart TD
 | `island_manufacture.py` | 制造工坊 | `IslandManufacture` | 四产线（木工/电子/工业/手工）各按配置启用岗位；完全覆盖 `run()` 与排产规则（数量由材料检查决定）；滑动 2 次 |
 | `island_business.py` | 商区经营 | `IslandBusiness` | 5 商店 × 蓝/黄/深蓝/灰按钮状态机；分批经营（默认批 1=简餐/餐馆/咖啡，批 2=饮品/烤肉）；季节商品库存 <7 时替换 fallback；加成（30/20/10%）档位替换；开始经营后 `task_delay` 触发对应餐馆生产任务补货 |
 | `island_daily_gather.py` | 每日采集 | `IslandDailyGather` | 每日 03:10 / 18:00 两次；三槽位派角色，体力阈值 100，忽略 WorkerJuu |
-| `island_daily_interact.py` | 摸猫、JUU 速运、商区外送、每周照相 | `IslandDailyInteract` | 开发计划标题、页签及图标状态稳定后区分有任务、无任务与未知；地点交互共用 `delivery_location_flow`；检查或执行失败 60 分钟重试 |
+| `island_daily_interact.py` | 摸猫、JUU 速运、商区外送、每周照相 | `IslandDailyInteract` | 开发计划标题、页签及图标状态稳定后区分有任务、无任务与未知；地点交互共用 `delivery_location_flow`；每周照相先等照相按钮，拍照后处理预览，返回支持国际服 Back 入口；检查或执行失败 60 分钟重试 |
 | `order.py`（旧 `island_daily_order.py` 兼容转发） | 每日订单 | `IslandOrder` | 普通／紧急／季节订单；普通保留 `RejectFilter` 并扣除库存与菜单保留，季节缺货触发规划；紧急周配额保留，汇总冷却与每日刷新调度 |
 | `island_air_drop.py` | 每日空投 + 好友岛偷补给 | `IslandAirDrop` | 以服务器 0 点为每日边界；5 小时偷取冷却（`LastSteal` 落配置）；拜访次数 OCR 复检 |
 | `island_pearl_sell.py` | 珍珠每周采购售卖 | `IslandPearlSell` | 周一 01:00 交易窗口；本岛价不达标时按排行榜拜访好友岛比价（买 1.1 折算）；每日 03:00 可选价格刷新 |
@@ -452,7 +454,7 @@ stateDiagram-v2
 | `GameStuckError` | 导航（进入管理/地图/页签）、`post_open` 反复重试、仓库筛选超时、选品连续失败超限 | 直接上抛，交给调度器按卡死流程恢复 |
 | `GameBugError` | 每轮结束检测到 `ERROR1` 弹窗（置 `island_error` 标志）、拜访卡死 | 各任务 `run()` 尾部统一抛出，调度器重启游戏客户端后重试 |
 | `GameTooManyClickError`（预防） | 同一按钮高频点击触发保护 | 代码主动规避：`select_product` 前清理 `click_record`、滑动后点安全区域且 `control_check=False`、地图确认按钮只在配置窗口（默认前 10 秒）内补点 |
-| 阶段级失败（返回 False/0） | 拜访超时、角色无可用、材料不足、按钮状态未知 | 记录警告后跳过该岗位/地点，不打断整轮任务；`IslandDailyInteract` 失败时延时 60 分钟重试 |
+| 阶段级失败（返回 False/0） | 拜访超时、角色无可用、材料不足（含岛币不足导致种苗补货失败）、按钮状态未知 | 记录警告后跳过该岗位/地点，不打断整轮任务；`IslandDailyInteract` 失败时延时 60 分钟重试 |
 
 错误处理的设计取向是「局部失败不拖垮全局」：单个岗位无角色、单个菜品原料不足、单个好友不可访问都只影响自身，循环继续处理其余岗位；只有 UI 导航层面无法回到已知状态才升级为异常。`GameBugError` 与 `GameStuckError` 的分工来自 `module/exception.py`：前者明确表示客户端 bug（重启可恢复），后者表示操作卡死。
 
@@ -486,6 +488,7 @@ stateDiagram-v2
 - **OCR 兜底链是有意设计**：材料 `150/(2+6)`、体力 `26/110` 都存在斜杠被误识别的已知问题，`island.py`/`island_select_character.py` 中多组候选区域、前缀读取、颜色条估算是踩坑后的补偿，勿简化为单区域 OCR。
 - **季节单例**：`get_global_season_config` 在进程内缓存，单测中需像 `tests/test_island_shop_production.py` 那样 patch 掉它，否则配置泄漏到其他测试。
 - **渔场与牧场共享资产**：`island_fishery.py` 同时导入 `island_fishery` 与 `island_rancher` 的 assets，且后置导入覆盖 `island.assets` 的旧同名定义——调整资源目录时保持导入顺序。
+- **补充其他服务器资源时连同覆盖文件一起提供**：不少岛屿资源靠 `.BUTTON.png` 把点击位置指向别处（岗位卡片标题 → 岗位格、页签 → 对侧页签、每周照相任务标题 → 地图按钮）。某服务器只放基础图而缺少对应 `.BUTTON.png` 时，`button_extract` 会把点击位置退化为识别区本身，表现为能识别但点错位置。国际服文案通常更长，裁剪时还需注意代码里写死的搜索区域：`DEVELOPMENT_PLAN_TASK_LIST_AREA` 宽 101 像素，任务名模板不能超过该宽度。
 - **岛屿内禁用舰船获取弹窗**：`IslandUI.ui_additional` 固定 `get_ship=False`，岛屿流程的状态循环必须带 `get_ship=False` 的导航调用，否则可能误点宿舍相关弹窗。
 
 ## 17. 已知限制
