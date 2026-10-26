@@ -6,8 +6,9 @@ export const FLEET_ROTATION = 'FleetRotation'
 export const FLEET_EQUIPMENT = 'FleetEquipment'
 export const FLEET_LEVEL_TRAINING = 'FleetLevelTraining'
 export const FLEET_AFFINITY_TRAINING = 'FleetAffinityTraining'
+export const FLEET_TRAINING = 'FleetTraining'
 export function taskNavItems(key: string | null, tasks: string[]) {
-  if (key === 'FleetManagement') return [...tasks, FLEET_ROTATION, FLEET_LEVEL_TRAINING, FLEET_AFFINITY_TRAINING, FLEET_EQUIPMENT, MIND_CALCULATOR, FLEET_TECHNOLOGY]
+  if (key === 'FleetManagement') return [...tasks, FLEET_ROTATION, FLEET_TRAINING, FLEET_EQUIPMENT, MIND_CALCULATOR, FLEET_TECHNOLOGY]
   return key === 'Alas' ? [tasks[0]!, SCHEDULER_EDITOR, ...tasks.slice(1)] : tasks
 }
 
@@ -22,8 +23,8 @@ export function ownerTaskOfGroup(args: Record<string, Record<string, Record<stri
 }
 
 /** 独立 WebUI 页面使用界面翻译，其余取任务表里的显示名。 */
-export function taskLabel(task: string, ui: (key: 'nav.schedulerProgram' | 'mind.title' | 'fleetTech.nav' | 'rotation.title' | 'fleetEquipment.title' | 'training.levelTitle' | 'training.affinityTitle') => string, t: (key: string) => string) {
-  if (task === FLEET_LEVEL_TRAINING) return ui('training.levelTitle')
-  if (task === FLEET_AFFINITY_TRAINING) return ui('training.affinityTitle')
+export function taskLabel(task: string, ui: (key: 'nav.schedulerProgram' | 'mind.title' | 'fleetTech.nav' | 'rotation.title' | 'fleetEquipment.title' | 'training.title') => string, t: (key: string) => string) {
+  if (task === FLEET_TRAINING) return ui('training.title')
+  if (task === FLEET_LEVEL_TRAINING || task === FLEET_AFFINITY_TRAINING) return ui('training.title')
   return task === FLEET_EQUIPMENT ? ui('fleetEquipment.title') : task === FLEET_ROTATION ? ui('rotation.title') : task === SCHEDULER_EDITOR ? ui('nav.schedulerProgram') : task === MIND_CALCULATOR ? ui('mind.title') : task === FLEET_TECHNOLOGY ? ui('fleetTech.nav') : t(`Task.${task}.name`)
 }

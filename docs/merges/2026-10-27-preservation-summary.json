@@ -1,0 +1,288 @@
+{
+  "base": "5f237f6a9",
+  "before": "bde73fed1",
+  "upstream": "a68ba971e",
+  "custom_paths": 996,
+  "upstream_changed_paths": 46,
+  "overlap_paths": 21,
+  "exclusive_paths_checked": 975,
+  "exclusive_existing_blob_checks": 968,
+  "exclusive_deletion_checks": 7,
+  "exclusive_unexpected_changes": [],
+  "allowed_document_changes": [
+    {
+      "path": "定制化修改清单.md",
+      "before_blob": "06b4d470193d9ce54528f6c7926b5212ac5c8c90",
+      "current_blob": "a9cab1244ff924819bfb41be9863aea8042f3677"
+    }
+  ],
+  "reviewed_exclusive_file_changes": [
+    {
+      "path": "module/config/i18n/zh-MIAO.json",
+      "before_blob": "a01976513349efe85f8f6c8ee66fd0517bd31f19",
+      "current_blob": "65cbf1154036408230ee00bb4c1d567c5ca307ba",
+      "review_reason": "原5263叶中仅2个标题更新、4个旧间隔翻译叶迁到2个共用小时翻译叶；其余原叶保持，词典、喵语入口、准确候补排序说明不删除。4项迁移逐条绑定旧值、新值及迁移源码hash，未设置笼统删除许可。"
+    }
+  ],
+  "configuration_custom_leaf_count": 6405,
+  "configuration_removed_leaf_count": 15,
+  "configuration_unexpected_change_count": 0,
+  "configuration_unexpected_restore_count": 0,
+  "generated_custom_attributes_checked": 40,
+  "generated_custom_attributes_changed": [],
+  "python_paths_checked": 499,
+  "python_custom_entities_checked": 7137,
+  "python_exact_comparisons": 7129,
+  "python_missing_entities_count": 0,
+  "python_changed_local_only_entities_count": 0,
+  "python_semantic_overlap_count": 8,
+  "python_restored_deleted_entities_count": 0,
+  "configuration_migrated_leaf_count": 4,
+  "mechanical_preservation_passed": true,
+  "semantic_review": {
+    "base": "5f237f6a9",
+    "before": "bde73fed1",
+    "upstream": "a68ba971e",
+    "reviewed_entities": [
+      {
+        "path": "module/api/config_service.py",
+        "entity": "ConfigService",
+        "line": 88,
+        "current_ast_sha256": "112c0d3f83f38617d2ff2aa5d99dc2b142cf2baa2fada4f28ce6043bc83cd83c",
+        "current_blob": "031e2c9319325942291d2953c71c5e0f3748581b",
+        "review_result": "本地保留并融合上游",
+        "reason": "类整体吸收共用间隔迁移；本地维护日/困难门禁、显式NextRun优先、数字归一化、META冲突拒绝、喵语、规划报告和旧资源参数迁移均保持，非交集方法由AST精确比较覆盖。"
+      },
+      {
+        "path": "module/api/config_service.py",
+        "entity": "ConfigService.read",
+        "line": 259,
+        "current_ast_sha256": "90252dcfcc51fe6dad1ca1a3e7d873bc3f7251ae61042c7862f3f9ad405a4049",
+        "current_blob": "031e2c9319325942291d2953c71c5e0f3748581b",
+        "review_result": "本地保留并融合上游",
+        "reason": "保留旧资源字段迁移后新增FleetInfo共用间隔转换，再执行原META及商店迁移；旧分钟/小时独立项从返回结构移除，原文件在只读get中不落盘，完成记录保持。旧有效间隔原本就是启用项min，新值换单位后保持该时长。"
+      },
+      {
+        "path": "module/campaign/fleet_rotation.py",
+        "entity": "preflight_rotation",
+        "line": 32,
+        "current_ast_sha256": "e966295c252ba166364a2f423bcf54b3f202f4c2a0b6b6aac6f7cae3901586db",
+        "current_blob": "d33d456ddcc6ec11d818c531c52c9c9024df163c",
+        "review_result": "本地保留并融合上游",
+        "reason": "保留单独培养时GameStuckError/GameTooManyClickError/RequestHumanTakeover转FleetManagementError的人工核对边界；加入due触发心情定期实读，纯心情分支mark_checked，关闭全部功能才清检查上下文。未移除本地异常链或互换断点保护。"
+      },
+      {
+        "path": "module/combat/auto_search_combat.py",
+        "entity": "AutoSearchCombat",
+        "line": 28,
+        "current_ast_sha256": "6cdc1d9d63d3322aff0bbb410d2ccf897f3813018efee0bb364807948a1e65d8",
+        "current_blob": "93eb6a351241d57f64bc9f096102c426e547cd34",
+        "review_result": "本地保留并融合上游",
+        "reason": "类整体新增各流程边界的OFF截图确认清理，防止跨流程旧帧拼成双帧；本地恢复自律时检测奖励菜单/已返回关卡并抛CampaignEnd的出口完整保留。"
+      },
+      {
+        "path": "module/combat/auto_search_combat.py",
+        "entity": "AutoSearchCombat.map_offensive_auto_search",
+        "line": 134,
+        "current_ast_sha256": "b75a70f644be75e73b39145c0f32fee34de2d14650dce35d6e0b72f06881a562",
+        "current_blob": "93eb6a351241d57f64bc9f096102c426e547cd34",
+        "review_result": "本地保留并融合上游",
+        "reason": "在开始恢复自律时清空_auto_search_off_frame，其后原本地is_in_auto_search_menu或_handle_auto_search_menu_missing正向确认和CampaignEnd出口保持；两者分别解决旧帧误触与关卡已结束死等，可并行生效。"
+      },
+      {
+        "path": "module/config/config_generated.py",
+        "entity": "GeneratedConfig",
+        "line": 9,
+        "current_ast_sha256": "0f51be266e4663473676f4ce9a26a376cf9b7d65e6d72b4ac215142db1de7374",
+        "current_blob": "652e78060aaf7a1ee5dbeee82f3f5b4bba929c4e",
+        "review_result": "本地保留并融合上游",
+        "reason": "生成配置将上游共有的两个30分钟间隔属性替换为共用0.5小时属性；不是删除本地新增配置。40个本地属性均精确一致；启用状态、目标值和State仍存在，旧保存值经双入口迁移。"
+      },
+      {
+        "path": "module/config/config_updater.py",
+        "entity": "ConfigUpdater",
+        "line": 667,
+        "current_ast_sha256": "ff975eb70c1987ad115c8baa52fbf5e9a84b4fb18cf98226d8b22fd81b321f04",
+        "current_blob": "cf07d9490b2df5dafbd76c220866f44be654c7af",
+        "review_result": "本地保留并融合上游",
+        "reason": "仅向redirection新增FleetInfo到FleetTraining.CheckIntervalHours的转换；本地persist隐藏状态保存、META迁移、商店迁移及强制默认规则未改。"
+      },
+      {
+        "path": "tests/test_fleet_training.py",
+        "entity": "TrainingIntegrationTests",
+        "line": 176,
+        "current_ast_sha256": "4880903f51ab01076e54ad9d605cc0849c5bc16de8e8db48023255480148dfb3",
+        "current_blob": "aa2be097704f7cff0e91fd11a13db9d221d2c7fb",
+        "review_result": "本地保留并融合上游",
+        "reason": "保留本地人工停止错误类型/异常原因/断点和不重复交换断言，新增已确认位置心情记录、共用小时单位、只读API和运行器迁移且保留State的测试；旧上游独立间隔预期改为共用字段，与产品行为同步。"
+      }
+    ],
+    "semantic_review_completed": true,
+    "scope": "8个Python AST交集按三方diff逐项复核，哈希绑定当前源码；非真实游戏验收"
+  },
+  "frontend_review": {
+    "base": "5f237f6a9",
+    "before": "bde73fed1",
+    "upstream": "a68ba971e",
+    "custom_frontend_paths": 106,
+    "exclusive_frontend_paths_verified_by_main_audit": 103,
+    "mock_local_added_blocks": 20,
+    "mock_local_added_blocks_retained": 20,
+    "unexplained_lost_blocks": [],
+    "block_evidence": [
+      {
+        "before_line": 3,
+        "line_count": 104,
+        "sha256": "4a38672e56b4e9e55e81c14972374c8fc5839eb7b0dceeddc569dbd2c116d8b9",
+        "retained_exactly": true
+      },
+      {
+        "before_line": 510,
+        "line_count": 1,
+        "sha256": "3ca222808e35cc779716d416ad453f7ef023c461678defb843eb1129fae7adb8",
+        "retained_exactly": true
+      },
+      {
+        "before_line": 537,
+        "line_count": 54,
+        "sha256": "20e6cc7620347c3ac47ba24086f7a2ae0f0ea713345753e53860b96d0c2a797e",
+        "retained_exactly": true
+      },
+      {
+        "before_line": 614,
+        "line_count": 5,
+        "sha256": "656adcd411c50151708f6adbfe978fc8e6e4e138a607d164fa3049b87731ddb8",
+        "retained_exactly": true
+      },
+      {
+        "before_line": 621,
+        "line_count": 1,
+        "sha256": "1cfc7180bbb86ab784d30dcdbb5869f5074561c57d2aa6a2b0c4a201b351bce8",
+        "retained_exactly": true
+      },
+      {
+        "before_line": 638,
+        "line_count": 4,
+        "sha256": "c0563cfdfc0043ae203853a01ee21be05ad7cc67953ace24665c17d42d589b92",
+        "retained_exactly": true
+      },
+      {
+        "before_line": 650,
+        "line_count": 1,
+        "sha256": "11d8c66ef5d78f5dc92305a282d2c5814ea85f7a2e5d782f18d1e4f0fe927623",
+        "retained_exactly": true
+      },
+      {
+        "before_line": 665,
+        "line_count": 3,
+        "sha256": "8dacca03d1d83230e4d5275748858145752c87d8ef11f6a1f757b9b2e8a4d3e3",
+        "retained_exactly": true
+      },
+      {
+        "before_line": 799,
+        "line_count": 7,
+        "sha256": "bead0afdea15dea07d257603f53a1ae0a390ef5b25fec530aa2ea34882424f2d",
+        "retained_exactly": true
+      },
+      {
+        "before_line": 855,
+        "line_count": 1,
+        "sha256": "f9ea37040bfb8ce4855bf125afc245e4cecb9bb0e4e9500b07e3b2ed91001b9c",
+        "retained_exactly": true
+      },
+      {
+        "before_line": 859,
+        "line_count": 1,
+        "sha256": "5f2d20ec83dc6f5b210acf7a7ef14a6f0e8d3d722b00e92509d1efeaa452e5e7",
+        "retained_exactly": true
+      },
+      {
+        "before_line": 961,
+        "line_count": 2,
+        "sha256": "8ee5d3c2f49aa1c03f879c9100631911f7a54adb76f4dda4830320098014226a",
+        "retained_exactly": true
+      },
+      {
+        "before_line": 1064,
+        "line_count": 1,
+        "sha256": "62e749a41587aea7700b5a6b19324694e3d93a9f590fa801cfaffda3b6424440",
+        "retained_exactly": true
+      },
+      {
+        "before_line": 1144,
+        "line_count": 2,
+        "sha256": "b4f6dbac6dde13c9f7bad96a6bfe24d5d4ce4260a2557c44a57d2beca696a4bd",
+        "retained_exactly": true
+      },
+      {
+        "before_line": 1164,
+        "line_count": 2,
+        "sha256": "bdf34122caba0178525254d11ec19629112568fefae0d1f93b2dfd7e83cdbba7",
+        "retained_exactly": true
+      },
+      {
+        "before_line": 1401,
+        "line_count": 251,
+        "sha256": "ac632c88ac2fa0da451e37bf92ff0b639d3cad26a5b4c626c05d8ec24e77be34",
+        "retained_exactly": true
+      },
+      {
+        "before_line": 1659,
+        "line_count": 2,
+        "sha256": "2f393c4fb9b340ccab2c03523507dfc99fa0f8beb81f97df59831ad3fcb38c5f",
+        "retained_exactly": true
+      },
+      {
+        "before_line": 1693,
+        "line_count": 2,
+        "sha256": "06df14e17f844d8efb949ff8c2bfeba176be61289d14cedcc65bce0ce0f47434",
+        "retained_exactly": true
+      },
+      {
+        "before_line": 1700,
+        "line_count": 1,
+        "sha256": "3401a18718fa801b0bd894e4002552e91527103e41234d53784f2d7d1cab5c8d",
+        "retained_exactly": true
+      },
+      {
+        "before_line": 1808,
+        "line_count": 1,
+        "sha256": "44f351f91ec135d71b5565aa5acebfb7e3800586fa032ac3a24a0670001bccc1",
+        "retained_exactly": true
+      }
+    ],
+    "overlap_reviews": [
+      {
+        "path": "frontend/e2e/mock.spec.ts",
+        "current_blob": "b2acb26e9bc2b10abada51cf3b5b5caa391a0e50",
+        "reason": "本地模拟器/旧版/趋势/指挥喵测试的新增或替换块逐块仍在；上游原培养独立页测试改为统一页面、共用间隔和记录表回归。"
+      },
+      {
+        "path": "frontend/src/app/App.tsx",
+        "current_blob": "df08ca7971699b90b1ac3ea8123acdd7e8c9616f",
+        "reason": "仅导入FLEET_TRAINING并将统一培养页加入隐藏右栏条件；原旧版外壳、Activity缓存、launcher/preview订阅及所有其他右栏条件不变。"
+      },
+      {
+        "path": "frontend/src/main.tsx",
+        "current_blob": "9bd4ddb001d1df4d81d861e475c1507169af265d",
+        "reason": "新增统一FleetTraining路由，旧等级/好感链接重定向；其余本地路由和页面缓存结构保留。"
+      }
+    ]
+  },
+  "upstream_adoption": {
+    "upstream_nonoverlap_paths": 25,
+    "exact_upstream_paths": 25,
+    "adapted": [],
+    "errors": []
+  },
+  "syntax": {
+    "python_files": 2724,
+    "errors": []
+  },
+  "generation": {
+    "generated_files": 77,
+    "changed": [],
+    "stable": true
+  },
+  "limitations": "静态内容审计与定向测试；不代替真实账号、跨服和桌面启动器实机验收。"
+}

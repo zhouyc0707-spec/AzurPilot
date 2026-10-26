@@ -34,7 +34,6 @@ class RotationEmotion(Emotion):
     @property
     def selected_only(self):
         return (self.rotation_enabled
-                and self.config.cross_get(ROTATION_PATH + '.Enabled', False) is True
                 and self.config.cross_get(ROTATION_PATH + '.SelectedOnly', False) is True)
 
     @property

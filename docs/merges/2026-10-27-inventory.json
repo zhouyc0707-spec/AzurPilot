@@ -1,0 +1,42 @@
+{
+  "base": "5f237f6a912d86f75309829127f0b45d29379bc2",
+  "before": "bde73fed1b798e9f7b5d823d0840a9c332b26076",
+  "upstream": "a68ba971e42a7ddc5f2fea9a010ca46d03f97b79",
+  "merge_base": "5f237f6a912d86f75309829127f0b45d29379bc2",
+  "old_new_counts": "0\t9",
+  "custom_paths": 996,
+  "custom_status_counts": {
+    "A": 676,
+    "M": 313,
+    "D": 7
+  },
+  "upstream_paths": 46,
+  "upstream_status_counts": {
+    "M": 40,
+    "A": 6
+  },
+  "overlap": [
+    "config/template.json",
+    "docs/modules/campaign.md",
+    "docs/modules/combat.md",
+    "docs/modules/game/retire-equipment.md",
+    "docs/modules/infra/notify-llm-logger.md",
+    "docs/modules/webui/frontend.md",
+    "frontend/e2e/mock.spec.ts",
+    "frontend/src/app/App.tsx",
+    "frontend/src/main.tsx",
+    "module/api/config_service.py",
+    "module/campaign/fleet_rotation.py",
+    "module/combat/auto_search_combat.py",
+    "module/config/argument/args.json",
+    "module/config/argument/argument.yaml",
+    "module/config/config_generated.py",
+    "module/config/config_updater.py",
+    "module/config/i18n/en-US.json",
+    "module/config/i18n/ja-JP.json",
+    "module/config/i18n/zh-CN.json",
+    "module/config/i18n/zh-TW.json",
+    "tests/test_fleet_training.py"
+  ],
+  "custom_exclusive_paths": 975
+}

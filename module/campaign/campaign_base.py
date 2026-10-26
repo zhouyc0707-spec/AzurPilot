@@ -273,7 +273,7 @@ class CampaignBase(CampaignUI, Map, AutoSearchCombat):
                 training_due = training is not None and training()
                 training_checked = training is not None
                 if training_due and not training_due_noted:
-                    logger.info('培养实读间隔已到，先完成当前地图，下次出击前核对等级/好感')
+                    logger.info('共用实读间隔已到，先完成当前地图，下次出击前核对舰名、心情及已启用培养条件')
                     training_due_noted = True
             except CampaignEnd:
                 training = self.__dict__.get('_fleet_training_after_battle')

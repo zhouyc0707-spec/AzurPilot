@@ -12,7 +12,7 @@ from module.retire.fleet_management import FleetManagement
 from module.runtime.fleet_rotation import (ROTATION_PATH, active_fleets, begin_round, calibration_changes,
                                          minimum_morale, parse_rules, rank_sources, recorded_morale, supported)
 from module.runtime.fleet_equipment import EQUIPMENT_PATH
-from module.runtime.fleet_training import goals
+from module.runtime.fleet_training import due, goals, mark_checked
 
 
 def _required(emotion, role, battle):
@@ -39,7 +39,7 @@ def preflight_rotation(runner, battle, mode):
     campaign = runner.campaign
     config = campaign.config
     mood_enabled = config.cross_get(ROTATION_PATH + '.Enabled', False) is True
-    if not goals(config):
+    if not mood_enabled and not goals(config):
         previous_context = runner.__dict__.get('_fleet_rotation_context', {})
         previous_context.pop('training_checked_at', None)
         previous_context.pop('training_goals', None)
@@ -105,7 +105,7 @@ def preflight_rotation(runner, battle, mode):
         config.cross_set(ROTATION_PATH + '.State', states)
         context['scanned'] = False
         context.pop('portraits', None)
-    fresh = not context.get('scanned', False)
+    fresh = not context.get('scanned', False) or due(config, context)
     current_fleet = None
     equipment_enabled = config.cross_get(EQUIPMENT_PATH + '.Enabled', False) is True
     equipment_used = False
@@ -131,6 +131,8 @@ def preflight_rotation(runner, battle, mode):
             emotion.calibrate_selected(fresh_readings)
             context['scanned'] = True
             context['portraits'] = manager.__dict__.get('_slot_portraits', {})
+            if not goals(config):
+                mark_checked(config, context)
             for fleet in recovering:
                 states.pop(str(fleet), None)
             config.cross_set(ROTATION_PATH + '.State', states)

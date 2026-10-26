@@ -14,6 +14,6 @@ describe('智能换船配置和入口', () => {
   it('入口仅属于舰队管理，显示独立页面名称', () => {
     expect(taskNavItems('FleetManagement', ['FleetInfo'])).toContain(FLEET_ROTATION)
     expect(taskNavItems('Tool', ['FleetScan'])).not.toContain(FLEET_ROTATION)
-    expect(taskLabel(FLEET_ROTATION, () => rotationZhCN['rotation.title'], () => '不应使用任务翻译')).toBe('智能换船-心情控制')
+    expect(taskLabel(FLEET_ROTATION, () => rotationZhCN['rotation.title'], () => '不应使用任务翻译')).toBe('换船配置')
   })
 })

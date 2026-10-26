@@ -19,7 +19,9 @@ from module.api.protocol import ApiError
 from module.combat.emotion_state import EmotionRecoveryState
 from module.config.deep import deep_get
 from module.config.config_updater import campaign_event_options, refresh_campaign_events
-from module.config.redirect_utils.utils import meta_assist_limit_redirect, sea_miles_interval_redirect
+from module.config.redirect_utils.utils import (
+    fleet_training_interval_redirect, meta_assist_limit_redirect, sea_miles_interval_redirect,
+)
 from module.config.time_source import now as current_time
 from module.config.transaction import config_transaction
 
@@ -306,6 +308,12 @@ class ConfigService:
                 if current_opsi.get(field) is None and legacy_opsi.get(field) is not None:
                     merged['OpsiHazard1Leveling']['OpsiHazard1Leveling'][field] = legacy_opsi[field]
                 merged.get('OpsiGeneral', {}).get('OpsiGeneral', {}).pop(field, None)
+        fleet = data.get('FleetInfo')
+        if isinstance(fleet, dict):
+            merged['FleetInfo']['FleetTraining']['CheckIntervalHours'] = fleet_training_interval_redirect(fleet)
+            for group in ('FleetLevelTraining', 'FleetAffinityTraining'):
+                merged['FleetInfo'][group].pop('CheckIntervalHours', None)
+                merged['FleetInfo'][group].pop('CheckInterval', None)
         from module.config.redirect_utils.shop import migrate_shop_options
         from module.config.redirect_utils.meta import migrate_meta_assist
 

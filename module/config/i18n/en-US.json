@@ -6988,11 +6988,11 @@
   },
   "FleetRotation": {
     "_info": {
-      "name": "Smart rotation - morale control",
+      "name": "Rotation configuration",
       "help": "Normal main and event stages only; disabled by default."
     },
     "Enabled": {
-      "name": "Enable smart rotation - morale control",
+      "name": "Enable morale scheduling",
       "help": "Normal main and event stages only; disabled by default."
     },
     "SelectedOnly": {
@@ -7020,10 +7020,6 @@
     "Target": {
       "name": "Target level",
       "help": "Off by default. Uses training slots and reserves. Verify every enabled goal on the same ship before completion; morale swaps keep progress."
-    },
-    "CheckInterval": {
-      "name": "Read interval (minutes)",
-      "help": "0 checks every battle result. Any due interval verifies all enabled goals."
     }
   },
   "FleetAffinityTraining": {
@@ -7038,16 +7034,16 @@
     "Target": {
       "name": "Target affinity",
       "help": "Off by default. Uses training slots and reserves. Verify every enabled goal on the same ship before completion; morale swaps keep progress."
-    },
-    "CheckInterval": {
-      "name": "Read interval (minutes)",
-      "help": "0 checks every battle result. Any due interval verifies all enabled goals."
     }
   },
   "FleetTraining": {
     "_info": {
       "name": "Training records",
       "help": "Persists verified readings, completed goals and pending swaps across restarts."
+    },
+    "CheckIntervalHours": {
+      "name": "Shared read interval (hours)",
+      "help": "Shared by morale, level and affinity; nonnegative decimals with no upper limit. 0 checks after every battle, then reads after the current map. Migrate the shortest enabled legacy interval; retain completion records."
     },
     "State": {
       "name": "Training records",

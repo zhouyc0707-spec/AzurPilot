@@ -2637,20 +2637,18 @@ FleetLevelTraining:
   Target:
     value: 120
     validate: [1, 125]
-  CheckInterval:
-    value: 30
-    validate: [0, 1440]
 
 FleetAffinityTraining:
   Enabled: false
   Target:
     value: 100
     validate: [1, 200]
-  CheckInterval:
-    value: 30
-    validate: [0, 1440]
 
 FleetTraining:
+  CheckIntervalHours:
+    value: 0.5
+    valuetype: float
+    validate: '^[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$'
   State:
     type: stored
     value: {}

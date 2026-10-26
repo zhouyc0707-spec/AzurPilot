@@ -20,9 +20,10 @@ from module.ui.assets import BACK_ARROW
 
 def parse_affinity(text):
     text = re.sub(r'\s+', '', unicodedata.normalize('NFKC', str(text)))
-    match = re.fullmatch(r'好感度达到100\(当前(\d{1,3})\)', text)
-    if match and 0 <= int(match[1]) <= 200:
-        return int(match[1])
+    # 部分誓约书的条件行会带入相邻状态字，只读取完整的当前值字段；多个字段不能猜测。
+    matches = re.findall(r'好感度达到100\(当前(\d{1,3})\)', text)
+    if len(matches) == 1 and 0 <= int(matches[0]) <= 200:
+        return int(matches[0])
     return None
 
 
@@ -30,6 +31,17 @@ class AffinityText(Ocr):
     def pre_process(self, image):
         gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
         return cv2.resize(255 - gray, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+
+
+class TrainingExp(ShipExp):
+    """沿用经验识别与文本修正，解析失败保留未知，避免展示成实际的零经验。"""
+
+    def ocr(self, image, direct_ocr=False):
+        text = Ocr.ocr(self, image, direct_ocr=direct_ocr)
+        if isinstance(text, list):
+            text = text[0] if text else ''
+        match = re.search(r'(\d+)/', str(text))
+        return int(match[1]) if match else None
 
 
 class AffinityReader:
@@ -64,15 +76,16 @@ class FleetTrainingReader(FleetShipDetail):
             self._back_to_formation()
 
     def inventory(self, fleets):
-        """只读所需舰队详情，等级单独开启时不额外进入船坞读心情。
+        """按详情固定舰位定位，再从编队舰位4、1进入选船页实读舰名和心情。
 
         Pages:
             in: Any
             out: 最后一个舰队的编队页
         """
+        fleets = sorted(fleets)
         result = deepcopy(self.config.cross_get(self.manager.RESULT_PATH, {}))
         scanner = FormationDetailScanner()
-        for fleet in sorted(fleets):
+        for fleet in fleets:
             image, _, _ = self.manager._capture_formation(fleet)
             formation = scanner.scan(image)
             for category in ('main', 'vanguard'):
@@ -88,7 +101,10 @@ class FleetTrainingReader(FleetShipDetail):
                     records.append(ship)
                 result.setdefault(category, {})[str(fleet)] = records
         self.manager._save_result(result)
-        return result
+        for fleet in fleets:
+            self.manager.prepare_rotation(fleet)
+            self.manager.finish_rotation()
+        return self.config.cross_get(self.manager.RESULT_PATH, {})
 
     def _affinity(self):
         reader = AffinityReader()
@@ -126,7 +142,7 @@ class FleetTrainingReader(FleetShipDetail):
                 continue
             values = {}
             if 'level' in targets:
-                level_reader, exp_reader = ShipLevel(OCR_SHIP_LEVEL, name='培养等级'), ShipExp(OCR_SHIP_EXP, name='培养经验')
+                level_reader, exp_reader = ShipLevel(OCR_SHIP_LEVEL, name='培养等级'), TrainingExp(OCR_SHIP_EXP, name='培养经验')
                 category = 'main' if slot <= 3 else 'vanguard'
                 reference = next((ship.get('level', 0) for ship in self.config.cross_get(self.manager.RESULT_PATH, {})
                                   .get(category, {}).get(str(fleet), []) if ship.get('slot') == slot), 0)

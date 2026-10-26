@@ -3839,15 +3839,14 @@
     },
     "FleetLevelTraining": {
       "Enabled": false,
-      "Target": 120,
-      "CheckInterval": 30
+      "Target": 120
     },
     "FleetAffinityTraining": {
       "Enabled": false,
-      "Target": 100,
-      "CheckInterval": 30
+      "Target": 100
     },
     "FleetTraining": {
+      "CheckIntervalHours": 0.5,
       "State": {}
     },
     "FleetEquipment": {

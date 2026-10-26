@@ -667,6 +667,7 @@ class ConfigGenerator:
 class ConfigUpdater:
     # 格式：source, target, (可选) convert_func
     redirection = [
+        ('FleetInfo', 'FleetInfo.FleetTraining.CheckIntervalHours', fleet_training_interval_redirect),
         ('OpsiGeneral.OpsiGeneral.ActionPointCheckInterval',
          'OpsiHazard1Leveling.OpsiHazard1Leveling.ActionPointCheckInterval'),
         ('OpsiGeneral.OpsiGeneral.SkipStrategicSearchCheck',

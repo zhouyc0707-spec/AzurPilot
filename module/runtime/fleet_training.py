@@ -1,9 +1,10 @@
 """普通舰队培养条件与持久记录；不操作设备，不估算等级或好感。"""
 
 from copy import deepcopy
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from module.config.time_source import now
+from module.config.redirect_utils.utils import fleet_training_interval_redirect
 from module.exception import FleetManagementError
 from module.runtime.mind_calculator import find_ship
 from module.runtime.fleet_rotation import ROTATION_PATH, active_fleets
@@ -11,6 +12,7 @@ from module.runtime.fleet_rotation import ROTATION_PATH, active_fleets
 LEVEL_PATH = 'FleetInfo.FleetLevelTraining'
 AFFINITY_PATH = 'FleetInfo.FleetAffinityTraining'
 TRAINING_PATH = 'FleetInfo.FleetTraining.State'
+INTERVAL_PATH = 'FleetInfo.FleetTraining.CheckIntervalHours'
 
 
 def goals(config):
@@ -20,24 +22,37 @@ def goals(config):
 
 
 def interval(config):
-    return min((config.cross_get(path + '.CheckInterval', 30) for path in (LEVEL_PATH, AFFINITY_PATH)
-                if config.cross_get(path + '.Enabled', False) is True), default=30)
+    """三种调度共用小时实读间隔，兼容尚未迁移的独立旧配置。"""
+    hours = config.cross_get(INTERVAL_PATH, None)
+    return fleet_training_interval_redirect(config.cross_get('FleetInfo', {})) if hours is None else hours
 
 
 def due(config, context):
-    if not goals(config):
-        return False
     signature = goals(config)
+    mood = config.cross_get(ROTATION_PATH + '.Enabled', False) is True
+    if not signature and not mood:
+        return False
     checked = context.get('training_checked_at')
     return (context.get('training_goals') != signature
+            or context.get('training_mood') != mood
             or context.get('training_rules') != config.cross_get(ROTATION_PATH + '.Rules', '{}')
             or context.get('training_fleets') != active_fleets(config) or not isinstance(checked, datetime)
-            or now() >= checked + timedelta(minutes=interval(config)))
+            or (now() - checked).total_seconds() / 3600 >= interval(config))
+
+
+def mark_checked(config, context, targets=None):
+    """记录共用读取时刻；目标变化仍强制重新核对，不能拼接不同批次的条件。"""
+    context['training_checked_at'] = now()
+    context['training_goals'] = dict(goals(config) if targets is None else targets)
+    context['training_mood'] = config.cross_get(ROTATION_PATH + '.Enabled', False) is True
+    context['training_rules'] = deepcopy(config.cross_get(ROTATION_PATH + '.Rules', '{}'))
+    context['training_fleets'] = active_fleets(config)
 
 
 def state(config):
     saved = deepcopy(config.cross_get(TRAINING_PATH, {}))
-    if not isinstance(saved, dict) or any(not isinstance(saved.get(key, {}), dict) for key in ('records', 'pending')):
+    if not isinstance(saved, dict) or any(not isinstance(saved.get(key, {}), dict)
+                                         for key in ('records', 'pending', 'readings')):
         raise FleetManagementError('培养记录格式无效，保留原记录，请检查配置')
     saved.setdefault('records', {})
     saved.setdefault('pending', {})
@@ -50,7 +65,8 @@ def ships(result, fleet):
             if type(item.get('slot')) is int and item.get('occupied', True)}
 
 
-def identity(ship, result):
+def identity(ship, result, *, allow_duplicates=False):
+    """默认要求唯一身份；同名仅可用于按舰位保存读数，不能据此完成或换船。"""
     if not ship or ship.get('review') or not ship.get('name'):
         return None
     info = find_ship(ship['name'])
@@ -63,7 +79,7 @@ def identity(ship, result):
     name = info['name']
     matches = sum(item.get('name') == ship['name'] for category in ('main', 'vanguard')
                   for fleet in result.get(category, {}).values() for item in fleet if item.get('occupied', True))
-    return name if matches == 1 else None
+    return name if matches == 1 or (allow_duplicates and matches > 1) else None
 
 
 def completed(record, targets):
@@ -78,10 +94,17 @@ def excluded(record, targets):
     return bool(targets) and isinstance(done, dict) and bool(done)
 
 
-def observe(saved, name, reading, targets):
+def observe(saved, name, reading, targets, *, fleet=None, slot=None, emotion=None):
     record = dict(saved['records'].get(name, {}), name=name, checked_at=now().isoformat(timespec='seconds'))
     # 同次检查重新写入全部已启用条件，不能把旧高好感与新等级拼成完成。
     record.update({metric: reading.get(metric) for metric in targets})
+    if 'level' in targets:
+        # 经验已经随等级实读，独立保存供页面展示，不参与完成判定。
+        record['exp'] = reading.get('exp')
+    if type(fleet) is int and 1 <= fleet <= 6 and type(slot) is int and 1 <= slot <= 6:
+        # 保存当次已确认的位置和已有心情读数，仅用于记录展示，不额外操作游戏。
+        record.update(fleet=fleet, slot=slot,
+                      emotion=emotion if type(emotion) is int and 0 <= emotion <= 150 else None)
     if completed(record, targets) and not record.get('completed_for'):
         record['completed_for'] = dict(targets)
         record['completed_at'] = now().isoformat(timespec='seconds')

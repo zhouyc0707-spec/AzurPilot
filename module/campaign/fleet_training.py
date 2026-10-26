@@ -1,6 +1,7 @@
 """等级/好感培养联动既有同号舰位换船，不重新实现心情调度。"""
 
 from copy import deepcopy
+from datetime import datetime, timedelta
 
 from module.config.time_source import now
 from module.equipment.fleet_rotation import FleetRotationEquipment
@@ -9,8 +10,8 @@ from module.logger import logger
 from module.retire.fleet_management import FleetManagement
 from module.retire.fleet_training import FleetTrainingReader
 from module.runtime.fleet_equipment import EQUIPMENT_PATH
-from module.runtime.fleet_rotation import ROTATION_PATH, active_fleets, calibration_changes, parse_rules, supported
-from module.runtime.fleet_training import TRAINING_PATH, due, excluded, goals, identity, interval, observe, ships, state
+from module.runtime.fleet_rotation import ROTATION_PATH, active_fleets, calibration_changes, parse_rules, recorded_morale, supported
+from module.runtime.fleet_training import TRAINING_PATH, completed, due, excluded, goals, identity, interval, mark_checked, observe, ships, state
 
 
 class TrainingSession:
@@ -34,7 +35,12 @@ class TrainingSession:
     def delay(self, message):
         logger.warning(message)
         self.save()
-        self.config.task_delay(minute=max(1, interval(self.config)))
+        try:
+            target = now() + timedelta(hours=max(1 / 60, interval(self.config)))
+        except OverflowError:
+            # 配置不限制小时数；超出日期表示范围时保留配置，等待到可表示的最晚时刻。
+            target = datetime.max
+        self.config.task_delay(target=target)
         raise ScriptEnd(message)
 
     def inspect(self, fleet, slots):
@@ -49,9 +55,24 @@ class TrainingSession:
                 continue
             name = identity(ship, self.result)
             reading = readings.get(slot, {})
-            if name is None or any(type(reading.get(metric)) is not int for metric in self.targets):
-                self.delay(f'第{fleet}舰队{slot}位培养身份或数据未确认，不记录完成')
-            observe(self.saved, name, reading, self.targets)
+            missing = ['等级' if metric == 'level' else '好感' for metric in self.targets
+                       if type(reading.get(metric)) is not int]
+            if missing:
+                self.delay(f'第{fleet}舰队{slot}位培养数据未确认（{"、".join(missing)}），不记录完成')
+            if name is None:
+                name = identity(ship, self.result, allow_duplicates=True)
+                if name is None:
+                    self.delay(f'第{fleet}舰队{slot}位培养舰名未确认，不记录完成')
+                # 舰位读数仅供展示，不能写入按舰名保存的完成/排除记录，也不参与中断互换。
+                self.saved.setdefault('readings', {})[f'{fleet}:{slot}'] = {
+                    'name': name, 'fleet': fleet, 'slot': slot, 'level': ship.get('level'),
+                    'emotion': ship.get('emotion'), 'checked_at': now().isoformat(timespec='seconds'), **reading}
+                logger.attr(f'第{fleet}舰队{slot}位{name}培养实读', reading)
+                if completed(reading, self.targets):
+                    self.delay(f'第{fleet}舰队{slot}位{name}存在同名舰船；已读到达标数据，但身份不唯一，不记录完成或换船')
+                logger.info('同名舰船实读已按舰位保存，尚未全部达标，继续培养，不合并同名进度')
+                continue
+            observe(self.saved, name, reading, self.targets, fleet=fleet, slot=slot, emotion=ship.get('emotion'))
             known[slot] = name
         self.save()
         return known
@@ -138,10 +159,7 @@ class TrainingSession:
                 equipment.apply_pending()
             if goals(self.config) == self.targets:
                 self.inspect(fleet, [job['slot'] for _, job in jobs])
-        self.context['training_checked_at'] = now()
-        self.context['training_goals'] = dict(self.targets)
-        self.context['training_rules'] = deepcopy(self.config.cross_get(ROTATION_PATH + '.Rules', '{}'))
-        self.context['training_fleets'] = active_fleets(self.config)
+        mark_checked(self.config, self.context, self.targets)
         return True
 
     def filter_sources(self, order, rule, fleet):
@@ -174,7 +192,7 @@ def recover_reading(runner, mode):
 
 
 def training_only(runner, battle, mode):
-    """仅培养调度时只进详情实读；达标才复用同号互换及心情校正。
+    """仅培养调度也实读选船页舰名与心情；达标才执行同号互换。
 
     Pages:
         in: 普通选关页
@@ -187,7 +205,10 @@ def training_only(runner, battle, mode):
     if context.get('task') != config.task.command:
         context.clear()
         context['task'] = config.task.command
-    if not due(config, context) and not state(config)['pending']:
+    selected_only = config.cross_get(ROTATION_PATH + '.SelectedOnly', False) is True
+    needs_morale = (not context.get('training') or context.get('scanned') is False
+                    or context.get('training_selected_only') != selected_only)
+    if not due(config, context) and not state(config)['pending'] and not needs_morale:
         return False
     rules = parse_rules(config.cross_get(ROTATION_PATH + '.Rules', '{}'))
     selected = {role: actual for role, actual in active_fleets(config).items()
@@ -207,7 +228,13 @@ def training_only(runner, battle, mode):
         session.reader.recover_page()
     # 确认后、保存前中断时两边旧记录都可能过时，恢复前必须实读双方。
     recovery_fleets = {job[side] for job in session.saved['pending'].values() for side in ('fleet', 'source')}
-    session.reader.inventory(set(selected.values()) | recovery_fleets)
+    inventory = set(selected.values()) | recovery_fleets
+    result = session.reader.inventory(inventory)
+    snapshots = {fleet: recorded_morale(result, fleet) for fleet in inventory}
+    config.cross_set_many(calibration_changes(config.data, snapshots, now()))
+    runner.campaign.emotion.calibrate_selected(snapshots)
+    context['scanned'] = True
+    context['training_selected_only'] = selected_only
     if config.cross_get(EQUIPMENT_PATH + '.Enabled', False) and config.cross_get(EQUIPMENT_PATH + '.State', {}):
         FleetRotationEquipment(manager).apply_pending()
     session.process(fresh=True)
@@ -226,7 +253,8 @@ def after_battle_due(runner, mode):
     from module.campaign.fleet_rotation import _required
     config = runner.campaign.config
     if (not supported(config.task.command, mode, runner.folder, runner.stage)
-            or config.Campaign_Mode != 'normal' or not goals(config)):
+            or config.Campaign_Mode != 'normal'
+            or (not goals(config) and config.cross_get(ROTATION_PATH + '.Enabled', False) is not True)):
         return False
     rules = parse_rules(config.cross_get(ROTATION_PATH + '.Rules', '{}'))
     selected = any(rules.get(str(actual), {}).get('slots') and rules[str(actual)].get('sources')

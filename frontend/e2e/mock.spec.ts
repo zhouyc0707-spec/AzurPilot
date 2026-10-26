@@ -105,80 +105,225 @@ for (const theme of ['light', 'legacy-light']) {
   })
 }
 
-test('等级和好感调度独立保存开关目标与间隔，并复用舰位配置', async ({page}) => {
-  const requests: string[] = []
+test('换船调度集中三种开关，共用换船配置并按不限上限的小时保存', async ({page}) => {
+  const requests: {method: string; params?: {changes?: {path: string; value: unknown}[]}}[] = []
   await page.addInitScript(() => {
     localStorage.setItem('azurpilot.language', 'zh-CN')
     localStorage.setItem('azurpilot.theme', 'light')
+    localStorage.setItem('azurpilot.material', 'plain')
+    localStorage.setItem('azurpilot.background.plain', JSON.stringify({source: 'off'}))
   })
   await page.routeWebSocket('**/api/v1/ws', socket => {
     const server = socket.connectToServer()
-    socket.onMessage(message => {requests.push(JSON.parse(String(message)).method); server.send(message)})
-    server.onMessage(message => socket.send(message))
-  })
-  for (const [path, title, target, goal, minutes] of [
-    ['FleetLevelTraining', '等级调度', '目标等级', '125', '5'],
-    ['FleetAffinityTraining', '好感调度', '目标好感', '200', '0'],
-  ]) {
-    await page.goto(`/#/i/demo-main/task/${path}`)
-    await expect(page.getByRole('heading', {name: title, exact: true})).toBeVisible()
-    const enable = page.getByRole('switch', {name: `启用${title}`, exact: true})
-    await expect(enable).toHaveAttribute('aria-checked', 'false')
-    await page.getByRole('spinbutton', {name: target, exact: true}).fill(goal)
-    await page.getByRole('spinbutton', {name: '实读间隔（分钟，0为每次结算）', exact: true}).fill(minutes)
-    await page.getByRole('button', {name: '保存规则', exact: true}).click()
-    await expect(page.getByText('培养调度设置已保存', {exact: true})).toBeVisible()
-    await enable.click()
-    await expect(enable).toHaveAttribute('aria-checked', 'true')
-    await page.reload()
-    await expect(enable).toHaveAttribute('aria-checked', 'true')
-    await expect(page.getByRole('spinbutton', {name: target, exact: true})).toHaveValue(goal)
-    await expect(page.getByRole('spinbutton', {name: '实读间隔（分钟，0为每次结算）', exact: true})).toHaveValue(minutes)
-    await expect(page.getByRole('link', {name: '设置培养舰位与候补舰队'})).toHaveAttribute('href', '#/i/demo-main/task/FleetRotation')
-    await expect(page.locator('.right-rail')).toHaveCount(0)
-    await page.screenshot({path: `test-results/${path}-desktop.png`, fullPage: true, animations: 'disabled'})
-  }
-  await page.setViewportSize({width: 390, height: 844})
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
-  await page.screenshot({path: 'test-results/fleet-training-mobile.png', fullPage: true, animations: 'disabled'})
-  await page.goto('/#/i/demo-main/task/FleetLevelTraining')
-  await expect(page.getByRole('switch', {name: '启用等级调度'})).toHaveAttribute('aria-checked', 'true')
-  expect(requests).not.toContain('tasks.run')
-  expect(requests).not.toContain('scheduler.start')
-})
-
-test('智能换船-心情控制独立保存仅计算培养舰船开关', async ({page}) => {
-  await page.addInitScript(() => {
-    localStorage.setItem('azurpilot.language', 'zh-CN')
-    localStorage.setItem('azurpilot.theme', 'light')
-  })
-  const requests: string[] = []
-  await page.routeWebSocket('**/api/v1/ws', socket => {
-    const server = socket.connectToServer()
-    socket.onMessage(message => {requests.push(JSON.parse(String(message)).method); server.send(message)})
+    socket.onMessage(message => {requests.push(JSON.parse(String(message))); server.send(message)})
     server.onMessage(message => socket.send(message))
   })
   await page.goto('/#/i/demo-main/task/FleetRotation')
-  await expect(page.getByRole('heading', {name: '智能换船-心情控制', exact: true})).toBeVisible()
-  const selected = page.getByRole('checkbox', {name: '仅计算更换舰船心情', exact: true})
-  await expect(selected).not.toBeChecked()
-  await expect(page.getByRole('spinbutton')).toHaveCount(0)
-  await selected.check()
+  await expect(page.getByRole('heading', {name: '换船配置', exact: true})).toBeVisible()
+  await expect(page.getByRole('switch')).toHaveCount(0)
+  await expect(page.getByRole('checkbox', {name: '仅计算更换舰船心情', exact: true})).toHaveCount(0)
+  const fleet = page.getByRole('region', {name: '第 1 舰队', exact: true})
+  await fleet.getByRole('checkbox', {name: '舰位 4 · 不变', exact: true}).check()
+  await fleet.getByRole('checkbox', {name: '候补舰队 3', exact: true}).check()
   await page.getByRole('button', {name: '保存规则', exact: true}).click()
-  await expect(page.getByText('换船规则已保存', {exact: true})).toBeVisible()
+  await expect(page.getByRole('button', {name: '保存规则', exact: true})).toBeDisabled()
+  await page.locator('main').getByRole('link', {name: '换船调度', exact: true}).click()
+  await expect(page.getByRole('heading', {name: '换船调度', exact: true})).toBeVisible()
+  const level = page.getByRole('region', {name: '等级调度', exact: true})
+  const affinity = page.getByRole('region', {name: '好感调度', exact: true})
+  const interval = '共用实读间隔（小时，0为每次结算，无上限）'
+  const sharedInterval = page.getByRole('spinbutton', {name: interval, exact: true})
+  for (const title of ['心情调度', '等级调度', '好感调度'])
+    await expect(page.getByRole('switch', {name: `启用${title}`, exact: true})).toHaveAttribute('aria-checked', 'false')
+  await expect(sharedInterval).toHaveCount(1)
+  await expect(sharedInterval).toHaveValue('0.5')
+  await expect(level.getByRole('spinbutton')).toHaveCount(1)
+  await expect(affinity.getByRole('spinbutton')).toHaveCount(1)
+  await level.getByRole('spinbutton', {name: '目标等级', exact: true}).fill('125')
+  await affinity.getByRole('spinbutton', {name: '目标好感', exact: true}).fill('200')
+  await sharedInterval.fill('48.5')
+  expect(await sharedInterval.getAttribute('max')).toBeNull()
+  expect(await sharedInterval.evaluate(element => {
+    const cards = document.querySelector('.fleet-grid')!
+    return !!(element.compareDocumentPosition(cards) & Node.DOCUMENT_POSITION_FOLLOWING)
+  })).toBe(true)
+  const selected = page.getByRole('checkbox', {name: '仅计算更换舰船心情', exact: true})
+  await selected.check()
+  await page.getByRole('button', {name: '保存调度设置', exact: true}).click()
+  await expect(page.getByRole('button', {name: '保存调度设置', exact: true})).toBeDisabled()
+  for (const title of ['等级调度', '好感调度', '心情调度']) {
+    const toggle = page.getByRole('switch', {name: `启用${title}`, exact: true})
+    await toggle.click()
+    await expect(toggle).toHaveAttribute('aria-checked', 'true')
+  }
   await page.reload()
+  for (const title of ['心情调度', '等级调度', '好感调度'])
+    await expect(page.getByRole('switch', {name: `启用${title}`, exact: true})).toHaveAttribute('aria-checked', 'true')
+  await page.getByRole('switch', {name: '启用心情调度', exact: true}).click()
+  await expect(page.getByRole('switch', {name: '启用心情调度', exact: true})).toHaveAttribute('aria-checked', 'false')
+  for (const title of ['等级调度', '好感调度'])
+    await expect(page.getByRole('switch', {name: `启用${title}`, exact: true})).toHaveAttribute('aria-checked', 'true')
   await expect(selected).toBeChecked()
-  await page.screenshot({path: 'test-results/rotation-morale-desktop.png', fullPage: true, animations: 'disabled'})
+  await expect(sharedInterval).toHaveValue('48.5')
+  await expect(level.getByRole('spinbutton', {name: '目标等级', exact: true})).toHaveValue('125')
+  await expect(affinity.getByRole('spinbutton', {name: '目标好感', exact: true})).toHaveValue('200')
+  await sharedInterval.fill('-1')
+  await expect(page.getByRole('button', {name: '保存调度设置', exact: true})).toBeDisabled()
+  await sharedInterval.fill('0')
+  await page.getByRole('button', {name: '保存调度设置', exact: true}).click()
+  await expect(page.getByRole('button', {name: '保存调度设置', exact: true})).toBeDisabled()
+  await expect(sharedInterval).toBeEnabled()
+  await page.reload()
+  await expect(sharedInterval).toHaveValue('0')
+  await expect(page.locator('.right-rail')).toHaveCount(0)
+  await page.screenshot({path: 'test-results/fleet-scheduling-desktop.png', fullPage: true, animations: 'disabled'})
+  await page.locator('main').getByRole('link', {name: '换船配置：设置舰位与候补舰队'}).click()
+  await expect(fleet.getByRole('checkbox', {name: '舰位 4 · 换船', exact: true})).toBeChecked()
+  await expect(fleet.getByRole('checkbox', {name: '候补舰队 3', exact: true})).toBeChecked()
+  for (const path of ['FleetLevelTraining', 'FleetAffinityTraining']) {
+    await page.goto(`/#/i/demo-main/task/${path}`)
+    await expect(page).toHaveURL(/task\/FleetTraining$/)
+    await expect(page.getByRole('heading', {name: '换船调度', exact: true})).toBeVisible()
+  }
   await page.setViewportSize({width: 390, height: 844})
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
-  await selected.uncheck()
-  await page.getByRole('button', {name: '保存规则', exact: true}).click()
-  await expect(page.getByText('换船规则已保存', {exact: true})).toBeVisible()
-  await page.reload()
-  await expect(selected).not.toBeChecked()
-  await page.screenshot({path: 'test-results/rotation-morale-mobile.png', fullPage: true, animations: 'disabled'})
-  expect(requests).not.toContain('tasks.run')
-  expect(requests).not.toContain('scheduler.start')
+  await page.screenshot({path: 'test-results/fleet-scheduling-mobile.png', fullPage: true, animations: 'disabled'})
+  expect(requests.map(item => item.method)).not.toContain('tasks.run')
+  expect(requests.map(item => item.method)).not.toContain('scheduler.start')
+  const patches = requests.filter(item => item.method === 'config.patch')
+  expect(patches.slice(1).flatMap(item => item.params?.changes ?? []).some(item => /\.(Rules|State)$/.test(item.path))).toBe(false)
+  const intervals = patches.flatMap(item => item.params?.changes ?? []).filter(item => /CheckInterval/.test(item.path))
+  expect(intervals.length).toBeGreaterThan(0)
+  expect(intervals.every(item => item.path === 'FleetInfo.FleetTraining.CheckIntervalHours')).toBe(true)
+})
+
+test('换船调度记录按舰位展示真实舰名心情，三框区分且历史各不超过六条', async ({page}) => {
+  const methods: string[] = []
+  await page.setViewportSize({width: 1440, height: 1800})
+  await page.addInitScript(() => {
+    localStorage.setItem('azurpilot.language', 'zh-CN')
+    localStorage.setItem('azurpilot.theme', 'light')
+    localStorage.setItem('azurpilot.material', 'plain')
+    localStorage.setItem('azurpilot.background.plain', JSON.stringify({source: 'off'}))
+  })
+  await page.routeWebSocket('**/api/v1/ws', socket => {
+    const server = socket.connectToServer()
+    socket.onMessage(message => {methods.push(JSON.parse(String(message)).method); server.send(message)})
+    server.onMessage(message => {
+      const response = JSON.parse(String(message)), values = response.result?.values?.FleetInfo
+      if (values) {
+        const names = ['企业', '胡德', '厌战', '拉菲', '克利夫兰', '海伦娜']
+        values.FleetRotation.Rules = JSON.stringify({'1': {slots: [6, 2, 3, 1, 5, 4], sources: [3]}})
+        values.FleetInfo.Result = {
+          main: {'1': [3, 1, 2].map(slot => ({name: names[slot - 1], slot, level: 119, emotion: 151 - slot}))},
+          vanguard: {'1': [6, 4, 5].map(slot => ({name: names[slot - 1], slot, level: 119, emotion: slot === 6 ? 0 : 151 - slot}))},
+        }
+        values.FleetTraining.State = {records: Object.fromEntries([
+          ...names.map((name, index) => [name, {level: 119, exp: 23456 + index, affinity: 98,
+            checked_at: '2026-10-26T12:34:56', fleet: 5, slot: 6, emotion: 80}]),
+          ...['欧根亲王', '圣地亚哥', '独角兽', '萨拉托加', '光辉', '明石', '贝尔法斯特', '绫波'].map((name, index) =>
+            [name, {level: 125, exp: 0, affinity: 200, emotion: 100, fleet: 2, slot: index % 6 + 1,
+              completed_at: `2026-10-26T11:0${index}:00`, completed_for: {level: 120, affinity: 100}}]),
+          ...['加贺', '赤城', '高雄', '爱宕', '翔鹤', '瑞鹤', '长门', '陆奥'].map((name, index) =>
+            [name, {level: 80, affinity: 50, checked_at: `2026-10-26T10:0${index}:00`,
+              ...(index === 7 ? {} : {fleet: 3, slot: index % 6 + 1, emotion: 50})}]),
+        ])}
+      }
+      socket.send(JSON.stringify(response))
+    })
+  })
+  await page.goto('/#/i/demo-main/task/FleetTraining')
+  const training = page.getByRole('region', {name: '培养舰船', exact: true})
+  const completed = page.getByRole('region', {name: '完成舰船', exact: true})
+  const history = page.getByRole('region', {name: '旧记录舰船', exact: true})
+  for (const group of [training, completed, history]) {
+    await expect(group).toBeVisible()
+    await expect(group.locator('tbody tr')).toHaveCount(6)
+  }
+  await expect(training.locator('tbody tr td:nth-child(2)')).toHaveText(['舰位 1', '舰位 2', '舰位 3', '舰位 4', '舰位 5', '舰位 6'])
+  await expect(training.locator('tbody tr td:nth-child(3)')).toHaveText(['企业', '胡德', '厌战', '拉菲', '克利夫兰', '海伦娜'])
+  const row = training.getByRole('row').filter({hasText: '企业'})
+  for (const value of ['第 1 舰队', '舰位 1', '150', '119', '23456', '98', '2026-10-26 12:34:56'])
+    await expect(row.getByRole('cell', {name: value, exact: true})).toBeVisible()
+  await expect(training.getByRole('row').filter({hasText: '海伦娜'}).locator('td').nth(3)).toHaveText('0')
+  await expect(completed.getByText('最多显示最近 6 条，共 8 条；完整历史记录保留。')).toBeVisible()
+  await expect(history.getByText('最多显示最近 6 条，共 8 条；完整历史记录保留。')).toBeVisible()
+  await expect(completed.getByRole('heading')).toHaveText('完成舰船 · 6')
+  await expect(history.getByRole('heading')).toHaveText('旧记录舰船 · 6')
+  for (const name of ['欧根亲王', '圣地亚哥']) await expect(completed.getByRole('cell', {name, exact: true})).toHaveCount(0)
+  for (const name of ['加贺', '赤城']) await expect(history.getByRole('cell', {name, exact: true})).toHaveCount(0)
+  await expect(completed.getByRole('row').filter({hasText: '绫波'}).locator('td').nth(5)).toHaveText('0')
+  await expect(history.getByRole('row').filter({hasText: '陆奥'}).getByRole('cell', {name: '未读取', exact: true})).toHaveCount(4)
+  await page.screenshot({path: 'test-results/fleet-training-three-panels-desktop.png', fullPage: true, animations: 'disabled'})
+  await training.locator('..').screenshot({path: 'test-results/fleet-training-three-panels.png', animations: 'disabled'})
+  await page.setViewportSize({width: 390, height: 844})
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  for (const group of [training, completed, history]) {
+    await group.scrollIntoViewIfNeeded()
+    await expect(group.getByRole('heading')).toBeVisible()
+  }
+  await training.scrollIntoViewIfNeeded()
+  const tableViewport = training.locator('.training-record-table')
+  expect(await tableViewport.evaluate(element => element.scrollWidth > element.clientWidth)).toBe(true)
+  await tableViewport.evaluate(element => {
+    const name = element.querySelector('tbody tr td:nth-child(3)') as HTMLElement
+    element.scrollLeft += name.getBoundingClientRect().left - element.getBoundingClientRect().left - 4
+  })
+  const headingBox = await training.getByRole('heading').boundingBox()
+  expect(headingBox!.x).toBeGreaterThanOrEqual(0)
+  const nameBox = await row.getByRole('cell', {name: '企业', exact: true}).boundingBox()
+  const moraleBox = await row.getByRole('cell', {name: '150', exact: true}).boundingBox()
+  expect(nameBox!.x).toBeGreaterThanOrEqual(0)
+  expect(moraleBox!.x + moraleBox!.width).toBeLessThanOrEqual(390)
+  await training.screenshot({path: 'test-results/fleet-training-three-panels-mobile.png', animations: 'disabled'})
+  expect(methods).not.toContain('config.patch')
+  expect(methods).not.toContain('tasks.run')
+  expect(methods).not.toContain('scheduler.start')
+})
+
+test('同名舰船实读按舰位展示60好感，不串用另一艘布里的记录', async ({page}) => {
+  const methods: string[] = []
+  await page.addInitScript(() => {
+    localStorage.setItem('azurpilot.language', 'zh-CN')
+    localStorage.setItem('azurpilot.theme', 'light')
+    localStorage.setItem('azurpilot.material', 'plain')
+    localStorage.setItem('azurpilot.background.plain', JSON.stringify({source: 'off'}))
+  })
+  await page.routeWebSocket('**/api/v1/ws', socket => {
+    const server = socket.connectToServer()
+    socket.onMessage(message => {methods.push(JSON.parse(String(message)).method); server.send(message)})
+    server.onMessage(message => {
+      const response = JSON.parse(String(message)), values = response.result?.values?.FleetInfo
+      if (values) {
+        values.FleetRotation.Rules = JSON.stringify({'5': {slots: [1, 4], sources: [3]}, '6': {slots: [4], sources: [3]}})
+        values.FleetInfo.Result = {
+          main: {'5': [{name: '博格', slot: 1, level: 100, emotion: 150}]},
+          vanguard: {'5': [{name: '泛用型布里', slot: 4, level: 100, emotion: 119}],
+            '6': [{name: '泛用型布里', slot: 4, level: 100, emotion: null}]},
+        }
+        values.FleetTraining.State = {
+          records: {'博格': {level: 100, exp: 0, affinity: 5, fleet: 5, slot: 1, checked_at: '2026-10-27T05:19:05'}},
+          readings: {'5:4': {name: '泛用型布里', fleet: 5, slot: 4, level: 100, exp: 13669, affinity: 60,
+            emotion: 119, checked_at: '2026-10-27T05:19:05'}},
+          pending: {},
+        }
+      }
+      socket.send(JSON.stringify(response))
+    })
+  })
+  await page.goto('/#/i/demo-main/task/FleetTraining')
+  const training = page.getByRole('region', {name: '培养舰船', exact: true})
+  await expect(training.locator('tbody tr')).toHaveCount(3)
+  const bulin = training.getByRole('row').filter({hasText: '泛用型布里'})
+  const current = bulin.filter({hasText: '第 5 舰队'})
+  for (const value of ['舰位 4', '100', '13669', '60', '119', '2026-10-27 05:19:05'])
+    await expect(current.getByRole('cell', {name: value, exact: true})).toBeVisible()
+  await expect(bulin.filter({hasText: '第 6 舰队'}).getByRole('cell', {name: '未读取', exact: true})).toHaveCount(4)
+  await expect(page.getByRole('region', {name: '完成舰船', exact: true}).locator('tbody tr')).toHaveCount(0)
+  await page.screenshot({path: 'test-results/fleet-training-duplicate-reading.png', fullPage: true, animations: 'disabled'})
+  expect(methods).not.toContain('config.patch')
+  expect(methods).not.toContain('tasks.run')
+  expect(methods).not.toContain('scheduler.start')
 })
 
 test('自动换装备页面默认关闭并可独立保存舰种码与开关', async ({page}) => {

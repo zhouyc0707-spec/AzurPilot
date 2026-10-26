@@ -20354,14 +20354,6 @@
           1,
           125
         ]
-      },
-      "CheckInterval": {
-        "type": "input",
-        "value": 30,
-        "validate": [
-          0,
-          1440
-        ]
       }
     },
     "FleetAffinityTraining": {
@@ -20376,17 +20368,15 @@
           1,
           200
         ]
-      },
-      "CheckInterval": {
-        "type": "input",
-        "value": 30,
-        "validate": [
-          0,
-          1440
-        ]
       }
     },
     "FleetTraining": {
+      "CheckIntervalHours": {
+        "type": "input",
+        "value": 0.5,
+        "valuetype": "float",
+        "validate": "^[0-9]+(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+      },
       "State": {
         "type": "stored",
         "value": {},
