@@ -256,7 +256,9 @@ class CampaignBase(CampaignUI, Map, AutoSearchCombat):
             self.lv_get()
 
         # 执行战斗
+        training_due_noted = False
         for _ in range(20):
+            training_checked = False
             try:
                 if not self.map_is_auto_search:
                     self.execute_a_battle()
@@ -267,7 +269,17 @@ class CampaignBase(CampaignUI, Map, AutoSearchCombat):
                         self.auto_search_withdraw()
                         return True
                     self.auto_search_execute_a_battle()
+                training = self.__dict__.get('_fleet_training_after_battle')
+                training_due = training is not None and training()
+                training_checked = training is not None
+                if training_due and not training_due_noted:
+                    logger.info('培养实读间隔已到，先完成当前地图，下次出击前核对等级/好感')
+                    training_due_noted = True
             except CampaignEnd:
+                training = self.__dict__.get('_fleet_training_after_battle')
+                if training is not None and not training_checked:
+                    # 最后一战由游戏直接退图时也检查到期，下一安全入口实读。
+                    training()
                 self._recovery_map_active = False
                 self._restart_resume_guard = False
                 logger.hr('战役结束')

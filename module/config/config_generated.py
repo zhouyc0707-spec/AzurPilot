@@ -581,7 +581,7 @@ class GeneratedConfig:
     GuildOperation_Enable = True
     GuildOperation_SelectNewOperation = False
     GuildOperation_NewOperationMaxDate = 15
-    GuildOperation_JoinThreshold = 1
+    GuildOperation_JoinThreshold = 1.0
     GuildOperation_AttackBoss = True
     GuildOperation_BossFleetRecommend = False
 
@@ -1229,8 +1229,27 @@ class GeneratedConfig:
 
     # 配置组 `FleetRotation`
     FleetRotation_Enabled = False
+    FleetRotation_SelectedOnly = False
     FleetRotation_Rules = '{}'
     FleetRotation_State = {}
+
+    # 配置组 `FleetLevelTraining`
+    FleetLevelTraining_Enabled = False
+    FleetLevelTraining_Target = 120
+    FleetLevelTraining_CheckInterval = 30
+
+    # 配置组 `FleetAffinityTraining`
+    FleetAffinityTraining_Enabled = False
+    FleetAffinityTraining_Target = 100
+    FleetAffinityTraining_CheckInterval = 30
+
+    # 配置组 `FleetTraining`
+    FleetTraining_State = {}
+
+    # 配置组 `FleetEquipment`
+    FleetEquipment_Enabled = False
+    FleetEquipment_Codes = '{}'
+    FleetEquipment_State = {}
 
     # 配置组 `FleetInfo`
     FleetInfo_UpdateEmotion = True

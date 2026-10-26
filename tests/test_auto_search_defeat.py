@@ -74,7 +74,8 @@ class ScreenReplay:
             Campaign_DefeatWithdraw=policy, Campaign_Mode='normal',
             FLEET_2=True, Fleet_FleetOrder='fleet1_all_fleet2_standby',
             Submarine_Fleet=0, Fleet_Fleet1Mode='combat_auto', Fleet_Fleet2Mode='combat_auto',
-            BUTTON_OFFSET=(30, 30), MAP_IS_ONE_TIME_STAGE=False, modified={})
+            BUTTON_OFFSET=(30, 30), MAP_IS_ONE_TIME_STAGE=False, modified={},
+            cross_get=lambda path, default=None: default)
         campaign.device = self.device
         campaign.emotion = Mock(is_calculate=True)
         campaign.map_is_auto_search = True

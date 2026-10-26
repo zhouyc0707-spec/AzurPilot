@@ -16,10 +16,12 @@
 舰队信息的[桌面截图](images/fleet-management-desktop.png)与[手机截图](images/fleet-management-mobile.png)
 来自隔离服务及合成记录，只验证舰位、未知心情和扫描选项展示，不代表实际账号操作。
 
-「舰队管理」另有 `/i/:instance/task/FleetRotation` 智能换船页面，属于独立配置页，
+「舰队管理」另有 `/i/:instance/task/FleetRotation`「智能换船-心情控制」页面，属于独立配置页，
 不注册游戏任务，也不显示调度状态或启动任务按钮。顶部启用开关默认关闭；六支水面
 舰队的36个舰位默认均为“不变”，可逐位改为“换船”，并为每支目标队多选候补队。
-规则保存到 `FleetInfo.FleetRotation.Enabled/Rules`，不调用 `tasks.run`。页面显示已保存
+新增默认关闭的“仅计算更换舰船心情”：开启时忽略固定低心情，关闭时全队最低心情决定等待；
+两种模式都单独计算培养舰位，按任务的保持经验加成、防绿脸等要求换船，不添加另一条心情线。
+规则保存到 `FleetInfo.FleetRotation.Enabled/SelectedOnly/Rules`，不调用 `tasks.run`。页面显示已保存
 的上次来源与本轮进度，任务运行时只刷新进度，不覆盖尚未保存的规则编辑。
 清空记录按钮仅在任务停止时可用，不允许直接改写内部进度。当前效果见
 [桌面截图](images/fleet-rotation-desktop.png)与[手机截图](images/fleet-rotation-mobile.png)，
@@ -32,6 +34,14 @@
 `TaskConfig` 把 `Task.<task>.help` 展示为参数列首卡，并在舰队信息中显示心情；旧数据缺少心情时显示未知。商店使用上游的任务参数和过滤器界面，活动商店的 `物品:数量上限` 兼容文本由配置翻译说明并原样提交。旧版统计整页、实例 `Activity` 缓存、顶栏重启与主题切换、模拟器运行状态、岛屿任务总开关及实时指挥喵报告继续沿用本地实现。
 
 旧版总览的日志／统计切换卡片中央提供「维护日」星期选择器（`components/MaintenanceWeekday.tsx`），绑定同一个 `Exercise.Exercise.MaintenanceWeekday`，不另存星期或日期。选择后复用实例编辑队列立即保存，并显示待保存、成功或失败状态；演习提前和困难图维护日18点各自开关保持原值，排程重查由既有 `ConfigService.patch()` 处理。该星期每周重复，直到用户修改。返回页面、连接恢复或重新聚焦时重新读取；旧读取不覆盖新的保存回执，实例切换丢弃旧控件状态。仅旧版主题显示，布局样式位于 `legacy.css`，不随总览的高频资源推送反复读取整份配置。
+
+同组新增`/i/:instance/task/FleetLevelTraining`等级调度和
+`/i/:instance/task/FleetAffinityTraining`好感调度，由`pages/FleetTraining.tsx`复用配置表单。
+各自独立保存启用、目标、分钟间隔，默认关闭；链接到原舰位与候补页面。培养完成记录只读，
+从`FleetInfo.FleetTraining.State`显示，运行时刷新记录不覆盖尚未保存的输入。两页不显示任务
+运行侧栏，不调用`tasks.run`，不改写心智计算器的费用/排除状态。真实模拟器仍需验收。
+模拟服务效果：[等级页](images/fleet-level-training-desktop.png)、
+[好感页](images/fleet-affinity-training-desktop.png)、[手机](images/fleet-training-mobile.png)。
 
 frontend/ 是 AzurPilot 的 React 浏览器控制台，覆盖主页与实例导航、任务配置表单、总览日志与截图预览、统计图表、系统设置、远程访问与更新器；本地保留的 PyWebIO 是另一个运行入口。前端不包含任何游戏逻辑，所有业务操作都通过 WebSocket API 交给 [API 服务](api.md)执行。
 

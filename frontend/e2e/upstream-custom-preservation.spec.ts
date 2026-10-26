@@ -1,4 +1,5 @@
 import {expect, test} from '@playwright/test'
+import type {LauncherStatus} from '../src/api/types'
 
 test('上游合入后旧版统计、顶栏快捷入口和新统计页同时可用', async ({page}, testInfo) => {
   const errors: string[] = []
@@ -99,17 +100,37 @@ for (const theme of ['light', 'legacy-light']) {
       localStorage.setItem('azurpilot.language', 'zh-CN')
       localStorage.setItem('azurpilot.background', JSON.stringify({source: 'off'}))
     }, theme)
-    // 浏览器验证只模拟启动器应答，不修改主机开机自启动。
-    await page.route('**/api/launcher/status', route => route.fulfill({
-      status: remote ? 403 : 200,
-      json: remote ? {success: false} : {
-        success: true, launcher_connected: true, autostart_supported: true, autostart_enabled: enabled,
-      },
-    }))
-    await page.route('**/api/launcher/startup', async route => {
-      enabled = route.request().postDataJSON().enabled as boolean
-      changes.push(enabled)
-      await route.fulfill({json: {success: true}})
+    let commandId: string | undefined
+    const status = (): LauncherStatus => ({
+      connected: true, platform: 'windows', version: 'test', capabilities: ['autostart'],
+      autostart: {supported: true, enabled},
+      commands: commandId ? [{id: commandId, status: 'succeeded', deadline: Date.now() / 1000 + 30,
+        result: {supported: true, enabled}}] : [],
+    })
+    // 模拟当前浏览器 RPC 契约；启动器命令不转发到后端，避免修改主机开机自启动。
+    await page.routeWebSocket('**/api/v1/ws', socket => {
+      const server = socket.connectToServer()
+      socket.onMessage(raw => {
+        const request = JSON.parse(String(raw))
+        if (request.method === 'launcher.status' || request.method === 'launcher.autostart.set') {
+          if (remote) {
+            socket.send(JSON.stringify({v: 1, type: 'response', id: request.id, ok: false,
+              error: {code: 'LOCAL_ONLY', message: '开机自启动只能在本机 WebUI 中设置'}}))
+          } else {
+            if (request.method === 'launcher.autostart.set') {
+              enabled = request.params.enabled as boolean
+              changes.push(enabled)
+              commandId = `test-autostart-${changes.length}`
+            }
+            socket.send(JSON.stringify({v: 1, type: 'response', id: request.id, ok: true,
+              result: request.method === 'launcher.status' ? status() : {commandId, status: 'pending'}}))
+          }
+        } else server.send(raw)
+      })
+      server.onMessage(raw => {
+        // 本夹具独立提供启动器状态，不让隔离后端的未连接事件覆盖模拟结果。
+        if (JSON.parse(String(raw)).topic !== 'launcher') socket.send(raw)
+      })
     })
     await page.goto('/#/settings')
     const toggle = page.getByRole('switch', {name: 'Windows 开机自启动', exact: true})

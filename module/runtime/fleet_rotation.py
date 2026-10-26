@@ -59,12 +59,12 @@ def active_fleets(config):
             if type(getattr(config, f'Fleet_Fleet{role}')) is int and 1 <= getattr(config, f'Fleet_Fleet{role}') <= 6}
 
 
-def rank_sources(rule, readings, needed=0):
-    """候补按整队最低实测心情降序，同值按编号升序；必须具备对应舰位。"""
+def rank_sources(rule, readings, needed=0, *, selected_only=False):
+    """候补按整队或勾选舰位的最低实测心情降序，同值按编号升序。"""
     available = []
     for source in rule['sources']:
         ships = readings.get(source, {})
-        minimum = minimum_morale(ships)
+        minimum = minimum_morale({slot: ships.get(slot) for slot in rule['slots']} if selected_only else ships)
         if minimum is not None and minimum >= needed and all(slot in ships for slot in rule['slots']):
             available.append((source, minimum))
     return [source for source, _ in sorted(available, key=lambda item: (-item[1], item[0]))]

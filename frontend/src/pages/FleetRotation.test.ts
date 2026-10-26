@@ -1,6 +1,7 @@
 import {describe, expect, it} from 'vitest'
 import {rotationRules} from './FleetRotation'
 import {FLEET_ROTATION, taskLabel, taskNavItems} from '../components/taskNavItems'
+import {rotationZhCN} from '../fleet-rotation-i18n'
 
 describe('智能换船配置和入口', () => {
   it('六个舰队的所有舰位默认不变，且未选择候补舰队', () => {
@@ -13,6 +14,6 @@ describe('智能换船配置和入口', () => {
   it('入口仅属于舰队管理，显示独立页面名称', () => {
     expect(taskNavItems('FleetManagement', ['FleetInfo'])).toContain(FLEET_ROTATION)
     expect(taskNavItems('Tool', ['FleetScan'])).not.toContain(FLEET_ROTATION)
-    expect(taskLabel(FLEET_ROTATION, () => '智能换船', () => '不应使用任务翻译')).toBe('智能换船')
+    expect(taskLabel(FLEET_ROTATION, () => rotationZhCN['rotation.title'], () => '不应使用任务翻译')).toBe('智能换船-心情控制')
   })
 })

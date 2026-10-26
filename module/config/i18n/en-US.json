@@ -6988,20 +6988,88 @@
   },
   "FleetRotation": {
     "_info": {
-      "name": "Smart ship rotation",
+      "name": "Smart rotation - morale control",
       "help": "Normal main and event stages only; disabled by default."
     },
     "Enabled": {
-      "name": "Enable ship rotation",
+      "name": "Enable smart rotation - morale control",
       "help": "Normal main and event stages only; disabled by default."
+    },
+    "SelectedOnly": {
+      "name": "Calculate morale for rotating ships only",
+      "help": "Off by default. When enabled, only selected slots control morale waiting and rotation; warnings from fixed ships may be confirmed. When disabled, wait for the whole fleet minimum. Both modes track training ships and retain task morale controls for rotation."
     },
     "Rules": {
       "name": "Rotation rules",
-      "help": "Configure slots and sources for each fleet. Slots stay unchanged by default. Reserves rotate in number order."
+      "help": "Set slots and sources for each fleet; unchecked slots stay unchanged. Morale rotation prefers candidates with higher minimum measured morale, then lower fleet numbers. Level/affinity replacement selects the first eligible, unfinished candidate by ascending fleet number. Both swap matching slot numbers."
     },
     "State": {
       "name": "Rotation history",
       "help": "Stores the last reserve and completed slots. Check the in-game formation before clearing."
+    }
+  },
+  "FleetLevelTraining": {
+    "_info": {
+      "name": "Level training",
+      "help": "Off by default. Uses training slots and reserves. Verify every enabled goal on the same ship before completion; morale swaps keep progress."
+    },
+    "Enabled": {
+      "name": "Enabled",
+      "help": "Off by default. Uses training slots and reserves. Verify every enabled goal on the same ship before completion; morale swaps keep progress."
+    },
+    "Target": {
+      "name": "Target level",
+      "help": "Off by default. Uses training slots and reserves. Verify every enabled goal on the same ship before completion; morale swaps keep progress."
+    },
+    "CheckInterval": {
+      "name": "Read interval (minutes)",
+      "help": "0 checks every battle result. Any due interval verifies all enabled goals."
+    }
+  },
+  "FleetAffinityTraining": {
+    "_info": {
+      "name": "Affinity training",
+      "help": "Off by default. Uses training slots and reserves. Verify every enabled goal on the same ship before completion; morale swaps keep progress."
+    },
+    "Enabled": {
+      "name": "Enabled",
+      "help": "Off by default. Uses training slots and reserves. Verify every enabled goal on the same ship before completion; morale swaps keep progress."
+    },
+    "Target": {
+      "name": "Target affinity",
+      "help": "Off by default. Uses training slots and reserves. Verify every enabled goal on the same ship before completion; morale swaps keep progress."
+    },
+    "CheckInterval": {
+      "name": "Read interval (minutes)",
+      "help": "0 checks every battle result. Any due interval verifies all enabled goals."
+    }
+  },
+  "FleetTraining": {
+    "_info": {
+      "name": "Training records",
+      "help": "Persists verified readings, completed goals and pending swaps across restarts."
+    },
+    "State": {
+      "name": "Training records",
+      "help": "Persists verified readings, completed goals and pending swaps across restarts."
+    }
+  },
+  "FleetEquipment": {
+    "_info": {
+      "name": "Automatic equipment",
+      "help": "Unequip outgoing ships and apply incoming ship codes by actual type. Off by default."
+    },
+    "Enabled": {
+      "name": "Enable automatic equipment",
+      "help": "When off, keep the original smart rotation behavior."
+    },
+    "Codes": {
+      "name": "Equipment codes by type",
+      "help": "Up to three codes per type, ordered by actual slot separately in each row. Empty positions are skipped; old single codes remain first."
+    },
+    "State": {
+      "name": "Pending equipment",
+      "help": "Pending target slots are processed before resuming a task when enabled."
     }
   },
   "FleetInfo": {

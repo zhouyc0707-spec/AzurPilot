@@ -119,7 +119,9 @@ module/config/
 
 ### 生成器与数据结构
 
-`ConfigGenerator.args` 产出的 `args.json` 中，每个参数是带属性的对象：`type`（checkbox/select/textarea/input/datetime/storage/state/lock/task_priority 等）、`value`、可选 `option` / `validate` / `display` / `preserve_empty` / `persist` / `mode`。前端与 `ConfigService.validate` 都依赖这套属性做控件渲染与白名单校验。`persist: true` 仅决定运行时加载是否保留隐藏字段或只读状态的已保存值，不改变控件可见性与 API 编辑权限；`lock` 仍强制使用默认值，模板生成也始终使用默认值。
+`ConfigGenerator.args` 产出的 `args.json` 中，每个参数是带属性的对象：`type`（checkbox/select/textarea/input/datetime/storage/state/lock/task_priority 等）、`value`、可选 `valuetype` / `option` / `validate` / `display` / `preserve_empty` / `persist` / `mode`。前端与 `ConfigService.validate` 都依赖这套属性做控件渲染与白名单校验。`persist: true` 仅决定运行时加载是否保留隐藏字段或只读状态的已保存值，不改变控件可见性与 API 编辑权限；`lock` 仍强制使用默认值，模板生成也始终使用默认值。
+
+数值输入优先遵循 `valuetype: int/float`，未声明时沿用默认值的数值类型；不能仅凭 JSON 中的 `1` 判断比例只能填整数。`config.patch` 接受数字文本、首尾空格、小数和科学计数写法，并在保存前转换为数值；整数参数允许 `2.0` 这类等值写法，实际小数仍拒绝。文本与下拉选项不做这类转换，范围、日期、YAML 和只读保护继续生效。`GuildOperation.JoinThreshold` 明确为 `0–1` 的比例，默认仍是 `1`；游戏中的参与判断保持原有行为。
 
 ### 事务锁（transaction.py）
 

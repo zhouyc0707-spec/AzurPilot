@@ -8,7 +8,7 @@ test('智能换船默认关闭，保存六队舰位与多选候补，并且不�
     server.onMessage(message => socket.send(message))
   })
   await page.goto('/#/i/testpilot/task/FleetRotation')
-  const enable = page.getByRole('switch', {name: '启用智能换船', exact: true})
+  const enable = page.getByRole('switch', {name: '启用智能换船-心情控制', exact: true})
   await expect(enable).toBeEnabled()
   await expect(enable).toHaveAttribute('aria-checked', 'false')
   const fleet = page.getByRole('region', {name: '第 1 舰队', exact: true})

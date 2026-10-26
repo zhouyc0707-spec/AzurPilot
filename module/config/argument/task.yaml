@@ -476,6 +476,10 @@ FleetManagement:
     FleetInfo:
       - FleetInfo
       - FleetRotation
+      - FleetLevelTraining
+      - FleetAffinityTraining
+      - FleetTraining
+      - FleetEquipment
 
 # ==================== Run Params ====================
 
