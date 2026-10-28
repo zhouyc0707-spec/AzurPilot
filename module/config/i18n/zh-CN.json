@@ -398,13 +398,9 @@
       "name": "舰队扫描",
       "help": "扫描当前编入舰队的舰娘信息"
     },
-    "MindCalculatorScan": {
-      "name": "心智单元船坞扫描",
-      "help": "扫描国服 1280×720 船坞，结果在心智单元计算器中核对。完成前保留旧数据；会重置船坞筛选。"
-    },
-    "FleetTechScan": {
-      "name": "舰船科技扫描",
-      "help": "独立记录舰船身份和等级，不按心智计费条件排除。"
+    "DockScan": {
+      "name": "船坞数据扫描",
+      "help": "读取船坞卡片，保存共享数据供心智与舰船科技分析；不执行养成或换船。"
     },
     "Daemon": {
       "name": "半自动点击",
@@ -1347,14 +1343,18 @@
       "zip": "zip"
     },
     "AzurStatsID": {
-      "name": "AzurStat ID",
-      "help": "上传至 https://azur-stats.lyoko.io 时，声明的客户端 ID\n由随机字符组成，可随意修改"
+      "name": "提交人标识",
+      "help": "向 AzurPilot 云端声明的匿名提交人标识，可留空。"
+    },
+    "CloudUpload": {
+      "name": "云端统计上报",
+      "help": "默认关闭。显式开启后，科研及非大世界掉落的“上传／保存并上传”会发送截图至 api.azurpilot.com，同时保留本地统计。大世界始终仅本地处理。上传失败暂存重试，最多512 MiB、7天。"
     },
     "API": {
-      "name": "上传线路",
-      "help": "如果国内用户无法连接到 AzurStat，可以使用\"国内反向代理\"",
-      "default": "默认 (Cloudflare)",
-      "cn_gz_reverse_proxy": "国内反向代理 (广州)"
+      "name": "统一云端接口",
+      "help": "统一使用 https://api.azurpilot.com；旧线路选项仅兼容历史配置。",
+      "default": "api.azurpilot.com",
+      "cn_gz_reverse_proxy": "api.azurpilot.com"
     },
     "ResearchRecord": {
       "name": "科研截图",
@@ -1382,7 +1382,9 @@
       "name": "战斗掉落截图",
       "help": "启用后会放缓结算时的点击速度\n在自律寻敌下不生效",
       "do_not": "无操作",
-      "save": "保存"
+      "save": "保存",
+      "upload": "上传",
+      "save_and_upload": "保存并上传"
     },
     "OpsiHazard1Leveling": {
       "name": "侵蚀一掉落截图",
@@ -6946,44 +6948,18 @@
       "help": "多个加成餐品时按过滤顺序优先替换第一个；替换槽位从餐品5→1倒查替换最后一个非空餐品\n可用餐品key对照：cheese:芝士, strawberry_milkshake:草莓奶绿, morning_light:晨光活力组合, wake_up_call:醒神套餐, fruity_fruitier:果香双杯乐\n示例：fruity_fruitier > wake_up_call > 30 > morning_light > strawberry_milkshake > 20 > cheese > 10"
     }
   },
-  "MindCalculator": {
+  "Dock": {
     "_info": {
-      "name": "心智单元计算器",
-      "help": "统计升至 120 级的心智单元Ⅰ与物资。"
+      "name": "共享船坞数据",
+      "help": "读取船坞卡片，保存共享数据供心智与舰船科技分析；不执行养成或换船。"
     },
     "MinLevel": {
       "name": "最低扫描等级",
-      "help": "包含边界。仅录入此等级及以上的舰船。"
+      "help": "读取船坞卡片，保存共享数据供心智与舰船科技分析；不执行养成或换船。"
     },
     "MaxLevel": {
       "name": "最高扫描等级",
-      "help": "包含边界。仅录入此等级及以下的舰船。"
-    },
-    "Result": {
-      "name": "舰船扫描结果",
-      "help": "按实例保存舰船、等级与核对状态。"
-    },
-    "FleetTechRecord": {
-      "name": "舰队科技记录",
-      "help": "按实例保存累计扫描证据、人工校正及阵营科技等级。"
-    }
-  },
-  "FleetTech": {
-    "_info": {
-      "name": "科技扫描",
-      "help": "默认 95–125，完整 1–125 无过滤扫描才可确认未发现。"
-    },
-    "MinLevel": {
-      "name": "最低等级",
-      "help": "包含边界，范围外的已有记录保留。"
-    },
-    "MaxLevel": {
-      "name": "最高等级",
-      "help": "包含边界，最高 125 级。"
-    },
-    "Record": {
-      "name": "舰船科技记录",
-      "help": "按实例保存群组、人工校正、等级切换历史和扫描范围证据。"
+      "help": "读取船坞卡片，保存共享数据供心智与舰船科技分析；不执行养成或换船。"
     }
   },
   "FleetRotation": {
@@ -7041,9 +7017,13 @@
       "name": "培养记录",
       "help": "按舰船保存实读数据、完成条件及待确认互换，重启后保留。"
     },
+    "FullScanRecord": {
+      "name": "最近全舰队扫描时间",
+      "help": "仅完整扫描成功后更新，局部调度实读不重置此时间。"
+    },
     "CheckIntervalHours": {
-      "name": "共用实读间隔（小时）",
-      "help": "心情、等级、好感共用，支持小数且无上限；0为每次结算检查，到期完成当前地图后读取。旧独立间隔按已启用项目中较短者迁移，完成记录保留。"
+      "name": "等级/好感检查间隔（小时）",
+      "help": "默认6小时，仅用于等级和好感检查，支持非负小数且无上限。到期后只读取参与换船且实际出战的舰队及已开启条件，全部毕业要求达标才换船。心情到保留要求独立触发。确认需要换船后直接全舰队扫描，没有额外扫描间隔。0为每次结算检查。"
     },
     "State": {
       "name": "培养记录",

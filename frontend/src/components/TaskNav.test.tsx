@@ -79,16 +79,21 @@ function render(path: string, props: {defaultOpenKey?: string; isDesktop?: boole
 }
 
 describe('TaskNav 导航组件', () => {
-  it.each((['legacy-light', 'light'] as Theme[]).flatMap(theme =>
-    ['MindCalculator', 'FleetTechnology'].map(task => [theme, task] as const)))('在 %s 主题的 %s 页保持舰队管理入口及分组高亮', (theme, task) => {
+  it.each((['legacy-light', 'legacy-dark', 'light'] as Theme[]).flatMap(theme =>
+    ['FleetAnalysis', 'FleetSwitch'].map(task => [theme, task] as const)))('在 %s 主题的 %s 页面保留舰队管理入口及分组高亮', (theme, task) => {
     const html = render(`/i/default/task/${task}`, {defaultOpenKey: 'FleetManagement'}, theme)
     expect(html).toContain('舰队管理')
     expect(html).toContain('task-group-button expanded active')
-    expect(html).toContain('href="/i/default/task/FleetInfo"')
-    expect(html).toContain('href="/i/default/task/MindCalculator"')
-    expect(html).toContain('href="/i/default/task/FleetTechnology"')
-    expect(html).toContain('心智单元计算器')
-    expect(html).toContain('舰队科技')
+    expect(html).toContain('href="/i/default/task/FleetSwitch"')
+    expect(html).toContain('智能换船')
+    expect(html).not.toContain('href="/i/default/task/FleetInfo"')
+    expect(html).toContain('href="/i/default/task/FleetAnalysis"')
+    expect(html).not.toContain('href="/i/default/task/FleetRotation"')
+    expect(html).not.toContain('href="/i/default/task/FleetTraining"')
+    expect(html).not.toContain('href="/i/default/task/FleetEquipment"')
+    expect(html).not.toContain('href="/i/default/task/MindCalculator"')
+    expect(html).not.toContain('href="/i/default/task/FleetTechnology"')
+    expect(html).toContain('舰船数据')
     expect(html).not.toContain('Task.MindCalculator.name')
     expect(html).not.toContain('Task.FleetTechnology.name')
   })

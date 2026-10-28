@@ -398,13 +398,9 @@
       "name": "Fleet Scan",
       "help": "Scan ships assigned to fleets"
     },
-    "MindCalculatorScan": {
-      "name": "Cognitive chip dock scan",
-      "help": "Scan a CN dock at 1280×720 and review results in the cognitive chip calculator. Keeps old data until completion; resets dock filters."
-    },
-    "FleetTechScan": {
-      "name": "Fleet technology scan",
-      "help": "Record ship identities and levels independently of cognitive chip exclusions."
+    "DockScan": {
+      "name": "Dock data scan",
+      "help": "Read dock cards into shared data for mental-chip and fleet-technology analysis; does not upgrade or swap ships."
     },
     "Daemon": {
       "name": "Semi-Auto Click",
@@ -1347,14 +1343,18 @@
       "zip": "zip"
     },
     "AzurStatsID": {
-      "name": "AzurStat ID",
-      "help": "The client ID declared when uploading to https://azur-stats.lyoko.io\nComposed of random characters and can be modified at will"
+      "name": "Contributor ID",
+      "help": "Optional anonymous contributor identifier for AzurPilot cloud statistics."
+    },
+    "CloudUpload": {
+      "name": "Cloud statistics upload",
+      "help": "Off by default. Explicitly enable to upload research and non-Operation Siren drop screenshots to api.azurpilot.com for Upload / Save and upload, while retaining local statistics. Operation Siren always stays local. Failed uploads retry from a queue limited to 512 MiB and 7 days."
     },
     "API": {
-      "name": "Upload route",
-      "help": "If users in China cannot connect to AzurStat, they can use \"China Reverse Proxy\"",
-      "default": "Default (Cloudflare)",
-      "cn_gz_reverse_proxy": "China Reverse Proxy (Guangzhou)"
+      "name": "Unified cloud API",
+      "help": "Uses https://api.azurpilot.com. Old route options are retained only for configuration compatibility.",
+      "default": "api.azurpilot.com",
+      "cn_gz_reverse_proxy": "api.azurpilot.com"
     },
     "ResearchRecord": {
       "name": "Research screenshot",
@@ -1382,7 +1382,9 @@
       "name": "Combat drop screenshot",
       "help": "Enabling this will slow down click speed during settlement\nDoes not take effect in auto-search mode",
       "do_not": "No action",
-      "save": "Save"
+      "save": "Save",
+      "upload": "Upload",
+      "save_and_upload": "Save and upload"
     },
     "OpsiHazard1Leveling": {
       "name": "Corrosion 1 drop screenshot",
@@ -6946,44 +6948,18 @@
       "help": "When multiple boosted products are detected, the first one in filter order is prioritized for replacement; the replacement slot is the last non-empty slot searched from Product5→1"
     }
   },
-  "MindCalculator": {
+  "Dock": {
     "_info": {
-      "name": "Cognitive chip calculator",
-      "help": "Calculate Cognitive Chips I and coins to reach level 120."
+      "name": "Shared dock data",
+      "help": "Read dock cards into shared data for mental-chip and fleet-technology analysis; does not upgrade or swap ships."
     },
     "MinLevel": {
       "name": "Minimum scan level",
-      "help": "Inclusive. Import ships at or above this level."
+      "help": "Read dock cards into shared data for mental-chip and fleet-technology analysis; does not upgrade or swap ships."
     },
     "MaxLevel": {
       "name": "Maximum scan level",
-      "help": "Inclusive. Import ships at or below this level."
-    },
-    "Result": {
-      "name": "Ship scan results",
-      "help": "Stores ships, levels and review states per instance."
-    },
-    "FleetTechRecord": {
-      "name": "Fleet technology records",
-      "help": "Stores cumulative scan evidence, manual overrides and faction technology levels per instance."
-    }
-  },
-  "FleetTech": {
-    "_info": {
-      "name": "Technology scan",
-      "help": "Defaults to 95–125. Only a complete unfiltered 1–125 scan can confirm absence."
-    },
-    "MinLevel": {
-      "name": "Minimum level",
-      "help": "Inclusive; preserve existing records outside the range."
-    },
-    "MaxLevel": {
-      "name": "Maximum level",
-      "help": "Inclusive, up to level 125."
-    },
-    "Record": {
-      "name": "Fleet technology records",
-      "help": "Store groups, manual corrections, level toggle history and scan coverage per instance."
+      "help": "Read dock cards into shared data for mental-chip and fleet-technology analysis; does not upgrade or swap ships."
     }
   },
   "FleetRotation": {
@@ -7041,9 +7017,13 @@
       "name": "Training records",
       "help": "Persists verified readings, completed goals and pending swaps across restarts."
     },
+    "FullScanRecord": {
+      "name": "Last full fleet scan",
+      "help": "Updated only after a successful full scan; partial scheduling reads do not reset this time."
+    },
     "CheckIntervalHours": {
-      "name": "Shared read interval (hours)",
-      "help": "Shared by morale, level and affinity; nonnegative decimals with no upper limit. 0 checks after every battle, then reads after the current map. Migrate the shortest enabled legacy interval; retain completion records."
+      "name": "Level/affinity check interval (hours)",
+      "help": "Defaults to 6 hours for level and affinity checks only; nonnegative decimals with no upper limit. Read participating active fleets when due and swap only after all enabled graduation goals are met. Morale reserve triggers independently. Confirmed swaps always scan all fleets without another interval. 0 checks after every battle."
     },
     "State": {
       "name": "Training records",

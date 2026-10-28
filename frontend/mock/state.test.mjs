@@ -3,6 +3,40 @@ import { describe, expect, it } from 'vitest'
 import { createMockState } from './state.mjs'
 import { normalizeReport } from '../src/components/statisticsData'
 
+describe('全局事件订阅与生产接口保持一致', () => {
+  it('首页允许不指定实例订阅启动器与通知', () => {
+    const {dispatch} = createMockState()
+    expect(dispatch('events.subscribe', {instance: null, topics: ['instances', 'notifications', 'launcher']}))
+      .toEqual({instance: null, topics: ['instances', 'notifications', 'launcher']})
+  })
+  it('实例事件仍拒绝缺少实例的订阅', () => {
+    const {dispatch} = createMockState()
+    for (const topic of ['overview', 'logs', 'preview', 'emulator', 'stock'])
+      expect(() => dispatch('events.subscribe', {instance: null, topics: ['launcher', topic]})).toThrow('订阅此主题需要指定实例')
+  })
+})
+
+describe('刷新智能换船状态', () => {
+  it('独立接口清空记录并保留调度配置', () => {
+    const {dispatch} = createMockState()
+    const before = dispatch('config.get', {instance: 'demo-main'})
+    const after = dispatch('fleetTraining.reset', {instance: 'demo-main', revision: before.revision})
+    expect(after.values.FleetInfo.FleetTraining.State).toEqual({})
+    expect(after.values.FleetInfo.FleetInfo.Result).toEqual({})
+    expect(after.values.FleetInfo.FleetRotation.Rules).toBe(before.values.FleetInfo.FleetRotation.Rules)
+    expect(after.values.FleetInfo.FleetTraining.CheckIntervalHours).toBe(before.values.FleetInfo.FleetTraining.CheckIntervalHours)
+    expect(after.values.FleetInfo.FleetEquipment).toEqual(before.values.FleetInfo.FleetEquipment)
+    expect(() => dispatch('fleetTraining.reset', {instance: 'demo-main', revision: '过期'})).toThrow(/配置已变化/)
+  })
+  it('实例运行时拒绝清空', () => {
+    const {dispatch} = createMockState()
+    dispatch('scheduler.start', {instance: 'demo-main'})
+    const before = dispatch('config.get', {instance: 'demo-main'})
+    expect(() => dispatch('fleetTraining.reset', {instance: 'demo-main', revision: before.revision})).toThrow(/先停止实例/)
+    expect(dispatch('config.get', {instance: 'demo-main'})).toEqual(before)
+  })
+})
+
 describe('前端模拟服务', () => {
   it('队列任务独立运行且再次停止保留原计划，不启动调度器', () => {
     const {dispatch} = createMockState()
@@ -175,6 +209,7 @@ describe('前端模拟服务', () => {
     const {dispatch, tick} = createMockState()
     expect(() => dispatch('schema.get', {language: '../deploy'})).toThrow(/契约/)
     expect(dispatch('schema.get', {language: 'en-US'}).translations.Emulator.Serial.name).toMatch(/serial/i)
+    expect(dispatch('schema.get', {language: 'zh-MIAO'}).translations.Task.FleetInfo.name).toBe('舰队信息喵')
     const config = dispatch('config.get', {instance: 'demo-main'})
     expect(() => dispatch('config.patch', {...config, values: undefined, changes: []})).toThrow(/契约/)
     expect(() => dispatch('config.patch', {instance: config.instance, revision: config.revision, changes: [{path: 'Main.Scheduler.Command', value: 'Main'}]})).toThrow(/不可修改/)

@@ -632,7 +632,7 @@ class SocketApiTests(unittest.TestCase):
                 patch('module.runtime.updater.updater', SimpleNamespace(event=stop_event)), \
                 self.client.websocket_connect('/api/v1/ws') as ws:
             self.login(ws)
-            for task, group in [('MindCalculatorScan', 'MindCalculator'), ('FleetTechScan', 'FleetTech')]:
+            for task, group in [('DockScan', 'Dock')]:
                 with self.subTest(task=task):
                     config = self.call(ws, 'config.get', {'instance': 'testpilot'})['result']
                     patched = self.call(ws, 'config.patch', {
@@ -658,7 +658,7 @@ class SocketApiTests(unittest.TestCase):
         with patch.object(ProcessManager, 'get_manager', return_value=manager), \
                 self.client.websocket_connect('/api/v1/ws') as ws:
             self.login(ws)
-            for task in ['FleetTechnology', 'Main', 'UnknownScan']:
+            for task in ['FleetTechnology', 'MindCalculatorScan', 'FleetTechScan', 'Main', 'UnknownScan']:
                 with self.subTest(task=task):
                     response = self.call(ws, 'tasks.run', {'instance': 'testpilot', 'task': task})
                     self.assertEqual('INVALID_PARAMS', response['error']['code'])
@@ -671,7 +671,7 @@ class SocketApiTests(unittest.TestCase):
         with patch.object(ProcessManager, 'get_manager', return_value=manager), \
                 self.client.websocket_connect('/api/v1/ws') as ws:
             self.login(ws)
-            response = self.call(ws, 'tasks.run', {'instance': 'testpilot', 'task': 'FleetTechScan'})
+            response = self.call(ws, 'tasks.run', {'instance': 'testpilot', 'task': 'DockScan'})
             self.assertEqual('INSTANCE_RUNNING', response['error']['code'])
             manager.start.assert_not_called()
 

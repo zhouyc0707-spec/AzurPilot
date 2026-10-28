@@ -13,7 +13,7 @@ from module.exception import ScriptError
 from module.server_checker import ServerChecker
 from module.server_status import GatewayServer, ServerStatusQueryError
 
-API_BASE = "https://server-checker.nanoda.work/api/v1/servers"
+API_BASE = "https://api.azurpilot.com/api/v2/get/server"
 
 
 def make_response(status_code=200, payload=None, text=""):
@@ -52,6 +52,9 @@ class ServerCheckerTestCase(unittest.TestCase):
         )
         self.session_patch.start()
         self.addCleanup(self.session_patch.stop)
+        device_patch = patch('module.server_checker.get_device_id', return_value='a' * 32)
+        device_patch.start()
+        self.addCleanup(device_patch.stop)
 
     def build_checker(self, server, response=None):
         """以指定首个响应构造检查器。"""
@@ -64,7 +67,10 @@ class ServerCheckerTestCase(unittest.TestCase):
         self.session.get.assert_called_once()
         args, kwargs = self.session.get.call_args
         url = kwargs.get("url", args[0] if args else None)
-        self.assertEqual(url, f"{API_BASE}/{composite_id}")
+        self.assertEqual(url, API_BASE)
+        region, server_id = composite_id.rsplit('_', 1)
+        self.assertEqual(kwargs.get('params'), {'region': region, 'server_id': int(server_id)})
+        self.assertEqual(kwargs.get('headers'), {'X-AzurPilot-ID': 'a' * 32})
         self.assertEqual(kwargs.get("timeout"), (3, 3))
 
 

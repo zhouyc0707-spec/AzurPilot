@@ -762,6 +762,10 @@
         "type": "input",
         "value": null
       },
+      "CloudUpload": {
+        "type": "checkbox",
+        "value": false
+      },
       "API": {
         "type": "select",
         "value": "default",
@@ -803,7 +807,9 @@
         "value": "do_not",
         "option": [
           "do_not",
-          "save"
+          "save",
+          "upload",
+          "save_and_upload"
         ]
       },
       "OpsiHazard1Leveling": {
@@ -20371,9 +20377,15 @@
       }
     },
     "FleetTraining": {
+      "FullScanRecord": {
+        "type": "stored",
+        "value": "2020-01-01 00:00:00",
+        "validate": "datetime",
+        "display": "hide"
+      },
       "CheckIntervalHours": {
         "type": "input",
-        "value": 0.5,
+        "value": 6.0,
         "valuetype": "float",
         "validate": "^[0-9]+(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
       },
@@ -20767,54 +20779,17 @@
       }
     }
   },
-  "MindCalculatorScan": {
-    "MindCalculator": {
+  "DockScan": {
+    "Dock": {
       "MinLevel": {
         "type": "input",
-        "value": 95,
+        "value": 1,
         "validate": "^[1-9][0-9]?$|^1[01][0-9]$|^12[0-5]$"
       },
       "MaxLevel": {
         "type": "input",
         "value": 125,
         "validate": "^[1-9][0-9]?$|^1[01][0-9]$|^12[0-5]$"
-      },
-      "Result": {
-        "type": "stored",
-        "value": {},
-        "display": "hide"
-      },
-      "FleetTechRecord": {
-        "type": "stored",
-        "value": {},
-        "display": "hide"
-      }
-    },
-    "Storage": {
-      "Storage": {
-        "type": "storage",
-        "value": {},
-        "valuetype": "ignore",
-        "display": "disabled"
-      }
-    }
-  },
-  "FleetTechScan": {
-    "FleetTech": {
-      "MinLevel": {
-        "type": "input",
-        "value": 95,
-        "validate": "^[1-9][0-9]?$|^1[01][0-9]$|^12[0-5]$"
-      },
-      "MaxLevel": {
-        "type": "input",
-        "value": 125,
-        "validate": "^[1-9][0-9]?$|^1[01][0-9]$|^12[0-5]$"
-      },
-      "Record": {
-        "type": "stored",
-        "value": {},
-        "display": "hide"
       }
     },
     "Storage": {

@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest'
 import {rotationRules} from './FleetRotation'
-import {FLEET_ROTATION, taskLabel, taskNavItems} from '../components/taskNavItems'
+import {FLEET_SWITCH, FLEET_ROTATION, taskLabel, taskNavItems} from '../components/taskNavItems'
 import {rotationZhCN} from '../fleet-rotation-i18n'
 
 describe('智能换船配置和入口', () => {
@@ -11,8 +11,9 @@ describe('智能换船配置和入口', () => {
     expect(rotationRules('{"1":{"slots":[3,4,5],"sources":[3,4,5,6]}}')[1]).toEqual({slots: [3, 4, 5], sources: [3, 4, 5, 6]})
     expect(() => rotationRules('broken')).toThrow()
   })
-  it('入口仅属于舰队管理，显示独立页面名称', () => {
-    expect(taskNavItems('FleetManagement', ['FleetInfo'])).toContain(FLEET_ROTATION)
+  it('配置入口收进智能换船，旧名称仍可用于页签', () => {
+    expect(taskNavItems('FleetManagement', ['FleetInfo'])).toContain(FLEET_SWITCH)
+    expect(taskNavItems('FleetManagement', ['FleetInfo'])).not.toContain(FLEET_ROTATION)
     expect(taskNavItems('Tool', ['FleetScan'])).not.toContain(FLEET_ROTATION)
     expect(taskLabel(FLEET_ROTATION, () => rotationZhCN['rotation.title'], () => '不应使用任务翻译')).toBe('换船配置')
   })

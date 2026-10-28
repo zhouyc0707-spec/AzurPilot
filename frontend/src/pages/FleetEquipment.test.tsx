@@ -5,17 +5,18 @@ import {translateUi} from '../i18n'
 import {FLEET_EQUIPMENT, taskLabel, taskNavItems} from '../components/taskNavItems'
 import {EquipmentCodeFields, equipmentCodes, equipmentTypes} from './FleetEquipment'
 
-describe('自动换装备配置页面', () => {
+describe('换船装备配置页面', () => {
   it('空配置提供15种舰种的空码，兼容配置恢复并拒绝错误映射', () => {
     expect(equipmentCodes(undefined)).toEqual(Object.fromEntries(equipmentTypes.map(type => [type, ['', '', '']])))
     expect(equipmentCodes('{"DD":" code ","CV":""}').DD).toEqual(['code', '', ''])
     expect(equipmentCodes({DD: ['one', '', 'three']}).DD).toEqual(['one', '', 'three'])
     for (const value of ['{', '[]', '{"unknown":""}', '{"DD":3}', '{"DD":null}', '{"DD":["a","b","c","d"]}', '{"DD":[null]}']) expect(() => equipmentCodes(value)).toThrow()
   })
-  it('仅在舰队管理中提供独立入口', () => {
-    expect(taskNavItems('FleetManagement', ['FleetInfo'])).toContain(FLEET_EQUIPMENT)
+  it('装备配置收进智能换船，使用换船装备名称', () => {
+    expect(taskNavItems('FleetManagement', ['FleetInfo'])).toContain('FleetSwitch')
+    expect(taskNavItems('FleetManagement', ['FleetInfo'])).not.toContain(FLEET_EQUIPMENT)
     expect(taskNavItems('Tool', ['FleetScan'])).not.toContain(FLEET_EQUIPMENT)
-    expect(taskLabel(FLEET_EQUIPMENT, () => '自动换装备', () => '非独立任务')).toBe('自动换装备')
+    expect(taskLabel(FLEET_EQUIPMENT, key => translateUi('zh-CN', key), () => '非独立任务')).toBe('换船装备')
   })
   it('全部输入框有舰种名称、跳过说明和已保存值', () => {
     const html = renderToStaticMarkup(<AppContext.Provider value={{

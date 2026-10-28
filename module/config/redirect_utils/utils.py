@@ -24,7 +24,7 @@ def fleet_training_hours_redirect(value):
 def fleet_training_interval_redirect(value):
     """合并旧独立间隔；优先启用项的最短间隔，已有共用值保持不变。"""
     if not isinstance(value, dict):
-        return 0.5
+        return 6.0
     shared = value.get('FleetTraining', {})
     if isinstance(shared, dict) and 'CheckIntervalHours' in shared:
         return shared['CheckIntervalHours']
@@ -40,7 +40,7 @@ def fleet_training_interval_redirect(value):
             configured.append(hours)
             if fields.get('Enabled') is True:
                 enabled.append(hours)
-    return min(enabled or configured, default=0.5)
+    return min(enabled or configured, default=6.0)
 
 
 def upload_redirect(value):

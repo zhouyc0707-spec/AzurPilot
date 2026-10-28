@@ -11,12 +11,16 @@
 
 [资源管理](resource-management.md) 在所有主题均位于「资源统计」内的「资源趋势」旁边，路径为 `/i/:instance/statistics?view=management`；旧 `/resources` 链接统一自动跳转，不再保留一级资源管理入口。旧版独立统计页顶部提供「资源趋势／资源管理」切换，「资源趋势」继续使用本地整页统计；总览内嵌统计不显示切换条、不跟随外层 `view` 参数。切换主题后保留当前资源管理视图。由 `pages/ResourceManagement.tsx` 与 `resources/` 提供 ECharts 桑基图、库存与收支明细。图节点支持资源与任务筛选，明细支持分页和完整区间 CSV 导出；原调度的石油自动控制使用现有配置事务接口保存。五种语言、窄屏和空数据状态均沿用控制台组件与主题。本地保留 `zh-MIAO` 的已保存偏好、原有字典与配置翻译；新增通用文案先继承简体中文，日期格式仍使用 `zh-CN`。
 
-所有主题在「舰队管理」下提供「舰队信息」、[心智单元计算器](mind-calculator.md)、[舰队科技](fleet-technology.md) 与智能换船。计算器路径为 `/i/:instance/task/MindCalculator`，旧 `/mind-calculator` 自动跳转；沿用 `components/taskNavItems.ts` 的 WebUI 页面导航机制，同时覆盖侧栏树、悬浮菜单及顶栏任务跳转，不注册新的游戏任务。「舰队信息」由 `pages/FleetInfoPage.tsx` 提供舰队卡片和扫描开关，调用 `tasks.run(FleetScan)`，只在该扫描运行时调用 `scheduler.stop`；其他任务运行、更新或连接不可用时禁用。启动前等待配置队列保存，再以最新修订保存 `FleetInfo.FleetInfo.UpdateEmotion`（扫描时更新心情）选项；关闭时保留已有舰位心情参考，不进行被动学习。扫描运行期间及结束后重读舰队信息，显示扫描确认的舰位，不为历史记录推断舰位。浏览页面不启动游戏，也不修改实例自启设置；手动指定舰位互换尚未提供独立按钮，智能换船使用下述策略页。
+「舰队管理」下并列放置「智能换船」与「舰船数据」。`pages/FleetSwitch.tsx` 在 `/i/:instance/task/FleetSwitch` 整合「舰队信息」「换船配置」「换船调度」「换船装备」四个页签，使用与舰船数据相同的分段按钮样式；查询参数 `tab=info|rotation|training|equipment` 记录当前页签，刷新后保持选择。原 `FleetInfo`、`FleetRotation`、`FleetTraining`、`FleetEquipment` 及等级/好感调度链接自动跳转到对应页签。侧栏树、悬浮菜单及顶栏任务跳转共用 `components/taskNavItems.ts`，只保留一个智能换船入口，不注册新的游戏任务，各页签继续使用原有配置路径与保存接口。原「自动换装备」页面显示名称改为「换船装备」，默认开关和装备码规则不变。
+
+整合前的[四个菜单入口](images/fleet-switch-before.png)来自用户提供的界面截图；整合后的[桌面](images/fleet-switch-desktop.png)与[手机](images/fleet-switch-mobile.png)截图来自隔离模拟服务，仅验证界面展示和交互，不代表实际游戏验证。
+
+「舰队信息」页签仍由 `pages/FleetInfoPage.tsx` 提供舰队卡片和扫描开关，调用 `tasks.run(FleetScan)`，只在该扫描运行时调用 `scheduler.stop`；其他任务运行、更新或连接不可用时禁用。启动前等待配置队列保存，再以最新修订保存 `FleetInfo.FleetInfo.UpdateEmotion`（扫描时更新心情）选项；关闭时保留已有舰位心情参考，不进行被动学习。扫描运行期间及结束后重读舰队信息，显示扫描确认的舰位，不为历史记录推断舰位。浏览页面不启动游戏，也不修改实例自启设置；手动指定舰位互换尚未提供独立按钮，智能换船使用下述策略页签。
 
 舰队信息的[桌面截图](images/fleet-management-desktop.png)与[手机截图](images/fleet-management-mobile.png)
 来自隔离服务及合成记录，只验证舰位、未知心情和扫描选项展示，不代表实际账号操作。
 
-「舰队管理」的 `/i/:instance/task/FleetRotation` 页面名为「换船配置」，属于独立配置页，
+「智能换船」的 `/i/:instance/task/FleetSwitch?tab=rotation` 页签名为「换船配置」，继续独立保存配置，
 不注册游戏任务，也不显示调度状态或启动任务按钮。六支水面
 舰队的36个舰位默认均为“不变”，可逐位改为“换船”，并为每支目标队多选候补队。
 此页只保存共享的 `FleetInfo.FleetRotation.Rules`，不修改三个调度的开关和心情计算选项，
@@ -24,15 +28,13 @@
 的上次来源与本轮进度，任务运行时只刷新进度，不覆盖尚未保存的规则编辑。
 清空轮换记录按钮仅在任务停止时可用，不清空培养完成记录。实际刷图触发由战役出击前策略负责。
 
-舰队科技路径为 `/i/:instance/task/FleetTechnology`，同样覆盖侧栏树、悬浮菜单及顶栏跳转并隐藏任务右栏；只在用户启动扫描时运行 `FleetTechScan`，人工编辑和心智清单同步仅更新当前实例记录。
-
-[心智单元计算器](mind-calculator.md) 的新旧入口共用舰船清单、待核对状态、导入导出与费用计算。该页隐藏任务右栏；自动船坞扫描属于独立游戏工具，仅支持国服且要求当前实例已停止，其余计算和文件处理无需操作游戏。
+「舰船数据」在 `/i/:instance/task/FleetAnalysis` 提供舰队科技、养成计算、扫描更新与我的舰船四个页签，隐藏任务右栏。旧 `/mind-calculator`、`/task/MindCalculator` 与 `/task/FleetTechnology` 链接分别跳转到新养成或科技页签，所有主题共用新流程。2026-10-28 用户明确接受上游新流程：旧记录保留备查，不保留原排除与导出行为；原有喵语和旧主题定制继续保留。扫描安全与记录迁移规则见[养成计算与船坞识别](mind-calculator.md)、[舰船数据](fleet-analysis.md)。
 
 `TaskConfig` 把 `Task.<task>.help` 展示为参数列首卡，并在舰队信息中显示心情；旧数据缺少心情时显示未知。商店使用上游的任务参数和过滤器界面，活动商店的 `物品:数量上限` 兼容文本由配置翻译说明并原样提交。旧版统计整页、实例 `Activity` 缓存、顶栏重启与主题切换、模拟器运行状态、岛屿任务总开关及实时指挥喵报告继续沿用本地实现。
 
 旧版总览的日志／统计切换卡片中央提供「维护日」星期选择器（`components/MaintenanceWeekday.tsx`），绑定同一个 `Exercise.Exercise.MaintenanceWeekday`，不另存星期或日期。选择后复用实例编辑队列立即保存，并显示待保存、成功或失败状态；演习提前和困难图维护日18点各自开关保持原值，排程重查由既有 `ConfigService.patch()` 处理。该星期每周重复，直到用户修改。返回页面、连接恢复或重新聚焦时重新读取；旧读取不覆盖新的保存回执，实例切换丢弃旧控件状态。仅旧版主题显示，布局样式位于 `legacy.css`，不随总览的高频资源推送反复读取整份配置。
 
-同组的`/i/:instance/task/FleetTraining`「换船调度」集中展示心情、等级和好感三个独立开关，
+同页的`/i/:instance/task/FleetSwitch?tab=training`「换船调度」集中展示心情、等级和好感三个独立开关，
 默认均关闭，共享上述舰位及候补。原等级/好感页面链接自动跳转到此页。等级与好感分别保存目标；
 页面上方只保留一个`FleetInfo.FleetTraining.CheckIntervalHours`共用小时实读间隔，三个卡片内不再重复。
 支持小数、不设上限、默认0.5小时；旧独立间隔优先按启用项目的最短值迁移，都关闭时取已有最短值，
@@ -87,7 +89,7 @@ React 旧版统计在首次显示、手动刷新、60 秒轮询及 `statistics` 
 - 通用设置的任务优先级由 `FieldInput` 的 `task_priority` 专用文本框显示，每行保留英文任务标识，并以 `# 本地化任务名` 附加已有翻译；`src/config/taskPriorityText.ts` 的纯函数负责显示转换与提交清理，保存到 `General.YukikazeTaskManager.TaskPriorityAdjustment` 时仅提交英文标识，使用 `\n> ` 分隔，翻译注释不写入配置（兼容注释行与全角箭头）
 - 主题、语言、背景等浏览器侧偏好的保存与应用（localStorage / IndexedDB）
 - 日志面板在数据进入 React state 前只保留最近 1000 条，作为后端环形缓冲之外的独立防线；切到截图页后仅接收有界缓冲，返回日志时一次合并，隐藏期间不持续更新日志 DOM。卡片聚合按重叠窗口复用未变中段，只重算被截断的首部和可能续行的尾部；筛选、排序或内容变化时重新核验。高度缓存随窗口淘汰，保留未变卡片的测量值。延迟历史响应不得覆盖较新的实时推送，游标回退与实时重置分别处理，防止跨进程混入旧日志
-- 独立 mock 服务（`mock/`），无需 Python、ADB 或模拟器即可开发验证前端交互
+- 独立 mock 服务（`mock/`），不连接 ADB 或模拟器；普通页面只需 Node.js，舰船数据和调度器算法用例另需项目 Python 环境
 
 ### 不负责
 
@@ -175,7 +177,7 @@ Node.js >= 22.12（推荐 24），首次准备用 `npm ci --prefix frontend`。
 
 ## 19. 调试方法
 
-- 界面交互问题先用 mock 模式复现（无需 Python 与模拟器）；`AZURPILOT_MOCK_SCENARIO=empty` 从零实例测首次创建，`AZURPILOT_MOCK_PASSWORD` 可测登录与重连。
+- 界面交互问题先用 mock 模式复现（不连接模拟器，舰船数据和调度器算法使用项目 Python 环境）；`AZURPILOT_MOCK_SCENARIO=empty` 从零实例测首次创建，`AZURPILOT_MOCK_PASSWORD` 可测登录与重连。
 - 模拟统计报告的逐点序列同真实接口使用 `{t, v, s?}`，时间为微秒整数；通过前端 `normalizeReport` 还原后再渲染，避免旧 `{time, value}` 夹具导致日期与指标显示 NaN。
 - e2e 失败先看截图输出在被 git 忽略的 `frontend/test-results/`；先确认跑的是哪套配置（主配置连临时 Python 后端，mock 配置连内存模拟服务）。
 - 类型报错疑似与后端契约不一致时，先重跑 `dev_tools.export_api_schema`，再排查是否有人手改了生成产物。

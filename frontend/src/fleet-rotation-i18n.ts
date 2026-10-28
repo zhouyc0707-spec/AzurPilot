@@ -1,4 +1,5 @@
 export const rotationZhCN = {
+  'rotation.pageTitle': '智能换船',
   'rotation.title': '换船配置', 'rotation.enable': '启用心情调度', 'rotation.save': '保存规则',
   'rotation.selectedOnly': '仅计算更换舰船心情',
   'rotation.emotionHelp': '三种调度共用，默认关闭。开启后只按勾选舰位心情决定等待，可确认固定舰船带来的红脸；关闭后按全队最低心情等待。沿用任务的保持经验加成、防绿脸等要求。只有开启心情调度，低心情才会触发临时换船。',
@@ -10,6 +11,7 @@ export const rotationZhCN = {
   'rotation.uncertain': '上轮未完成，下次运行会自动清理旧记录并重扫实际编队，无需手动清空。', 'rotation.reset': '清空轮换记录', 'rotation.saved': '换船规则已保存',
 }
 export const rotationZhTW: typeof rotationZhCN = {
+  'rotation.pageTitle': '智慧換船',
   'rotation.title': '換船設定', 'rotation.enable': '啟用心情調度', 'rotation.save': '儲存規則',
   'rotation.selectedOnly': '僅計算更換艦船心情',
   'rotation.emotionHelp': '三種調度共用，預設關閉。開啟後僅以勾選艦位心情決定等待，可確認固定艦船造成的紅臉；關閉後以全隊最低心情等待。沿用任務的經驗加成、防綠臉等要求。僅啟用心情調度時，低心情才會觸發暫時換船。',
@@ -21,6 +23,7 @@ export const rotationZhTW: typeof rotationZhCN = {
   'rotation.uncertain': '上輪未完成，下次執行會自動清除舊紀錄並重新掃描實際編隊，無須手動清除。', 'rotation.reset': '清空輪換記錄', 'rotation.saved': '換船規則已儲存',
 }
 export const rotationEnUS: typeof rotationZhCN = {
+  'rotation.pageTitle': 'Smart ship rotation',
   'rotation.title': 'Rotation configuration', 'rotation.enable': 'Enable morale scheduling', 'rotation.save': 'Save rules',
   'rotation.selectedOnly': 'Calculate morale for rotating ships only',
   'rotation.emotionHelp': 'Shared by all three modes; off by default. When enabled, only selected slots control morale waiting and warnings from fixed ships may be confirmed. Otherwise use the whole fleet minimum. Task morale requirements remain in effect. Low morale causes temporary swaps only when morale scheduling is enabled.',
@@ -32,6 +35,7 @@ export const rotationEnUS: typeof rotationZhCN = {
   'rotation.uncertain': 'The previous round was incomplete. The next run automatically clears old progress and rescans the actual formation; no manual reset is needed.', 'rotation.reset': 'Clear rotation history', 'rotation.saved': 'Rotation rules saved',
 }
 export const rotationJaJP: typeof rotationZhCN = {
+  'rotation.pageTitle': '自動艦船交代',
   'rotation.title': '交代設定', 'rotation.enable': 'コンディション調整を有効化', 'rotation.save': 'ルールを保存',
   'rotation.selectedOnly': '交代対象艦のみコンディション計算',
   'rotation.emotionHelp': '3種類の調整で共用、初期設定は無効。有効時は選択配置のみで待機を判定し、固定艦の警告は承認可能です。無効時は全艦隊の最低値で待機します。タスクの基準は維持し、低下による一時交代はコンディション調整の有効時のみ行います。',

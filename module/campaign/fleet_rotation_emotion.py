@@ -7,7 +7,7 @@ from module.combat.emotion_state import EmotionRecoveryState
 from module.config.time_source import now
 from module.exception import FleetManagementError
 from module.runtime.fleet_rotation import ROTATION_PATH, minimum_morale
-from module.runtime.fleet_training import goals
+from module.runtime.fleet_training import goals, persist_context
 
 
 def selected_morale(readings, slots):
@@ -18,8 +18,8 @@ def selected_morale(readings, slots):
 class RotationEmotion(Emotion):
     """只由支持换船的出击前入口安装，不改变其他任务的心情策略。
 
-    培养账本保存在当前任务会话，复用整数恢复相位与实际战斗扣减；切换任务或
-    重启后先实测重建。整队 Value/Record/RecoveryState 始终记录全队最低值。
+    培养账本保留整数恢复相位与实际战斗扣减，跨任务启动恢复；没有有效账本时
+    才先实测重建。整队 Value/Record/RecoveryState 始终记录全队最低值。
     """
 
     def __init__(self, config, context, rules, selected):
@@ -107,6 +107,7 @@ class RotationEmotion(Emotion):
             state = self.training_state(fleet_index)
             if state is not None:
                 state.consume(self.reduce_shipwreck if shipwreck else self.reduce_per_battle)
+                persist_context(self.config, self.context)
 
     def rotation_popup_allowed(self):
         """仅在培养舰位充足时确认固定红脸，不把固定低值算到培养账本。"""
@@ -127,9 +128,11 @@ class RotationEmotion(Emotion):
         recovered = now() if needs_scan else self._check_reduce(battle)[0]
         self.context['scanned'] = False
         self.context.pop('training', None)
+        persist_context(self.config, self.context)
         self.config.task_delay(target=recovered)
 
     def emergency_reset(self):
         super().emergency_reset()
         self.context['scanned'] = False
         self.context.pop('training', None)
+        persist_context(self.config, self.context)

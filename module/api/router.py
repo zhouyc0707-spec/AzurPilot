@@ -72,19 +72,23 @@ class Router:
             'config.get': Method(p.InstanceParams, lambda x: configs.get(x.instance)),
             'config.export': Method(p.InstanceParams, lambda x: configs.export(x.instance)),
             'config.patch': Method(p.PatchParams, lambda x: configs.patch(x.instance, x.revision, x.changes), True),
+            'fleetTraining.reset': Method(p.RevisionParams, self.reset_fleet_training, True),
             'overview.get': Method(p.InstanceParams, lambda x: runtime.overview(x.instance)),
             'emulator.status': Method(p.InstanceParams, lambda x: runtime.emulator_status(x.instance)),
+            'dock.report': Method(p.InstanceParams, lambda x: self.dock.report(x.instance)),
+            'dock.importLegacy': Method(p.RevisionParams, lambda x: self.dock.import_legacy(x.instance, x.revision), True),
+            'dock.configure': Method(p.DockConfigureParams, lambda x: self.dock.configure(x.instance, x.min_level, x.max_level), True),
+            'dock.patch': Method(p.DockPatchParams, lambda x: self.dock.patch(x.instance, x.revision, [change.model_dump(exclude_unset=True) for change in x.changes]), True),
+            'dock.stageImport': Method(p.DockStageImportParams, lambda x: self.dock.stage_import(x.instance, x.revision, [ship.model_dump(exclude_unset=True) for ship in x.ships]), True),
+            'dock.review': Method(p.DockReviewParams, lambda x: self.dock.review(x.instance, x.revision, x.pending_revision, [decision.model_dump(exclude_unset=True) for decision in x.decisions]), True),
             'mind.catalog': Method(p.InstanceParams, lambda x: self.mind.catalog(x.instance)),
             'fleetTech.catalog': Method(p.InstanceParams, lambda x: self.fleet_tech.catalog(x.instance)),
             'fleetTech.report': Method(p.InstanceParams, lambda x: self.fleet_tech.report(x.instance)),
-            'fleetTech.syncMind': Method(p.InstanceParams, lambda x: self.fleet_tech.sync_mind(x.instance), True),
+            'fleetTech.mergeShips': Method(p.RevisionParams, lambda x: self.fleet_tech.merge_ships(x.instance, x.revision), True),
             'fleetTech.patch': Method(p.FleetTechPatchParams, lambda x: self.fleet_tech.patch(x.instance, x.revision, x.changes, x.nations), True),
-            'mind.report': Method(p.InstanceParams, lambda x: self.mind.report(x.instance)),
-            'mind.calculate': Method(p.MindCalculateParams, lambda x: self.mind.calculate(x.instance, [ship.model_dump() for ship in x.ships])),
-            'mind.save': Method(p.MindSaveParams, lambda x: self.mind.save(x.instance, x.revision, [ship.model_dump() for ship in x.ships]), True),
+            'mind.plan': Method(p.CultivationParams, lambda x: self.mind.plan(x.instance, x.revision, x.ship_ids, x.target_level)),
             'mind.import': Method(p.MindFileParams, lambda x: self.mind.import_file(x.instance, x.filename, x.content)),
             'mind.recognize': Method(p.MindFileParams, lambda x: self.mind.recognize(x.instance, x.filename, x.content)),
-            'mind.export': Method(p.MindExportParams, lambda x: self.mind.export(x.instance, x.format)),
             'stock.status': Method(p.InstanceParams, lambda x: self.stock_exchange.status(x.instance)),
             'stock.rebuild': Method(p.StockRebuildParams, lambda x: self.stock_exchange.rebuild(x.instance, x.confirm, x.scope), True),
             'stock.request': Method(p.StockRequestParams, lambda x: self.stock_exchange.request(x.instance, x.path, x.method, x.body, x.etag), True),
@@ -147,6 +151,11 @@ class Router:
                                                     lambda x: {'removed': background.gallery_remove(x.id)}, True),
             'background.gallery.open': Method(p.Params, lambda _: background.gallery_open(), True),
         }
+
+    @property
+    def dock(self):
+        from module.api.dock_service import DockService
+        return DockService(self.configs)
 
     @property
     def fleet_tech(self):
@@ -354,6 +363,13 @@ class Router:
         if entry.mutates and os.environ.get('DEMO') == '1':
             raise p.ApiError('READ_ONLY', '演示模式下禁止修改配置或运行任务')
         return entry.handler(validated)
+
+    def reset_fleet_training(self, params: p.RevisionParams):
+        """停止状态下清空智能换船记录；与启动共用生命周期锁，避免清空后被旧进程回写。"""
+        with ProcessManager._get_lifecycle_lock(params.instance):
+            if self.runtime.manager(params.instance).alive:
+                raise p.ApiError('INSTANCE_RUNNING', '请先停止实例，再刷新换船状态')
+            return self.configs.reset_fleet_training(params.instance, params.revision)
 
     def delete(self, params: p.RevisionParams):
         """删除指定实例及其关联的数据和进程。

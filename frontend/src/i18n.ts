@@ -1,3 +1,4 @@
+import {analysisZhCN, analysisZhTW, analysisEnUS, analysisJaJP} from './fleet-analysis-i18n'
 import {rotationZhCN, rotationZhTW, rotationEnUS, rotationJaJP} from './fleet-rotation-i18n'
 import {trainingZhCN, trainingZhTW, trainingEnUS, trainingJaJP} from './fleet-training-i18n'
 import {equipmentZhCN, equipmentZhTW, equipmentEnUS, equipmentJaJP} from './fleet-equipment-i18n'
@@ -53,6 +54,7 @@ const zhCN = {
   'emulator.readFailed': '最近检测失败，暂无法预计',
   'emulator.readFailedHistory': '最近一次检测失败，显示上次成功检测的结果。',
   'emulator.unavailable': '暂时无法获取检测结果',
+  ...analysisZhCN,
   ...mindZhCN,
   ...fleetTechZhCN,
   ...rotationZhCN,
@@ -701,6 +703,7 @@ const enUS: Record<UiKey, string> = {
   'emulator.readFailedHistory': 'The latest check failed. Showing the last successful reading.',
   'emulator.unavailable': 'Check results temporarily unavailable',
   'nav.schedulerProgram': 'Custom scheduler',
+  ...analysisEnUS,
   ...mindEnUS,
   ...fleetTechEnUS,
   ...rotationEnUS,
@@ -904,6 +907,7 @@ const jaJP: Record<UiKey, string> = {
   'emulator.readFailedHistory': '最新の検出に失敗しました。前回成功時の結果を表示しています。',
   'emulator.unavailable': '検出結果を一時的に取得できません',
   'nav.schedulerProgram': 'カスタムスケジューラー',
+  ...analysisJaJP,
   ...mindJaJP,
   ...fleetTechJaJP,
   ...rotationJaJP,
@@ -1151,6 +1155,7 @@ const zhTW: Record<UiKey, string> = {
   'emulator.readFailedHistory': '最近一次偵測失敗，顯示上次成功偵測的結果。',
   'emulator.unavailable': '暫時無法取得偵測結果',
   'nav.schedulerProgram': '自訂排程',
+  ...analysisZhTW,
   ...mindZhTW,
   ...fleetTechZhTW,
   ...rotationZhTW,

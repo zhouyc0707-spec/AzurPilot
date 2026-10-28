@@ -1,7 +1,20 @@
 import { describe, expect, it } from 'vitest'
+import {fleetTechZhCN, translateFleetTech} from './fleet-tech/i18n'
 import { detectLanguage, isLanguage, localeForLanguage, translateUi } from './i18n'
 
 describe('WebUI i18n', () => {
+  it('舰船数据新增文案在喵语中保留已有翻译并回退简中', () => {
+    for (const [key, chinese] of Object.entries(fleetTechZhCN)) {
+      const value = translateFleetTech('zh-MIAO', key.slice('fleetTech.'.length))
+      expect(value).toBeTruthy()
+      expect(value).not.toBe(key.slice('fleetTech.'.length))
+      expect(translateUi('zh-MIAO', key as keyof typeof fleetTechZhCN)).toBe(value)
+      expect(chinese).toBeTruthy()
+    }
+    expect(translateUi('zh-MIAO', 'analysis.title')).toBe('舰船数据')
+    expect(translateUi('zh-MIAO', 'mind.title')).toContain('喵')
+  })
+
   it('单次任务操作在全部语言中有完整文案并带目标名称', () => {
     const keys = ['task.runOnce', 'task.stopOnce', 'task.runOnceStarted', 'task.runOnceStopped',
       'task.runOnceStatus', 'task.standaloneStatus', 'task.stopStandalone', 'task.stopped', 'task.stopTool', 'task.stopRequested'] as const

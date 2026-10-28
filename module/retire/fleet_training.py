@@ -1,6 +1,7 @@
 """培养舰船等级、经验与好感实读，固定坐标基于1280×720国服截图。"""
 
 from copy import deepcopy
+from bisect import bisect_right
 import re
 import unicodedata
 
@@ -11,11 +12,22 @@ from module.base.timer import Timer
 from module.exception import FleetManagementError
 from module.ocr.ocr import Ocr
 from module.os.ship_exp import ShipLevel, ShipExp
+from module.os.ship_exp_data import LIST_SHIP_EXP
 from module.awaken.assets import OCR_SHIP_LEVEL, OCR_SHIP_EXP
 from module.retire.fleet_detail import FleetShipDetail
 from module.retire.fleet_management import position_button
 from module.runtime.fleet_formation import FormationDetailScanner, CATEGORY_SLOTS
 from module.ui.assets import BACK_ARROW
+from module.logger import logger
+
+
+def training_level(level, exp):
+    """复用大世界累计经验口径，计入未突破时存储的经验，不执行突破。"""
+    if type(level) is not int or not 1 <= level <= len(LIST_SHIP_EXP):
+        return None
+    if type(exp) is not int or exp < 0:
+        return level
+    return bisect_right(LIST_SHIP_EXP, LIST_SHIP_EXP[level - 1] + exp)
 
 
 def parse_affinity(text):
@@ -75,8 +87,8 @@ class FleetTrainingReader(FleetShipDetail):
         if self.appear(FLEET_DETAIL_CHECK):
             self._back_to_formation()
 
-    def inventory(self, fleets):
-        """按详情固定舰位定位，再从编队舰位4、1进入选船页实读舰名和心情。
+    def inventory(self, fleets, *, slots=None):
+        """按固定舰位定位，从勾选舰位进入选船页，只实读目标舰队。
 
         Pages:
             in: Any
@@ -102,7 +114,7 @@ class FleetTrainingReader(FleetShipDetail):
                 result.setdefault(category, {})[str(fleet)] = records
         self.manager._save_result(result)
         for fleet in fleets:
-            self.manager.prepare_rotation(fleet)
+            self.manager.prepare_rotation(fleet, slots=(slots or {}).get(fleet), fleets={fleet})
             self.manager.finish_rotation()
         return self.config.cross_get(self.manager.RESULT_PATH, {})
 
@@ -150,10 +162,13 @@ class FleetTrainingReader(FleetShipDetail):
                 for _ in self.loop(skip_first=False, timeout=8):
                     if self.appear(EQUIPMENT_CODE_ENTRANCE):
                         value = level_reader.ocr(self.device.image)
-                        if value > 0 and value == previous and (not reference or value == reference):
-                            values.update(level=value, exp=exp_reader.ocr(self.device.image))
+                        exp = exp_reader.ocr(self.device.image) if value > 0 else None
+                        if value > 0 and (value, exp) == previous and (not reference or value == reference):
+                            values.update(level=training_level(value, exp), display_level=value, exp=exp)
+                            logger.attr(f'第{fleet}舰队{slot}位界面等级/实际等级/经验',
+                                        f'{value}/{values["level"]}/{exp}')
                             break
-                        previous = value
+                        previous = (value, exp)
                 if 'level' not in values:
                     raise FleetManagementError('培养等级未能从两张新截图确认，不记录培养完成')
             if 'affinity' in targets:

@@ -7,7 +7,7 @@ import {ErrorBox, Loading, PageTitle} from '../components/ui'
 import {rotationRules} from './FleetRotation'
 
 type Row = {
-  level?: number | null; exp?: number | null; affinity?: number | null; checked_at?: string
+  level?: number | null; display_level?: number | null; exp?: number | null; affinity?: number | null; checked_at?: string
   completed_for?: Record<string, number>; completed_at?: string; fleet?: number; slot?: number; emotion?: number | null
 }
 type PositionedRow = Row & {name: string; key: string}
@@ -81,7 +81,7 @@ export function TrainingRecords({snapshot}: {snapshot: RecordSnapshot}) {
             <td>{row.fleet ? ui('fleet.title', {number: row.fleet}) : ui('training.unread')}</td>
             <td>{row.slot ? ui('fleet.slot', {number: row.slot}) : ui('training.unread')}</td>
             <td>{row.name || ui('fleet.unknown')}</td><td>{row.emotion ?? ui('training.unread')}</td>
-            <td>{row.level ?? ui('training.unread')}</td><td>{row.exp ?? ui('training.unread')}</td><td>{row.affinity ?? ui('training.unread')}</td>
+            <td title={row.display_level == null ? undefined : ui('training.displayLevel', {level: row.display_level})}>{row.level ?? ui('training.unread')}</td><td>{row.exp ?? ui('training.unread')}</td><td>{row.affinity ?? ui('training.unread')}</td>
             <td>{row.checked_at ? row.checked_at.replace('T', ' ') : ui('training.unread')}</td>
           </tr>)}</tbody>
           </table>
@@ -107,7 +107,7 @@ const metrics: Metric[] = ['level', 'affinity']
 export function FleetTraining() {
   const {instance = ''} = useParams(), {ui, notify, instances} = useApp(), connection = useConnection()
   const [morale, setMorale] = useState(false), [selectedOnly, setSelectedOnly] = useState(false)
-  const [hours, setHours] = useState('0.5')
+  const [hours, setHours] = useState('6')
   const [settings, setSettings] = useState<Record<Metric, Goal>>({
     level: {enabled: false, target: '120'},
     affinity: {enabled: false, target: '100'},
@@ -129,7 +129,7 @@ export function FleetTraining() {
       const values = config.values.FleetInfo
       setMorale(values.FleetRotation?.Enabled === true)
       setSelectedOnly(values.FleetRotation?.SelectedOnly === true)
-      setHours(String(values.FleetTraining?.CheckIntervalHours ?? 0.5))
+      setHours(String(values.FleetTraining?.CheckIntervalHours ?? 6))
       setSettings(Object.fromEntries(metrics.map(metric => {
         const value = values[groups[metric]]
         return [metric, {enabled: value?.Enabled === true, target: String(value?.Target ?? (metric === 'level' ? 120 : 100))}]
@@ -174,12 +174,25 @@ export function FleetTraining() {
     } catch (error) {setError((error as Error).message)} finally {setBusy(false)}
   }
 
+  async function resetStatus() {
+    setBusy(true); setError('')
+    try {
+      await editor(`config:${instance}`).settled()
+      const current = await api.request('config.get', {instance})
+      const result = await api.request('fleetTraining.reset', {instance, revision: current.revision})
+      setSnapshot(recordSnapshot(result.values.FleetInfo)); notify(ui('training.resetDone'))
+    } catch (error) {setError((error as Error).message)} finally {setBusy(false)}
+  }
+
   return <>
     <PageTitle title={ui('training.title')} actions={
-      <button className="button primary" disabled={disabled || !loaded || !dirty || !valid} onClick={() => void save()}>{ui('training.save')}</button>
+      <>
+        <button className="button" disabled={disabled || running || !loaded} onClick={() => void resetStatus()}>{ui('training.reset')}</button>
+        <button className="button primary" disabled={disabled || !loaded || !dirty || !valid} onClick={() => void save()}>{ui('training.save')}</button>
+      </>
     }/>
     <p className="muted">{ui('training.help')}</p>
-    <p><Link to={`/i/${instance}/task/FleetRotation`}>{ui('training.slotConfig')}</Link></p>
+    <p><Link to={`/i/${instance}/task/FleetSwitch?tab=rotation`}>{ui('training.slotConfig')}</Link></p>
     {error && <ErrorBox message={error}/>}
     {!loaded ? !error && <Loading/> : <>
       <section className="panel" style={{padding: 20, margin: '20px 0'}}>
@@ -214,6 +227,7 @@ export function FleetTraining() {
           </section>
         })}
       </div>
+      <p className="muted">{ui('training.resetHelp')}</p>
       <TrainingRecords snapshot={snapshot}/>
     </>}
   </>

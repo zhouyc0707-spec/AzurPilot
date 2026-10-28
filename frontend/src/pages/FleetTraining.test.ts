@@ -97,6 +97,25 @@ describe('换船调度记录分组', () => {
     snapshot.formation = {vanguard: {'5': [{name: '拉菲', slot: 4, level: 100, emotion: 120}]}}
     expect(trainingRecordGroups(snapshot).training[0]?.affinity).toBeUndefined()
   })
+  it('培养与完成行使用已折算等级，保留原始界面等级供核对', () => {
+    const snapshot: Parameters<typeof trainingRecordGroups>[0] = {
+      records: {
+        '花月': {level: 118, display_level: 105, exp: 1594218},
+        '文琴佐·焦贝蒂': {level: 120, display_level: 105, exp: 1919750, completed_for: {level: 120}},
+      },
+      formation: {vanguard: {'1': [{name: '花月', slot: 5, level: 105},
+        {name: '文琴佐·焦贝蒂', slot: 6, level: 105}]}},
+      rules: rotationRules({'1': {slots: [5, 6], sources: [3]}}),
+    }
+    const grouped = trainingRecordGroups(snapshot)
+    expect(grouped.training[0]).toMatchObject({level: 118, display_level: 105, exp: 1594218})
+    expect(grouped.completed[0]).toMatchObject({level: 120, display_level: 105, exp: 1919750})
+    const html = renderToStaticMarkup(createElement(AppContext.Provider, {value: {
+      ui: (key, params) => translateUi('zh-CN', key, params),
+    } as AppContextValue}, createElement(TrainingRecords, {snapshot})))
+    expect(html).toContain('实际等级')
+    expect(html).toContain('界面等级：105')
+  })
   it('用三个独立大框显示，舰队舰位名字心情等列均可查看', () => {
     const html = renderToStaticMarkup(createElement(AppContext.Provider, {value: {
       ui: (key, params) => translateUi('zh-CN', key, params),
@@ -111,17 +130,18 @@ describe('换船调度记录分组', () => {
 describe('统一换船调度入口', () => {
   it('舰队管理只提供一个调度入口，旧名称仍能解析为统一页面名', () => {
     const items = taskNavItems('FleetManagement', ['FleetInfo'])
-    expect(items.filter(item => [FLEET_TRAINING, FLEET_LEVEL_TRAINING, FLEET_AFFINITY_TRAINING].includes(item))).toEqual([FLEET_TRAINING])
+    expect(items).toContain('FleetSwitch')
+    expect(items.filter(item => [FLEET_TRAINING, FLEET_LEVEL_TRAINING, FLEET_AFFINITY_TRAINING].includes(item))).toEqual([])
     expect(taskNavItems('Tool', [])).not.toContain(FLEET_TRAINING)
     for (const task of [FLEET_TRAINING, FLEET_LEVEL_TRAINING, FLEET_AFFINITY_TRAINING])
       expect(taskLabel(task, key => translateUi('zh-CN', key), () => '不应使用任务名')).toBe('换船调度')
   })
   it('四种语言提供小时单位和实际经验记录文案', () => {
     for (const language of ['zh-CN', 'zh-TW', 'en-US', 'ja-JP'] as const)
-      for (const key of ['training.title', 'training.moraleTitle', 'training.exp', 'training.checkedAt', 'training.unread', 'training.interval'] as const)
+      for (const key of ['training.title', 'training.moraleTitle', 'training.exp', 'training.checkedAt', 'training.unread', 'training.interval', 'training.reset', 'training.resetHelp', 'training.resetDone'] as const)
         expect(translateUi(language, key)).not.toBe(key)
     expect(translateUi('zh-CN', 'training.interval')).toContain('小时')
-    expect(translateUi('zh-CN', 'training.interval')).toContain('共用')
+    expect(translateUi('zh-CN', 'training.interval')).toContain('等级/好感')
     expect(translateUi('zh-CN', 'training.interval')).toContain('无上限')
   })
 })

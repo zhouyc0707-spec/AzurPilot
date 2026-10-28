@@ -2,8 +2,8 @@ import { defineConfig } from '@playwright/test'
 
 export default defineConfig({
   testDir: './e2e',
-  // 配对、股票、心智单元及单次任务用例依赖各自的专用模拟服务配置。
-  testIgnore: ['**/mock.spec.ts', '**/pairing.spec.ts', '**/stock-exchange/**', '**/legacy-single-task.spec.ts', '**/mind-*.spec.ts'],
+  // 配对、股票、舰船数据及单次任务用例依赖各自的专用模拟服务配置。
+  testIgnore: ['**/mock.spec.ts', '**/pairing.spec.ts', '**/stock-exchange/**', '**/legacy-single-task.spec.ts', '**/mind-*.spec.ts', '**/fleet-data-workflow.spec.ts'],
   fullyParallel: false,
   workers: 1,
   retries: process.env.CI ? 1 : 0,

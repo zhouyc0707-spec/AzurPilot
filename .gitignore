@@ -275,3 +275,6 @@ config/stock-exchange-migration-backups/
 # cursor-helper/**/review/reports/summary/**
 # cursor-helper/**/fix/fix_report.md
 # cursor-helper/**/organize-rules/**
+
+# 独立舰船数据库及 SQLite 事务旁文件（实例私有数据）
+/config/fleet/

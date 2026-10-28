@@ -3,7 +3,7 @@
  */
 
 import type {Catalog, ProgramSaved, ProgramSimulation, ProgramValidation, RuntimeProgramState} from '../scheduler/types'
-import type {MindCalculation, MindCatalog, MindReport, MindShip} from '../mind/types'
+import type {MindCatalog, MindShip} from '../mind/types'
 import type {Catalog as FleetTechCatalog, Report as FleetTechReport} from '../fleet-tech/types'
 
 export type Scalar = string | number | boolean | null
@@ -229,8 +229,36 @@ export interface LauncherStatus {
   autostart: {supported: boolean; enabled: boolean | null}; commands: LauncherCommand[]
 }
 
+export interface DockCard {
+  full_star?: boolean | null; form?: 'base' | 'retrofit' | null
+  id: number; group_type: number | null; name: string; level: number
+  rarity: string; base_rarity: string; extra_exp: number | null; review: boolean; source: string
+}
+
+export interface LedgerDifference {
+  id: string; kind: 'ship' | 'technology' | 'nation'; operation: 'add' | 'update' | 'remove' | 'resolve'
+  ship_id: number | null; group_type: number | null; name: string
+  before: Record<string, unknown> | null; after: Record<string, unknown> | null; fields: string[]
+  candidates: {id: number; name: string; level: number}[]
+}
+
+export interface DockReport {
+  pending_read?: {source: string; updated_at: string; observed_count: number; review_count: number; complete: boolean}
+  pending_revision: string | null; pending_changes: LedgerDifference[]
+  legacy_imported?: boolean
+  scan_range?: {min_level: number; max_level: number}
+  instance: string; revision: string; updated_at: string | null; min_level: number; max_level: number
+  ships: DockCard[]; complete: boolean; review_count: number; source: string
+}
+
 export interface Results {
   'emulator.status': EmulatorStatus
+  'dock.report': DockReport
+  'dock.configure': DockReport
+  'dock.importLegacy': DockReport
+  'dock.patch': DockReport
+  'dock.review': DockReport
+  'dock.stageImport': DockReport
   'launcher.status': LauncherStatus
   'launcher.autostart.set': {commandId: string; status: 'pending'}
   'launcher.command.get': LauncherCommand
@@ -239,13 +267,10 @@ export interface Results {
   'fleetTech.catalog': FleetTechCatalog
   'fleetTech.report': FleetTechReport
   'fleetTech.patch': FleetTechReport
-  'fleetTech.syncMind': FleetTechReport
-  'mind.report': MindReport
-  'mind.calculate': MindCalculation
-  'mind.save': MindReport
+  'fleetTech.mergeShips': FleetTechReport
+  'mind.plan': import('../mind/cultivation').CultivationReport
   'mind.import': {ships: MindShip[]}
   'mind.recognize': {ships: MindShip[]}
-  'mind.export': {filename: string; content: string}
   'statistics.resourceFlows': ResourceFlowReport
   'stock.status': StockExchangeStatus
   'stock.rebuild': StockExchangeRebuild
@@ -290,6 +315,7 @@ export interface Results {
   'instances.delete': {deleted: string}
   'config.get': Config
   'config.patch': Config
+  'fleetTraining.reset': Config
   'overview.get': Overview
   'scheduler.start': Overview
   'scheduler.stop': Overview

@@ -88,7 +88,7 @@ npm run dev
 
 ## 独立前端模拟服务
 
-只需 Node.js 和前端依赖，无需 Python、ADB 或模拟器：
+普通界面需要 Node.js 和前端依赖，无需 ADB 或模拟器；舰船数据与调度器算法用例另需项目 Python 环境，模拟服务通过 `uv run --no-sync` 调用隔离的真实算法：
 
 ```powershell
 npm ci --prefix frontend
@@ -198,3 +198,12 @@ npm run test:e2e:mock
 ## 资源管理
 
 实例侧栏「资源管理」对应 `/i/:instance/resources`，独立展示任务来源 → 资源 → 用途任务的桑基图、最近库存、收支依据与分页明细。支持自定义区间、资源和任务筛选、完整 CSV 导出及石油控制设置。刷新只读取本地账本，空实例不生成虚假收支。详细采集、归因与库存复核规则见 [资源管理文档](../docs/modules/webui/resource-management.md)。
+
+
+## 舰船数据与共享船坞
+
+舰队管理中的「舰船数据」提供舰队科技、养成计算、扫描更新和我的舰船四个页签；智能换船单独整合舰队信息、换船配置、换船调度和换船装备。旧 `task/MindCalculator`、`mind-calculator` 和 `task/FleetTechnology` 链接跳转到相应分析标签；旧扫描任务不再显示在工具菜单。
+
+`dock.report({instance})` 返回共享扫描报告（`revision`、`updated_at`、`min_level`、`max_level`、`ships`、`complete`、`review_count`、`source`、`scan_range`）。`dock.configure({instance,min_level,max_level})` 保存 1–125 级范围并返回报告；点击统一扫描入口才调用 `tasks.run({instance,task:"DockScan"})`。扫描读取船坞舰名和等级，需要导航与滚动，不进行升级、突破、觉醒或换船。页面展示扫描时间、实际快照范围 `scan_range`、数据来源、完成情况与待核对数量；`min_level`/`max_level` 是下一次扫描设置，修改设置不会伪装成已扫描数据。
+
+舰船编辑通过 `dock.patch` 保存；文件和截图由 `mind.import` / `mind.recognize` 解析，再通过 `dock.stageImport` 与 `dock.review` 暂存及确认。养成计算通过 `mind.plan` 只读计算，科技里程碑使用 `fleetTech.patch` 独立编辑。用户已确认采用新流程，旧记录仅留存备查，不继续提供旧排除与导出行为。页面浏览不触发游戏任务；旧版主题、喵语及扫描失败保护继续保留。详细行为见[舰船数据](../docs/modules/webui/fleet-analysis.md)。

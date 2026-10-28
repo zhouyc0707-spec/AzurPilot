@@ -13,12 +13,11 @@ import threading
 import hashlib
 import re
 import shutil
-from contextlib import closing
 import os
 import sqlite3
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from dataclasses import asdict
 
 import inflection
@@ -76,7 +75,7 @@ class DropImage:
         # 退出 with 块时自动提交截图
     """
 
-    def __init__(self, stat, genre, save, local, info='', analyze=False):
+    def __init__(self, stat, genre, save, local, info='', analyze=False, upload=False):
         """
         Args:
             stat (AzurStats): 关联的 AzurStats 实例。
@@ -92,6 +91,8 @@ class DropImage:
         self.save = bool(save)
         self.local = bool(local)
         self.analyze = bool(analyze)
+        self.upload = bool(upload)
+        self.collected_at = None
         self.info = info
         self.images = []
         self.combat_count = 0
@@ -103,6 +104,8 @@ class DropImage:
             image (np.ndarray): 截图图像。
         """
         if self:
+            if not self.images:
+                self.collected_at = datetime.now(timezone.utc).isoformat()
             self.images.append(image)
             logger.info(
                 f'Drop record added, genre={self.genre}, amount={self.count}')
@@ -145,7 +148,7 @@ class DropImage:
         return len(self.images)
 
     def __bool__(self):
-        return self.save or self.local or self.analyze
+        return self.save or self.local or self.analyze or self.upload
 
     def __enter__(self):
         return self
@@ -154,14 +157,14 @@ class DropImage:
         if self:
             self.stat.commit(images=self.images, genre=self.genre, save=self.save,
                              local=self.local, info=self.info, combat_count=self.combat_count,
-                             analyze=self.analyze)
+                             analyze=self.analyze, upload=self.upload, collected_at=self.collected_at)
 
 
 class AzurStats:
     """AzurStats 统计管理核心类，负责掉落截图的保存、解析和数据存储。
 
     提供两种数据处理路径：
-        - 远程上传（已废弃）：将截图提交到远程 AzurStats 服务。
+        - 云端上报：按上传设置将截图送入磁盘重试队列，交由 A/B/C 识别统计。
         - 本地处理：将截图中的物品信息解析后存入 SQLite 数据库，
           并生成统计汇总 CSV 文件（如指挥喵 farming 统计）。
 
@@ -210,6 +213,8 @@ class AzurStats:
             config:
         """
         self.config = config
+        from module.statistics.cloud_upload import update_policy
+        update_policy(config)
 
     meowofficer_farming_labels = ['侵蚀等级', '上次记录时间', '有效战斗轮数', '平均黄币/轮', '平均金菜/轮', '平均深渊/轮', '平均隐秘/轮']
     meowofficer_farming_map = [
@@ -917,7 +922,7 @@ class AzurStats:
         return reward
 
     def commit(self, images, genre, save=False, local=False, info='', combat_count=0,
-               analyze=False):
+               analyze=False, upload=False, collected_at=None):
         """提交并处理一组掉落截图，执行保存、本地入库或专用解析。
 
         Args:
@@ -938,7 +943,7 @@ class AzurStats:
         save, local = bool(save), bool(local)
         logger.info(
             f'Drop record commit, genre={genre}, amount={len(images)}, save={save}, local={local}')
-        image = pack(images)
+        image = pack(images) if save or local else None
         now = int(time.time() * 1000)
 
         if info:
@@ -966,6 +971,14 @@ class AzurStats:
                 record_research_drop(images, instance=self.config.config_name, imgid=filename)
             except Exception as e:
                 logger.warning(f'[科研统计] 掉落解析失败，跳过本次记录: {type(e).__name__}')
+
+        if (upload and getattr(self.config, 'DropRecord_CloudUpload', False) is True
+                and not str(genre).startswith(OPSI_DROP_GENRE_PREFIX)):
+            try:
+                from module.statistics.cloud_upload import enqueue
+                enqueue(self.config, images, genre, combat_count, collected_at)
+            except Exception as error:
+                logger.warning(f'[云端统计] 本次截图未进入上传队列，本地统计保留: {type(error).__name__}')
 
         return True
 
@@ -1002,9 +1015,13 @@ class AzurStats:
             else:
                 local = False
         # 科研掉落走独立解析链路（写 cl1_record.db）：只要用户没有显式关掉记录，
-        # 存图与否都统计——save 档事后要能核对，upload 档就是不落盘只要数据。
+        # 存图与否都保留本地统计；upload 档额外通过临时磁盘队列上报云端。
         analyze = genre == 'research' and method_value != 'do_not'
-        return DropImage(stat=self, genre=genre, save=save, local=local, info=info, analyze=analyze)
+        # 本地大世界 upload 约定只解析，不因云功能开启改变历史记录含义。
+        upload = (getattr(self.config, 'DropRecord_CloudUpload', False) is True
+                  and method_value in ('upload', 'save_and_upload')
+                  and not str(genre).startswith(OPSI_DROP_GENRE_PREFIX))
+        return DropImage(stat=self, genre=genre, save=save, local=local, info=info, analyze=analyze, upload=upload)
 
     @staticmethod
     def opsi_save_method(task_command, method):

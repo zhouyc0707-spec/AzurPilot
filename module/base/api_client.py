@@ -1,26 +1,28 @@
 """API 客户端模块。
 
 负责与 API 服务器进行 HTTP 交互，包括 CL1 数据提交和公告获取，
-支持主域名 (nanoda.work) 和备用域名 (nanoda.work) 的自动故障转移。
+默认统一使用 api.azurpilot.com，保留既有的主备端点请求流程。
 """
-import threading
 from typing import Any, Dict, List, Tuple, Optional
+from datetime import datetime, timezone
+import uuid
 
 import requests
 
+from deploy.api_endpoints import API_BASE_URL
 from module.logger import logger
 
 
 class ApiClient:
-    """统一的 API 客户端，支持双域名故障转移。"""
+    """统一的 API 客户端，保留主备端点配置。"""
     
     # 主域名和备用域名列表
-    PRIMARY_DOMAIN = 'https://alas-apiv2.nanoda.work'
-    FALLBACK_DOMAIN = 'https://alas-apiv2.nanoda.work'
+    PRIMARY_DOMAIN = API_BASE_URL
+    FALLBACK_DOMAIN = API_BASE_URL
     
     # API端点路径
-    CL1_DATA_PATH = '/api/telemetry'
-    ANNOUNCEMENT_PATH = '/api/get/announcement'
+    CL1_DATA_PATH = '/api/v2/post/cl1'
+    ANNOUNCEMENT_PATH = '/api/v2/get/notice/data.json'
 
     # 公告检查间隔（秒），1.5分钟 = 90秒
     ANNOUNCEMENT_CHECK_INTERVAL = 90
@@ -110,7 +112,8 @@ class ApiClient:
                         timeout=timeout,
                         headers={
                             'Content-Type': 'application/json',
-                            'User-Agent': 'alas AzurPilot'
+                            'User-Agent': 'alas AzurPilot',
+                            'X-AzurPilot-ID': str((json_data or {}).get('device_id', '')),
                         }
                     )
                 
@@ -155,7 +158,7 @@ class ApiClient:
             
             success, status_code, response_text = ApiClient._post_with_fallback(
                 ApiClient.CL1_DATA_PATH,
-                data,
+                ApiClient.cl1_payload(data),
                 timeout=timeout
             )
             
@@ -166,6 +169,20 @@ class ApiClient:
 
         except Exception as e:
             logger.exception(f'[基础-API] CL1 数据提交异常: {e}')
+
+    @staticmethod
+    def cl1_payload(data: Dict[str, Any]) -> Dict[str, Any]:
+        """Send raw monthly counters; derived metrics are computed by C."""
+        return {
+            'request_id': data.get('request_id') or str(uuid.uuid4()),
+            'device_id': data['device_id'],
+            'instance_id': data['instance_id'],
+            'month': data['month'],
+            'collected_at': data.get('collected_at') or datetime.now(timezone.utc).isoformat(),
+            'battle_count': data['battle_count'],
+            'akashi_encounters': data.get('akashi_encounters', 0),
+            'akashi_ap': data.get('akashi_ap', data.get('net_stamina_gain', 0)),
+        }
     
     @classmethod
     def submit_cl1_data(cls, data: Dict[str, Any], timeout: int = 10):
@@ -214,6 +231,18 @@ class ApiClient:
                 import json
                 try:
                     data = json.loads(response_text)
+
+                    if not isinstance(data, dict) or data.get('schema_version') != 2 or 'announcement' not in data:
+                        logger.warning('[基础-API] 公告文档格式不正确')
+                        return None
+                    notice = data['announcement']
+                    if notice is None:
+                        return {}  # Explicit withdrawal; distinct from a failed request.
+                    if not isinstance(notice, dict) or not notice.get('id'):
+                        return None
+                    if str(notice['id']) == str(current_id):
+                        return None
+                    data = {**notice, 'announcementId': notice['id']}
                     
                     # 如果返回空字典或无ID，也视为无更新
                     if not data or not data.get('announcementId'):

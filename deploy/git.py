@@ -5,14 +5,12 @@ from typing import Optional
 
 import requests
 
+from deploy.api_endpoints import FORCE_UPDATE_CONTROL_URL as CLOUD_FORCE_UPDATE_CONTROL_URL
 from deploy.config import GIT_OVER_CDN_FALLBACK_REPOSITORIES, DeployConfig, ErrorCodes, ExecutionError
 from deploy.git_over_cdn.client import GitOverCdnClient
 from deploy.git_over_cdn.endpoints import CLOUDFLARE_UPDATE_URLS, FALLBACK_UPDATE_URLS
 from deploy.logger import logger
 from deploy.utils import *
-
-
-CLOUD_FORCE_UPDATE_CONTROL_URL = 'https://alas-apiv2.nanoda.work/api/force_update'
 
 
 def peer_fallback_repository(url: str) -> Optional[str]:
@@ -250,6 +248,12 @@ class GitManager(DeployConfig):
             data = resp.json()
         except ValueError:
             data = text
+
+        if isinstance(data, dict):
+            if data.get('schema_version') != 2 or not isinstance(data.get('force_update'), bool):
+                logger.warning('Invalid cloud update policy document')
+                return None
+            data = data['force_update']
 
         if data is True or (isinstance(data, str) and data.lower() in ('true', 'ture')):
             logger.info('Cloud force update control is enabled')

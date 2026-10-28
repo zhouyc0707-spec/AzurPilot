@@ -1,4 +1,5 @@
-"""复用 AP 设备和船坞导航的心智单元扫描任务。"""
+"""共享船坞扫描：只导航、筛选和读取，生成等待玩家采纳的差异。"""
+import copy
 from datetime import datetime
 from hashlib import sha256
 import json
@@ -13,24 +14,37 @@ from module.base.timer import Timer
 from module.base.utils import color_similarity_2d
 from module.exception import GameStuckError, MindCalculatorScanError
 from module.logger import logger
-from module.retire.assets import DOCK_EMPTY
+from module.retire.assets import DOCK_EMPTY, DOCK_SEARCH_ACTIVE, DOCK_SEARCH_CLOSED
 from module.retire.dock import CARD_GRIDS, DOCK_SCROLL, Dock
-from module.runtime.mind_calculator import RESULT_PATH, calculate, revision
+from module.runtime import dock_data
+from module.runtime.fleet_database import FleetDatabase, FleetDatabaseConflict
+from module.runtime.fleet_tech_identity import FleetTechIdentity
 from module.runtime.mind_recognition import (Card, ScanMerger, ScanPolicy, ScrollAmbiguityError, ScrollMotion,
                                            ScrollMotionError, grid_rows, recognize_cards)
-from module.ui.page import page_dock
+from module.ui.page import page_dock, page_main
 
 
-class MindCalculatorScan(Dock):
-    evidence_folder = 'mind_scan'
-    scan_label = '心智扫描'
+class DockScan(Dock):
+    evidence_folder = 'dock_scan'
+    scan_label = '船坞扫描'
     require_reliable_levels = True
 
+    def handle_popup_confirm(self, name='', offset=None, interval=2):
+        """扫描不接受通用确认弹窗，避免确认扫描前残留的资源操作。"""
+        from module.handler.assets import POPUP_CONFIRM
+        from module.ui_white.assets import POPUP_CONFIRM_WHITE
+        if offset is None:
+            offset = self._popup_offset
+        if self.appear(POPUP_CONFIRM, offset=offset) or self.appear(POPUP_CONFIRM_WHITE, offset=offset):
+            raise MindCalculatorScanError('船坞扫描遇到确认弹窗，已停止；请人工处理后重试')
+        return False
+
     def _make_merger(self):
-        return ScanMerger()
+        return ScanMerger(group_identity=True)
 
     def _read_cards(self, image, source, names, levels):
-        return recognize_cards(image, source, name_ocr=names, level_ocr=levels)
+        return recognize_cards(image, source, name_ocr=names, level_ocr=levels,
+                               identity=getattr(self, '_identity', None))
 
     def _check_scan_page(self, cards, at_bottom):
         """检查已加载行列；真实末页允许最后一排末尾不足七艘。"""
@@ -41,35 +55,60 @@ class MindCalculatorScan(Dock):
                 or not at_bottom and (len(rows) != 3 or len(cards) != 21)):
             raise ValueError('扫描卡片未完整加载或存在缺格')
 
+    def _close_search(self):
+        """确认搜索关闭；进入船坞前先经主界面清空隐藏搜索词。"""
+        timeout = Timer(20).start()
+        while True:
+            self.device.screenshot()
+            if self.appear(DOCK_SEARCH_CLOSED):
+                return
+            if timeout.reached():
+                raise MindCalculatorScanError('未能确认船坞搜索已关闭，保留共享扫描数据')
+            if self.appear_then_click(DOCK_SEARCH_ACTIVE, interval=2):
+                continue
+            if self.handle_popup_confirm():
+                continue
+
     def run(self):
-        """扫描指定等级范围；三排确认低于下限后结束，完成前保留旧结果。
+        """完成后事务保存待确认差异；不执行养成、退役、换船或战斗。
 
         Pages:
             in: Any
             out: page_dock
         """
-        if server.server != 'cn':
-            raise MindCalculatorScanError('心智单元计算器当前内置国服舰船资料，请在国服实例使用自动扫描')
-        from module.ocr.al_ocr import AlOcr
-        from module.config.deep import deep_get, deep_set
         from module.config.transaction import config_transaction
         from module.config.utils import filepath_config
-        logger.hr('心智单元船坞扫描', level=0)
-        logger.attr('心智扫描源码', f'{Path(__file__).resolve()} SHA256 {sha256(Path(__file__).read_bytes()).hexdigest()}')
-        self._scan_evidence_paths = set()
+        from module.ocr.al_ocr import AlOcr
+        from module.retire.enhancement import OCR_DOCK_AMOUNT
+
+        if server.server != 'cn':
+            raise MindCalculatorScanError('共享船坞自动扫描当前仅支持国服')
+        logger.hr('共享船坞扫描', level=0)
         try:
-            self._policy = ScanPolicy(self.config.MindCalculator_MinLevel, self.config.MindCalculator_MaxLevel,
-                                      sorted_desc=True)
+            self._policy = ScanPolicy(self.config.Dock_MinLevel, self.config.Dock_MaxLevel, sorted_desc=True)
         except ValueError as exc:
             raise MindCalculatorScanError(str(exc)) from exc
-        logger.attr('扫描等级范围', f'{self._policy.min_level}–{self._policy.max_level}（含边界）')
-        previous_revision = revision(deep_get(self.config.data, RESULT_PATH, {}).get('ships', []))
+        self._identity = FleetTechIdentity()
+        self._scan_evidence_paths = set()
+        self._scan_slots = []
+        self._scan_metadata = dict(reached_bottom=False, physical_count=0)
+        database = FleetDatabase(filepath_config(self.config.config_name))
+        state = database.load()
+        if state.get('pending_revision') is not None:
+            raise MindCalculatorScanError('仍有待确认更新，请先采纳或忽略后再开始扫描')
+        original = dock_data.read_snapshot(state)
+        logger.attr('船坞扫描等级范围', f'{self._policy.min_level}–{self._policy.max_level}（含边界）')
+        self.ui_ensure(page_main)
         self.ui_ensure(page_dock)
+        self._close_search()
         self.dock_reset()
-        # 通用 reset 服务于退役的升序流程；本任务需要明确切换为等级降序。
         self.dock_sort_method_dsc_set(True)
+        expected_count, remaining, capacity = OCR_DOCK_AMOUNT.ocr(self.device.image)
+        if capacity <= 0 or not 0 <= expected_count <= capacity or remaining + expected_count != capacity:
+            expected_count = None
+            logger.warning('船坞数量未确认，本轮不能据缺失清空已有记录')
         if self.appear(DOCK_EMPTY):
-            ships = []
+            self._scan_metadata['reached_bottom'] = True
         else:
             DOCK_SCROLL.set_top(self)
             thumb = self._scroll_thumb()
@@ -77,28 +116,29 @@ class MindCalculatorScan(Dock):
                 logger.attr('船坞位置', '已确认顶部')
             else:
                 raise MindCalculatorScanError('船坞未能回到顶部，保留旧扫描结果')
+            names = AlOcr(config=self.config, name='ppocr_v6', save_debug_images=False)
+            levels = AlOcr(config=self.config, name='azur_lane', save_debug_images=False)
             try:
-                names = AlOcr(config=self.config, name='ppocr_v6', save_debug_images=False)
-                levels = AlOcr(config=self.config, name='azur_lane', save_debug_images=False)
-                ships = self._scan_pages(names, levels)
+                self._scan_pages(names, levels)
             except MemoryError as exc:
-                raise MindCalculatorScanError('扫描内存不足，已停止并保留旧清单；请释放内存后重试') from exc
-        # 扫描期间用户可能修改数据；复读当前配置避免覆盖手工修正。
-        with config_transaction(filepath_config(self.config.config_name)):
-            latest = self.config.read_file(self.config.config_name)
-            if revision(deep_get(latest, RESULT_PATH, {}).get('ships', [])) != previous_revision:
-                raise MindCalculatorScanError('扫描期间舰船数据已修改，保留现有数据；请重新扫描')
-            # 同一清单重复保存只会更新日期；通过版本检查后更新本字段基线，
-            # 让通用配置保存继续保护其他字段，同时允许提交已完成的扫描。
-            if hasattr(self.config, '_loaded_data'):
-                import copy
-                deep_set(self.config._loaded_data, RESULT_PATH, copy.deepcopy(deep_get(latest, RESULT_PATH, {})))
-            self.config.modified[RESULT_PATH] = dict(ships=ships, updated_at=datetime.now().isoformat(timespec='seconds'))
-            self.config.save()
+                raise MindCalculatorScanError('扫描内存不足，保留共享扫描数据') from exc
+        if not self.appear(DOCK_SEARCH_CLOSED):
+            raise MindCalculatorScanError('扫描结束时搜索状态变化，保留共享扫描数据')
+        snapshot = dock_data.build_snapshot(
+            self._scan_slots, min_level=self._policy.min_level, max_level=self._policy.max_level,
+            filters_clear=True, expected_count=expected_count,
+            updated_at=datetime.now().isoformat(timespec='seconds'), **self._scan_metadata)
+        try:
+            # 与实例删除共用生命周期锁；扫描期间不持有配置锁。
+            with config_transaction(filepath_config(self.config.config_name)):
+                if not Path(filepath_config(self.config.config_name)).is_file():
+                    raise MindCalculatorScanError('实例配置已删除，未保存本次扫描')
+                database.save_scan(snapshot, expected_revision=original['revision'])
+        except FleetDatabaseConflict as exc:
+            raise MindCalculatorScanError(str(exc)) from exc
         self._prune_scan_evidence()
-        result = calculate(ships)
-        logger.info(f'[心智扫描] 已保存 {len(ships)} 艘，计入 {result["included"]} 艘，'
-                    f'待核对 {result["review"]} 艘，心智单元Ⅰ {result["mind"]}，物资 {result["gold"]}')
+        logger.info(f'[船坞扫描] 已读取 {len(snapshot["ships"])} 个物理船位，等待玩家采纳差异；'
+                    f'待核对 {snapshot["review_count"]} 条；完整扫描：{snapshot["complete"]}')
 
     def _scroll_thumb(self):
         """初始顶部确认复用真实像素核验，短滑块与单行抗锯齿规则一致。"""
@@ -184,12 +224,12 @@ class MindCalculatorScan(Dock):
         end = (start[0], start[1] - distance)
         if supported:
             self.device.drag(start, end, point_random=(0, 0, 0, 0), shake=(0, 0),
-                             shake_random=(0, 0, 0, 0), hold_duration=.4, name='心智单元船坞三排定位')
+                             shake_random=(0, 0, 0, 0), hold_duration=.4, name='船坞扫描三排定位')
         else:
             if abs(distance) < 10:
                 raise MindCalculatorScanError('当前控制方式无法进行船坞小距离校正，请改用 MaaTouch 等支持拖拽的控制方式')
             # 不使用 Device.drag 的不支持分支，避免其松手后回退点击舰船。
-            self.device.swipe(start, end, duration=.6, name='心智单元船坞三排定位')
+            self.device.swipe(start, end, duration=.6, name='船坞扫描三排定位')
         return distance, supported
 
     def _dock_scroll_thumb(self):
@@ -231,7 +271,7 @@ class MindCalculatorScan(Dock):
                 x = round(float(CARD_GRIDS.origin[0] + col * CARD_GRIDS.delta[0]))
                 recovered.append(Card(x, y, col, dict(
                     name=f'待核对舰船（{y}px 第 {col + 1} 列）', level=0, rarity='', base_rarity='',
-                    excluded=False, review=True, group_type=None, type=None, candidates=[], identity_ambiguous=True,
+                    review=True, group_type=None, type=None, candidates=[], identity_ambiguous=True,
                     source='当前卡位三帧仍未加载，保留位置待核对'), fleet=-1))
         return sorted(recovered, key=lambda card: (card.y, card.col))
 
@@ -391,7 +431,7 @@ class MindCalculatorScan(Dock):
                                 evidence_path = self._save_scan_evidence(image)
                                 evidence_frame = image
                             if read_attempts >= 3:
-                                # 心智费用仍要求完整等级；科技扫描可独立保留待核对证据。
+                                # 新船坞入口沿用本地严格等级；底层宽松策略仅保留未知核对证据。
                                 if invalid and self.require_reliable_levels:
                                     self._save_scan_evidence(image)
                                     raise MindCalculatorScanError(f'等级三次重读仍未确认：{locations}；保留旧扫描结果')
@@ -517,7 +557,13 @@ class MindCalculatorScan(Dock):
                 previous = None
                 stable.reset()
                 continue
-        ships = merger.ships(policy.min_level, policy.max_level)
-        if self.require_reliable_levels and any(not 1 <= ship['level'] <= 125 for ship in ships):
+        # 保存按物理位置去重的全部读数；同身份副本由分析层各自归并。
+        if self.require_reliable_levels and any(
+                not card.level_reliable or not 1 <= card.ship['level'] <= 125 for card, _ in merger.slots):
             raise MindCalculatorScanError('累计船位存在未确认等级，保留旧扫描结果')
-        return ships
+        self._scan_slots = [dict(copy.deepcopy(card.ship),
+                                 level=card.ship['level'] if card.level_reliable else 0,
+                                 review=card.ship.get('review', False) or not card.level_reliable,
+                                 slot=dict(row=int(y), column=card.col))
+                            for card, y in sorted(merger.slots, key=lambda item: (item[1], item[0].col))]
+        return merger.ships(policy.min_level, policy.max_level)

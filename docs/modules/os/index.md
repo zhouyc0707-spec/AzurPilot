@@ -250,6 +250,8 @@ flowchart TD
 4. **AP 判定**：总行动力达到 CL1 保留线时发送通知并延迟到服务器刷新；补币行动力不足时，普通智能调度同样延期，防溢出代理可改为清理当前真实行动力。
 5. 启用的补币任务均无内容或仍在推迟检查期间 → 延迟到服务器刷新并结束本轮。
 
+`OSCampaignRun.load_campaign()` 默认创建 `OperationSiren`，因此补币单轮分发始终先经过 `OpsiPreventActionPointOverflow._run_scheduled_coin_task_once()`，与防溢出任务是否启用无关。覆盖方法需同时接收并透传 `fresh_ap` 与 `meow_target_zone`；后者为 `None` 时沿用短猫自身设置，有值时只覆盖本轮海域，结束后恢复。回归测试 `tests/test_opsi_month_end_cleanup.py::TestOperationSirenCoinTaskRouting` 保留真实的方法解析、配置绑定和短猫准备流程，并覆盖月末清理各步骤及正常收尾。
+
 代理执行用 `_run_with_opsi_task_context(任务名, 函数)`：临时换身份 → 调用子任务的 `run_*_once` → 恢复身份。`ActionPointLimit` 在代理层被翻译为「达到保留值，正常返回」。
 
 智能调度决策首读暂留行动力面板，确定子任务后才关闭或补充。侵蚀 1 绑定自身配置及保留值后，在同一面板完成开工准备；耄耋相接仅在已处于单个指定安全海域时合并补充。低行动力可直接沿用首读，不再关闭后重新打开、重复读取；开箱或购买后的实际读数仍刷新，并通过 `fresh_ap` 传给子任务。侵蚀 1 当前行动力达到 100、短猫达到 120 时不开箱。练度检查、海域成就、开荒、换图等地图操作先关闭面板，任务提前结束也会关闭；卡死异常交给原恢复机制。月末清理的跨任务读取保持独立。

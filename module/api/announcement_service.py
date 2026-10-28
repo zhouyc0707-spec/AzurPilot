@@ -66,7 +66,7 @@ class AnnouncementService:
                 # ApiClient.get_announcement 支持传入 current_id 进行增量检查
                 data = ApiClient.get_announcement(timeout=5, current_id=cached_id)
                 if data is not None:
-                    self._cached = data
+                    self._cached = data or None
                 # 若返回 None 且之前有缓存，则保留已有缓存（如 304 Not Modified）
             except Exception as e:
                 logger.warning(f'[API] 拉取公告失败: {e}')

@@ -189,8 +189,8 @@ class TestSchedulerRecovery(unittest.TestCase):
     def test_mind_scan_recognition_failure_reports_cause_without_restart(self):
         script = self.make_script()
         error = MindCalculatorScanError('相邻船坞截图没有明确的重叠位移')
-        script.mind_calculator_scan = Mock(side_effect=error)
-        self.assertFalse(script.run('MindCalculatorScan'))
+        script.dock_scan = Mock(side_effect=error)
+        self.assertFalse(script.run('DockScan'))
         script.save_error_log.assert_called_once_with()
         script._try_restart_emulator.assert_not_called()
         script.config.task_call.assert_not_called()

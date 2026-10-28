@@ -228,4 +228,13 @@ AzurPilot 后端通过 `STOCK_EXCHANGE_URL` 配置交易所 origin，默认 `htt
 
 Python 后端提供独立的 `/api/v2/launcher/ws`，启动器主动连接；控制命令、通知与登录票据共用一条连接。页面仍通过业务 WS 调用 `launcher.status`、`launcher.autostart.set` 和 `launcher.command.get`，订阅全局 `launcher` 主题。`auth.launcher` 消费 60 秒一次性票据，不传输或存储访问密码。以上操作与主题限定本机直连，写操作遵循 DEMO 只读保护。
 
-任务通知入口为 `POST /api/v2/internal/notifications`。旧启动器 HTTP/SSE 路径已移除，完整格式与恢复约定见 [启动器协议 v2](../docs/modules/webui/launcher-protocol-v2.md)。
+任务通知入口为 `POST /api/v2/internal/notifications`。本地旧启动器 HTTP/SSE 桥接继续保留，与 V2 共用连接状态；V2 格式与恢复约定见 [启动器协议 v2](../docs/modules/webui/launcher-protocol-v2.md)。
+
+
+## 舰船数据与共享船坞
+
+舰队管理中的「舰船数据」提供舰队科技、养成计算、扫描更新和我的舰船四个页签；智能换船单独整合舰队信息、换船配置、换船调度和换船装备。旧 `task/MindCalculator`、`mind-calculator` 和 `task/FleetTechnology` 链接跳转到相应分析标签；旧扫描任务不再显示在工具菜单。
+
+`dock.report({instance})` 返回共享扫描报告（`revision`、`updated_at`、`min_level`、`max_level`、`ships`、`complete`、`review_count`、`source`、`scan_range`）。`dock.configure({instance,min_level,max_level})` 保存 1–125 级范围并返回报告；点击统一扫描入口才调用 `tasks.run({instance,task:"DockScan"})`。扫描读取船坞舰名和等级，需要导航与滚动，不进行升级、突破、觉醒或换船。页面展示扫描时间、实际快照范围 `scan_range`、数据来源、完成情况与待核对数量；`min_level`/`max_level` 是下一次扫描设置，修改设置不会伪装成已扫描数据。
+
+舰船编辑通过 `dock.patch` 保存；文件和截图由 `mind.import` / `mind.recognize` 解析，再通过 `dock.stageImport` 与 `dock.review` 暂存及确认。养成计算通过 `mind.plan` 只读计算，科技里程碑使用 `fleetTech.patch` 独立编辑。用户已确认采用新流程，旧记录仅留存备查，不继续提供旧排除与导出行为。页面浏览不触发游戏任务；旧版主题、喵语及扫描失败保护继续保留。详细行为见[舰船数据](../docs/modules/webui/fleet-analysis.md)。

@@ -527,6 +527,8 @@ DropRecord:
     value: zip
     option: [ bz2, gzip, xz, zip ]
   AzurStatsID: null
+  # 保留旧配置只做本地统计的含义；非大世界云上报须显式开启。
+  CloudUpload: false
   API:
     value: default
     option: [default, cn_gz_reverse_proxy]
@@ -541,7 +543,7 @@ DropRecord:
     option: [do_not, save]
   CombatRecord:
     value: do_not
-    option: [do_not, save]
+    option: [do_not, save, upload, save_and_upload]
   # 大世界掉落截图按任务拆分（原 OpsiRecord 单一开关）。跨月每日跟大世界每日、
   # 档案坐标跟隐秘海域、月度Boss跟深渊坐标共用一项，其余任务走 OpsiOther。
   OpsiHazard1Leveling:
@@ -2594,33 +2596,13 @@ IslandBusinessShop5:
 
 # ==================== Fleet Management ====================
 
-MindCalculator:
+Dock:
   MinLevel:
-    value: 95
+    value: 1
     validate: "^[1-9][0-9]?$|^1[01][0-9]$|^12[0-5]$"
   MaxLevel:
     value: 125
     validate: "^[1-9][0-9]?$|^1[01][0-9]$|^12[0-5]$"
-  Result:
-    type: stored
-    value: {}
-    display: hide
-  FleetTechRecord:
-    type: stored
-    value: {}
-    display: hide
-
-FleetTech:
-  MinLevel:
-    value: 95
-    validate: "^[1-9][0-9]?$|^1[01][0-9]$|^12[0-5]$"
-  MaxLevel:
-    value: 125
-    validate: "^[1-9][0-9]?$|^1[01][0-9]$|^12[0-5]$"
-  Record:
-    type: stored
-    value: {}
-    display: hide
 
 FleetRotation:
   Enabled: false
@@ -2645,8 +2627,12 @@ FleetAffinityTraining:
     validate: [1, 200]
 
 FleetTraining:
+  FullScanRecord:
+    type: stored
+    value: 2020-01-01 00:00:00
+    display: hide
   CheckIntervalHours:
-    value: 0.5
+    value: 6.0
     valuetype: float
     validate: '^[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$'
   State:

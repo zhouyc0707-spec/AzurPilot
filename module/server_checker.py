@@ -1,6 +1,6 @@
 """游戏服务器状态检查器。
 
-通过 server-checker.nanoda.work 查询碧蓝航线服务器状态。在任务调度前
+通过统一云 API 查询碧蓝航线服务器状态。在任务调度前
 检查所选服务器是否可用，避免在维护或尚未开放期间执行无效操作。
 """
 
@@ -9,6 +9,8 @@ from json import JSONDecodeError
 
 import requests
 
+from deploy.api_endpoints import API_BASE_URL
+from module.base.device_id import get_device_id
 from module.base.timer import Timer
 from module.config.server import VALID_SERVER_LIST as server_list
 from module.config.server import ServerInfo, get_server_info
@@ -16,7 +18,7 @@ from module.exception import ScriptError
 from module.logger import logger
 from module.server_status import ServerStatusQueryError, query_server
 
-SERVER_API_BASE = 'https://server-checker.nanoda.work'
+SERVER_API_BASE = API_BASE_URL
 AVAILABLE_SERVER_STATES = {'normal', 'full', 'reg_full'}
 UNAVAILABLE_SERVER_STATES = {'maintenance', 'unopened', 'unknown'}
 
@@ -74,10 +76,9 @@ class ServerChecker:
             session = requests.Session()
             session.trust_env = False
             response = session.get(
-                url=(
-                    f'{self._base}/api/v1/servers/'
-                    f'{self._server_info.region}_{self._server_info.server_id}'
-                ),
+                url=f'{self._base}/api/v2/get/server',
+                params={'region': self._server_info.region, 'server_id': self._server_info.server_id},
+                headers={'X-AzurPilot-ID': get_device_id()},
                 timeout=(3, 3),
             )
             if response.status_code == 200:
