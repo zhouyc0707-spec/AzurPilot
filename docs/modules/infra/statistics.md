@@ -295,6 +295,12 @@ flowchart LR
 
 关键分叉在 `new()` 的 `method` 参数：配置值 `do_not` 产生空的 DropImage（零开销）；大世界掉落（`is_opsi_drop_genre()` 认可的任务，侵蚀1练级除外）的 `save` 与 `upload` **都会**解析入库，区别只在要不要把截图落盘——`upload` 这个名字是远程 AzurStats 时代的遗留，现在的「上传」就是「解析入本地库、不落盘」。解析中发现只有数字代号的未识别物品时，把结算截图画上红框另存到 `screenshots/unknown_items/`，供人工补模板。
 
+### 云端截图提交（与本地统计并存）
+
+`DropRecord_CloudUpload` 控制独立的云端提交，本地默认关闭，旧配置缺省也关闭；非大世界截图只有显式开启并选择上传模式才会提交，全部 `opsi_` 类型始终只在本地处理。`AzurStats.new()`、`AzurStats.commit()` 与独立 `cloud_upload.enqueue()` 均保留此保护，既有 CL1 数值接口另按原行为运行。允许提交的截图先写入 `log/cloud_upload/<实例>/` 的有界磁盘队列，本地解析及保留策略继续生效。新任务持久化 `upload_version=2`、MD5 与 SHA-256，通过 `https://api.azurpilot.com/api/v2/uploads/init` 获取 A 的 307 地址，随后向 A 登记清单并申请 123 盘 HTTPS 预签名 URL。图片以最多 64 KiB 的读缓冲直接 PUT 到云盘，不经过 A/C，也不携带网盘账户令牌。
+
+A 自行向云盘核验 MD5、大小和目标归属，全部文件通过后才确认图片组。客户端只在收到最终组回执后清理上传暂存；地址失效、网络断开或进程重启时保留原任务 ID、截图和采集时间重试。旧队列没有 `upload_version` 字段，升级后继续调用 `/api/v1/uploads`，旧服务端协议未改变。云端校验失败不会改写本地统计；B 的下载 SHA-256 复核和每 30 分钟派发规则保持不变。
+
 ### 日报流程
 
 ```mermaid
@@ -506,9 +512,10 @@ stateDiagram-v2
 
 ## 17. 已知限制
 
-- `AzurStats` 的远程上传路径已废弃；大世界 `upload` 表示本地解析、不保存截图，侵蚀1练级除外。
+- 原 AzurStats 远程地址已废弃；现有云端提交由独立开关和 `cloud_upload.py` 实现。全部大世界 `opsi_` 截图禁止云上传，原本地解析及截图保留规则继续生效，侵蚀1数值统计接口的原有例外不变。
 - 耄耋月度收获按用户约定将未识别海域掉落默认计入侵蚀 5；这不是海域识别结果，不能由此推算额外轮次或每轮收益。原始明细中的未知等级保留，CL1 轮次与总库累计均值沿用既有统计口径。
 - 旧版「大世界数据收集」与月度耄耋收获只显示对应月份有记录的侵蚀等级。存在未取整轮次、战斗、事件或掉落记录时保留该行，不能以展示轮次取整为零或高价值物品收益全零判断无记录。大世界数据收集沿用当前实例范围，月度收获沿用本设备不限实例的旧口径。历月累计独立返回，PyWebIO 历史弹窗也有独立累计表，不因所选月份无记录而隐藏历史数据。
+- `AzurStats.get_meow_loot_monthly_totals` / `get_meow_loot_available_months` 在本地旧版统计接口与 PyWebIO 导出中仍有调用，不能按上游的“无调用预留接口”判断删除。
 - 委托收益条目没有「已检查但零结算」的心跳记录，日报侧只能把空列表标为 `available=False` 而非零收益（`commission_income_stats` 有注释说明）。
 - 遥测域名 `ApiClient.PRIMARY_DOMAIN` 与 `FALLBACK_DOMAIN` 当前相同，故障转移实际未生效。
 - farming 汇总表（`farming_aggregates`）使用 SQL 全量重算而非增量，明细库很大时刷新会变慢。

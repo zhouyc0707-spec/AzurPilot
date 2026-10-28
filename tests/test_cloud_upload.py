@@ -46,7 +46,7 @@ class CloudUploadTest(unittest.TestCase):
         self.image = np.zeros((720, 1280, 3), dtype=np.uint8)
 
     def test_restart_reuses_job_id_and_cleans_only_after_complete(self):
-        queue = CloudUploadQueue(self.root)
+        queue = CloudUploadQueue(self.root, protocol_version=1)
         ident = queue.enqueue([self.image, self.image], self.meta)
         session = UploadSession()
         session.fail = True
@@ -124,7 +124,7 @@ class CloudUploadTest(unittest.TestCase):
                        'http://127.0.0.1/other', 'https://api.azurpilot.com/api/v1/uploads/init',
                        'http://127.0.0.1:invalid/api/v1/uploads/init'):
             with self.subTest(target=target):
-                queue = CloudUploadQueue(self.root)
+                queue = CloudUploadQueue(self.root, protocol_version=1)
                 ident = queue.enqueue([self.image], self.meta)
                 job = self.root / f'{ident}.pending'
                 response = Mock(status_code=307, headers={'Location': target})
@@ -189,7 +189,7 @@ class CloudUploadTest(unittest.TestCase):
         origin_thread = threading.Thread(target=origin.serve_forever, daemon=True)
         origin_thread.start()
         try:
-            queue = CloudUploadQueue(self.root, base_url=f'http://127.0.0.1:{origin.server_port}/api/v1/uploads')
+            queue = CloudUploadQueue(self.root, base_url=f'http://127.0.0.1:{origin.server_port}/api/v1/uploads', protocol_version=1)
             queue.enqueue([self.image], self.meta)
             with requests.Session() as session:
                 queue.drain_once(session)

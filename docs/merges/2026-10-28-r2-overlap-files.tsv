@@ -1,0 +1,4 @@
+path
+docs/modules/infra/statistics.md
+module/statistics/cloud_upload.py
+tests/test_cloud_upload.py

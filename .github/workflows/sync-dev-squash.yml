@@ -1,0 +1,47 @@
+name: Sync dev ancestry after squash
+
+# 长期分支 dev -> master 继续允许 Squash and merge。
+# 合并后记录 master 的 Squash 提交为 dev 的祖先，避免下一次 PR 重复计算历史差异。
+on:
+  pull_request:
+    types: [closed]
+    branches: [master]
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: '已合并的 dev -> master PR 编号（手动补跑）'
+        required: true
+        type: number
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: sync-dev-squash-ancestry
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    # push 兼容首次随 PR 发布的工作流；pull_request 只接受仓库内 dev -> master。
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.pull_request.merged == true &&
+       github.event.pull_request.head.ref == 'dev' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout dev (full history)
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+          filter: blob:none
+      - name: Reconcile squash ancestry without changing files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_EVENT_NUMBER: ${{ github.event.pull_request.number }}
+          MANUAL_PR_NUMBER: ${{ inputs.pr_number }}
+        run: bash .github/scripts/sync-dev-squash-ancestry.sh

@@ -1,0 +1,24 @@
+{
+  "base": "0fa2a60ed7b30f3e7d1994480e513b2820f612db",
+  "before": "8ae6d618fca3d7f3ed5c3d419d9b8d2633fccbbd",
+  "upstream": "12ae4b0b3fabd9510482cb78daa28b1b1286ef14",
+  "merge_base": "0fa2a60ed7b30f3e7d1994480e513b2820f612db",
+  "old_new_counts": "0\t11",
+  "custom_paths": 1015,
+  "custom_status_counts": {
+    "A": 691,
+    "M": 317,
+    "D": 7
+  },
+  "upstream_paths": 15,
+  "upstream_status_counts": {
+    "A": 3,
+    "M": 12
+  },
+  "overlap": [
+    "docs/modules/infra/statistics.md",
+    "module/statistics/cloud_upload.py",
+    "tests/test_cloud_upload.py"
+  ],
+  "custom_exclusive_paths": 1012
+}

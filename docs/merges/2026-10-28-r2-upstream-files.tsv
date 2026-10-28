@@ -1,0 +1,16 @@
+status	path
+A	.github/scripts/sync-dev-squash-ancestry.sh
+M	.github/workflows/ci.yml
+A	.github/workflows/sync-dev-squash.yml
+M	deploy/Windows/config.py
+M	deploy/api_endpoints.py
+M	deploy/config.py
+M	docs/modules/infra/statistics.md
+M	frontend/e2e/mind-fleet-tech.spec.ts
+M	frontend/src/fleet-tech/types.test.ts
+M	frontend/src/fleet-tech/types.ts
+M	module/statistics/cloud_upload.py
+A	tests/test_cloud_direct_upload.py
+M	tests/test_cloud_upload.py
+M	tests/test_deploy_location.py
+M	tests/test_deploy_settings_transactions.py
