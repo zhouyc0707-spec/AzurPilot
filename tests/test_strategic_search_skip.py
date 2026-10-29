@@ -1,7 +1,7 @@
-"""计划作战快速模式：跳过选项滑动检查的回归，不连接游戏。"""
+"""计划作战启动和确认弹窗的离线回归，不连接游戏。"""
 
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, call
 
 from module.os_handler.strategic import StrategicSearchHandler
 
@@ -48,6 +48,46 @@ class TestStrategicSearchSkipCheck(unittest.TestCase):
         self.assertFalse(handler.strategic_search_start(skip_first_screenshot=True))
         self.assertEqual(handler.strategic_search_set_option.call_count, 3)
         handler.strategic_search_confirm.assert_not_called()
+
+
+class TestStrategicSearchConfirm(unittest.TestCase):
+    """确认计划作战后，继续处理可能出现的指挥喵召回弹窗。"""
+
+    def test_confirms_meowfficer_popup_after_search_panel(self):
+        handler = StrategicSearchHandler.__new__(StrategicSearchHandler)
+        handler.loop = Mock(return_value=range(3))
+        handler.appear = Mock(side_effect=[True, False, False])
+        handler.handle_popup_confirm = Mock(side_effect=[True, True, False])
+        handler.is_in_map = Mock(return_value=True)
+
+        self.assertTrue(handler.strategic_search_confirm())
+        self.assertEqual(handler.handle_popup_confirm.call_args_list, [
+            call(offset=(30, 30), name='STRATEGIC_SEARCH'),
+            call(offset=(30, 30), name='STRATEGIC_SEARCH_MEOWFFICER'),
+            call(offset=(30, 30), name='STRATEGIC_SEARCH_MEOWFFICER'),
+        ])
+        handler.is_in_map.assert_called_once_with()
+
+    def test_does_not_confirm_unknown_popup_before_search_panel(self):
+        handler = StrategicSearchHandler.__new__(StrategicSearchHandler)
+        handler.loop = Mock(return_value=range(1))
+        handler.appear = Mock(return_value=False)
+        handler.handle_popup_confirm = Mock()
+        handler.is_in_map = Mock(return_value=True)
+
+        self.assertTrue(handler.strategic_search_confirm())
+        handler.handle_popup_confirm.assert_not_called()
+
+    def test_returns_to_map_without_second_popup(self):
+        handler = StrategicSearchHandler.__new__(StrategicSearchHandler)
+        handler.loop = Mock(return_value=range(2))
+        handler.appear = Mock(side_effect=[True, False])
+        handler.handle_popup_confirm = Mock(side_effect=[True, False])
+        handler.is_in_map = Mock(return_value=True)
+
+        self.assertTrue(handler.strategic_search_confirm())
+        self.assertEqual(handler.handle_popup_confirm.call_count, 2)
+        handler.is_in_map.assert_called_once_with()
 
 
 if __name__ == '__main__':

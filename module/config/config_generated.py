@@ -934,12 +934,14 @@ class GeneratedConfig:
     IslandFarm_Positions = 3  # 1, 2, 3, 4
     IslandFarm_WorkerFilter = 'WorkerJuu'
     IslandFarm_MinFarm = 660
+    IslandFarm_CropTargets = None
     IslandFarm_PlantPotatoes = 4  # 0, 1, 2, 3, 4
 
     # 配置组 `IslandOrchard`
     IslandOrchard_Positions = 4  # 1, 2, 3, 4
     IslandOrchard_WorkerFilter = 'WorkerJuu'
     IslandOrchard_MinOrchard = 300
+    IslandOrchard_CropTargets = None
     IslandOrchard_IgnoreAvocado = True
     IslandOrchard_PlantRubber = 0  # 0, 1, 2, 3, 4
     IslandOrchard_AmagiChanRubber = False
@@ -948,6 +950,7 @@ class GeneratedConfig:
     IslandNursery_Positions = 2  # 1, 2
     IslandNursery_WorkerFilter = 'WorkerJuu'
     IslandNursery_MinNursery = 0
+    IslandNursery_CropTargets = None
     IslandNursery_IgnorePineapple = True
     IslandNursery_PlantLavender = 2  # 0, 1, 2
 
@@ -1267,6 +1270,23 @@ class GeneratedConfig:
     BoxDisassemble_BlueBoxLimit = 1000
     BoxDisassemble_UseWhiteBox = True
     BoxDisassemble_WhiteBoxLimit = 2000
+
+    # 配置组 `IslandPlannerTool`
+    IslandPlannerTool_ApplySettings = False  # True, False
+    IslandPlannerTool_RescanTechnology = True  # True, False
+    IslandPlannerTool_ScanSeasonTasks = True  # True, False
+    IslandPlannerTool_SeasonTaskTargets = None
+    IslandPlannerTool_ExtraTargets = None
+    IslandPlannerTool_DailyProfitLowerLimit = 50000
+    IslandPlannerTool_DailyBufferSafetyMargin = 0
+    IslandPlannerTool_FieldsEfficiency = 0  # 0, 4, 12
+    IslandPlannerTool_OrchardEfficiency = 0  # 0, 4, 12
+    IslandPlannerTool_NurseryEfficiency = 0  # 0, 4, 12
+    IslandPlannerTool_RestaurantGrade = 'bronze'  # bronze, silver, gold, diamond
+    IslandPlannerTool_TeahouseGrade = 'bronze'  # bronze, silver, gold, diamond
+    IslandPlannerTool_JuuEateryGrade = 'bronze'  # bronze, silver, gold, diamond
+    IslandPlannerTool_GrillGrade = 'bronze'  # bronze, silver, gold, diamond
+    IslandPlannerTool_JuuCoffeeGrade = 'bronze'  # bronze, silver, gold, diamond
 
     # 配置组 `AutoEquip`
     AutoEquip_ShipLimit = 0

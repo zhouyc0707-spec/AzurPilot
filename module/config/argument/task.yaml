@@ -526,6 +526,8 @@ Tool:
       - EmulatorManager
     MeowfficerScore:
       - MeowfficerScore
+    IslandProductionPlanner:
+      - IslandPlannerTool
 Dashboard:
   page: dashboard
   tasks:

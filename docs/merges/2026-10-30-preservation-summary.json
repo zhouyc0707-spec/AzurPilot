@@ -1,0 +1,234 @@
+{
+  "base": "ba8979ef3ff9ba744d651b31a882b1a04ca602d4",
+  "before": "d9856d146137ddbf52eb3eefd5232776f2655cfe",
+  "upstream": "6a05d815e218a2bf075a2de626034440df3f1589",
+  "local_custom_paths": 1029,
+  "upstream_changed_paths": 40,
+  "overlap_paths": 17,
+  "exclusive_custom_paths_checked": 1012,
+  "full_union_paths_checked": 11568,
+  "actual_file_blob_checks": 11561,
+  "exact_paths": 11537,
+  "preserved_deleted_paths": 7,
+  "exclusive_custom_existing_exact": 1001,
+  "exclusive_custom_deleted_preserved": 7,
+  "upstream_nonoverlap_paths": 23,
+  "upstream_nonoverlap_exact": 20,
+  "passed": true,
+  "reviewed_path_count": 24,
+  "exclusive_custom_reviewed_paths": [
+    "docs/modules/entry/alas.md",
+    "module/config/i18n/zh-MIAO.json",
+    "tests/test_island_technology_scanner.py",
+    "定制化修改清单.md"
+  ],
+  "custom_entity_audit": {
+    "custom_entities": 68,
+    "entities_exact": 65,
+    "custom_config_leaves": 6345,
+    "config_leaves_exact": 6340
+  },
+  "config_review_note": "1092个配置/四语言定制叶子完全相同；另5253个喵语原叶子中5248个不变，5个雷达名称和说明按实际逻辑修正。无配置键删除或复活；源定义与生成结构无重复键/属性。",
+  "frontend": {
+    "paths": 390,
+    "changed": []
+  },
+  "scheduler_loop_union": {
+    "upstream_release_checks": 1,
+    "all_prior_control_flow_exact": true
+  },
+  "technology_asset_equivalence": [
+    {
+      "old": "ALAS_ISLAND_GOTO_TECHNOLOGY",
+      "new": "ISLAND_GOTO_ISLAND_TECHNOLOGY",
+      "coordinate_and_color_exact": true,
+      "images": [
+        {
+          "server": "cn",
+          "same_blob": true,
+          "old_blob": "f521a3ab7785d24ff622fd976442ec672d909073",
+          "new_blob": "f521a3ab7785d24ff622fd976442ec672d909073"
+        },
+        {
+          "server": "en",
+          "same_blob": true,
+          "old_blob": "f521a3ab7785d24ff622fd976442ec672d909073",
+          "new_blob": "f521a3ab7785d24ff622fd976442ec672d909073"
+        },
+        {
+          "server": "jp",
+          "same_blob": true,
+          "old_blob": "f521a3ab7785d24ff622fd976442ec672d909073",
+          "new_blob": "f521a3ab7785d24ff622fd976442ec672d909073"
+        },
+        {
+          "server": "tw",
+          "same_blob": true,
+          "old_blob": "f521a3ab7785d24ff622fd976442ec672d909073",
+          "new_blob": "f521a3ab7785d24ff622fd976442ec672d909073"
+        }
+      ]
+    },
+    {
+      "old": "ALAS_ISLAND_TECHNOLOGY_CHECK",
+      "new": "ISLAND_TECHNOLOGY_CHECK",
+      "coordinate_and_color_exact": true,
+      "images": [
+        {
+          "server": "cn",
+          "same_blob": true,
+          "old_blob": "5ae5c9b2506cec5af65df19376730ff63d293f77",
+          "new_blob": "5ae5c9b2506cec5af65df19376730ff63d293f77"
+        },
+        {
+          "server": "en",
+          "same_blob": true,
+          "old_blob": "fcff61f950ca8227782b3ceb0dc932bf71e96572",
+          "new_blob": "fcff61f950ca8227782b3ceb0dc932bf71e96572"
+        },
+        {
+          "server": "jp",
+          "same_blob": true,
+          "old_blob": "0a0efa57ab8af0f55975c22e1842b925e36a8950",
+          "new_blob": "0a0efa57ab8af0f55975c22e1842b925e36a8950"
+        },
+        {
+          "server": "tw",
+          "same_blob": true,
+          "old_blob": "5f48193738660ce22105723f2032dbbb1aec5050",
+          "new_blob": "5f48193738660ce22105723f2032dbbb1aec5050"
+        }
+      ]
+    }
+  ],
+  "custom_document_blocks": 23,
+  "custom_document_blocks_verbatim": 22,
+  "custom_document_review": "大世界说明中一块被新增召回段落分开；拆分前后的全部原行仍逐行保留，没有删除。岛屿原定制说明块全部完整保留。",
+  "reviewed_paths": [
+    {
+      "path": "alas.py",
+      "current_blob": "7a4b27ab8a16d8a5506f847c655b3b0aa0837507",
+      "reason": "保留所有本地入口及7个定制实体；loop仅插入上游关闭重启限制时释放冷却检查，移除此节点后AST与合并前完全一致；FleetManagementError停止回归通过。"
+    },
+    {
+      "path": "config/template.json",
+      "current_blob": "f9dee5f5400325b1b9624653d22867fb961437e7",
+      "reason": "重新生成；41个本地配置叶子原值保留，新增18个上游叶子在IslandPlannerTool映射下完全一致，不包含真实用户配置。"
+    },
+    {
+      "path": "docs/modules/entry/alas.md",
+      "current_blob": "5f75bdb224f7ec9efccbef0d9755d802dc4cfff2",
+      "reason": "仅修正FleetManagementError停止条件并新增同进程冷却释放、人工排期与队列边界；原恢复规则保留。"
+    },
+    {
+      "path": "docs/modules/game/island.md",
+      "current_blob": "9e9aece288d01d1fe0c0842fae8f28e5f6a955a0",
+      "reason": "本地定制文字块全保留，新增独立工具、自动计划优先及扫描领奖边界，修正仅针对上游独立工具的能力说明。"
+    },
+    {
+      "path": "docs/modules/os/auxiliary.md",
+      "current_blob": "f1eca7e708c7c67456171a23bbc74224cb469f35",
+      "reason": "上游新增指挥喵召回说明；追加说明只拆开原定制段落，原奖励等待、月末购买、统计与地图保护文字仍完整保留。"
+    },
+    {
+      "path": "module/config/argument/args.json",
+      "current_blob": "b0c7d5a664f3ba1cde860fac778ff5e041302ac4",
+      "reason": "重新生成；128个本地配置叶子原值保留，新增50个上游叶子按独立组映射后完全一致。"
+    },
+    {
+      "path": "module/config/argument/argument.yaml",
+      "current_blob": "5d304f64a42caf5f1053b672267151ef934d0392",
+      "reason": "保留旧IslandProductionPlanner组完整语义和102个本地叶子，将新工具组独立为IslandPlannerTool；新增37个上游叶子语义原样保留，无重复键。"
+    },
+    {
+      "path": "module/config/argument/task.yaml",
+      "current_blob": "bfac16df253b6b6f29486eedec44fd6acef4dc6d",
+      "reason": "保留IslandPlan中的本地组；独立工具任务名保留上游，仅其参数组映射到IslandPlannerTool。"
+    },
+    {
+      "path": "module/config/config_generated.py",
+      "current_blob": "1bb92d537e229af977f2f23f15d1b8dae2df731b",
+      "reason": "重新生成；41个本地属性AST完全不变，新增工具属性使用独立前缀，全部属性无重复覆盖。"
+    },
+    {
+      "path": "module/config/i18n/en-US.json",
+      "current_blob": "820a354c88fe8da5442ae5e1966943e725bab4bd",
+      "reason": "205个本地翻译叶子不变；合入上游翻译并独立新参数组，明确预览扫描副作用及已有自动季节订单，保留已废弃且无调用的TodayBattleUnit删除。"
+    },
+    {
+      "path": "module/config/i18n/ja-JP.json",
+      "current_blob": "a2b7d8c8e220681b5485b82583b898e24a592fe6",
+      "reason": "205个本地翻译叶子不变，合入上游日语修正；新工具组独立，补充扫描领奖和本地自动规划边界。"
+    },
+    {
+      "path": "module/config/i18n/zh-CN.json",
+      "current_blob": "716eba7e7c0c226abaf7b9d6270b9aadc59b5afa",
+      "reason": "205个本地翻译叶子不变，合入上游雷达及功能翻译；新工具组独立，补充扫描领奖和本地自动规划边界。"
+    },
+    {
+      "path": "module/config/i18n/zh-MIAO.json",
+      "current_blob": "7518d1778d4f9586d8a982ab07c246ed1a75b93d",
+      "reason": "5253个原叶子中5248个不变，5个雷达名称及说明同步已核实实际逻辑；补全新工具和CropTargets文案，保留喵语入口与旧规划组。"
+    },
+    {
+      "path": "module/config/i18n/zh-TW.json",
+      "current_blob": "c980748586c23c9c39b80fbcb781d75b8a2ae2b1",
+      "reason": "205个本地翻译叶子不变，合入上游繁体修正；新工具组独立，补充扫描领奖和本地自动规划边界。"
+    },
+    {
+      "path": "module/island/assets.py",
+      "current_blob": "842b9bec3995bf27869bd269805e53a5cb43b470",
+      "reason": "本地5个新增资源赋值AST完整保留，同时加入上游季节页资源；生成结果核对。"
+    },
+    {
+      "path": "module/island/island_farm.py",
+      "current_blob": "ec3905e3e3590b130764e51e671e98fdd151c7df",
+      "reason": "先取上游逐作物手工目标，再经本地planner_target覆盖有效自动计划，最后使用上游缺口比例排序；季节/忽略保护保留，11个方法无删除，9个方法AST不变，离线组合回归通过。"
+    },
+    {
+      "path": "module/island_planner/planner.py",
+      "current_blob": "daf249e6201246c8f8ca978b6e4b3b1bd6d6e369",
+      "reason": "完整采用上游计算器，唯一代码适配为参数GROUP及两个写回路径隔离；修正不处理季节订单的全局表述为独立工具边界，避免覆盖本地同名组。"
+    },
+    {
+      "path": "module/ui/assets.py",
+      "current_blob": "dbf92986cdc91d89188c16285d7071ddbf81fd23",
+      "reason": "本地2个ALAS兼容资源赋值AST不变，并加入上游标准入口和EN资源；旧新符号坐标、颜色及每服图片blob完全相同。"
+    },
+    {
+      "path": "module/ui/page.py",
+      "current_blob": "90f7dcaf45f8c27ea9ca62985cd087ab3ff5e767",
+      "reason": "科技页合并为唯一共享对象、使用等价标准资源；保留本地兑换入口，新增季节页入口，消除重复科技边；两个scanner继续共用同一页。"
+    },
+    {
+      "path": "tests/test_island_farm_targets.py",
+      "current_blob": "de8470cf3372df5a8f35aed3044532c9d6a525e1",
+      "reason": "完整保留上游目标测试，追加实际入口的自动优先、手工后备、季节/忽略和原件不改回归。"
+    },
+    {
+      "path": "tests/test_island_planner.py",
+      "current_blob": "35781c907340bd7b2c16c389bcdd01b771760d9d",
+      "reason": "上游测试引用适配新GROUP，并新增参数隔离及不覆盖自动计划/开关的回归；原求解及写回断言保留。"
+    },
+    {
+      "path": "tests/test_island_technology_scanner.py",
+      "current_blob": "fe904c54b1e45a5ce55b9c1e66387af97c2e1b23",
+      "reason": "仅将路径断言更新为同内容的上游标准入口符号；原严格扫描与导航断言保持。"
+    },
+    {
+      "path": "tests/test_scheduler_recovery.py",
+      "current_blob": "2a2d6c9e2c552f1b6c19d811ac304788446f2140",
+      "reason": "本地7个定制测试实体全部不变；合入上游冷却测试，追加人工停止组合及用户排期不写盘断言。"
+    },
+    {
+      "path": "定制化修改清单.md",
+      "current_blob": "1e8e1e7b90d437d304608b2be8a5b7151a21954a",
+      "reason": "更新本次日期和上游基线，追加独立规划、故障冷却和召回弹窗融合说明，保留全部既有定制项。"
+    }
+  ],
+  "limitations": [
+    "静态保留审计不等于真实游戏验证。",
+    "新增加的报告与回归文件不属于合入前三树路径基线。",
+    "精确比较通过Git过滤规则，独立前端构建是否匹配由运行交付验证负责。"
+  ]
+}

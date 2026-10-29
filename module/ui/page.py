@@ -448,7 +448,8 @@ page_island_mill = Page(ISLAND_MILL_CHECK)
 page_island_season = Page(ISLAND_SEASON_CHECK)
 page_island_phone = Page(ISLAND_PHONE_CHECK)
 page_island_exchange_shop = Page(ALAS_EXCHANGE_SHOP_CHECK)
-page_island_technology = Page(ALAS_ISLAND_TECHNOLOGY_CHECK)
+# 本地自动规划与独立工具共用科技页；标准资源与旧 ALAS 资源内容一致。
+page_island_technology = Page(ISLAND_TECHNOLOGY_CHECK)
 
 page_dormmenu.link(button=DORMMENU_GOTO_ISLAND, destination=page_island)
 page_island_message.link(button=DORMMENU_GOTO_ISLAND_MESSAGE, destination=page_island)
@@ -470,9 +471,9 @@ page_island_management.link(button=ISLAND_MANAGEMENT_GOTO_VISIT, destination=pag
 page_island_visit.link(button=ISLAND_VISIT_GOTO_MANAGEMENT, destination=page_island_management)
 page_island_mill.link(button=ISLAND_MILL_GOTO_ISLAND, destination=page_island)
 page_island_season.link(button=ISLAND_SEASON_GOTO_ISLAND, destination=page_island)
+page_island.link(button=ISLAND_GOTO_ISLAND_TECHNOLOGY, destination=page_island_technology)
+page_island.link(button=ISLAND_GOTO_ISLAND_SEASON, destination=page_island_season)
+page_island_technology.link(button=BACK_ARROW_WHITE, destination=page_island)
 page_island_phone.link(button=ISLAND_PHONE_GOTO_MAIN, destination=page_main)
 page_island_phone.link(button=ISLAND_PHONE_GOTO_ISLAND, destination=page_island)
 page_island_phone.link(button=ISLAND_PHONE_GOTO_ISLAND_MANAGE, destination=page_island_management)
-# 官方科技入口位于岛屿主界面；手机页沿已有返回连接进入，不能复用错误的手机坐标。
-page_island.link(button=ALAS_ISLAND_GOTO_TECHNOLOGY, destination=page_island_technology)
-page_island_technology.link(button=BACK_ARROW_WHITE, destination=page_island)

@@ -100,7 +100,7 @@ class TechnologyScannerTest(unittest.TestCase):
         try:
             self.assertIs(page_island_phone.parent, page_island)
             self.assertIs(page_island.parent, page_island_technology)
-            self.assertEqual(page_island.links[page_island_technology].name, 'ALAS_ISLAND_GOTO_TECHNOLOGY')
+            self.assertEqual(page_island.links[page_island_technology].name, 'ISLAND_GOTO_ISLAND_TECHNOLOGY')
             self.assertIn(page_island, page_island_technology.links)
         finally:
             Page.clear_connection()

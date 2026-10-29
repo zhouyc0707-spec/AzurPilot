@@ -97,7 +97,7 @@ module/os_simulator/
 | `OSStatus(UI)` | 黄币/紫币 OCR（双读确认 + `_cache_lock` 缓存降级）；`is_in_task_explore`/`is_running_cl1_leveling` 等属性读取 `_bind_task_override`，是代理身份判断的唯一实现点 |
 | `PortHandler(OSShop)` | 港口进出（`PORT_CHECK`）、任务接取、`port_dock_repair` 港口维修；被 `OSMap` 与大世界守护共用 |
 | `MissionHandler` | `os_mission_overview_accept`（任务总览接取）、`MissionAtCurrentZone` 异常；`is_in_opsi_explore()` 在此定义（OpsiExplore 启用且 next_run 早于重置前 12 小时） |
-| `StrategicSearchHandler` / `MapOrderHandler` / `OSTargetHandler` | 战略搜索流程、作战指令冷却、海域成就（`TARGET_SWITCH` 为三态选择器：all/unfinished） |
+| `StrategicSearchHandler` / `MapOrderHandler` / `OSTargetHandler` | 计划作战流程（首次确认后如出现指挥喵强制召回提示，继续用现有确认按钮处理）、作战指令冷却、海域成就（`TARGET_SWITCH` 为三态选择器：all/unfinished） |
 
 `os_auto_search_quit()` 关闭结算奖励后持续截图确认地图。普通天气的 `is_in_map()` 通过右下方 `IN_MAP` 亮度图案判断，雾天通过 `MAP_GOTO_GLOBE_FOG` 图案和颜色判断；亮度匹配可能透过暗幕命中背景，所以单靠点击奖励或亮度命中不能直接交回检索。
 
@@ -218,6 +218,8 @@ OpsiAshBeacon.run() → META 页攻击 → 按档案状态决定支援 → 恢�
 石油购买缓存按实例与服务器周记录实际已购数，配置上限增减不重置实际次数；已达上限或月末封锁直接跳过石油选项，无效计数不当作买满。实际剩余 `0/5` 仍须连续两帧确认，并将本周耗尽标记保存到本实例共享配置，切任务或重启后同周仍跳过购买；周重置后自动失效。月末仅在最后一个自然周跨月时禁购当月部分，月末为周日且整周都在当月时不禁购。
 
 `OpsiHazard1Leveling.ActionPointCheckInterval` 与 `SkipStrategicSearchCheck` 位于献祭流血量开关下方，旧通用配置值自动迁移。常规行动力仅在定时到期时从已有地图帧后台读取；0 关闭定时读取。未到期不截图、不 OCR，按已确认的出击扣减库存下界；奖励和购买增加箱子不强制开面板。首次确认、补给和恢复仍实时读取，开箱与石油购买后确认实际值。初始化及原地重启恢复清除缓存，下次重新读取。
+
+计划作战启动确认成功后，继续处理当前海域指挥喵的召回确认弹窗，正向确认回到地图才结束本次确认流程。尚未确认计划作战时，不使用这一分支确认未知弹窗；`SkipStrategicSearchCheck` 仍只跳过计划作战面板的选项滑动核对，不跳过启动确认。回归见 `tests/test_strategic_search_skip.py`。
 
 侵蚀一与短猫的事件检索通过 `wait_until_walk_stable(allow_event_finish=True)` 在商店正常退出、最终领奖、档案领取或战斗处理完成后，用新截图确认地图及计划作战入口并快速收尾。后续选项会撤销旧完成标记，意外页面恢复仍要求重新定位；下一轮保留任务收尾、EMP、修理和任务切换检查；同一海域完成事件后复用刚确认的地图位置，省略开工前重复的海域名称 OCR，随即进入计划作战。近距离清除问号、当前视野重扫之前的提示条等待继续保留；上述优化只缩短事件已完成后的镜头稳定收尾，不绕过地图识别的提示条保护。
 

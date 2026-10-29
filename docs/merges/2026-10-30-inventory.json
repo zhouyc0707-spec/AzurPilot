@@ -1,0 +1,38 @@
+{
+  "base": "ba8979ef3ff9ba744d651b31a882b1a04ca602d4",
+  "before": "d9856d146137ddbf52eb3eefd5232776f2655cfe",
+  "upstream": "6a05d815e218a2bf075a2de626034440df3f1589",
+  "merge_base": "ba8979ef3ff9ba744d651b31a882b1a04ca602d4",
+  "old_new_counts": "0\t24",
+  "custom_paths": 1029,
+  "custom_status_counts": {
+    "A": 705,
+    "M": 317,
+    "D": 7
+  },
+  "upstream_paths": 40,
+  "upstream_status_counts": {
+    "M": 21,
+    "A": 19
+  },
+  "overlap": [
+    "alas.py",
+    "config/template.json",
+    "docs/modules/game/island.md",
+    "docs/modules/os/auxiliary.md",
+    "module/config/argument/args.json",
+    "module/config/argument/argument.yaml",
+    "module/config/argument/task.yaml",
+    "module/config/config_generated.py",
+    "module/config/i18n/en-US.json",
+    "module/config/i18n/ja-JP.json",
+    "module/config/i18n/zh-CN.json",
+    "module/config/i18n/zh-TW.json",
+    "module/island/assets.py",
+    "module/island/island_farm.py",
+    "module/ui/assets.py",
+    "module/ui/page.py",
+    "tests/test_scheduler_recovery.py"
+  ],
+  "custom_exclusive_paths": 1012
+}
