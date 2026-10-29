@@ -3,7 +3,7 @@
   "passed": true,
   "base_upstream": "12ae4b0b3fabd9510482cb78daa28b1b1286ef14",
   "before_local": "dbac0693186f43e8847afc9fefdf88342c37b74b",
-  "target_upstream": "b6d36354771764251000f3aa7c258a7ab070d910",
+  "target_upstream": "ba8979ef3ff9ba744d651b31a882b1a04ca602d4",
   "comparison": {
     "local_custom_paths": 1022,
     "upstream_changed_paths": 14,
@@ -102,8 +102,17 @@
     },
     {
       "path": "定制化修改清单.md",
-      "reason": "仅更新日期和上游基线、统一调度的主动清空说明、云总暂停/旧队列转换说明；原定制要求与此前用户C决定不变。"
+      "reason": "仅更新日期和上游基线、统一调度的主动清空说明、云总暂停/旧队列转换说明；原定制要求与此前用户C决定不变。交付终检仅把上游基线更新为同树的ba8979ef3，新增两条祖先记录不改变产品。"
     }
   ],
-  "scope": "对固定三方树内全部路径使用Git规范化blob比对，交集逐项重新审阅；新增合入报告不属于历史保留基线。只读工作树审计，不代表真实游戏验收或远端交付；未复用往轮许可，未包含私人配置、截图、数据库或其哈希。"
+  "scope": "对固定三方树内全部路径使用Git规范化blob比对，交集逐项重新审阅；新增合入报告不属于历史保留基线。只读工作树审计，不代表真实游戏验收或远端交付；未复用往轮许可，未包含私人配置、截图、数据库或其哈希。",
+  "upstream_history": {
+    "reachable_records": 11,
+    "first_parent_records": 8,
+    "initial_target": "b6d36354771764251000f3aa7c258a7ab070d910",
+    "initial_and_final_tree_identical": true,
+    "late_added_ancestry_records": 2,
+    "late_behavior_delta_paths": 0
+  },
+  "reviewed_files_match_index": true
 }
