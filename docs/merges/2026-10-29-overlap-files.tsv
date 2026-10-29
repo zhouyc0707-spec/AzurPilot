@@ -1,0 +1,11 @@
+path
+docs/modules/campaign.md
+docs/modules/game/retire-equipment.md
+frontend/e2e/mock.spec.ts
+frontend/mock/state.mjs
+frontend/mock/state.test.mjs
+module/api/config_service.py
+module/statistics/cloud_upload.py
+module/ui/ui.py
+tests/test_cloud_upload.py
+tests/test_fleet_training.py

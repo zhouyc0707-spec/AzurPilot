@@ -1,0 +1,109 @@
+{
+  "audit_date": "2026-10-29",
+  "passed": true,
+  "base_upstream": "12ae4b0b3fabd9510482cb78daa28b1b1286ef14",
+  "before_local": "dbac0693186f43e8847afc9fefdf88342c37b74b",
+  "target_upstream": "b6d36354771764251000f3aa7c258a7ab070d910",
+  "comparison": {
+    "local_custom_paths": 1022,
+    "upstream_changed_paths": 14,
+    "overlap_paths": 10,
+    "exclusive_custom_paths": 1012
+  },
+  "full_path_audit": {
+    "union_paths": 11542,
+    "existing_git_blobs_checked": 11535,
+    "exact_existing_paths": 11521,
+    "reviewed_paths": 14,
+    "preserved_prior_deleted_paths": 7,
+    "unexplained_changes": 0,
+    "unexpected_deletions": 0
+  },
+  "exclusive_custom_audit": {
+    "exact_existing": 1001,
+    "preserved_deleted": 7,
+    "reviewed_document_updates": 3,
+    "reviewed_test_adaptations": 1
+  },
+  "upstream_adoption": {
+    "nonoverlap_paths": 4,
+    "exact_blobs": 4,
+    "reviewed_overlaps": 10
+  },
+  "semantic_audit": {
+    "custom_python_entities": 13,
+    "exact_custom_python_entities": 11,
+    "fused_custom_python_entities": 2,
+    "whole_python_module_fusion_proofs_passed": 5,
+    "custom_frontend_blocks_preserved": 35,
+    "custom_overlap_document_blocks_preserved": 14,
+    "prior_cloud_policy_tests_preserved": 4,
+    "cloud_policy_tests_exact": 3,
+    "cloud_policy_tests_fixture_adapted": 1,
+    "new_cloud_pause_tests": 2
+  },
+  "fusions": [
+    "云上传完整采用上游全局暂停、旧任务转v2和429/503共享退避；原显式开启与opsi禁止门禁紧随总开关，普通统计/本地解析规则不变。",
+    "岛屿保护下沉到GET_SHIP单项；本地guild优先、game_tips背景校验、模态不穿透、连续新帧与有限提前补点保留。",
+    "上游主动刷新允许放弃未完成换船/读取/装备记录；仅显式触发且实例停止，保留设置、不操作游戏；本地异常人工停止和未主动清空时恢复规则保留。"
+  ],
+  "reviewed_paths": [
+    {
+      "path": "docs/modules/campaign.md",
+      "reason": "原9个定制新增/替换区块逐字保留；接入上游显式reset可放弃未完成记录的说明，另明确本地FleetManagementError停止调度、保存现场及未主动清空时继续恢复的边界。"
+    },
+    {
+      "path": "docs/modules/game/retire-equipment.md",
+      "reason": "原5个定制区块逐字保留；新增上游主动刷新同时放弃未完成装备待办的说明，保留方案且不操作/还原游戏。"
+    },
+    {
+      "path": "docs/modules/infra/statistics.md",
+      "reason": "文档仅增加上传总暂停说明，并把过时v1重传改为v2持久化转换/429退避，更新已知限制；显式开启、opsi仅本地、CL1独立及普通统计总库等定制说明保留。"
+    },
+    {
+      "path": "docs/modules/ui.md",
+      "reason": "两处过时岛屿整组屏蔽描述改为GET_SHIP单项保护；明确独立guild优先、模态冷却不穿透、连续新帧及有限提前补点均保留。"
+    },
+    {
+      "path": "frontend/e2e/mock.spec.ts",
+      "reason": "20个定制区块逐字保留；仅吸收上游异常实例携带未完成操作时显式刷新回归，保留设置并断言不启动/停止游戏任务。"
+    },
+    {
+      "path": "frontend/mock/state.mjs",
+      "reason": "12个定制区块逐字保留；上游reset仅移除pending拒绝并清空Equipment.State，running/revision拒绝以及本地单次运行、模拟器、喵语、launcher订阅、统计模拟均保留。"
+    },
+    {
+      "path": "frontend/mock/state.test.mjs",
+      "reason": "3个定制区块逐字保留；新增上游Rotation/Equipment清空断言。"
+    },
+    {
+      "path": "module/api/config_service.py",
+      "reason": "完整模块AST等于合入前文件仅将reset_fleet_training替换为上游实现；4个定制函数AST精确一致，维护日联动/数值归一化/META与侵蚀一迁移/喵语及岛屿报告不变。"
+    },
+    {
+      "path": "module/statistics/cloud_upload.py",
+      "reason": "完整模块AST等于上游最终版本在enqueue全局暂停之后加入原显式开启和opsi禁止门禁；上游V1转V2、共享429/503退避、全局暂停完整采用，本地门禁不丢失。"
+    },
+    {
+      "path": "module/ui/ui.py",
+      "reason": "完整模块AST等于原文件仅接入上游ui_page_main_popups与ui_additional保护下沉；本地ui_goto、2个岛屿就绪函数AST精确不变，ui_additional独立guild优先和game_tips背景核验保留，仅同步旧注释。"
+    },
+    {
+      "path": "tests/test_cloud_upload.py",
+      "reason": "完整模块AST等于上游最终测试加原本地campaign场景定制；该定制测试AST精确不变。"
+    },
+    {
+      "path": "tests/test_cloud_upload_custom_policy.py",
+      "reason": "原4项本地策略测试均保留：3个AST精确，1个仅加UPLOAD_ENABLED=True夹具以实际覆盖原本地门禁；新增2个暂停入队/已有队列不后台发送测试，使用合法1280×720离线图。"
+    },
+    {
+      "path": "tests/test_fleet_training.py",
+      "reason": "完整模块AST等于原文件仅更新上游reset拒绝运行/过期与主动清空两测试；3个本地人工停止和中断恢复测试及相关导入精确保留。"
+    },
+    {
+      "path": "定制化修改清单.md",
+      "reason": "仅更新日期和上游基线、统一调度的主动清空说明、云总暂停/旧队列转换说明；原定制要求与此前用户C决定不变。"
+    }
+  ],
+  "scope": "对固定三方树内全部路径使用Git规范化blob比对，交集逐项重新审阅；新增合入报告不属于历史保留基线。只读工作树审计，不代表真实游戏验收或远端交付；未复用往轮许可，未包含私人配置、截图、数据库或其哈希。"
+}

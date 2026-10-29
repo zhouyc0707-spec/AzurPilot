@@ -1,0 +1,15 @@
+status	path
+A	docs/images/fleet-training-reset-recovery.png
+M	docs/modules/campaign.md
+M	docs/modules/game/retire-equipment.md
+M	frontend/e2e/mock.spec.ts
+M	frontend/mock/state.mjs
+M	frontend/mock/state.test.mjs
+M	frontend/src/fleet-training-i18n.ts
+M	module/api/config_service.py
+M	module/statistics/cloud_upload.py
+M	module/ui/ui.py
+A	tests/fixtures/island_return_popup/guild_popup.png
+M	tests/test_cloud_upload.py
+M	tests/test_fleet_training.py
+A	tests/test_island_return_popup.py

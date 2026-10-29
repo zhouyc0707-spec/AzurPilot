@@ -1,0 +1,31 @@
+{
+  "base": "12ae4b0b3fabd9510482cb78daa28b1b1286ef14",
+  "before": "dbac0693186f43e8847afc9fefdf88342c37b74b",
+  "upstream": "b6d36354771764251000f3aa7c258a7ab070d910",
+  "merge_base": "12ae4b0b3fabd9510482cb78daa28b1b1286ef14",
+  "old_new_counts": "0\t9",
+  "custom_paths": 1022,
+  "custom_status_counts": {
+    "A": 698,
+    "M": 317,
+    "D": 7
+  },
+  "upstream_paths": 14,
+  "upstream_status_counts": {
+    "A": 3,
+    "M": 11
+  },
+  "overlap": [
+    "docs/modules/campaign.md",
+    "docs/modules/game/retire-equipment.md",
+    "frontend/e2e/mock.spec.ts",
+    "frontend/mock/state.mjs",
+    "frontend/mock/state.test.mjs",
+    "module/api/config_service.py",
+    "module/statistics/cloud_upload.py",
+    "module/ui/ui.py",
+    "tests/test_cloud_upload.py",
+    "tests/test_fleet_training.py"
+  ],
+  "custom_exclusive_paths": 1012
+}

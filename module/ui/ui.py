@@ -683,6 +683,10 @@ class UI(InfoHandler):
         Returns:
             bool: 是否处理了弹窗。
         """
+        # 离开岛屿时 ui_current 要等到下一帧识别后才更新，期间仍需处理主界面弹窗。
+        # 岛屿管理页的邮箱按钮与 GET_SHIP 检测区域重叠，因此只跳过这一项。
+        is_island_page = bool(getattr(self, 'ui_current', None) and 'island' in self.ui_current.name)
+
         # 大舰队弹窗
         if self.handle_guild_popup_cancel():
             return True
@@ -702,7 +706,7 @@ class UI(InfoHandler):
             return True
         if self.appear_then_click(GET_ITEMS_2, offset=True, interval=3):
             return True
-        if get_ship:
+        if get_ship and not is_island_page:
             if self.appear_then_click(GET_SHIP, offset=(20, 20), interval=5):
                 return True
         if self.appear_then_click(LOGIN_RETURN_SIGN, offset=(30, 30), interval=3):
@@ -806,16 +810,13 @@ class UI(InfoHandler):
             return True
 
         # 大舰队弹窗在任意页面都可能弹出（例如从岛屿计划返回主界面时），
-        # 因此必须在下面的岛屿页面保护之前单独处理，否则会被一并跳过
+        # 保留独立优先处理入口，避免后续弹窗识别穿透模态画面。
         if self.handle_guild_popup_cancel():
             return True
 
         # 主界面和奖励页面弹窗
-        # 仅在非岛屿页面时处理，避免岛屿页面的 UI 元素被误检测为 GET_SHIP/GET_ITEMS
-        # 例如岛屿管理界面的邮箱按钮与 GET_SHIP 检测区域 (1104,610,1110,630) 重叠
-        if not (hasattr(self, 'ui_current') and self.ui_current and 'island' in self.ui_current.name):
-            if self.ui_page_main_popups(get_ship=get_ship):
-                return True
+        if self.ui_page_main_popups(get_ship=get_ship):
+            return True
 
         # 剧情跳过
         if self.handle_story_skip():

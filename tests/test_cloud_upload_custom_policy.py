@@ -1,5 +1,7 @@
 """旧统计配置不因合入云接口自动外传，大世界始终只做本地处理。"""
 import unittest
+import tempfile
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -12,10 +14,33 @@ from module.statistics.azurstats import AzurStats
 class LocalStatisticsPolicyTest(unittest.TestCase):
     def test_direct_enqueue_cannot_bypass_local_policy(self):
         from module.statistics.cloud_upload import enqueue
-        with patch('module.statistics.cloud_upload.queue_for') as queue:
+        with patch('module.statistics.cloud_upload.UPLOAD_ENABLED', True), \
+                patch('module.statistics.cloud_upload.queue_for') as queue:
             for enabled, genre in ((False, 'research'), (True, 'opsi_daily')):
                 self.assertIsNone(enqueue(SimpleNamespace(DropRecord_CloudUpload=enabled), [], genre, 0, None))
             queue.assert_not_called()
+
+    def test_upstream_pause_blocks_explicitly_enabled_upload_before_queue_creation(self):
+        from module.statistics.cloud_upload import enqueue
+        with patch('module.statistics.cloud_upload.UPLOAD_ENABLED', False), \
+                patch('module.statistics.cloud_upload.queue_for') as queue:
+            self.assertIsNone(enqueue(SimpleNamespace(DropRecord_CloudUpload=True), [], 'research', 0, None))
+            queue.assert_not_called()
+
+    def test_upstream_pause_keeps_existing_queue_without_background_send(self):
+        from module.statistics.cloud_upload import CloudUploadQueue
+        with tempfile.TemporaryDirectory() as directory:
+            queue = CloudUploadQueue(Path(directory) / 'queue', enabled=lambda: True)
+            upload_id = queue.enqueue([np.zeros((720, 1280, 3), dtype=np.uint8)], {})
+            job = queue.root / f'{upload_id}.pending'
+            original = {p.name: p.read_bytes() for p in job.iterdir()}
+            with patch('module.statistics.cloud_upload.UPLOAD_ENABLED', False), \
+                    patch('module.statistics.cloud_upload.requests.Session'), \
+                    patch.object(queue, 'drain_once') as send, \
+                    patch.object(queue.wake, 'wait', side_effect=lambda _: queue.stop.set()):
+                queue._run()
+            send.assert_not_called()
+            self.assertEqual({p.name: p.read_bytes() for p in job.iterdir()}, original)
 
     def test_missing_cloud_flag_defaults_off_without_rewriting_record_modes(self):
         old = {'Alas': {'DropRecord': {'ResearchRecord': 'upload', 'OpsiDaily': 'upload'}}}
