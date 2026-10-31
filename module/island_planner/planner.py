@@ -55,11 +55,13 @@ def efficiency_rate(value):
 def resolve_item(key):
     """物品名或 ID 转物品 ID。同名物品（如两个 Corn）优先取可以生产的那个。"""
     if isinstance(key, str) and not key.strip().isdigit() and '(' not in key:
-        matches = [item_id for item_id, item in DIC_ISLAND_ITEM.items()
-                   if item['name'][server.server] == key.strip()]
-        if len(matches) > 1:
-            produced = [item_id for item_id in matches if item_id in ProductionPlanCalculator.RECIPE_PRODUCT_IDS]
-            return (produced or matches)[0]
+        for language in dict.fromkeys((server.server, 'en')):
+            matches = [item_id for item_id, item in DIC_ISLAND_ITEM.items()
+                       if item['name'].get(language) == key.strip()]
+            if matches:
+                produced = [item_id for item_id in matches
+                            if item_id in ProductionPlanCalculator.RECIPE_PRODUCT_IDS]
+                return (produced or matches)[0]
     return normalize_item_id(key)
 
 

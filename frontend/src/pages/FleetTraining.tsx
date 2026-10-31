@@ -107,6 +107,7 @@ const metrics: Metric[] = ['level', 'affinity']
 export function FleetTraining() {
   const {instance = ''} = useParams(), {ui, notify, instances} = useApp(), connection = useConnection()
   const [morale, setMorale] = useState(false), [selectedOnly, setSelectedOnly] = useState(false)
+  const [dorm, setDorm] = useState(false), [dormFloor, setDormFloor] = useState('floor_1')
   const [hours, setHours] = useState('6')
   const [settings, setSettings] = useState<Record<Metric, Goal>>({
     level: {enabled: false, target: '120'},
@@ -129,6 +130,8 @@ export function FleetTraining() {
       const values = config.values.FleetInfo
       setMorale(values.FleetRotation?.Enabled === true)
       setSelectedOnly(values.FleetRotation?.SelectedOnly === true)
+      setDorm(values.FleetDorm?.Enabled === true)
+      setDormFloor(values.FleetDorm?.Floor === 'floor_2' ? 'floor_2' : 'floor_1')
       setHours(String(values.FleetTraining?.CheckIntervalHours ?? 6))
       setSettings(Object.fromEntries(metrics.map(metric => {
         const value = values[groups[metric]]
@@ -155,7 +158,7 @@ export function FleetTraining() {
     setDirty(true)
   }
 
-  async function save(nextMorale = morale, nextSettings = settings) {
+  async function save(nextMorale = morale, nextSettings = settings, nextDorm = dorm) {
     if (!valid) return
     setBusy(true); setError('')
     try {
@@ -164,13 +167,15 @@ export function FleetTraining() {
       await api.request('config.patch', {instance, revision: config.revision, changes: [
         {path: 'FleetInfo.FleetRotation.Enabled', value: nextMorale},
         {path: 'FleetInfo.FleetRotation.SelectedOnly', value: selectedOnly},
+        {path: 'FleetInfo.FleetDorm.Enabled', value: nextDorm},
+        {path: 'FleetInfo.FleetDorm.Floor', value: dormFloor},
         {path: 'FleetInfo.FleetTraining.CheckIntervalHours', value: Number(hours)},
         ...metrics.flatMap(metric => [
           {path: `FleetInfo.${groups[metric]}.Enabled`, value: nextSettings[metric].enabled},
           {path: `FleetInfo.${groups[metric]}.Target`, value: Number(nextSettings[metric].target)},
         ]),
       ]})
-      setMorale(nextMorale); setSettings(nextSettings); setDirty(false); notify(ui('training.saved'))
+      setMorale(nextMorale); setSettings(nextSettings); setDorm(nextDorm); setDirty(false); notify(ui('training.saved'))
     } catch (error) {setError((error as Error).message)} finally {setBusy(false)}
   }
 
@@ -226,6 +231,20 @@ export function FleetTraining() {
             </div>
           </section>
         })}
+        <section className="panel" aria-label={ui('training.dormTitle')}>
+          <div className="panel-heading"><h2>{ui('training.dormTitle')}</h2>
+            <button type="button" className={`toggle ${dorm ? 'on' : ''}`} role="switch" aria-label={ui('training.dormEnable')} aria-checked={dorm} disabled={disabled || !valid} onClick={() => void save(morale, settings, !dorm)}><span/></button>
+          </div>
+          <div style={{padding: 20, display: 'grid', gap: 16}}>
+            <label style={{display: 'grid', gap: 8}}>{ui('training.dormFloor')}
+              <select value={dormFloor} disabled={disabled} onChange={event => {setDormFloor(event.target.value); setDirty(true)}}>
+                <option value="floor_1">{ui('training.dormFloor1')}</option>
+                <option value="floor_2">{ui('training.dormFloor2')}</option>
+              </select>
+            </label>
+            <p className="muted" style={{margin: 0}}>{ui('training.dormHelp')}</p>
+          </div>
+        </section>
       </div>
       <p className="muted">{ui('training.resetHelp')}</p>
       <TrainingRecords snapshot={snapshot}/>

@@ -1321,7 +1321,7 @@
   "DropRecord": {
     "_info": {
       "name": "Drop record",
-      "help": ""
+      "help": "Research and commissions support cloud submission. Other scenes only control local screenshots. Local reward statistics are independent of saving and uploading."
     },
     "SaveFolder": {
       "name": "Drop save directory",
@@ -1346,19 +1346,9 @@
       "xz": "xz",
       "zip": "zip"
     },
-    "AzurStatsID": {
-      "name": "Contributor ID",
-      "help": "Optional anonymous contributor identifier for AzurPilot cloud statistics."
-    },
     "CloudUpload": {
       "name": "Cloud statistics upload",
-      "help": "Off by default. Explicitly enable to upload research and non-Operation Siren drop screenshots to api.azurpilot.com for Upload / Save and upload, while retaining local statistics. Operation Siren always stays local. Failed uploads retry from a queue limited to 512 MiB and 7 days."
-    },
-    "API": {
-      "name": "Unified cloud API",
-      "help": "Uses https://api.azurpilot.com. Old route options are retained only for configuration compatibility.",
-      "default": "api.azurpilot.com",
-      "cn_gz_reverse_proxy": "api.azurpilot.com"
+      "help": "Disabled by default; explicitly enable and choose an upload mode. Master switch for research and commission submissions. Structured drops go to api.azurpilot.com; unknown item icons and their source frames go to templates-api.azurpilot.com. Failed work is retried from a local queue (up to 64 MiB and 10000 jobs). Disabling pauses uploads while local statistics and screenshot saving continue. All Operation Siren records remain local; upload means local parsing only. Do not record disables research and Operation Siren drop parsing. Independent commission income and screenshots still follow their existing settings."
     },
     "ResearchRecord": {
       "name": "Research screenshot",
@@ -1384,11 +1374,9 @@
     },
     "CombatRecord": {
       "name": "Combat drop screenshot",
-      "help": "Enabling this will slow down click speed during settlement\nDoes not take effect in auto-search mode",
-      "do_not": "No action",
+      "help": "Supports local screenshots only; no cloud submission.\nEnabling this will slow down click speed during settlement\nDoes not take effect in auto-search mode",
       "save": "Save",
-      "upload": "Upload",
-      "save_and_upload": "Save and upload"
+      "do_not": "Do not save"
     },
     "OpsiHazard1Leveling": {
       "name": "Corrosion 1 drop screenshot",
@@ -1456,17 +1444,15 @@
     },
     "MeowfficerBuy": {
       "name": "Meowfficer purchase screenshot",
-      "help": "",
-      "do_not": "No action",
+      "help": "Supports local screenshots only; no cloud submission.",
+      "do_not": "Do not save",
       "save": "Save"
     },
     "MeowfficerTalent": {
       "name": "Meowfficer talent screenshot",
-      "help": "",
-      "do_not": "No action",
+      "help": "Supports local screenshots only; no cloud submission.",
       "save": "Save",
-      "upload": "Upload",
-      "save_and_upload": "Save and upload"
+      "do_not": "Do not save"
     },
     "TelemetryReport": {
       "name": "Telemetry data reporting",
@@ -1863,7 +1849,7 @@
   "OperationHandover": {
     "_info": {
       "name": "Operation handover settings",
-      "help": ""
+      "help": "Supports main and event stages. Names such as 12-4 use the main campaign; D3, T6, and SP3 use the selected event. Event difficulty follows the stage name. Handover availability is checked in game."
     },
     "Count": {
       "name": "Handover count",
@@ -7026,6 +7012,22 @@
     "Target": {
       "name": "Target affinity",
       "help": "Off by default. Uses training slots and reserves. Verify every enabled goal on the same ship before completion; morale swaps keep progress."
+    }
+  },
+  "FleetDorm": {
+    "_info": {
+      "name": "Rest after rotation",
+      "help": "After all swaps, arrange the entire current fleet on the selected dorm floor, then continue the task."
+    },
+    "Enabled": {
+      "name": "Enable rest after rotation",
+      "help": "Off by default. Clear the selected floor and select the entire current fleet by its number, including fixed slots. Priority: all-battle fleet, mob fleet, boss fleet. Skip rest and continue if the floor is locked, slots are insufficient or selection cannot be verified. CN only."
+    },
+    "Floor": {
+      "name": "Dorm floor",
+      "help": "Train on the first floor or rest on the second. Floors and slots are not purchased automatically.",
+      "floor_1": "First floor (training)",
+      "floor_2": "Second floor (rest)"
     }
   },
   "FleetTraining": {

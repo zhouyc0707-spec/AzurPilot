@@ -10,7 +10,7 @@ AzurPilot 在执行任务时天然经过大量战斗结算与资源画面。这�
 
 这一层由五条相对独立的链路组成：
 
-- **掉落统计链路**：战斗结算截图经 `AzurStats` 保存或解析入库。实时侧（`azurstats.py`）在战斗结束的上下文里收集截图；离线侧（`drop_statistics.py`）对历史截图文件夹做批量模板匹配与 OCR，导出 CSV。大世界掉落（除侵蚀1练级外）在「保存」与「上传」两个档位都会解析入库，`opsi_drop_stats.py` 把它们按窗口聚合成「大世界掉落」页的金菜与彩图纸收益。
+- **掉落统计链路**：战斗结算截图经 `AzurStats` 保存或解析入库。实时侧（`azurstats.py`）在战斗结束的上下文里收集截图；离线侧（`drop_statistics.py`）对历史截图文件夹做批量模板匹配与 OCR，导出 CSV。大世界掉落（除侵蚀1练级外）在「保存」与「不保存」两个档位都会解析入库，`opsi_drop_stats.py` 把它们按窗口聚合成「大世界掉落」页的金菜与彩图纸收益。
 - **CL1 统计链路**：`Cl1Database` 按「实例 × 月份」记录大世界侵蚀 1（CL1）与耄耋相接的战斗、明石、行动力等指标；`Cl1DataSubmitter` 把当月汇总匿名化后提交到官方遥测端点。
 - **日报链路**：`DailySummaryStore` 持续采集任务运行与侵蚀 1 战斗事件，`DailySummaryService` 在触发窗口聚合事实、调用 LLM 生成文案并经 OnePush 推送。
 - **仓库快照链路**：独立 `StorageStatistics` 任务进入普通仓库材料页，单遍完整浏览并逐格核对后，把已确认数量原子保存到 `config/azurpilot.db`；单格失败记为未知，不阻断其他物品。统计页面只读最近快照及成功扫描的历史趋势，刷新不启动游戏扫描。
@@ -293,15 +293,17 @@ flowchart LR
     D --> I[cleanup_drop_screenshots_if_due<br/>节流 1 小时]
 ```
 
-关键分叉在 `new()` 的 `method` 参数：配置值 `do_not` 产生空的 DropImage（零开销）；大世界掉落（`is_opsi_drop_genre()` 认可的任务，侵蚀1练级除外）的 `save` 与 `upload` **都会**解析入库，区别只在要不要把截图落盘——`upload` 这个名字是远程 AzurStats 时代的遗留，现在的「上传」就是「解析入本地库、不落盘」。解析中发现只有数字代号的未识别物品时，把结算截图画上红框另存到 `screenshots/unknown_items/`，供人工补模板。
+`new()` 将截图保存、本地统计与云端提交分开处理。大世界掉落（`is_opsi_drop_genre()` 认可的任务，侵蚀1练级除外）保留四档配置：`save`、`upload` 与 `save_and_upload` 解析入库，`do_not` 不记录；其中 `upload` 只做本地解析，绝不上传。各任务原有截图保存过滤规则继续生效。战斗、侵蚀1练级与指挥喵截图仅支持本地保存；它们选择 `do_not` 时产生空的 `DropImage`。解析中发现只有数字代号的未识别物品时，把结算截图画上红框另存到 `screenshots/unknown_items/`，供人工补模板。
 
-### 云端截图提交（与本地统计并存）
+### 科研与委托云端提交（与本地统计并存）
 
-当前上游将 `cloud_upload.UPLOAD_ENABLED` 设为 `False`：业务入口不新增入队，后台队列不发往上传服务器，即使用户显式开启 `DropRecord_CloudUpload` 也保持暂停。本地解析、统计与既有截图保留照常；CL1数值接口独立，不属于这个截图上传开关。以下为保留的传输实现说明，总暂停解除前不会经正常业务路径执行；已有暂存仍沿用原保留期限。
+`DropRecord_CloudUpload` 本地默认关闭，旧配置缺省也关闭；仅科研与委托在用户显式开启总开关并选择 `upload` / `save_and_upload` 时提交。全部 `opsi_` 类型始终只在本地处理。科研与委托保留四档，旧 `save` 不会迁成上传；科研 `do_not` 不解析本地统计，其他三档保留本地解析。委托原有收益统计及 `CommissionIncomeScreenshot` 独立生效。科研列表在 `save` / `save_and_upload` 时本地留图，不进入云端奖励流。CL1 数值接口独立，继续原有行为。
 
-`DropRecord_CloudUpload` 控制独立的云端提交，本地默认关闭，旧配置缺省也关闭；非大世界截图只有显式开启并选择上传模式才会提交，全部 `opsi_` 类型始终只在本地处理。`AzurStats.new()`、`AzurStats.commit()` 与独立 `cloud_upload.enqueue()` 均保留此保护，既有 CL1 数值接口另按原行为运行。允许提交的截图先写入 `log/cloud_upload/<实例>/` 的有界磁盘队列，本地解析及保留策略继续生效。新任务持久化 `upload_version=2`、MD5 与 SHA-256，通过 `https://api.azurpilot.com/api/v2/uploads/init` 获取 A 的 307 地址，随后向 A 登记清单并申请 123 盘 HTTPS 预签名 URL。图片以最多 64 KiB 的读缓冲直接 PUT 到云盘，不经过 A/C，也不携带网盘账户令牌。
+现有 v3 实现由 `cloud_upload.py` 接入 `CloudService`：结构化掉落提交到 `https://api.azurpilot.com/api/v3/post/drops`；未知物品图标通过 `templates-api.azurpilot.com/api/v3/post/templates/unknown` 登记，对应的完整 1280×720 原图通过 `/api/v3/post/templates/screenshots` 提交至同一模板服务。模板发布包从 `templates.azurpilot.com` 同步并校验签名与摘要。提交身份使用现有设备标识，旧 `AzurStatsID` 与线路选择 `API` 不再保留。
 
-A 自行向云盘核验 MD5、大小和目标归属，全部文件通过后才确认图片组。客户端只在收到最终组回执后清理成功上传的暂存；地址失效、网络断开或进程重启时保留v2任务ID、截图和采集时间重试。旧队列在首次重传前计算文件哈希、生成新ID并持久化为v2直传，避免旧v1任务继续占用中转服务器；后续重试使用转换后的同一个ID。429/503响应依据Retry-After加入随机退避，同进程中指向同一服务的队列共享暂停；普通网络错误随机延后重试。云端校验失败不会改写本地统计。
+持久队列位于实际配置目录的 `cloud/<设备与实例哈希>/`，由 `jobs`、`icons`、`screenshots` 保存待提交数据，容量上限为 64 MiB、10000 项。失败按退避时间重试，收到成功回执后移除对应任务。总开关关闭或两个场景都不允许上传时暂停网络工作；单个场景改为 `save` / `do_not` 时保留其待处理任务，其他允许场景继续提交。重新启用后可补传，暂停任务不占其他场景的批量名额；共享未知图标可通过仍允许上传的场景登记。云端故障不阻断本地统计。
+
+迁移只将不再支持云提交的战斗、指挥喵天赋场景从旧 `save_and_upload` 转为 `save`、`upload` 转为 `do_not`；科研、委托、大世界已有四档保持原意。旧 `log/cloud_upload/` 暂存原件保留备查，新 v3 不会自动迁移或补传这些旧任务。
 
 ### 日报流程
 
@@ -405,15 +407,16 @@ stateDiagram-v2
 | `Alas.DropRecord.SaveFolder` | str | ./screenshots | 掉落截图根目录（按 genre 分子目录） |
 | `Alas.DropRecord.RetentionDays` | int | 0 | 截图保留天数，0 = 不清理 |
 | `Alas.DropRecord.BackUpMethod` / `ZipMethod` | option | zip / zip | 过期截图的处理方式（delete / zip / copy）与压缩格式（bz2 / gzip / xz / zip）；备份落在各来源目录下的 `bak/` |
-| `Alas.DropRecord.CombatRecord` / `ResearchRecord` / `CommissionRecord` | option | do_not | 各场景掉落记录方式（do_not / save / upload / save_and_upload） |
-| `Alas.DropRecord.OpsiHazard1Leveling` / `OpsiMeowfficerFarming` / `OpsiDaily` / `OpsiObscure` / `OpsiAbyssal` / `OpsiStronghold` / `OpsiExplore` / `OpsiOther` | option | upload | 大世界掉落记录方式，按任务拆分（前七项依次为侵蚀1练级、耄耋相接、大世界每日、隐秘海域、深渊海域、塞壬要塞、每月开荒）：跨月每日跟大世界每日、档案坐标跟隐秘海域、月度Boss跟深渊海域共用开关，`OpsiOther` 兜底没列出的任务；运行期由 `opsi_drop_record(config)` 按 `config.task.command` 取用。除侵蚀1练级外，`save` / `upload` / `save_and_upload` 都会解析入库（区别只在要不要把截图落盘），侵蚀1练级只落盘截图、不入掉落统计 |
+| `Alas.DropRecord.CloudUpload` | bool | true | 科研、委托云端提交总开关，关闭时保留本地统计与截图保存 |
+| `Alas.DropRecord.ResearchRecord` / `CommissionRecord` | option | upload | 上传 / 保存并上传 / 不上传（upload / save_and_upload / do_not）；不上传仍保留本地收益统计 |
+| `Alas.DropRecord.CombatRecord` / `MeowfficerBuy` / `MeowfficerTalent` | option | do_not | 保存 / 不保存（save / do_not），只支持本地截图 |
+| `Alas.DropRecord.OpsiHazard1Leveling` / `OpsiMeowfficerFarming` / `OpsiDaily` / `OpsiObscure` / `OpsiAbyssal` / `OpsiStronghold` / `OpsiExplore` / `OpsiOther` | option | do_not | 按任务控制保存 / 不保存截图。跨月每日与大世界每日、档案坐标与隐秘海域、月度 Boss 与深渊海域共用开关，`OpsiOther` 兜底；由 `opsi_drop_record(config)` 按当前任务取值。两档均保留本地掉落统计，侵蚀1练级仅由大世界总结统计 |
 | `Alas.DropRecord.CommissionIncomeScreenshot` | option | save | 委托收益截图开关 |
-| `Alas.DropRecord.ResearchRecord` | option | do_not | 科研掉落截图开关；`save` / `upload` / `save_and_upload` 都会统计（区别只在要不要把截图落盘） |
 | `Alas.DropRecord.TelemetryReport` | bool | true | CL1 遥测提交开关（hazard_leveling 里检查） |
 | `Alas.Error.LlmApiKey/LlmApiBase/LlmModel` | str | "" | 日报 LLM 配置（与错误上报共用） |
 | `Alas.Error.OnePushConfig` | str | "" | 推送通道配置 |
 
-关联关系：日报的 LLM 与推送配置刻意复用 `Error` 组，避免两套密钥；掉落记录各场景开关决定 `DropImage.save/local`。除侵蚀1练级外，大世界任务的 `save` / `upload` / `save_and_upload` 均本地解析，`do_not` 不统计。日报线程不持有完整配置对象——`alas.py` 只传 `SimpleNamespace` 快照并按配置文件 mtime 热读，避免与任务线程争用配置对象。
+关联关系：日报的 LLM 与推送配置刻意复用 `Error` 组，避免两套密钥；掉落记录各场景设置决定 `DropImage.save/upload`，本地统计由场景解析能力决定。日报线程不持有完整配置对象——`alas.py` 只传 `SimpleNamespace` 快照并按配置文件 mtime 热读，避免与任务线程争用配置对象。
 
 ## 11. 异常与错误处理
 
@@ -514,7 +517,7 @@ stateDiagram-v2
 
 ## 17. 已知限制
 
-- 原 AzurStats 远程地址已废弃；云端提交实现由独立开关和 `cloud_upload.py` 管理，目前受上游总开关暂停。全部大世界 `opsi_` 截图始终禁止云上传，原本地解析及截图保留规则继续生效，侵蚀1数值统计接口的原有例外不变。
+- 原 AzurStats 远程地址及 v1/v2 截图协议已废弃；科研与委托改用 v3，默认不上传。全部 `opsi_` 场景始终禁止云上传，既有本地解析与截图保留规则继续生效，侵蚀1数值统计接口的原有例外不变。
 - 耄耋月度收获按用户约定将未识别海域掉落默认计入侵蚀 5；这不是海域识别结果，不能由此推算额外轮次或每轮收益。原始明细中的未知等级保留，CL1 轮次与总库累计均值沿用既有统计口径。
 - 旧版「大世界数据收集」与月度耄耋收获只显示对应月份有记录的侵蚀等级。存在未取整轮次、战斗、事件或掉落记录时保留该行，不能以展示轮次取整为零或高价值物品收益全零判断无记录。大世界数据收集沿用当前实例范围，月度收获沿用本设备不限实例的旧口径。历月累计独立返回，PyWebIO 历史弹窗也有独立累计表，不因所选月份无记录而隐藏历史数据。
 - `AzurStats.get_meow_loot_monthly_totals` / `get_meow_loot_available_months` 在本地旧版统计接口与 PyWebIO 导出中仍有调用，不能按上游的“无调用预留接口”判断删除。

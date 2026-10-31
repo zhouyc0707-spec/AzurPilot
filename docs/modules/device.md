@@ -23,8 +23,8 @@
 - 触控与输入：点击、长按、滑动、拖拽（贝塞尔曲线 + 抖动模拟人手）、向量滑动、按住滑动；u2 文本输入与 IME 检测。
 - 应用（碧蓝航线客户端）生命周期：前台包名检测、启动（am/monkey 双链）、停止、清缓存；UI 层级 dump 与 XPath 查询。
 - 模拟器发现与管理：注册表/进程扫描（Windows）、/Applications 扫描（macOS）、SSH 远程命令；启停命令按模拟器类型分发，含 MuMu12 专属的僵死进程清理与深度重启。
-- 运行稳定性检测：卡死检测（截图指纹 + 等待计时器双通道）、点击频率检测（最近 15 次点击统计）。
-- 单按钮连击保护阈值为 12 次；仅 S 经验结算按钮 `EXP_INFO_S` 放宽为 15 次，配合普通战斗处理器的 2 秒点击间隔等待自动跳转。双按钮各 6 次的交替点击保护不变。
+- 运行稳定性检测：卡死检测（截图指纹 + 等待计时器双通道）、点击循环检测（当前设备最近 50 次操作）。
+- 连续 50 次同按钮或严格双按钮交替时触发保护；识别到流程进展时清理记录。地图滑动 `MAP_SWIPE_*` 不计为点击循环，由相机的有界重试与超时负责兜底；普通战斗结算仍保留 2 秒点击间隔。
 - 基准测试入口：首次连接时自动为截图方式与 OCR 设备跑简化基准并写回配置。
 
 uiautomator2、minitouch、scrcpy、MaaTouch、nemu_ipc 控制下，前台应用检测、游戏启动/停止和
@@ -119,10 +119,10 @@ module/device/
 | `platform` | `Platform` | 惰性创建的模拟器管理实例（`connect=False`，不触发 ADB 连接） |
 | `stuck_timer` / `stuck_timer_long` | `Timer` | 60s / 195s 等待超时；长等待名单（战斗结算、PAUSE 等）命中时以 195s 为准 |
 | `_stuck_image_timer` | `Timer` | 截图指纹（16×16 缩略哈希）30s 不变判卡死 |
-| `click_record` | `deque(maxlen=15)` | 最近点击记录，类属性 |
+| `click_record` | `deque(maxlen=50)` | 最近操作记录，初始化时为每个设备单独创建 |
 | `_screenshot_interval` | `Timer` | 截图间隔闸门，由 `screenshot_interval_set()` 按配置收敛 |
 
-注意 `click_record`、`stuck_timer`、`detect_record` 等是**类属性**：同一进程内多个 Device 实例会共享它们。当前每个 worker 进程只构造一个 Device，因此无实际冲突，但这是隐含约束。
+`click_record` 在设备初始化时独立创建；`stuck_timer`、`detect_record` 等仍有类属性默认值。当前每个 worker 进程只构造一个 Device，跨设备复用这些状态前需检查共享边界。
 
 ### Mixin 继承结构
 
@@ -163,6 +163,9 @@ Input(Uiautomator2)
 | `nemu_ipc` | MuMu 内部 RPC 触控（低性能机易丢步，保留为可选项） |
 | `Hermit` | HTTP 注入，仅 VMOS（无 u2/minitouch 的环境） |
 | `scrcpy` | scrcpy 控制通道（代码保留，配置选项未暴露） |
+
+`control_interval()` 仅在当前调用范围内为输入增加随机间隔，默认不启用，正常返回或异常退出均恢复原值。
+智能换船的 `preflight_rotation()` 使用0.1–0.3秒间隔，通过 `Device.handle_control_check()` 覆盖点击、滑动和拖动，保留既有卡死及连点检测；普通任务不增加等待。该节流只控制输入节奏，界面就绪仍由截图状态循环确认。
 
 `PatchedIniter.push_url()` 为 atx-agent 预填 uiautomator2 的原有缓存，再沿用上游解包和 ADB 推送。
 下载时不发送固定的 GitHub `Origin`，避免 `atx.azurpilot.com` 重定向到 CNB 后被拒绝；连接/读取
@@ -399,7 +402,7 @@ Device 构造也有自己的小型阶梯：`super().__init__` 抛 `EmulatorNotRu
 - **`Config.when(DEVICE_OVER_HTTP=...)` 是硬分支**：HTTP 连接（云手机）下 `adb_command`、`adb_connect`、`adb_shell` 都有独立实现，改动对应方法时两个分支都要看。
 - **`PlatformWindows._emulator_op_lock` 必须保持类属性**。实例属性锁挡不住「每轮恢复新建实例」和「绕过 Platform 直接调 Device.emulator_start」这两条路径。
 - **nemu_ipc 截图与控制不强制配套**是踩过坑的决定：上游曾强制联动又因慢机丢步回退；本仓库恢复过联动，实测会静默覆盖用户手选的 MaaTouch，故保持独立（`method_check` 中有完整注释）。
-- `Device` 的检测类属性（`click_record`、`stuck_timer`、`detect_record`、`_screen_size_checked` 等）在**类上**，同进程多实例会互相污染；如需多设备共存要先把它们实例化。
+- `Device` 的 `stuck_timer`、`detect_record`、`_screen_size_checked` 等仍有类属性共享边界；`click_record` 已按实例独立。如需多设备共存，应逐项核对其余状态。
 - 一切识别都假设 1280×720：非该尺寸的截图会被 `resize_screenshot_to_720p` 缩放（已验证 MuMu 多档分辨率），改动该管线会同时影响所有模板资源。
 - MuMu12 启停必须走「同步关闭 → 轮询确认实例停止 → 再启动」，`shutdown_player` 是异步的，直接跟着发 launch 会把启动请求吞掉（命令成功、实例永远起不来）。
 - 远程/云手机（`is_over_http`、`is_chinac_phone_cloud`）下 nc 变体与多数后端不可用，`method_check`/`serial_check` 已有强制回退；新增选项时先核对这两处。

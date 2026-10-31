@@ -247,6 +247,7 @@ class ResourceFlowTests(unittest.TestCase):
         shop.get_coins_no_limit = Mock(return_value=1000)
         shop.interval_clear = shop.ui_ensure_index = Mock()
         shop.appear = Mock(side_effect=lambda button, **kwargs: button in (AMOUNT_MINUS, AMOUNT_PLUS))
+        shop.loop = Mock(return_value=iter([None]))
         item = SimpleNamespace(price=10, count=100)
         with patch('module.os_shop.shop.OCR_SHOP_AMOUNT.ocr', return_value=1):
             self.assertTrue(shop.shop_buy_amount_handler(item))

@@ -61,7 +61,8 @@ class ShopReplay:
         self.shop.appear = Mock(side_effect=self.appear)
         self.shop.match_template_color = Mock(side_effect=self.match_template_color)
         self.shop.image_color_count = Mock(side_effect=self.image_color_count)
-        self.shop.handle_info_bar = Mock(return_value=False)
+        # 信息栏消失等待由独立处理器负责；本回放只提供商店与弹窗状态帧。
+        self.shop.ensure_no_info_bar = Mock()
         # 保留真实处理器，让蓝色双按钮和白色按钮各走实际确认路径。
         self.shop.handle_popup_confirm = Mock(wraps=self.shop.handle_popup_confirm)
         self.shop.handle_popup_cancel = Mock(wraps=self.shop.handle_popup_cancel)
@@ -107,7 +108,7 @@ class ShopRefreshTests(unittest.TestCase):
         replay.shop.handle_popup_confirm.assert_called_once_with(
             'SHOP_REFRESH_CONFIRM', offset=(30, 30),
         )
-        replay.shop.handle_info_bar.assert_called_once()
+        replay.shop.ensure_no_info_bar.assert_called_once_with(timeout=1)
 
     def test_popup_click_cooldown_keeps_waiting_instead_of_using_background_arrow(self):
         replay = ShopReplay([
@@ -167,6 +168,7 @@ class ShopRefreshTests(unittest.TestCase):
         self.assertEqual(replay.clicks, [])
         replay.shop.device.screenshot.assert_not_called()
         replay.shop.handle_popup_confirm.assert_not_called()
+        replay.shop.ensure_no_info_bar.assert_called_once_with(timeout=1)
 
     def test_mistaken_purchase_popup_is_closed_without_confirmation(self):
         replay = ShopReplay([
@@ -198,7 +200,7 @@ class ShopRefreshTests(unittest.TestCase):
             replay.shop.shop_refresh()
 
         self.assertEqual(replay.clicks, [])
-        replay.shop.handle_info_bar.assert_not_called()
+        replay.shop.ensure_no_info_bar.assert_not_called()
 
     def test_clicked_confirmation_without_returning_to_shop_is_not_success(self):
         replay = ShopReplay([shop_screen(), popup_screen(), Screen()])
@@ -207,7 +209,7 @@ class ShopRefreshTests(unittest.TestCase):
             replay.shop.shop_refresh()
 
         self.assertEqual(replay.clicks[-1], (1, 'POPUP_CONFIRM_SHOP_REFRESH_CONFIRM'))
-        replay.shop.handle_info_bar.assert_not_called()
+        replay.shop.ensure_no_info_bar.assert_not_called()
 
 
 class GuildShopRefreshTests(unittest.TestCase):
@@ -242,6 +244,8 @@ class GuildShopRefreshTests(unittest.TestCase):
         self.assertEqual(replay.clicks, [
             (0, SHOP_REFRESH.name), (1, 'POPUP_CONFIRM_SHOP_REFRESH_CONFIRM'),
         ])
+
+        shop.ensure_no_info_bar.assert_called_once_with(timeout=1)
 
     def test_refresh_disabled_keeps_single_purchase_pass(self):
         shop = self.make_shop(refresh=False)

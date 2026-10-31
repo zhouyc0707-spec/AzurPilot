@@ -472,6 +472,70 @@ class VisualTargetTests(unittest.TestCase):
 
 
 class DirectRotationTests(unittest.TestCase):
+    def test_fixed_slot_portrait_skips_another_source_ship_on_the_earlier_page(self):
+        scanner = VisualDockScanner()
+        native = frame('slot4_dock')
+        cards = scanner.scan(native)
+        rows = sorted({card.y for card in cards})
+        aylwin = next(card for card in cards if card.col == 1 and card.y == rows[0])
+        snake = next(card for card in cards if card.col == 1 and card.y == rows[1])
+        mercury = next(card for card in cards if card.col == 2 and card.y == rows[1])
+        # 错误截图中艾尔温已在1队；仅在虚拟页面还原交换前的3队徽标。
+        native[aylwin.y + 117:aylwin.y + 162, aylwin.x:aylwin.x + 35] = (
+            native[mercury.y + 117:mercury.y + 162, mercury.x:mercury.x + 35])
+        earlier = native.copy()
+        earlier[rows[1]:rows[1] + 207, 85:570] = native[rows[0]:rows[0] + 207, 85:570]
+        # 与日志一样，艾尔温先出现在完整第二行，水星号还需要翻页。
+        earlier[rows[0] + 117:rows[0] + 162, aylwin.x:aylwin.x + 35] = 0
+        entries = [('水星号', 4, 88, mercury), ('长蛇号', 5, 98, snake), ('艾尔温', 6, 99, aylwin)]
+        source = [dict(name=name, slot=slot, level=level, emotion=150) for name, slot, level, _ in entries]
+        pictures = [scanner.portrait(native, card).copy() for *_, card in entries]
+        detail = detail_portraits(frame('slot4_detail'))
+
+        class SelectionSubmitted(Exception):
+            pass
+
+        for cached, available in ((False, True), (True, True), (True, False)):
+            with self.subTest(cached=cached, source_visible=available):
+                tool = runner()
+                tool._rotation_fleet = 1
+                tool._rotation_picker = (1, 4)
+                if cached:
+                    tool._rotation_scanned_slot = (1, 4)
+                tool._rotation_result = {'vanguard': {'1': [dict(name='热心.改', slot=4, level=105, emotion=150)],
+                                                       '3': deepcopy(source)}}
+                # 候补按等级降序排列，与固定舰位顺序相反。
+                tool._rotation_pool = {'vanguard': ({'3': list(reversed(source))},
+                                                     {'3': list(reversed(pictures))})}
+                tool._slot_portraits = {(3, slot): detail[slot] for slot in (4, 5, 6)}
+                tool.device.image = earlier
+                pages = []
+
+                def dock_pages(scan, **kwargs):
+                    for image in (earlier, native) if available else (earlier,):
+                        tool.device.image = image
+                        pages.append(image)
+                        yield scan.scan(image), []
+
+                tool._dock_pages = dock_pages
+                tool._confirm_replacement.side_effect = SelectionSubmitted
+                with (patch('module.runtime.fleet_formation.FleetNameScanner', side_effect=AssertionError('禁止舰名OCR')),
+                      patch('module.runtime.fleet_formation.LevelScanner', side_effect=AssertionError('禁止等级OCR'))):
+                    if available:
+                        with self.assertRaises(SelectionSubmitted):
+                            tool.rotate_slot(3, 4, 1)
+                        self.assertEqual(len(pages), 2)
+                        button = tool.device.click.call_args.args[0]
+                        self.assertEqual(button.button, (mercury.x + 20, mercury.y + 40,
+                                                         mercury.x + 115, mercury.y + 145))
+                        tool._confirm_replacement.assert_called_once()
+                    else:
+                        with self.assertRaisesRegex(FleetManagementError, '未能确认来源舰位卡面'):
+                            tool.rotate_slot(3, 4, 1)
+                        tool.device.click.assert_not_called()
+                        tool._confirm_replacement.assert_not_called()
+                tool._save_result.assert_not_called()
+
     def test_local_check_starts_from_selected_slot_and_preserves_other_fleet_morale(self):
         tool = self.direct_tool()
         tool._rotation_result['main']['1'][0]['emotion'] = 70

@@ -150,7 +150,23 @@ def _startup_process_ids():
         command = current.cmdline()
         executable = os.path.normcase(str(Path(current.exe()).resolve()))
         interpreter = os.path.normcase(str(Path(sys.executable).resolve()))
-        for parent in current.parents():
+        try:
+            ancestors = current.parents()
+        except psutil.NoSuchProcess:
+            # A vanished distant ancestor can abort psutil.parents() before it
+            # returns the still-live uv / venv forwarding processes.
+            ancestors, seen = [], {current.pid}
+            parent = current
+            while True:
+                try:
+                    parent = parent.parent()
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    break
+                if parent is None or parent.pid in seen:
+                    break
+                seen.add(parent.pid)
+                ancestors.append(parent)
+        for parent in ancestors:
             parent_path = Path(parent.exe()).resolve()
             parent_executable = os.path.normcase(str(parent_path))
             parent_command = parent.cmdline()
@@ -441,8 +457,12 @@ class LegacyDecoder:
             elif isinstance(payload, str):
                 try:
                     data = self.payload(kind, payload, self.secure.file_context(self.root, kind, original))
-                except json.JSONDecodeError as error:
-                    raise UnreadableSnapshotFile('旧包装快照的载荷不是有效 JSON 或已知密文') from error
+                except MigrationError as error:
+                    # payload 已将 JSON 解析异常封装；只恢复不可读包装的旧分类，
+                    # 合法 JSON 的错误结构、解密和完整性异常仍沿用各自保护。
+                    if isinstance(error.__cause__, json.JSONDecodeError):
+                        raise UnreadableSnapshotFile('旧包装快照的载荷不是有效 JSON 或已知密文') from error
+                    raise
             else:
                 raise UnreadableSnapshotFile('旧包装快照缺少有效字典或密文载荷')
         if not isinstance(data, dict):

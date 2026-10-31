@@ -300,6 +300,8 @@ def training_only(runner, battle, mode):
         FleetRotationEquipment(manager).apply_pending()
     manager.finish_rotation()
     manager._commit_formation()
+    from module.dorm.fleet_rotation import rest_after_rotation
+    rest_after_rotation(manager, session.replaced_fleets, committed=True)
     config.update()
     runner.config.update()
     runner.campaign.emotion = RotationEmotion(config, context, rules, selected)

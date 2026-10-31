@@ -158,6 +158,9 @@ jobs:
       - name: Run startup and cloud upload regression tests
         run: uv run python -m unittest tests.test_deploy_location tests.test_deploy_settings_transactions tests.test_deploy_redirect_fields tests.test_cloud_upload tests.test_cloud_direct_upload
 
+      - name: Run transport, screenshot and event regression tests
+        run: uv run pytest -q tests/test_http_transport.py tests/test_cloud_direct_upload.py tests/test_event_20261022.py
+
       - name: Run import smoke test
         run: uv run python -m dev_tools.import_smoke_test --summary-file import-smoke-summary.json
 

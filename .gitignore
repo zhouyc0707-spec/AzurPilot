@@ -278,3 +278,5 @@ config/stock-exchange-migration-backups/
 
 # 独立舰船数据库及 SQLite 事务旁文件（实例私有数据）
 /config/fleet/
+/pytest-of-AzurLane
+/tmp5nvjit1d

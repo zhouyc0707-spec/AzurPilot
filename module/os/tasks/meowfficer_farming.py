@@ -11,6 +11,8 @@
 通过指定海域列表实现高效的指挥喵资源收集。
 """
 
+from contextlib import ExitStack
+
 from module.config.config import TaskEnd
 from module.config.utils import get_os_reset_remain
 from module.exception import (
@@ -386,8 +388,10 @@ class OpsiMeowfficerFarming(MeowfficerTargetZoneMixin, CoinTaskMixin, OSMap):
 
         self.meow_search_metrics_start()
         try:
-            self.run_auto_search()
-            with self._meow_debug_clip():
+            with ExitStack() as stack:
+                self.run_auto_search(
+                    on_search_finished=lambda: stack.enter_context(self._meow_debug_clip())
+                )
                 self.handle_after_auto_search()
         finally:
             self.meow_search_metrics_end()
@@ -439,18 +443,12 @@ class OpsiMeowfficerFarming(MeowfficerTargetZoneMixin, CoinTaskMixin, OSMap):
 
         self.meow_search_metrics_start()
         try:
-            self.run_auto_search()
-            with self._meow_debug_clip():
-                self._solved_map_event = set()
-                self._solved_fleet_mechanism = False
-                # 强制移动开启时它已遍历 1~4 队雷达（含主队），这里不再重复扫；
-                # 未开启时保留本地「仅当前舰队雷达」清问号。
-                # 显式调用 OSMap 的单舰队实现：组合类 OperationSiren 的 MRO 中
-                # OpsiMeowfficerFarming 之后是 OpsiHazard1Leveling，裸调用会错误解析到
-                # 侵蚀1的多舰队 override，与本处「仅当前舰队雷达」的本意相反。
-                if not self.config.OpsiMeowfficerFarming_ExecuteFixedPatrolScan:
-                    OSMap.clear_question(self)
-                self.map_rescan()
+            with ExitStack() as stack:
+                # 扫描留在自律寻敌的掉落上下文内，保留已解决事件供雷达补扫和统计使用。
+                # run_auto_search 已显式清当前舰队问号；这里不再重复清问号或重置已解决标记。
+                self.run_auto_search(
+                    rescan="full", on_search_finished=lambda: stack.enter_context(self._meow_debug_clip())
+                )
                 self._meow_fixed_patrol_scan()
                 self.handle_after_auto_search()
         finally:

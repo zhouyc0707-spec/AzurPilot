@@ -26,7 +26,7 @@ class UiGameTipsTest(unittest.TestCase):
     @staticmethod
     def make_ui(image):
         ui = UI.__new__(UI)
-        ui.config = SimpleNamespace(BUTTON_OFFSET=(20, 20))
+        ui.config = SimpleNamespace(BUTTON_OFFSET=(20, 20), SERVER='cn', data={})
         ui.interval_timer = {}
         ui.device = SimpleNamespace(image=image, click=Mock(), stuck_record_add=Mock())
         ui.ui_current = SimpleNamespace(name='page_main')

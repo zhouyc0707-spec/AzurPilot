@@ -1,0 +1,67 @@
+{
+  "passed": true,
+  "sealed_at_utc": "2026-10-31T12:24:55+00:00",
+  "base": "6a05d815e218a2bf075a2de626034440df3f1589",
+  "before": "a4a0569cd30aee9396c666c1233865037dccaabc",
+  "upstream": "348b88cfd4f191714e8664de615cd7483848f830",
+  "working_tree": "D:\\Codex\\workspace\\AzurPilot-upstream-dev-20261031",
+  "paths": {
+    "full_union_paths_checked": 11681,
+    "actual_file_blob_checks": 11674,
+    "local_custom_paths": 1040,
+    "upstream_changed_paths": 228,
+    "overlap_paths": 52,
+    "exclusive_custom_paths_checked": 988,
+    "exclusive_custom_existing_exact": 974,
+    "exclusive_custom_deleted_preserved": 7,
+    "upstream_nonoverlap_paths": 176,
+    "upstream_nonoverlap_exact": 167
+  },
+  "local_nonoverlap_reviewed_paths": [
+    "docs/modules/os/auxiliary.md",
+    "docs/modules/os/index.md",
+    "module/config/i18n/zh-MIAO.json",
+    "tests/test_cloud_upload_custom_policy.py",
+    "tests/test_shop_refresh.py",
+    "tests/test_ui_game_tips.py",
+    "定制化修改清单.md"
+  ],
+  "upstream_nonoverlap_reviewed_paths": [
+    "docs/modules/cloud-api.md",
+    "module/api/statistics_service.py",
+    "module/research/selector.py",
+    "tests/test_cloud_direct_upload.py",
+    "tests/test_drop_record_config.py",
+    "tests/test_fleet_dorm.py",
+    "tests/test_opsi_meow_rescan.py",
+    "tests/test_persistence_migration.py",
+    "tests/test_tui_backend.py"
+  ],
+  "semantic": {
+    "custom_entities": 232,
+    "entities_exact": 208,
+    "custom_config_leaves": 6757,
+    "config_leaves_exact": 6740,
+    "custom_entities_reviewed": 24,
+    "custom_config_leaves_reviewed": 17,
+    "upstream_entities_checked": 146,
+    "upstream_entities_exact": 118,
+    "upstream_entities_reviewed": 28,
+    "upstream_config_leaves_checked": 260,
+    "upstream_config_leaves_exact": 116,
+    "upstream_config_leaves_reviewed": 144,
+    "upstream_deleted_test_entities_retained": 13,
+    "upstream_deleted_translation_leaves_retained": 72,
+    "duplicate_generated_entities": 0,
+    "unexplained_resurrections": 0
+  },
+  "path_reviews_bound_to_exact_blob": 68,
+  "unresolved": [],
+  "evidence_sha256": {
+    "preservation-final.json": "c9f57ac8e5d453769bff97545b05cc1b6c030e499d73beba8f38a1ca499203ce",
+    "preservation-semantic.json": "e4fa11e9d2c41aea9ca9fa4d8b4feee57d9924f1f2107b6133856cbbd1193461",
+    "preservation-semantic-reviewed.json": "52e1a1104fa44e9a8480fac7fb48cb77599e9d8efe0cd4cfcabee880ac68b0a0",
+    "reviewed-preservation.json": "60ace3392e87c03fda387c7f107949721a4deabd2761a658011e9e89f4c35f21"
+  },
+  "scope": "固定三方树的全部受跟踪路径；本地定制实体/配置叶子双向复核；新增本轮报告不在三方保留基线内。截图/模拟验证不等同真实游戏验收。"
+}

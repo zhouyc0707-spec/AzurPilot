@@ -719,7 +719,8 @@ class FleetManagement(Dock):
         index = self._rotation_reference_index(ships[source], source_pool, source_faces, faces.get((source, slot)))
         if index is None or len(source_faces) != len(source_pool):
             raise FleetManagementError('来源舰位不能对应唯一候选，下次自动重扫')
-        matcher = PortraitMatcher(source_faces[index])
+        # 保留固定舰位卡面，避免船坞裁剪中的公共边框和同队徽标误匹配其他船。
+        matcher = PortraitMatcher(faces.get((source, slot), source_faces[index]))
         if self._rotation_picker != (fleet, slot):
             if self._rotation_picker is not None:
                 self._close_picker()

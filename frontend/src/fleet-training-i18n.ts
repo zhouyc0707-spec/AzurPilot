@@ -1,4 +1,7 @@
 export const trainingZhCN = {
+  'training.dormTitle': '换船休息', 'training.dormEnable': '启用换船休息', 'training.dormFloor': '后宅楼层',
+  'training.dormFloor1': '一楼（训练）', 'training.dormFloor2': '二楼（休息）',
+  'training.dormHelp': '默认关闭。整轮换船和换装完成后，先取消所选楼层原有舰船，再按舰队编号选入当前整队（含固定舰位），确认并退出后宅后继续任务。多队换船时按全队出击、道中队、Boss队优先。楼层未解锁、栏位不足或选择无法确认时跳过休息并继续任务；当前仅支持国服。',
   'training.intervalHelp': '默认 6 小时，仅用于等级和好感检查。到期只读取参与换船且实际出战的舰队及已开启条件；未毕业就继续任务，等下次间隔。心情调度独立触发，不受此间隔限制。',
   'training.reset': '刷新状态',
   'training.resetDone': '换船记录和检查状态已清空',
@@ -20,6 +23,9 @@ export const trainingZhCN = {
   'training.ship': '舰船', 'training.status': '培养状态', 'training.completed': '培养完成', 'training.pending': '继续培养／待核对',
 }
 export const trainingZhTW: typeof trainingZhCN = {
+  'training.dormTitle': '換船休息', 'training.dormEnable': '啟用換船休息', 'training.dormFloor': '後宅樓層',
+  'training.dormFloor1': '一樓（訓練）', 'training.dormFloor2': '二樓（休息）',
+  'training.dormHelp': '預設關閉。整輪換船及換裝完成後，先取消所選樓層原有艦船，再按艦隊編號選入目前整隊（含固定艦位），確認並退出後宅後繼續任務。多隊換船依全隊出擊、道中隊、Boss隊優先。樓層未解鎖、欄位不足或無法確認選擇時略過休息並繼續任務；目前僅支援國服。',
   'training.intervalHelp': '預設 6 小時，僅用於等級與好感檢查。到期只讀取參與換船且實際出戰的艦隊及已啟用條件；未畢業則繼續任務，等待下次間隔。心情調度獨立觸發，不受此間隔限制。',
   'training.reset': '重新整理狀態',
   'training.resetDone': '換船紀錄與檢查狀態已清空',
@@ -41,6 +47,9 @@ export const trainingZhTW: typeof trainingZhCN = {
   'training.ship': '艦船', 'training.status': '培養狀態', 'training.completed': '培養完成', 'training.pending': '繼續培養／待確認',
 }
 export const trainingEnUS: typeof trainingZhCN = {
+  'training.dormTitle': 'Rest after rotation', 'training.dormEnable': 'Enable rest after rotation', 'training.dormFloor': 'Dorm floor',
+  'training.dormFloor1': 'First floor (training)', 'training.dormFloor2': 'Second floor (rest)',
+  'training.dormHelp': 'Off by default. After all swaps and equipment changes, clear the selected dorm floor and select the entire current fleet by its number, including fixed slots. Confirm and leave the dorm before continuing. Priority: all-battle fleet, mob fleet, boss fleet. Skip rest and continue if the floor is locked, slots are insufficient or selection cannot be verified. CN only.',
   'training.intervalHelp': 'Defaults to 6 hours for level and affinity checks only. When due, read participating active fleets and enabled goals. Continue the task until the next interval if graduation goals are unmet. Morale scheduling triggers independently.',
   'training.reset': 'Refresh state',
   'training.resetDone': 'Rotation records and check state cleared',
@@ -62,6 +71,9 @@ export const trainingEnUS: typeof trainingZhCN = {
   'training.ship': 'Ship', 'training.status': 'Training status', 'training.completed': 'Training complete', 'training.pending': 'Training / verify',
 }
 export const trainingJaJP: typeof trainingZhCN = {
+  'training.dormTitle': '交代後の休憩', 'training.dormEnable': '交代後の休憩を有効化', 'training.dormFloor': '寮舎の階',
+  'training.dormFloor1': '1階（訓練）', 'training.dormFloor2': '2階（休憩）',
+  'training.dormHelp': '初期設定は無効。全交代と装備変更後、指定階の選択を解除し、艦隊番号で固定枠を含む現艦隊全員を選択します。確定して寮舎を出てからタスクを続行します。優先順は全戦闘担当、道中、ボス艦隊。階が未解放、枠不足、選択を確認できない場合は休憩をスキップしてタスクを続行します。中国版のみ対応。',
   'training.intervalHelp': '初期値は6時間で、レベル・好感度の確認だけに使用します。期限後に出撃する対象艦隊と有効な条件を読み、卒業未達なら次の間隔までタスクを続けます。コンディション調整は独立して発動します。',
   'training.reset': '状態をリセット',
   'training.resetDone': '交代記録と確認状態を消去しました',

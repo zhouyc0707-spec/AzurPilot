@@ -50,6 +50,19 @@ class NameMappingTest(unittest.TestCase):
     def tearDown(self):
         server.server = self.previous_server
 
+    def test_english_names_on_cn_server_keep_producible_identity(self):
+        from module.island_planner.planner import parse_targets, resolve_item
+        from module.island_planner.utils import normalize_item_id
+
+        server.server = 'cn'
+        matches = [item_id for item_id, item in DIC_ISLAND_ITEM.items()
+                   if item['name']['en'] == 'Corn']
+        expected = next((item_id for item_id in matches
+                         if item_id in ProductionPlanCalculator.RECIPE_PRODUCT_IDS), matches[0])
+        self.assertEqual(resolve_item('Corn'), expected)
+        self.assertIn(normalize_item_id('Corn'), matches)
+        self.assertEqual(parse_targets('Corn: 200', 'ExtraTargets'), {expected: [200]})
+
     def test_every_azurpilot_dish_option_has_an_item(self):
         for rid, kitchen in sm.KITCHENS.items():
             for name in MEAL_OPTIONS[rid] + PRODUCT_OPTIONS[rid]:
@@ -79,6 +92,21 @@ class NameMappingTest(unittest.TestCase):
         settings = sm.restaurant_settings({}, {}, open_ids={601})
         self.assertEqual(settings[602]['waitress_slots'], ('none', 'none'))
         self.assertEqual(settings[601]['waitress_slots'], ('any', 'any'))
+
+
+class SeasonScannerRetryTest(unittest.TestCase):
+    def test_retry_when_no_task_rows_found(self):
+        from unittest.mock import Mock
+
+        import numpy as np
+
+        from module.island_planner.season_tasks import IslandSeasonTaskScanner
+
+        scanner = IslandSeasonTaskScanner.__new__(IslandSeasonTaskScanner)
+        scanner.loop = Mock(return_value=range(2))
+        scanner._task_rows = Mock(side_effect=[np.empty((0, 2)), np.array([[0., 40.]])])
+        self.assertEqual(len(scanner.season_task_grid.buttons), 3)
+        self.assertEqual(scanner._task_rows.call_count, 2)
 
 
 class FakeCalculatorTest(unittest.TestCase):

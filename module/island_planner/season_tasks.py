@@ -186,7 +186,7 @@ class IslandSeasonTaskScanner(IslandUI):
                 origin_y = DETECT_AREA[1] - NAME_AREA[1]
             grid = ButtonGrid(origin=(DETECT_AREA[0], origin_y), delta=TAB_DELTA, button_shape=TAB_SIZE,
                               grid_shape=(3, max(len(rows), 1)), name='SEASON_TASK_GRID')
-            if len(grid.buttons) >= 3:
+            if len(rows) >= 1:
                 break
         return grid
 

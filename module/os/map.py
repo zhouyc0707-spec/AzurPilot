@@ -1567,7 +1567,8 @@ class OSMap(MapEventResumeMixin, OSFleet, Map, GlobeCamera, StorageHandler, Stra
         return False
 
     def run_auto_search(
-        self, question=True, rescan=None, after_auto_search=True, interrupt=None, exit_map=False
+        self, question=True, rescan=None, after_auto_search=True, interrupt=None, exit_map=False,
+        on_search_finished=None,
     ):
         """
         通过运行自律寻敌清理当前海域。需要先完成大世界剧情模式才能解锁自律寻敌。
@@ -1582,6 +1583,7 @@ class OSMap(MapEventResumeMixin, OSFleet, Map, GlobeCamera, StorageHandler, Stra
             after_auto_search (bool): 自动搜索后是否调用 handle_after_auto_search()。
             interrupt (callable): 中断回调函数。
             exit_map (bool): 清理后在同一掉落记录内退出特殊海域，包含退出时的奖励。
+            on_search_finished (callable | None): 战斗结束后、清问号和扫描前调用，用于启动战后录像。
 
         Returns:
             int: 完成的战斗次数。
@@ -1627,6 +1629,9 @@ class OSMap(MapEventResumeMixin, OSFleet, Map, GlobeCamera, StorageHandler, Stra
                 break
 
             drop.set_combat_count(self._auto_search_battle_count)
+
+            if on_search_finished is not None:
+                on_search_finished()
 
             # 重扫需要在 drop 上下文内进行。某些大世界奖励
             # 仅在清理问号或重扫地图时出现。
@@ -2016,6 +2021,7 @@ class OSMap(MapEventResumeMixin, OSFleet, Map, GlobeCamera, StorageHandler, Stra
         Raises:
             MapDetectionError: 识别或摄像机定位失败，交由上层保存现场并恢复；
                 失败不能作为“全图没有事件”的依据。
+            GameStuckError: 摄像机无确认位移或坐标震荡，一次有界重新定位仍失败。
         """
         result = False
         # 新一轮重扫重新给每个事件一次机会，清掉上一轮的“到不了”记录
@@ -2041,6 +2047,7 @@ class OSMap(MapEventResumeMixin, OSFleet, Map, GlobeCamera, StorageHandler, Stra
                 queue = queue.sort_by_camera_distance(self.camera)
                 target = queue[0]
                 logger.hr(f"重新扫描 {target} ({scanned + 1}/{scan_count})")
+                logger.attr("扫描相机/目标", f"{location2node(self.camera)} -> {target}")
                 self.focus_to(target, swipe_limit=(6, 5))
                 self.focus_to_grid_center(0.3)
                 if tuple(self.camera) != tuple(target.location):

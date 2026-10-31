@@ -48,9 +48,10 @@ def normalize_item_id(item_id):
             return normalized_id
         raise ValueError(f'Unknown item id: {item_text}')
 
-    for normalized_id, item_data in DIC_ISLAND_ITEM.items():
-        if item_data['name'][server.server] == item_text:
-            return normalized_id
+    for language in dict.fromkeys((server.server, 'en')):
+        for normalized_id, item_data in DIC_ISLAND_ITEM.items():
+            if item_data['name'].get(language) == item_text:
+                return normalized_id
 
     raise ValueError(f'Unknown item key: {item_text}')
 

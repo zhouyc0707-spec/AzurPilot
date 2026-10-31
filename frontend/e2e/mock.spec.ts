@@ -105,6 +105,47 @@ for (const theme of ['light', 'legacy-light']) {
   })
 }
 
+test('换船休息默认关闭，楼层可保存且不改变其他调度开关', async ({page}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('azurpilot.language', 'zh-CN')
+    localStorage.setItem('azurpilot.material', 'plain')
+  })
+  await page.goto('/#/i/demo-main/task/FleetSwitch?tab=training')
+  const dorm = page.getByRole('region', {name: '换船休息', exact: true})
+  const toggle = dorm.getByRole('switch', {name: '启用换船休息', exact: true})
+  const floor = dorm.getByRole('combobox', {name: '后宅楼层', exact: true})
+  await expect(toggle).toHaveAttribute('aria-checked', 'false')
+  await expect(floor).toHaveValue('floor_1')
+  await floor.selectOption('floor_2')
+  await page.getByRole('button', {name: '保存调度设置', exact: true}).click()
+  await expect(page.getByRole('button', {name: '保存调度设置', exact: true})).toBeDisabled()
+  // 保存进行中同样会禁用按钮；等楼层控件恢复，避免刷新中断尚未发送的请求。
+  await expect(floor).toBeEnabled()
+  await page.reload()
+  await expect(toggle).toHaveAttribute('aria-checked', 'false')
+  await expect(floor).toHaveValue('floor_2')
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-checked', 'true')
+  await page.reload()
+  await expect(toggle).toHaveAttribute('aria-checked', 'true')
+  await expect(floor).toHaveValue('floor_2')
+  for (const name of ['心情调度', '等级调度', '好感调度'])
+    await expect(page.getByRole('switch', {name: `启用${name}`, exact: true})).toHaveAttribute('aria-checked', 'false')
+  await expect(dorm).toContainText('全队出击、道中队、Boss队优先')
+  await dorm.screenshot({path: 'test-results/fleet-dorm-desktop.png', animations: 'disabled'})
+  await page.setViewportSize({width: 390, height: 844})
+  await dorm.scrollIntoViewIfNeeded()
+  await expect(toggle).toBeVisible()
+  await expect(floor).toBeVisible()
+  await dorm.screenshot({path: 'test-results/fleet-dorm-mobile.png', animations: 'disabled'})
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-checked', 'false')
+  await floor.selectOption('floor_1')
+  await page.getByRole('button', {name: '保存调度设置', exact: true}).click()
+  await expect(page.getByRole('button', {name: '保存调度设置', exact: true})).toBeDisabled()
+  await expect(floor).toBeEnabled()
+})
+
 test('智能换船整合四个页签，旧入口兼容且刷新与手机布局正常', async ({page}) => {
   const methods: string[] = []
   await page.addInitScript(() => {

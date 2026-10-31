@@ -141,9 +141,7 @@
       "RetentionDays": 0,
       "BackUpMethod": "zip",
       "ZipMethod": "zip",
-      "AzurStatsID": null,
       "CloudUpload": false,
-      "API": "default",
       "ResearchRecord": "do_not",
       "CommissionRecord": "do_not",
       "CommissionIncomeScreenshot": "save",
@@ -3848,6 +3846,10 @@
     "FleetAffinityTraining": {
       "Enabled": false,
       "Target": 100
+    },
+    "FleetDorm": {
+      "Enabled": false,
+      "Floor": "floor_1"
     },
     "FleetTraining": {
       "FullScanRecord": "2020-01-01 00:00:00",

@@ -65,6 +65,15 @@ class MigrationProcessTests(unittest.TestCase):
         with self.assertRaisesRegex(MigrationError, 'PID 1000002'):
             self.scan(current, [redirector, old])
 
+    def test_vanished_distant_ancestor_keeps_verified_windows_redirector(self):
+        import psutil
+        current = self.process(os.getpid(), self.base_interpreter, ['gui.py'])
+        redirector = self.process(1000001, self.interpreter, ['gui.py'])
+        current.parents.side_effect = psutil.NoSuchProcess(1000002)
+        current.parent.return_value = redirector
+        redirector.parent.return_value = None
+        self.scan(current, [current, redirector])
+
     def test_python_ancestor_running_an_entry_is_not_exempt(self):
         current = self.process(os.getpid(), self.base_interpreter, ['gui.py'])
         parent = self.process(1000001, self.base_interpreter, ['gui.py'])
@@ -321,6 +330,28 @@ class MigrationTests(unittest.TestCase):
             self.database.ensure_ready()
         self.assertFalse(self.database.path.exists())
         self.assertEqual(source.read_text(encoding='utf-8'), '[]')
+
+    def test_valid_json_wrapped_nonobject_still_blocks_without_replacing_sources(self):
+        """包装存在不代表可跳过结构错误，原件和完整备份均须保留。"""
+        for index, payload in enumerate(('[]', 'null', '1')):
+            for kind, filename in (('ships', 'ship_exp_data.json'), ('archives', 'cl1_monthly.json')):
+                with self.subTest(payload=payload, kind=kind):
+                    root = self.root / f'invalid-wrapper-{kind}-{index}'
+                    root.mkdir()
+                    install_store(self, root)
+                    database = BusinessDatabase(root / 'config')
+                    source = root / 'log' / 'cl1' / 'broken' / filename
+                    source.parent.mkdir(parents=True)
+                    raw = json.dumps({'__opsi_secure_v1__': True, 'payload': payload}).encode()
+                    source.write_bytes(raw)
+                    with self.assertRaisesRegex(MigrationError, '载荷无法解码'):
+                        database.ensure_ready()
+                    self.assertFalse(database.path.exists())
+                    self.assertFalse(database.marker.exists())
+                    self.assertEqual(source.read_bytes(), raw)
+                    backup = next((database.directory / 'storage-backups').iterdir())
+                    self.assertEqual((backup / source.relative_to(root)).read_bytes(), raw)
+                    self.assertFalse((backup / 'unmigrated.json').exists())
 
     def test_entire_aes_snapshot_uses_saved_device_id_without_refreshing_it(self):
         expected = {'battle_count': 7, 'commission_income_entries': [{'keep': True}], 'extra': [None, 2 ** 80]}

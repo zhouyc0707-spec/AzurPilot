@@ -3,7 +3,7 @@
 import tempfile
 import unittest
 from datetime import datetime
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from textual.widgets import Input
 
@@ -135,6 +135,18 @@ class TestTUIApp(IsolatedTUIFixture, unittest.IsolatedAsyncioTestCase):
         factory.start()
         self.addCleanup(factory.stop)
 
+    async def test_clock_during_mount_and_teardown(self):
+        app = AzurPilotTUI()
+        app.tick_clock()  # No screen is mounted yet.
+        screen = Mock()
+        screen.query.return_value = []
+        with patch.object(AzurPilotTUI, 'screen_stack', property(lambda self: [screen])):
+            app.tick_clock()  # The screen exists but its header has been removed.
+            header = Mock()
+            screen.query.return_value = [header]
+            app.tick_clock()
+            header.tick_clock.assert_called_once()
+
     async def test_app_compose_and_actions(self) -> None:
         """在无头模式下测试 App 挂载与快捷指令。"""
         app = AzurPilotTUI()
@@ -209,6 +221,9 @@ class TestTUIApp(IsolatedTUIFixture, unittest.IsolatedAsyncioTestCase):
                     await pilot.pause()
                 else:
                     ctrl.focus()
+                    # 焦点切换通过消息队列生效，确认后再发送回车。
+                    await pilot.pause()
+                    self.assertIs(ctrl, app.focused)
                     await pilot.press('enter')
                 self.assertEqual([{'path': path, 'value': int(original)}], modal.collect_changes())
                 with patch('module.api.config_service.current_time', return_value=now):

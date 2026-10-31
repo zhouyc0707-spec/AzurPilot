@@ -206,7 +206,7 @@ flowchart BT
 | `os_init()` | 所有任务的前置：强制潜艇每战出击、覆盖通用剧情配置（大世界处理器局部使用 SKIP）→ 进入海域 → `zone_init`/`hp_reset` → 从特殊海域退出 → 按任务身份决定是否 `run_first_auto_search()`（智能调度会把该决策延后到决策点） |
 | `globe_goto(zone, types, refresh, stop_if_safe)` | 跨海域导航的标准路径：特殊海域先退出 → 海域图进球面 → 聚焦/类型选择/进入 → `zone_init` |
 | `os_map_goto_globe()` | 包装重试 3 次：`RewardUncollectedError`（探索奖励未领不能离开海域）时先 `run_auto_search(rescan=True, after_auto_search=False)` 再试；禁用 after_auto_search 防止递归退出海域 |
-| `run_auto_search(question, rescan, after_auto_search, interrupt)` | 自律寻敌主循环：drop 统计上下文内跑战斗、清问号、按 `rescan` 重扫（`current`/`full`），特殊任务可整体关闭 |
+| `run_auto_search(question, rescan, after_auto_search, interrupt, on_search_finished)` | 自律寻敌主循环：drop 统计上下文内跑战斗、清问号、按 `rescan` 重扫（`current`/`full`），特殊任务可整体关闭；可在战斗结束、事件扫描开始前进入片段记录上下文 |
 | `map_rescan(rescan_mode)` | 全图重扫：明石商店、扫描装置、伐木塔、双舰队机关（`ALREADY_SOLVED_MAP_EVENTS` 集合去重）；明石/装置点击被遮挡时先收起舰队栏，再换舰队，仍不行走恢复式强制移动 |
 | `fleet_repair()` / `port_goto()` | 港口维修与「走不动就换港口绕路」的容错包装 |
 | `boss_clear()`（`fleet.py`） | 月度/要塞 Boss 的多舰队轮换攻击，`limit_walk` 限制单次行走曼哈顿距离 ≤3 格 |
@@ -374,6 +374,8 @@ OCR：行动力面板 / 黄币 / 紫币 ──▶ 决策（智能调度状态机
 - **敏感任务默认值**：`OpsiCrossMonth/OpsiObscure/OpsiAbyssal` 的 `Sensitive: true` 意味着运行到一半失败会让调度器停机（等待人工），新增高危任务时才追加，勿扩大范围。
 - **月末清理优先于黄币/CL1 调度**。`run_smart_scheduling_once` 的分支顺序是产品行为（月底清 AP 避免浪费），重排决策顺序会改变玩家收益。
 - **`ALREADY_SOLVED_MAP_EVENTS`**（明石/扫描装置/伐木塔）控制重扫的去重；新事件加入前确认它能被 `map_rescan` 处理，否则会无限重扫。
+- **普通短猫每轮只做一次全图重扫**。`_meow_handle_normal_search()` 在 `run_auto_search(rescan="full")` 的掉落上下文内完成当前舰队问号与事件扫描，之后保留已解决标记供雷达补查和统计使用；不再清标记后重复扫描。当前舰队清理仍显式调用 `OSMap.clear_question()`，避免组合类的方法解析顺序误入侵蚀一的多队入口；战略搜索两种模式仍保留主队预检、其他舰队补查和强制移动开关的原边界。目标海域模式仍遵守原随机事件开关。验证见 `tests/test_opsi_meow_rescan.py`。
+- **全图扫描必须逐节点确认到达**。通用相机聚焦只接受截图确认的位移，零位移或震荡时仅尝试一次有界边缘重新定位，失败向上抛出；大世界仍保留按地图尺寸限制次数、同时识别横纵边缘的本地定位。扫描日志按距离排序后的实际目标记录当前位置、目标及完成数量，未到目标或定位失败不能记成“全图无事件”。提示条等待继续保留。验证见 `tests/test_map_camera_progress.py`、`tests/test_opsi_map_scan_coverage.py`。
 - **明石商店去重范围**：`_akashi_handled` 只限制当前海域本轮搜索的重复进店。`globe_enter()` 本次确实点击过入口并确认进入地图后清零，普通海域、要塞和仓库隐秘／深渊坐标共用该边界；连续两个相同海域编号的坐标仍各自允许购买。特殊海域退出时，先确认已回到地图且 `MAP_EXIT` 不再显示，按原稳定计时结束后清零；奖励处理本身不代表已经退出。保留 `run_strategic_search()` 每轮清零，同图 `run_auto_search()` 恢复、`zone_init()`／`map_init()`、战后重扫、换队及从球面返回当前地图均不清零。购买过滤、余额检查和行动力统计沿用原逻辑。离线回归见 `tests/test_opsi_akashi_scope.py`。
 - **明石商店处理速度**：确认进店后建立仅本次访问有效的 `_akashi_shop_session`，正常结束、购买／退出失败及任务中断都在 `finally` 清理。黄币校验省去额外固定等待，仍由截图循环取得连续两张一致读数；零值或奖励可见会打断校验，奖励处于点击冷却时不读背景余额。每次选品仍读取实际黄／紫币并记录原统计，不按价格推算余额。
 - 商品识别逐格比较当前截图的全部识别区域，只有像素完全相同且已知的格才复用本次进店结果；变更格走原名称、数量、币种及价格识别链。未知、空格和价格失败格每轮重识别，离开商店、布局或截图尺寸变化、新会话、模板提取模式不沿用旧缓存。余额下降、价格变化和售罄按当前结果重新过滤；临时局部网格在异常时也还原。货架加载初次识别后最多重拍两次，最后一次有效结果仍可选品。入口稳定确认、成交确认及补点冷却保持原值；日志记录本次商店处理耗时。验证见 `tests/test_opsi_shop_coin_read.py`、`tests/test_opsi_akashi_inventory.py`，存储追加优化见[统计模块](../infra/statistics.md)。

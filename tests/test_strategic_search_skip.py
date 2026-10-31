@@ -16,7 +16,7 @@ class TestStrategicSearchSkipCheck(unittest.TestCase):
         handler.strategy_search_enter = Mock()
         handler.strategic_search_set_tab = Mock()
         handler.strategic_search_set_option = Mock(return_value=True)
-        handler.strategic_search_confirm = Mock()
+        handler.strategic_search_confirm = Mock(return_value=True)
         return handler
 
     def test_default_still_checks_options(self):
@@ -42,6 +42,12 @@ class TestStrategicSearchSkipCheck(unittest.TestCase):
         self.assertEqual(handler.strategic_search_set_option.call_count, 2)
         handler.strategic_search_confirm.assert_called_once_with()
 
+    def test_confirmation_failure_is_not_reported_as_success(self):
+        handler = self.make_handler(skip=True)
+        handler.strategic_search_confirm = Mock(return_value=False)
+        self.assertFalse(handler.strategic_search_start())
+        self.assertEqual(handler.strategic_search_confirm.call_count, 3)
+
     def test_gives_up_after_three_failures(self):
         handler = self.make_handler(skip=False)
         handler.strategic_search_set_option = Mock(return_value=False)
@@ -53,7 +59,7 @@ class TestStrategicSearchSkipCheck(unittest.TestCase):
 class TestStrategicSearchConfirm(unittest.TestCase):
     """确认计划作战后，继续处理可能出现的指挥喵召回弹窗。"""
 
-    def test_confirms_meowfficer_popup_after_search_panel(self):
+    def test_confirms_secondary_popup_and_waits_for_map(self):
         handler = StrategicSearchHandler.__new__(StrategicSearchHandler)
         handler.loop = Mock(return_value=range(3))
         handler.appear = Mock(side_effect=[True, False, False])
@@ -67,6 +73,28 @@ class TestStrategicSearchConfirm(unittest.TestCase):
             call(offset=(30, 30), name='STRATEGIC_SEARCH_MEOWFFICER'),
         ])
         handler.is_in_map.assert_called_once_with()
+
+    def test_handles_multiple_secondary_popups_until_map(self):
+        handler = StrategicSearchHandler.__new__(StrategicSearchHandler)
+        handler.loop = Mock(return_value=range(4))
+        handler.appear = Mock(side_effect=[True, False, False, False])
+        handler.handle_popup_confirm = Mock(side_effect=[True, True, True, False])
+        handler.is_in_map = Mock(return_value=True)
+
+        self.assertTrue(handler.strategic_search_confirm())
+        self.assertEqual(handler.handle_popup_confirm.call_count, 4)
+        handler.is_in_map.assert_called_once_with()
+
+    def test_waits_for_map_while_confirmation_is_on_cooldown(self):
+        handler = StrategicSearchHandler.__new__(StrategicSearchHandler)
+        handler.loop = Mock(return_value=range(4))
+        handler.appear = Mock(side_effect=[True, False, False, False])
+        handler.handle_popup_confirm = Mock(side_effect=[True, False, True, False])
+        handler.is_in_map = Mock(side_effect=[False, True])
+
+        self.assertTrue(handler.strategic_search_confirm())
+        self.assertEqual(handler.handle_popup_confirm.call_count, 4)
+        self.assertEqual(handler.is_in_map.call_count, 2)
 
     def test_does_not_confirm_unknown_popup_before_search_panel(self):
         handler = StrategicSearchHandler.__new__(StrategicSearchHandler)
@@ -86,7 +114,10 @@ class TestStrategicSearchConfirm(unittest.TestCase):
         handler.is_in_map = Mock(return_value=True)
 
         self.assertTrue(handler.strategic_search_confirm())
-        self.assertEqual(handler.handle_popup_confirm.call_count, 2)
+        self.assertEqual(handler.handle_popup_confirm.call_args_list, [
+            call(offset=(30, 30), name='STRATEGIC_SEARCH'),
+            call(offset=(30, 30), name='STRATEGIC_SEARCH_MEOWFFICER'),
+        ])
         handler.is_in_map.assert_called_once_with()
 
 
