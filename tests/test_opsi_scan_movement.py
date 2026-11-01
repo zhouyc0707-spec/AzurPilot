@@ -1,6 +1,7 @@
 """真实大世界默认配置、脱敏截图与无设备完整扫描回归。"""
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -42,11 +43,12 @@ def texture(seed):
 
 
 class TextureGrid:
-    def __init__(self, location, full, piece=None):
+    def __init__(self, location, full):
         self.location = location
-        self.is_in_detecting_area = True
-        self._image_similar_full = full
-        self._image_similar_piece = full[2:-2, 2:-2] if piece is None else piece
+        self.config = SimpleNamespace(HOMO_TILE=full.shape[::-1])
+        self.image_trans = np.repeat(full[:, :, None], 3, axis=2)
+        # 合成纹理放在真实OS遮罩内，生产路径仍检查整个搜索区域是否合法。
+        self.homo_data = np.array(((1, 0, -600), (0, 1, -300), (0, 0, 1)), dtype=float)
 
     def predict_fleet(self):
         return False
@@ -154,12 +156,30 @@ class TestScanMovementEvidence(unittest.TestCase):
         self.assertIsNone(predict_scan_swipe(previous, current))
 
     def test_one_way_best_matches_are_not_accepted_as_mutual(self):
-        a, b, c, d = [texture(seed) for seed in range(4)]
-        previous = texture_view([TextureGrid((0, 0), b, a[2:-2, 2:-2]),
-                                 TextureGrid((1, 0), d, c[2:-2, 2:-2])])
-        current = texture_view([TextureGrid((-2, 0), a, d[2:-2, 2:-2]),
-                                TextureGrid((-1, 0), c, b[2:-2, 2:-2])])
+        a, b, c = [texture(seed) for seed in range(3)]
+        previous = texture_view([TextureGrid((0, 0), a), TextureGrid((1, 0), a), TextureGrid((2, 0), b)])
+        current = texture_view([TextureGrid((-2, 0), a), TextureGrid((-1, 0), b), TextureGrid((0, 0), c)])
+        # 两个A都单向匹配同一个A，反向无法唯一确定；只剩B这一对，不能通过。
         self.assertIsNone(predict_scan_swipe(previous, current))
+
+    def test_ui_or_screen_boundary_cannot_supply_matching_evidence(self):
+        for source_origin in ((0, 0), (-8, 300), (1272, 300), (600, 712)):
+            with self.subTest(source_origin=source_origin):
+                previous = texture_view([TextureGrid((x, 0), texture(x)) for x in range(3)])
+                current = texture_view([TextureGrid((x - 2, 0), texture(x)) for x in range(3)])
+                x, y = source_origin
+                for grid in previous:
+                    grid.homo_data[:2, 2] = (-x, -y)
+                self.assertIsNone(predict_scan_swipe(previous, current))
+
+    def test_partial_ui_mask_inside_full_search_area_is_rejected(self):
+        previous = texture_view([TextureGrid((x, 0), texture(x)) for x in range(3)])
+        current = texture_view([TextureGrid((x - 2, 0), texture(x)) for x in range(3)])
+        mask = np.full((720, 1280), 255, np.uint8)
+        # 中央模板仍可见，但搜索区域左侧仅一个像素属于UI，也不得拿来匹配。
+        mask[300:316, 600] = 0
+        with patch('module.os.scan_movement.ASSETS', SimpleNamespace(ui_mask_os_in_map=mask)):
+            self.assertIsNone(predict_scan_swipe(previous, current))
 
     def test_conflicting_unique_texture_movements_are_rejected(self):
         previous = texture_view([TextureGrid((x, 0), texture(x)) for x in range(3)])

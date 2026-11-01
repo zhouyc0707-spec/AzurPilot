@@ -4,6 +4,26 @@ import cv2
 import numpy as np
 
 from module.logger import logger
+from module.map_detection.utils_assets import ASSETS
+
+
+def _scan_grid_images(view):
+    """按整格透视变换取得纹理，排除完整搜索范围内的UI和屏幕边界。"""
+    # 与图像使用相同的透视变换；额外留出2个原图像素，防止插值混入遮罩边缘。
+    safe_mask = cv2.erode(ASSETS.ui_mask_os_in_map, np.ones((5, 5), np.uint8),
+                         borderType=cv2.BORDER_CONSTANT, borderValue=0)
+    images = []
+    for grid in view:
+        mask = cv2.warpPerspective(safe_mask, grid.homo_data, grid.config.HOMO_TILE)
+        if not np.all(mask == 255):
+            continue
+        full = cv2.cvtColor(grid.image_trans, cv2.COLOR_RGB2GRAY)
+        # 默认140像素整格，中央100像素为模板，其余用于容纳小幅识别偏差。
+        y, x = np.array(full.shape) // 7
+        piece = full[y:-y, x:-x]
+        if np.std(piece) >= 1:
+            images.append((grid.location, piece, full))
+    return images
 
 
 def predict_scan_swipe(previous, current):
@@ -16,21 +36,19 @@ def predict_scan_swipe(previous, current):
     if observed is not None:
         return observed
 
-    before = [grid for grid in previous if grid.is_in_detecting_area]
-    after = [grid for grid in current if grid.is_in_detecting_area]
+    # 屏幕矩形裁片只做缩放，纵向移动后透视仍不同，重复海纹可能形成假唯一匹配。
+    # 使用现有的整格透视矫正图，让同一地形在前后帧中保持相同几何形状。
+    before = _scan_grid_images(previous)
+    after = _scan_grid_images(current)
     if len(before) < 2 or len(after) < 2:
         return None
 
     def unique_matches(source, target):
         matches = {}
-        for index, grid in enumerate(source):
-            piece = grid._image_similar_piece
-            # 常量图的归一化相关系数没有辨识意义。
-            if np.std(piece) < 1:
-                continue
+        for index, (_, piece, _) in enumerate(source):
             scores = np.array([
-                cv2.minMaxLoc(cv2.matchTemplate(other._image_similar_full, piece, cv2.TM_CCOEFF_NORMED))[1]
-                for other in target
+                cv2.minMaxLoc(cv2.matchTemplate(full, piece, cv2.TM_CCOEFF_NORMED))[1]
+                for _, _, full in target
             ])
             order = np.argsort(scores)
             best, second = order[-1], order[-2]
@@ -41,7 +59,7 @@ def predict_scan_swipe(previous, current):
     forward = unique_matches(before, after)
     reverse = unique_matches(after, before)
     offset = np.subtract(previous.center_loca, current.center_loca)
-    movements = [tuple((np.subtract(before[a].location, after[b].location) - offset).tolist())
+    movements = [tuple((np.subtract(before[a][0], after[b][0]) - offset).tolist())
                  for a, b in forward.items() if reverse.get(b) == a]
     if len(movements) >= 2 and len(set(movements)) == 1:
         logger.attr('全图扫描画面位移', f'{movements[0]}，{len(movements)} 个双向唯一格子')
