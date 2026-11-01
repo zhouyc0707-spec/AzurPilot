@@ -27,6 +27,7 @@ from module.map_detection.os_grid import OSGrid
 from module.map_detection.view import View
 from module.os.map_operation import OSMapOperation
 from module.os.radar import Radar
+from module.os.scan_movement import predict_scan_swipe
 
 
 class OSCamera(OSMapOperation, Camera):
@@ -184,7 +185,10 @@ class OSCamera(OSMapOperation, Camera):
             MapDetectionError: 无法确认位移、目标未到达或有限扫描定位未完成。
         """
         target = location_ensure(location)
-        tolerance = min(self.config.MAP_SWIPE_DROP, 0.3)
+        tolerance = self.config.MAP_SWIPE_DROP
+        # 完整扫描必须保留相邻画面的共同内容；大步跨越会使舰队和地形
+        # 同时离开有效识别区域，无法从下一帧证明实际移动量。
+        swipe_limit = np.minimum(swipe_limit, (3, 2))
         # 每次有效整格移动至少缩短一格；另留格心校准，不使用通用定位的旧恢复算法。
         attempts = int(np.sum(np.array(self.map.shape) + 1)) + 1
         try:
@@ -197,23 +201,22 @@ class OSCamera(OSMapOperation, Camera):
                 requested = np.add(swipe, 0.5 - previous_view.center_offset)
                 moved = self.map_swipe(swipe)
                 if moved:
-                    observed = None
-                    if self.config.MAP_SWIPE_PREDICT:
-                        observed = previous_view.predict_swipe(
-                            self.view,
-                            with_current_fleet=self.config.MAP_SWIPE_PREDICT_WITH_CURRENT_FLEET,
-                            with_sea_grids=self.config.MAP_SWIPE_PREDICT_WITH_SEA_GRIDS,
-                        )
+                    # 大世界默认关闭通用预测；完整扫描独立获取画面证据，
+                    # 不修改该开关，也不采用重复海面格子的宽松投票。
+                    observed = predict_scan_swipe(previous_view, self.view)
                     edges = (self.view.left_edge or self.view.right_edge,
                              self.view.upper_edge or self.view.lower_edge)
-                    if observed is None and any(value and not edge for value, edge in zip(requested, edges)):
+                    if observed is None and any(abs(value) > tolerance and not edge
+                                                for value, edge in zip(requested, edges)):
                         self.camera = previous
                         raise MapDetectionError(f'全图扫描缺少位移证据：{location2node(previous)} -> {location2node(target)}')
                     verified = np.array(previous if observed is None else np.add(previous, observed))
-                    if edges[0]:
+                    # 已确认的画面位移优先；只有没有位移匹配时才用边缘锚定，
+                    # 避免一次边缘误识别覆盖可靠的前后帧证据。
+                    if observed is None and edges[0]:
                         verified[0] = (self.view.center_loca[0] if self.view.left_edge else
                                        self.map.shape[0] - self.view.shape[0] + self.view.center_loca[0])
-                    if edges[1]:
+                    if observed is None and edges[1]:
                         verified[1] = (self.map.shape[1] - self.view.shape[1] + self.view.center_loca[1]
                                        if self.view.upper_edge else self.view.center_loca[1])
                     self.camera = tuple(verified)

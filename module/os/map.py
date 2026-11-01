@@ -2048,7 +2048,6 @@ class OSMap(MapEventResumeMixin, OSFleet, Map, GlobeCamera, StorageHandler, Stra
                 logger.hr(f"重新扫描 {target} ({scanned + 1}/{scan_count})")
                 logger.attr("扫描相机/目标", f"{location2node(self.camera)} -> {target}")
                 self.focus_to_scan_target(target, swipe_limit=(6, 5))
-                self.focus_to_grid_center(0.3)
                 if tuple(self.camera) != tuple(target.location):
                     raise MapDetectionError(
                         f'全图扫描未到达目标 {target}，实际摄像机 '
@@ -2056,9 +2055,15 @@ class OSMap(MapEventResumeMixin, OSFleet, Map, GlobeCamera, StorageHandler, Stra
                     )
 
                 scanned += 1
+                scan_image = self.view.image
                 if self.map_rescan_current(drop=drop):
                     result = True
                     break
+                if self.view.image is not scan_image:
+                    # 未完成的事件交互也可能带动镜头；update_os 只重建视图，
+                    # 不能用交互前的绝对坐标继续累计下一次相对位移。
+                    logger.info('[大世界-扫描] 事件交互后视图改变，重新确认地图边缘')
+                    self.ensure_edge_insight(skip_first_update=False)
                 queue = queue[1:]
             if not result:
                 logger.info(f'[大世界-扫描] 全部 {scanned}/{scan_count} 个视野节点扫描完成，未发现事件')

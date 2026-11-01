@@ -149,7 +149,8 @@ class MeowRescanTests(unittest.TestCase):
         map_.shape = 'T20'
         camera = map_.camera_data[-1].location
         runner = SimpleNamespace(
-            map=map_, camera=camera, map_data_init=Mock(), handle_info_bar=Mock(), update=Mock(),
+            map=map_, camera=camera, view=SimpleNamespace(image=object()),
+            map_data_init=Mock(), handle_info_bar=Mock(), update=Mock(),
             map_init=Mock(), map_rescan_current=Mock(return_value=False),
             focus_to_scan_target=Mock(), focus_to_grid_center=Mock(),
         )

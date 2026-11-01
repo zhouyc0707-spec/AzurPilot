@@ -74,20 +74,20 @@ class CleanupTests(unittest.TestCase):
         map_.shape = 'H8'
         self.assertEqual(map_.spawn_data_stack, [])
         runner = SimpleNamespace(
-            map=map_, camera=(0, 0), zone=SimpleNamespace(is_port=False),
+            map=map_, camera=(0, 0), view=SimpleNamespace(image=object()), zone=SimpleNamespace(is_port=False),
             config=SimpleNamespace(OpsiFleet_Fleet=1), _opsi_meowfficer_cleanup=True,
             _solved_fleet_mechanism=False, _solved_map_event=set(), is_in_task_explore=True,
             fleet_set=Mock(), map_data_init=Mock(), map_init=Mock(), handle_info_bar=Mock(),
-            update=Mock(), focus_to=Mock(), focus_to_grid_center=Mock(),
+            update=Mock(), focus_to_scan_target=Mock(), focus_to_grid_center=Mock(),
             map_rescan_current=Mock(return_value=False),
         )
-        runner.focus_to.side_effect = lambda grid, **kwargs: setattr(runner, 'camera', grid.location)
+        runner.focus_to_scan_target.side_effect = lambda grid, **kwargs: setattr(runner, 'camera', grid.location)
         runner.map_rescan_once = lambda **kw: OSMap.map_rescan_once(runner, **kw)
         self.assertTrue(OSMap.map_rescan(runner, rescan_mode='full'))
-        visited = [args.args[0] for args in runner.focus_to.call_args_list]
+        visited = [args.args[0] for args in runner.focus_to_scan_target.call_args_list]
         self.assertEqual(set(visited), set(map_.camera_data))
         self.assertEqual(len(visited), len(map_.camera_data))
-        for args in runner.focus_to.call_args_list:
+        for args in runner.focus_to_scan_target.call_args_list:
             self.assertEqual(args.kwargs, {'swipe_limit': (6, 5)})
         self.assertEqual(runner.map_rescan_current.call_count, len(visited) + 1)
 

@@ -9,6 +9,12 @@ import numpy as np
 from module.exception import MapDetectionError
 from module.os.map import OSMap
 from module.os.map_base import OSCampaignMap
+from module.os.config import OSConfig
+
+
+class ScanView(SimpleNamespace):
+    def __iter__(self):
+        return iter(())
 
 
 class ScanCameraTests(unittest.TestCase):
@@ -19,12 +25,14 @@ class ScanCameraTests(unittest.TestCase):
 
     def runner(self, observed=None):
         runner = OSMap.__new__(OSMap)
-        runner.config = SimpleNamespace(MAP_SWIPE_PREDICT=True, MAP_SWIPE_PREDICT_WITH_CURRENT_FLEET=True,
-                                        MAP_SWIPE_PREDICT_WITH_SEA_GRIDS=False, MAP_SWIPE_DROP=0.25)
+        runner.config = SimpleNamespace(MAP_SWIPE_PREDICT=OSConfig.MAP_SWIPE_PREDICT,
+                                        MAP_SWIPE_PREDICT_WITH_CURRENT_FLEET=True,
+                                        MAP_SWIPE_PREDICT_WITH_SEA_GRIDS=False,
+                                        MAP_SWIPE_DROP=OSConfig.MAP_SWIPE_DROP)
         runner.map = OSCampaignMap('离线定位')
         runner.map.shape = 'T13'
         runner.camera = (8, 5)
-        runner.view = SimpleNamespace(center_offset=np.array((0.5, 0.5)), predict_swipe=Mock(return_value=observed),
+        runner.view = ScanView(center_offset=np.array((0.5, 0.5)), predict_swipe=Mock(return_value=observed),
                                       left_edge=False, right_edge=False, upper_edge=False, lower_edge=False,
                                       center_loca=(4, 1), shape=(7, 4))
         runner.predict = Mock()
@@ -51,7 +59,7 @@ class ScanCameraTests(unittest.TestCase):
         with self.assertRaisesRegex(MapDetectionError, '缺少位移证据'):
             runner.focus_to_scan_target((12, 5))
         self.assertEqual(runner.camera, (8, 5))
-        self.assertEqual(runner.requests, [(4, 0)])
+        self.assertEqual(runner.requests, [(3, 0)])
         self.assertIsNone(runner._prev_view)
         self.assertIsNone(runner._prev_swipe)
         self.assertTrue(all(call.kwargs == {'with_current_fleet': True, 'with_sea_grids': False}
@@ -69,14 +77,14 @@ class ScanCameraTests(unittest.TestCase):
         runner = self.runner((2, 0))
         runner.focus_to_scan_target((12, 5))
         self.assertEqual(runner.camera, (12, 5))
-        self.assertEqual(runner.requests, [(4, 0), (2, 0)])
+        self.assertEqual(runner.requests, [(3, 0), (2, 0)])
 
     def test_visible_edge_anchors_requested_axis_without_feature_match(self):
         runner = self.runner()
         runner.view.left_edge = True
         runner.focus_to_scan_target((4, 5))
         self.assertEqual(runner.camera, (4, 5))
-        self.assertEqual(runner.requests, [(-4, 0)])
+        self.assertEqual(runner.requests, [(-3, 0)])
 
     def test_one_visible_edge_does_not_confirm_other_moving_axis(self):
         runner = self.runner()
@@ -85,12 +93,32 @@ class ScanCameraTests(unittest.TestCase):
             runner.focus_to_scan_target((4, 8))
         self.assertEqual(runner.camera, (8, 5))
 
-    def test_disabled_prediction_is_not_forced_on_for_scanning(self):
+    def test_default_disabled_prediction_still_has_independent_scan_evidence(self):
+        runner = self.runner((3, 0))
+        runner.focus_to_scan_target((11, 5))
+        self.assertEqual(runner.camera, (11, 5))
+        self.assertFalse(runner.config.MAP_SWIPE_PREDICT)
+        runner.view.predict_swipe.assert_called_once_with(runner.view, with_current_fleet=True,
+                                                        with_sea_grids=False)
+
+    def test_small_cross_axis_offset_does_not_require_an_unrelated_edge(self):
+        runner = self.runner()
+        runner.view.left_edge = True
+        runner.view.center_offset = np.array((0.5, 0.5064))
+        runner.focus_to_scan_target((4, 5))
+        self.assertEqual(runner.camera, (4, 5))
+
+    def test_verified_movement_is_not_overwritten_by_noisy_edge(self):
         runner = self.runner((4, 0))
-        runner.config.MAP_SWIPE_PREDICT = False
-        with self.assertRaisesRegex(MapDetectionError, '缺少位移证据'):
-            runner.focus_to_scan_target((12, 5))
-        runner.view.predict_swipe.assert_not_called()
+        runner.view.lower_edge = True
+        runner.focus_to_scan_target((12, 5))
+        self.assertEqual(runner.camera, (12, 5))
+
+    def test_centering_uses_actual_device_drop_tolerance(self):
+        runner = self.runner()
+        runner.view.center_offset = np.array((0.82, 0.5))
+        runner.focus_to_scan_target(runner.camera)
+        self.assertEqual(runner.requests, [])
 
     def test_already_reached_centered_target_needs_no_device_swipe(self):
         runner = self.runner()

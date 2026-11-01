@@ -51,6 +51,7 @@ class TestOSMapScanCoverage(unittest.TestCase):
         runner.map = OSCampaignMap('离线侵蚀五')
         runner.map.shape = 'T13'
         runner.camera = (10, 6)
+        runner.view = SimpleNamespace(image=object())
         runner.map_data_init = Mock()
         runner.handle_info_bar = Mock()
         runner.update = Mock()
@@ -199,7 +200,7 @@ class TestOSMapScanCoverage(unittest.TestCase):
         runner.map_rescan_current.side_effect = lambda **kwargs: checked.append(runner.camera) or False
         self.assertFalse(runner.map_rescan_once(drop='离线记录'))
         self.assertEqual(runner.focus_to_scan_target.call_count, 9)
-        self.assertEqual(runner.focus_to_grid_center.call_count, 9)
+        runner.focus_to_grid_center.assert_not_called()
         self.assertEqual(len(checked), 10)
         self.assertEqual(set(checked[1:]), set(runner.map.camera_data.location))
         for call in runner.focus_to_scan_target.call_args_list:
@@ -215,12 +216,11 @@ class TestOSMapScanCoverage(unittest.TestCase):
         runner.map_rescan_current.assert_called_once_with(drop=None)
         runner.focus_to_scan_target.assert_called_once()
 
-    def test_grid_center_drift_is_also_rejected(self):
+    def test_verified_scan_is_not_followed_by_unverified_centering(self):
         runner = self.make_scan_runner()
-        runner.focus_to_grid_center.side_effect = lambda *args: setattr(runner, 'camera', (0, 0))
-        with self.assertRaises(MapDetectionError):
-            runner.map_rescan_once()
-        runner.map_rescan_current.assert_called_once_with(drop=None)
+        runner.focus_to_grid_center.side_effect = AssertionError('不能在验证后追加未核验的移动')
+        self.assertFalse(runner.map_rescan_once())
+        runner.focus_to_grid_center.assert_not_called()
 
     def test_initial_update_failure_propagates_before_event_scan(self):
         runner = self.make_scan_runner()
