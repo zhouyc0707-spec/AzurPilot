@@ -73,7 +73,9 @@ class RewardTracker:
                 items = reward_parser().stats_get_items(image, amount_trim=True)
             changes = {}
             for item in items:
-                if item.is_known_item() and isinstance(item.amount, int) and item.amount > 0:
+                # OCR 超限截断后的值已标为不可信，不能把猜出的数量写进资源账本。
+                if (item.is_known_item() and getattr(item, 'amount_valid', True)
+                        and type(item.amount) is int and item.amount > 0):
                     key = resource_flow.canonical(item.name)
                     changes[key] = changes.get(key, 0) + int(item.amount)
             inventory_unknown = not items or any(not item.is_known_item() for item in items)

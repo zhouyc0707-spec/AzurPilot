@@ -370,6 +370,19 @@ class Island(SelectCharacter):
         self.appear_then_click(FILTER_CONFIRM)
         self.device.sleep(1)
 
+    def handle_island_info_popup(self):
+        """关闭已识别的岛屿信息提示，只有实际点击才返回 True。"""
+        if self.appear(ISLAND_INFO_EXIT, offset=(30, 30), interval=3):
+            self.device.click(ISLAND_INFO_EXIT)
+            return True
+        return False
+
+    def ui_additional(self, get_ship=True):
+        """普通岛屿任务也处理信息提示，不依赖 IslandUI 的继承链。"""
+        if self.appear(ISLAND_INFO_EXIT, offset=(30, 30)):
+            return self.handle_island_info_popup()
+        return super().ui_additional(get_ship=get_ship)
+
     def goto_postmanage(self):
         """导航进入岗位管理页面。"""
         page = self.ui_get_current_page()
@@ -382,6 +395,10 @@ class Island(SelectCharacter):
 
     def goto_management(self):
         """导航进入岛屿管理页面。
+
+        Pages:
+            in: 任意可导航页面，允许岛屿信息提示或奖励遮挡。
+            out: page_island_management。
 
         Raises:
             GameStuckError: 进入岛屿管理页面超时。
@@ -399,6 +416,15 @@ class Island(SelectCharacter):
                 self.config, 'UiWait_IslandEntryRetryWait', ISLAND_ENTRY_RETRY_WAIT, 1, 60)).clear()
             entry_confirm = Timer(1, count=2)
             for _ in self.loop(timeout=20, skip_first=False):
+                # 模态弹窗仍可见时，即使关闭按钮在冷却也不能使用背景入口。
+                if self.appear(ISLAND_INFO_EXIT, offset=(30, 30)):
+                    self.handle_island_info_popup()
+                    entry_confirm.clear()
+                    continue
+                if self.appear(ISLAND_GET, offset=30):
+                    self.handle_island_reward_popup()
+                    entry_confirm.clear()
+                    continue
                 if self.appear(ISLAND_MANAGEMENT_CHECK, offset=1):
                     break
                 if self.ui_additional(get_ship=False):
@@ -681,10 +707,17 @@ class Island(SelectCharacter):
 
         Raises:
             GameStuckError: 切换岗位管理页签超时。
+
+        Pages:
+            in: 岗位管理页，允许领取奖励尚未关闭。
+            out: 已确认的目标岗位页签。
         """
         post_manage_button = POST_MANAGE_BUSINESS if post_manage_mode == POST_MANAGE_PRODUCTION else POST_MANAGE_PRODUCTION
         direct_click_timer = Timer(1)
         for _ in self.loop(timeout=15, skip_first=False):
+            if self.appear(ISLAND_GET, offset=30):
+                self.handle_island_reward_popup()
+                continue
             if self.appear_then_click(post_manage_button, interval=1):
                 continue
             elif self.appear(post_manage_mode):
@@ -710,6 +743,9 @@ class Island(SelectCharacter):
             GameStuckError: 切换采集页签超时。
         """
         for _ in self.loop(timeout=15, skip_first=False):
+            if self.appear(ISLAND_GET, offset=30):
+                self.handle_island_reward_popup()
+                continue
             if self.appear(ISLAND_GATHER_COLLECT_CHECK):
                 return True
             if self.appear_then_click(ISLAND_GATHER_COLLECT, interval=1):

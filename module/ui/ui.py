@@ -42,7 +42,8 @@ from module.map.assets import (FLEET_PREPARATION, MAP_PREPARATION,
                                MAP_PREPARATION_HARD, MAP_PREPARATION_CANCEL, WITHDRAW)
 from module.meowfficer.assets import MEOWFFICER_BUY
 from module.ocr.ocr import Ocr
-from module.os_handler.assets import (AUTO_SEARCH_REWARD, EXCHANGE_CHECK, RESET_FLEET_PREPARATION, RESET_TICKET_POPUP)
+from module.os_handler.assets import (AUTO_SEARCH_REWARD, EXCHANGE_CHECK, RESET_FLEET_PREPARATION,
+                                      RESET_FLEET_PREPARATION_2, RESET_TICKET_POPUP)
 from module.raid.assets import *
 from module.ui.assets import *
 from module.ui.page import (Page, page_academy, page_campaign, page_campaign_menu, page_event, page_island,
@@ -757,6 +758,15 @@ class UI(InfoHandler):
 
         return False
 
+    def ui_get_os_reset_fleet_preparation(self):
+        """识别大世界重置舰队窗口，不消耗点击冷却。"""
+        if (self.config.SERVER == 'cn'
+                and self.match_template_color(RESET_FLEET_PREPARATION_2, offset=(30, 30))):
+            return RESET_FLEET_PREPARATION_2
+        if self.appear(RESET_FLEET_PREPARATION, offset=(30, 30)):
+            return RESET_FLEET_PREPARATION
+        return None
+
     def ui_page_os_popups(self):
         """处理大世界页面出现的弹窗。
 
@@ -771,18 +781,22 @@ class UI(InfoHandler):
         # - RESET_TICKET_POPUP 弹窗
         # - 是否打开兑换商店？handle_popup_confirm() 点击确认
         # - EXCHANGE_CHECK 页面，点击返回箭头
-        if self._opsi_reset_fleet_preparation_click >= 5:
-            logger.critical("[UI] 无法确认大世界出击舰队，大叔你还点？是在玩打地鼠吗？真是逊毙了！")
-            logger.critical("[UI] 哎呀呀，大叔是眼花了还是没长脑子？ #1: 建议检查您是否在大世界中设置了舰队")
-            logger.critical("[UI] 笨——蛋——大叔！ #2: 建议检查您的舰队准入门槛（等级限制）")
-            raise RequestHumanTakeover
         if self.appear_then_click(RESET_TICKET_POPUP, offset=(30, 30), interval=3):
             return True
-        if self.appear_then_click(RESET_FLEET_PREPARATION, offset=(30, 30), interval=3):
-            self._opsi_reset_fleet_preparation_click += 1
-            self.interval_reset(FLEET_PREPARATION)
-            self.interval_reset(RESET_TICKET_POPUP)
-            return True
+        fleet_button = self.ui_get_os_reset_fleet_preparation()
+        if fleet_button is not None:
+            # 两版模板共享冷却；可见但尚未到点击时间时，不能当作普通战役准备页。
+            if self.get_interval_timer(RESET_FLEET_PREPARATION, interval=3).reached():
+                if self._opsi_reset_fleet_preparation_click >= 5:
+                    logger.critical('[UI] 无法确认大世界出击舰队，请检查舰队设置及等级准入条件')
+                    raise RequestHumanTakeover
+                self.device.click(fleet_button)
+                self._opsi_reset_fleet_preparation_click += 1
+                self.interval_reset(RESET_FLEET_PREPARATION, interval=3)
+                self.interval_reset(FLEET_PREPARATION)
+                self.interval_reset(RESET_TICKET_POPUP)
+                return True
+            return False
         if self.appear(EXCHANGE_CHECK, offset=(30, 30), interval=3):
             logger.info(f'[UI-额外] {EXCHANGE_CHECK} -> {GOTO_MAIN}')
             GOTO_MAIN.clear_offset()
@@ -826,6 +840,8 @@ class UI(InfoHandler):
         # 包含 popup_confirm 变体，必须优先处理
         if self.ui_page_os_popups():
             return True
+        if self.ui_get_os_reset_fleet_preparation() is not None:
+            return False
 
         # 科研弹窗、断线重连弹窗
         if self.handle_popup_confirm("UI_ADDITIONAL"):

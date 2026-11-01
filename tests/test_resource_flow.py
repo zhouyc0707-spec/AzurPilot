@@ -399,6 +399,31 @@ class ResourceFlowTests(unittest.TestCase):
         self.assertEqual({'OpsiMonthlyBoss'}, {entry['task'] for entry in result['entries']})
         self.assertTrue(all(entry['amount'] > 0 for entry in result['entries']))
 
+    def test_unreliable_reward_amount_is_not_income_but_other_items_are_kept(self):
+        from module.combat import assets
+        from module.handler import assets as handler
+        for index, button in enumerate((assets.GET_ITEMS_1, assets.GET_ITEMS_2, assets.GET_ITEMS_3)):
+            self.enterContext(patch.object(button, 'match_template_color', return_value=index == 0))
+        self.enterContext(patch.object(handler.INFO_BAR_1, 'appear_on', return_value=False))
+        parser = Mock()
+        # 模拟超限 70 被旧 OCR 截成 7；该格不可信，同页物资仍应正常记账。
+        parser.stats_get_items.return_value = [
+            SimpleNamespace(name='CognitiveChips', amount=7, amount_valid=False, is_known_item=lambda: True),
+            SimpleNamespace(name='Coins', amount=215, amount_valid=True, is_known_item=lambda: True),
+        ]
+        self.enterContext(patch('module.statistics.resource_tracking.reward_parser', return_value=parser))
+        image = np.zeros((720, 1280, 3), dtype=np.uint8)
+        with flow.task_session('testpilot', 'Daily') as state:
+            tracker = RewardTracker(self.config)
+            tracker.frame(image, clicked=True)
+            tracker.frame(image, clicked=True)
+            self.assertEqual({'Coin': 215}, state['rewards'])
+        result = self.report()
+        self.assertEqual(1, result['total'])
+        self.assertEqual(('Coin', 215, 'Daily'),
+                         (result['entries'][0]['resource'], result['entries'][0]['amount'],
+                          result['entries'][0]['task']))
+
     def test_quick_commission_group_and_multiple_reward_layouts_are_not_missed(self):
         from module.combat import assets
         from module.commission.assets import EXP_INFO_S_REWARD

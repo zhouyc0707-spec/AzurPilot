@@ -242,8 +242,15 @@ class IslandRancher(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
         self.post_manage_swipe(0)
 
         if not self.goto_mill_from_any_ranch_post():
-            logger.warning("[岛屿-牧场] 四个牧场岗位均无法进入磨坊，本次跳过饲料和面粉补充")
-            return []
+            self.raise_if_island_error()
+            # 工作中的岗位可能没有材料快捷入口，沿现有地图路线进入，不撤回生产。
+            if not self.back_to_postmanage_after_mill_purchase():
+                raise GameStuckError("磨坊快捷入口失败后未能返回岗位管理")
+            logger.info("[岛屿-牧场] 岗位快捷入口均不可用，改从岛屿地图前往磨坊")
+            if not self.goto_mill():
+                logger.warning("[岛屿-牧场] 地图路线未能进入磨坊，返回岗位管理并跳过本轮补充")
+                self.goto_postmanage()
+                return []
 
         processed_items = []
         for mill_item, quantity in mill_needs:
