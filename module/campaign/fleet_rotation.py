@@ -15,6 +15,7 @@ from module.runtime.fleet_rotation import (ROTATION_PATH, active_fleets, begin_r
 from module.runtime.fleet_equipment import EQUIPMENT_PATH
 from module.runtime.fleet_training import (due, goals, mark_checked,
                                            persist_context, restore_context)
+from module.campaign.fleet_training_notify import notify_event, notify_failure, notify_training
 
 
 def _required(emotion, role, battle):
@@ -59,6 +60,7 @@ def mark_morale_checked(config, emotion, selected, battle, context):
 
 
 @control_interval((0.1, 0.3))
+@notify_failure('换船失败', '智能换船本轮未完成，保留原有异常恢复和待完成记录。')
 def preflight_rotation(runner, battle, mode):
     """在原有心情检查之前轮换，恢复选关页后仍走正常心情及入场流程。
 
@@ -105,7 +107,9 @@ def preflight_rotation(runner, battle, mode):
                 recovery_fleets.add(progress['source'])
             states[target] = {'rescan': True}
     selected = {role: actual for role, actual in active.items()
-                if rules.get(str(actual), {}).get('slots') and rules[str(actual)].get('sources')
+                if rules.get(str(actual), {}).get('slots')
+                and (rules[str(actual)].get('sources') or rules[str(actual)].get('favourite')
+                     or (goals(config) and config.cross_get('FleetInfo.FleetTraining.StopOnComplete', False) is True))
                 and _required(campaign.emotion, role, battle)[1] is not None}
     manager = None
     emotion = campaign.emotion
@@ -139,7 +143,7 @@ def preflight_rotation(runner, battle, mode):
     scan_fleets = set(selected.values()) | recovery_fleets
     from module.runtime.fleet_training import state
     pending = state(config)['pending']
-    scan_fleets.update(job[side] for job in pending.values() for side in ('fleet', 'source'))
+    scan_fleets.update(job[side] for job in pending.values() for side in ('fleet', 'source') if job[side] > 0)
     training_due = due(config, context)
     mood_due = morale_due(emotion, selected, battle, context)
     fresh = bool(scan_fleets) and (training_due or mood_due or bool(recovering) or bool(pending))
@@ -149,6 +153,7 @@ def preflight_rotation(runner, battle, mode):
     equipment_used = False
     replaced_fleets = set()
     full_scanned = False
+    changes = []
     try:
         fresh_readings = {}
         if equipment_enabled and config.cross_get(EQUIPMENT_PATH + '.State', {}):
@@ -198,13 +203,16 @@ def preflight_rotation(runner, battle, mode):
                 fresh_readings = {number: recorded_morale(result, number) for number in range(1, 7)}
             full_scanned = training.sources_refreshed
             replaced_fleets.update(training.replaced_fleets)
+            changes.extend(training.changes)
         for role, fleet in selected.items():
             current_fleet = fleet
             if training is not None and fleet in training.replaced_fleets:
                 continue
             # 前一个角色可能刚从本角色的实际舰队换走舰船，不能继续使用旧快照。
             emotion.update()
-            rule = rules[str(fleet)]
+            rule = training.rotation_rule(fleet) if training is not None else rules[str(fleet)]
+            if not rule['slots']:
+                continue
             previous = states.get(str(fleet), {})
             if not isinstance(previous, dict):
                 previous = {}
@@ -237,6 +245,7 @@ def preflight_rotation(runner, battle, mode):
             minimum = selected_morale(readings, rule['slots'])
             if minimum is None:
                 logger.warning('培养舰位实际心情未读全，不执行换船，由心情检查决定是否等待或停止')
+                notify_event(config, '换船失败', f'第{fleet}舰队培养舰位心情未读全，本轮不执行换船，沿用原心情检查。')
                 manager.finish_rotation()
                 continue
             config.cross_set_many(calibration_changes(config.data, snapshots, now()))
@@ -258,7 +267,23 @@ def preflight_rotation(runner, battle, mode):
                     order = training.filter_sources(order, rule, fleet)
                 progress = begin_round(rule, previous, order)
                 if progress is None:
+                    if rule.get('favourite'):
+                        from module.campaign.fleet_training import rotate_favourite_fallback
+                        fallback = rotate_favourite_fallback(runner, manager, context, rules, selected, fleet,
+                                                            rule, snapshots, needed, states, training)
+                        changes.extend(fallback)
+                        if fallback:
+                            replaced_fleets.add(fleet)
+                            equipment_used |= equipment_enabled
+                        else:
+                            notify_event(config, '换船失败',
+                                         f'第{fleet}舰队没有满足条件的候补或常用舰船，保留当前编队并沿用原心情检查。')
+                        # 本轮逐舰位候补/常用选择结束，心情仍低则沿用原等待逻辑。
+                        fresh = False
+                        continue
                     logger.warning('候补队没有满足心情及对应舰位的舰船，保留当前编队并沿用原心情检查')
+                    notify_event(config, '换船失败',
+                                 f'第{fleet}舰队没有满足心情及对应舰位要求的候补，保留当前编队并沿用原心情检查。')
                     manager.finish_rotation()
                     continue
                 logger.attr('候补队心情优先级', order)
@@ -283,10 +308,15 @@ def preflight_rotation(runner, battle, mode):
                 # 先记下即将执行的互换。进程中断后不能猜测已交换还是尚未交换。
                 progress['pending'] = dict(slot=slot, source_slot=source_slot)
                 config.cross_set(ROTATION_PATH + '.State', states)
+                from module.runtime.fleet_training import ships
+                before = config.cross_get('FleetInfo.FleetInfo.Result', {})
+                outgoing = ships(before, fleet).get(slot, {}).get('name') or '未确认舰名'
+                incoming = ships(before, source).get(slot, {}).get('name') or '未确认舰名'
                 snapshots = manager.rotate_slot(source, slot, fleet)
                 config.cross_set_many(calibration_changes(config.data,
                     {number: snapshots[number] for number in (fleet, source)}, now()))
                 emotion.calibrate_selected({number: snapshots[number] for number in (fleet, source)})
+                changes.append(dict(fleet=fleet, slot=slot, source=source, incoming=incoming, outgoing=outgoing))
                 progress['done'].append(slot)
                 progress['pending'] = None
                 config.cross_set(ROTATION_PATH + '.State', states)
@@ -306,6 +336,9 @@ def preflight_rotation(runner, battle, mode):
             config.cross_set(ROTATION_PATH + '.State', states)
             manager.finish_rotation()
             context['portraits'] = manager.__dict__.get('_slot_portraits', {})
+            if training is not None:
+                training.report_replaced(fleet, rule['slots'],
+                                         [job for job in changes if job['fleet'] == fleet])
             fresh = False
             book = emotion.map_is_2x_book
             emotion = RotationEmotion(config, context, rules, selected)
@@ -315,6 +348,9 @@ def preflight_rotation(runner, battle, mode):
             manager.finish_rotation()
             if equipment_used:
                 manager._commit_formation()
+            # 培养模式在各阶段发送；仅心情模式也在进入后宅前报告，后宅失败不能阻挡换船结果。
+            if not goals(config) and (checked_this_round or changes):
+                notify_training(config, rules, selected, changes)
             from module.dorm.fleet_rotation import rest_after_rotation
             rest_after_rotation(manager, replaced_fleets, committed=equipment_used)
             config.update()

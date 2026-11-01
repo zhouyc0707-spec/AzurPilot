@@ -215,6 +215,7 @@ T 类：Research_RemainingCommissions（配置持久化）
 - `Research_RemainingCommissions` 是唯一跨任务持久状态，存在用户配置 JSON 中；写入走 `config.cross_set`（委托侧）与直接赋值（科研侧），配置修改会落盘并触发调度。
 - `ResearchProject.equipment_amount/commission_amount` 用 `cached_property` 缓存在项目对象上，对象随任务结束销毁，无失效问题。
 - 识别过程无文件缓存；掉落截图按 `DropRecord_ResearchRecord` 保存到 `./screenshots` 或上传统计平台，`total <= 0` 时丢弃本次记录避免空图。
+- `drop_record()` 对一行／两行物品弹窗沿用上游新增的 0.5 秒渲染等待后重新截图，大弹窗继续保存滑动前后的两帧；本地 `finish_research_reward(start)` 仍将同次奖励归为一组。上传仍受本地 `DropRecord_CloudUpload` 总开关约束，默认关闭；不会因新增截图等待自动启用上传。相关回归见 `tests/test_reward_render_capture.py`。
 
 ## 14. 生命周期
 

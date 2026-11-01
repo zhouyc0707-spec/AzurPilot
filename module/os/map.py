@@ -2021,7 +2021,6 @@ class OSMap(MapEventResumeMixin, OSFleet, Map, GlobeCamera, StorageHandler, Stra
         Raises:
             MapDetectionError: 识别或摄像机定位失败，交由上层保存现场并恢复；
                 失败不能作为“全图没有事件”的依据。
-            GameStuckError: 摄像机无确认位移或坐标震荡，一次有界重新定位仍失败。
         """
         result = False
         # 新一轮重扫重新给每个事件一次机会，清掉上一轮的“到不了”记录
@@ -2048,7 +2047,7 @@ class OSMap(MapEventResumeMixin, OSFleet, Map, GlobeCamera, StorageHandler, Stra
                 target = queue[0]
                 logger.hr(f"重新扫描 {target} ({scanned + 1}/{scan_count})")
                 logger.attr("扫描相机/目标", f"{location2node(self.camera)} -> {target}")
-                self.focus_to(target, swipe_limit=(6, 5))
+                self.focus_to_scan_target(target, swipe_limit=(6, 5))
                 self.focus_to_grid_center(0.3)
                 if tuple(self.camera) != tuple(target.location):
                     raise MapDetectionError(

@@ -148,6 +148,8 @@ class TestOpsiShopMonthEnd(unittest.TestCase):
     def test_campaign_entry_keeps_existing_runner_on_purchase_day(self):
         run = object.__new__(OSCampaignRun)
         run.config = self.make_shop().config
+        run.config.task = SimpleNamespace(command='OpsiShop')
+        run.config.cross_get = Mock(return_value=False)
         run._run_opsi_task_with_ap_overflow_guard = Mock()
         with server_clock(datetime(2026, 10, 31, 12)):
             run.opsi_shop()

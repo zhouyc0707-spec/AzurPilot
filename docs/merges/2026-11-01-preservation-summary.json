@@ -1,0 +1,271 @@
+{
+  "base": "348b88cfd4f191714e8664de615cd7483848f830",
+  "before": "d5af9ab67c0dfa94eec4460e2eafb0b8a80983af",
+  "upstream": "fdfda0227df85569dbb1c10acbcb5e24bf9bbc40",
+  "local_custom_paths": 1054,
+  "upstream_changed_paths": 54,
+  "overlap_paths": 17,
+  "exclusive_custom_paths_checked": 1037,
+  "full_union_paths_checked": 11703,
+  "actual_file_blob_checks": 11695,
+  "exact_paths": 11661,
+  "preserved_deleted_paths": 8,
+  "exclusive_custom_existing_exact": 1018,
+  "exclusive_custom_deleted_preserved": 7,
+  "upstream_nonoverlap_paths": 37,
+  "upstream_nonoverlap_exact": 32,
+  "upstream_nonoverlap_deleted_preserved": 1,
+  "passed": true,
+  "reviewed_path_count": 34,
+  "exclusive_custom_reviewed_paths": [
+    "docs/modules/device.md",
+    "docs/modules/game/commission.md",
+    "docs/modules/map.md",
+    "docs/modules/os/index.md",
+    "module/config/i18n/zh-MIAO.json",
+    "module/os/camera.py",
+    "module/os/map.py",
+    "tests/test_commission_settlement.py",
+    "tests/test_opsi_map_scan_coverage.py",
+    "tests/test_opsi_meow_rescan.py",
+    "tests/test_opsi_shop_month_end.py",
+    "定制化修改清单.md"
+  ],
+  "upstream_nonoverlap_reviewed_paths": [
+    "frontend/src/pages/FleetTraining.test.ts",
+    "module/os/tasks/smart_explore.py",
+    "tests/test_fleet_training_notifications.py",
+    "tests/test_opsi_smart_explore_task_delay.py"
+  ],
+  "semantic_scope": "17个原交集，加本轮另行适配的本地专用路径及上游新增模块；新编写但不在三树内的回归由独立测试检查。",
+  "semantic_totals": {
+    "custom_entities": 173,
+    "entities_exact": 160,
+    "custom_config_leaves": 6965,
+    "config_leaves_exact": 6965
+  },
+  "incoming_entity_count": 126,
+  "incoming_entity_exact": 121,
+  "incoming_config_leaves": 24,
+  "incoming_config_exact": 24,
+  "frontend_boundary": {
+    "custom_paths": 107,
+    "custom_exact": 106,
+    "custom_changed": [
+      "frontend/e2e/mock.spec.ts"
+    ],
+    "upstream_paths": 6,
+    "upstream_exact": 4,
+    "upstream_adapted": [
+      "frontend/e2e/mock.spec.ts",
+      "frontend/src/pages/FleetTraining.test.ts"
+    ],
+    "pywebio_paths": 62,
+    "pywebio_changed": []
+  },
+  "semantic_union_proofs": {
+    "module/campaign/fleet_rotation.py": {
+      "custom_guard_exact": true,
+      "upstream_module_without_custom_guard_exact": true
+    },
+    "module/campaign/os_run.py": {
+      "month_end_guard_exact": true,
+      "upstream_module_without_local_guard_exact": true
+    },
+    "module/os/map.py": {
+      "all_prior_logic_except_scan_focus_call_exact": true
+    },
+    "tests/test_opsi_map_scan_coverage.py": {
+      "original_assertions_except_method_name_exact": true
+    },
+    "tests/test_opsi_meow_rescan.py": {
+      "original_assertions_except_method_name_exact": true
+    },
+    "module/os/camera.py": {
+      "existing_os_camera_logic_exact": true
+    }
+  },
+  "common_camera_matches_upstream": true,
+  "resolved_behavior_conflict": {
+    "decision": "用户批准方案1：通用相机完整跟随上游回退，大世界完整扫描单独保留实测位移确认，证据不足停止并交既有恢复。",
+    "result": "通用camera blob与上游相同；OSCamera新增专用定位，旧OS边缘保护完全不变；OSMap替换扫描入口，原队列和事件保护不变。",
+    "boundary": "图像匹配关闭或未获得位移且没有足够可见边缘时保守失败，可能增加恢复；未进行真实账号或真实游戏验收。"
+  },
+  "reviewed_paths": [
+    {
+      "path": "config/template.json",
+      "current_blob": "5015115c173e733204dfafc35d8c2604cc194e55",
+      "reason": "重新生成，全部本地配置叶子原值保留，新增StopOnComplete和Notify默认false，与上游一致；不是私人配置。"
+    },
+    {
+      "path": "docs/modules/campaign.md",
+      "current_blob": "7a14fbc89e22457ab9a1afcd1a0464573fba722d",
+      "reason": "保留所有原定制说明，加入上游常用候补、全部达标停止、通知、后宅及详情复用说明；明确本地异常包装仍停止且通知按原因链去重。"
+    },
+    {
+      "path": "docs/modules/device.md",
+      "current_blob": "c884af656cb83580a572dd84b0d8998dd143fc3c",
+      "reason": "按用户方案1修正通用相机回退后的保护边界，明确通用聚焦无独立次数上限，严格位移确认由大世界扫描专用实现负责。"
+    },
+    {
+      "path": "docs/modules/game/commission.md",
+      "current_blob": "30146c932fb471634df7038979a529c0db6a267c",
+      "reason": "补充父循环新帧渲染等待与点击冷却，保留逐弹窗收益、经验分批和失败不结算说明。"
+    },
+    {
+      "path": "docs/modules/game/research.md",
+      "current_blob": "96eb84457a1a89a20ea07402ce25eb3d667ad127",
+      "reason": "补充上游新帧取图与原本地奖励分组/云上传默认关闭边界，其余定制说明保留。"
+    },
+    {
+      "path": "docs/modules/game/retire-equipment.md",
+      "current_blob": "47789b0376338f1e13a3fd744465facd6dfa5d3b",
+      "reason": "原定制块保留并合入上游详情复用、底部队号确认和不重复开关菜单说明。"
+    },
+    {
+      "path": "docs/modules/map.md",
+      "current_blob": "bb563c48ab740bd79d0be1b520c9ca8b4b32cfb6",
+      "reason": "按批准方案明确通用相机按请求推算与OS扫描按实测确认的区分；保留真实双边定位和配置开关边界。"
+    },
+    {
+      "path": "docs/modules/os/index.md",
+      "current_blob": "b27ce24a00032b47d6efff7e076354da8782c6b8",
+      "reason": "说明OS扫描新位移入口、保守失败、同日智能开荒让位与单次执行/月末购买融合；原数据、事件、统计和完整覆盖保护继续保留。"
+    },
+    {
+      "path": "frontend/e2e/mock.spec.ts",
+      "current_blob": "d550add3e54e599ad787356a7622777d7a59e1d3",
+      "reason": "原全部本地测试块保留，加入上游常用及停止/通知保存测试，等待控件恢复可用以确认异步保存实际完成。"
+    },
+    {
+      "path": "frontend/src/pages/FleetTraining.test.ts",
+      "current_blob": "22357cc99fbf478eba4f233e225bad7bd7ad7e21",
+      "reason": "完整采用上游新增选项/旧规则测试，仅将喵语加入翻译回退断言。"
+    },
+    {
+      "path": "module/campaign/fleet_rotation.py",
+      "current_blob": "21a6ba37fb7bce8040015fee54727027b93f360f",
+      "reason": "保留原本地独立培养异常转换try块原样；剥离该块后整模块AST等于完整上游，通知与常用/停止逻辑同时保留。"
+    },
+    {
+      "path": "module/campaign/os_run.py",
+      "current_blob": "f2f03c136ddd2507892449749f2fa0ac665597f9",
+      "reason": "先执行原月末商店日期门禁，再调用上游智能开荒让位；剥离本地门禁后整模块AST等于上游。"
+    },
+    {
+      "path": "module/commission/commission.py",
+      "current_blob": "abcf196d6650110569440150753e3fa0011e755e",
+      "reason": "10个本地定制实体原样保留；把上游奖励渲染0.5秒及点击后0.3秒等待融入父循环Timer，新帧同标题确认后记账，保留逐批收益和失败保护。"
+    },
+    {
+      "path": "module/config/argument/args.json",
+      "current_blob": "c79fe3324778039fc95ff817cd04341c895bdbe0",
+      "reason": "从源定义重新生成；全部本地元数据叶子不变，上游新增两选项及类型元数据完整保留。"
+    },
+    {
+      "path": "module/config/argument/argument.yaml",
+      "current_blob": "e1d49ba18f05502eb663e40555a169dad43abf4c",
+      "reason": "全部本地定义叶子原值保留，追加上游StopOnComplete/Notify两个默认关闭的选项；无重复键。"
+    },
+    {
+      "path": "module/config/config.py",
+      "current_blob": "13c87bee95afdb64aabc52025bc45b32b448938b",
+      "reason": "本地单次执行事务/排程保护及岛屿时间对齐10个定制实体全部AST不变；上游队列让位函数完整采用。"
+    },
+    {
+      "path": "module/config/config_generated.py",
+      "current_blob": "1f0cfebd78d6150b3f74c1d6fb027f6155dbe4f9",
+      "reason": "生成后66个本地属性AST不变，新增2个上游属性且默认关闭，无重复属性。"
+    },
+    {
+      "path": "module/config/i18n/en-US.json",
+      "current_blob": "456cf95e9014a10f40467eeda08bdce307cac2d3",
+      "reason": "全部原本地英文叶子保留，新增上游停止/通知文案完整采用。"
+    },
+    {
+      "path": "module/config/i18n/ja-JP.json",
+      "current_blob": "f8f206de10dc5e6c9fe20d04a40f98d9712d9168",
+      "reason": "全部原本地日文叶子保留，新增上游停止/通知文案完整采用。"
+    },
+    {
+      "path": "module/config/i18n/zh-CN.json",
+      "current_blob": "8e3755f2fe2d004e623fafd7039688aead848798",
+      "reason": "全部原本地简体叶子保留，新增上游停止/通知文案完整采用。"
+    },
+    {
+      "path": "module/config/i18n/zh-MIAO.json",
+      "current_blob": "bf6f41d2bf955fcd452d42e9db70c8c99d381430",
+      "reason": "5326个原喵语叶子完全不变，仅新增停止/通知名称与说明，保留喵语入口。"
+    },
+    {
+      "path": "module/config/i18n/zh-TW.json",
+      "current_blob": "d42a863d5f9c39bece0b23a7718f4fed193377fd",
+      "reason": "全部原本地繁体叶子保留，新增上游停止/通知文案完整采用。"
+    },
+    {
+      "path": "module/os/camera.py",
+      "current_blob": "86f8639f8bb37d7f6286151f7b6d4ecd90089ed3",
+      "reason": "按用户方案1新增扫描专用focus_to_scan_target；移除新增方法和copy导入后整模块AST等于原本地版本，原真实双边定位逻辑不变。"
+    },
+    {
+      "path": "module/os/map.py",
+      "current_blob": "faa3add84e7971c13a6f645cf0d71de9a328297c",
+      "reason": "完整扫描改调扫描专用定位并更新异常说明；恢复该调用名和docstring后整模块AST与原本地一致，覆盖队列、已见事件和计数不变。"
+    },
+    {
+      "path": "module/os/tasks/smart_explore.py",
+      "current_blob": "79b2f4031145251e55caf37fd8bc105b106b41dc",
+      "reason": "采用上游同日让位机制，补充本地显式单次执行绕过队列让位、月末模式不受旧月初禁购数字影响，任务日期门禁独立保留。"
+    },
+    {
+      "path": "tests/test_commission_settlement.py",
+      "current_blob": "7c8568ea373f2f18e2dc532be0366c2a6691f955",
+      "reason": "仅适配新增渲染帧/计时器的测试夹具，原两次收入记录和失败不结算断言保留。"
+    },
+    {
+      "path": "tests/test_fleet_dorm.py",
+      "current_blob": "219afeddfc91ad7c66860e93bb71e686104f119d",
+      "reason": "融合导入冲突，原本地后宅故障人工停止测试与全部上游新识别测试均保留。"
+    },
+    {
+      "path": "tests/test_fleet_training.py",
+      "current_blob": "d13dc50d2813122fdacc8f6a080c902da0956ab5",
+      "reason": "原本地独立培养异常保护测试实体AST不变，新增上游常用/停止条件测试完整采用。"
+    },
+    {
+      "path": "tests/test_fleet_training_notifications.py",
+      "current_blob": "3752118f7192a9d5dea1a2f0e80fd54003b150cc",
+      "reason": "保留上游通知测试并新增本地异常包装后的pending保留、无自动继续和单次失败通知回归。"
+    },
+    {
+      "path": "tests/test_opsi_map_scan_coverage.py",
+      "current_blob": "0019d51b32564001963e6aff67d3352fcd9b96df",
+      "reason": "仅把聚焦Mock/断言指向扫描专用方法，反向还原方法名后全部原AST不变。"
+    },
+    {
+      "path": "tests/test_opsi_meow_rescan.py",
+      "current_blob": "5621d833b7f8c31a91aeee379d3aa746cc775830",
+      "reason": "仅把聚焦Mock/断言指向扫描专用方法，反向还原属性及关键字名后全部原AST不变。"
+    },
+    {
+      "path": "tests/test_opsi_shop_month_end.py",
+      "current_blob": "2dc3c2edfbb2078858ea43405e0e7d5261284622",
+      "reason": "补齐上游让位前置所需task/cross_get夹具，原月末购买日允许及非购买日延期断言均保留。"
+    },
+    {
+      "path": "tests/test_opsi_smart_explore_task_delay.py",
+      "current_blob": "8445dd213756323e4fefc7943617f4aefac3f766",
+      "reason": "保留上游同日让位测试，追加单次执行、月末模式与默认配置兼容回归。"
+    },
+    {
+      "path": "定制化修改清单.md",
+      "current_blob": "97e821de539c111844f0ef13af0e378ff366f443",
+      "reason": "更新日期和上游基线，记录用户方案1及新通用功能默认关闭边界，保留全部既有定制项。"
+    }
+  ],
+  "limits": [
+    "逐路径/实体审计证明代码与配置保留及明确融合，不单独等同于真实游戏验收。",
+    "E盘运行状态、未知文件、前端产物及远端分支由主任务另行核验；进程读取AccessDenied不代表无运行进程。",
+    "新增加的合入报告和回归文件不属于本轮三树基线，不计入该路径总数。"
+  ]
+}

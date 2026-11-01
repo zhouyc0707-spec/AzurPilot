@@ -7,6 +7,7 @@ from module.config.time_source import now
 from module.equipment.fleet_rotation import FleetRotationEquipment
 from module.exception import FleetManagementError, ScriptEnd
 from module.logger import logger
+from module.campaign.fleet_training_notify import notification_enabled, notify_event, notify_failure, notify_training
 from module.retire.fleet_management import FleetManagement
 from module.retire.fleet_training import FleetTrainingReader
 from module.runtime.fleet_equipment import EQUIPMENT_PATH
@@ -29,6 +30,76 @@ class TrainingSession:
         self.replaced_fleets = set()
         self.sources_refreshed = False
         self.checking_targets = False
+        self.changes = []
+        self.notification_phase = '培养检查失败'
+
+    def report(self, fleet, slots, event, changes=()):
+        rules = {str(fleet): dict(self.rules[str(fleet)], slots=list(slots))}
+        notify_training(self.config, rules, {fleet: fleet}, changes, event=event)
+
+    def report_replaced(self, fleet, slots, changes):
+        if not changes or not notification_enabled(self.config):
+            return
+        # 换入舰船已在候补阶段实读；推送只复用记录，不为通知追加游戏操作。
+        self.report(fleet, slots, 'replaced', changes)
+
+    def favourite_job(self, fleet, slot, outgoing, *, needed=0, reserved=()):
+        from module.retire.fleet_favourite import FavouriteShips
+        self.saved['reading'] = dict(fleet=fleet, slots=[slot], favourite=True)
+        self.save()
+
+        def record(name, values, emotion):
+            observe(self.saved, name, values, self.targets, emotion=emotion)
+            self.save()
+
+        candidate = FavouriteShips(self.manager).find(fleet, slot, self.targets, self.saved['records'],
+                                                      needed=needed, reserved=reserved, observe=record)
+        self.saved.pop('reading', None)
+        self.save()
+        if candidate is not None:
+            return dict(fleet=fleet, slot=slot, source=0, outgoing=outgoing, incoming=candidate['name'],
+                        targets=dict(self.targets), candidate=candidate)
+        return None
+
+    def rotation_rule(self, fleet):
+        rule = self.rules[str(fleet)]
+        if self.config.cross_get('FleetInfo.FleetTraining.StopOnComplete', False) is True:
+            # 等待本轮其他舰船毕业时，不把已毕业舰位换成下一批。
+            rule = dict(rule, slots=[slot for slot in rule['slots']
+                        if not completed(self.saved['records'].get(
+                            identity(ships(self.result, fleet).get(slot), self.result), {}), self.targets)])
+        return rule
+
+    def stop_when_complete(self):
+        current = {}
+        for fleet in self.selected.values():
+            current[fleet] = self.inspect(fleet, self.rules[str(fleet)]['slots'], defer_completion=True)
+        notify_training(self.config, self.rules, self.selected, event='check')
+        ready = [(fleet, slot, name) for fleet, names in current.items() for slot, name in names.items()
+                 if completed(self.saved['records'][name], self.targets)]
+        if ready:
+            self.refresh_sources()
+            for fleet, slot, name in ready:
+                if identity(ships(self.result, fleet).get(slot), self.result) != name:
+                    self.delay('全舰队扫描后毕业舰船身份无法唯一确认，不停止任务')
+                self.saved['records'][name].update(completed_for=dict(self.targets),
+                                                   completed_at=now().isoformat(timespec='seconds'))
+            self.save()
+        expected = {(fleet, slot) for fleet in self.selected.values() for slot in self.rules[str(fleet)]['slots']
+                    if slot in ships(self.result, fleet)}
+        mark_checked(self.config, self.context, self.targets)
+        if expected and expected == {(fleet, slot) for fleet, slot, _ in ready}:
+            self.manager.finish_rotation()
+            self.manager._commit_formation()
+            logger.info('本轮全部培养舰船已达到等级/好感目标，停止当前练级任务')
+            self.config.Scheduler_Enable = False
+            notify_training(self.config, self.rules, self.selected, event='graduated', status='培养完成，已停止练级')
+            self.config.task_stop()
+        for fleet in current:
+            graduated = [slot for number, slot, _ in ready if number == fleet]
+            if graduated:
+                self.report(fleet, graduated, 'graduated')
+        return True
 
     @property
     def result(self):
@@ -46,6 +117,8 @@ class TrainingSession:
         self.save()
         if self.checking_targets:
             mark_checked(self.config, self.context, self.targets)
+        if notification_enabled(self.config):
+            notify_event(self.config, self.notification_phase, message)
         try:
             target = now() + timedelta(hours=max(1 / 60, interval(self.config)))
         except OverflowError:
@@ -96,6 +169,14 @@ class TrainingSession:
         """中断前已落盘的互换必须按双方身份核实，不盲目重复。"""
         for key, job in list(self.saved['pending'].items()):
             target = identity(ships(self.result, job['fleet']).get(job['slot']), self.result)
+            if job['source'] == 0:
+                if target == job['incoming']:
+                    del self.saved['pending'][key]
+                elif target != job['outgoing']:
+                    raise FleetManagementError('常用换船中断后的目标舰位身份未确认，保留记录')
+                elif job.get('targets', self.targets) != self.targets:
+                    del self.saved['pending'][key]
+                continue
             source = identity(ships(self.result, job['source']).get(job['slot']), self.result)
             if (target, source) == (job['incoming'], job['outgoing']):
                 del self.saved['pending'][key]
@@ -126,14 +207,19 @@ class TrainingSession:
         self.config.cross_set_many(calibration_changes(self.config.data, snapshots, now()))
         self.runner.campaign.emotion.calibrate_selected(snapshots)
 
+    @notify_failure('培养换船失败', '本轮培养检查或换船未完成；继续沿用原异常及待完成记录处理。')
     def process(self, *, fresh=False, force=False):
         if not self.targets or not self.selected or (not force and not due(self.config, self.context) and not self.saved['pending']):
             return False
         self.checking_targets = True
         self.recover()
+        if self.config.cross_get('FleetInfo.FleetTraining.StopOnComplete', False) is True:
+            return self.stop_when_complete()
         for role, fleet in self.selected.items():
             rule = self.rules[str(fleet)]
+            self.notification_phase = '培养检查失败'
             current = self.inspect(fleet, rule['slots'], defer_completion=True)
+            self.report(fleet, rule['slots'], 'check')
             ready = [slot for slot, name in current.items()
                      if completed(self.saved['records'][name], self.targets)
                      or excluded(self.saved['records'][name], self.targets)]
@@ -150,33 +236,41 @@ class TrainingSession:
                 if not excluded(record, self.targets):
                     record.update(completed_for=dict(self.targets), completed_at=now().isoformat(timespec='seconds'))
             self.save()
+            graduated = [slot for slot in ready if completed(self.saved['records'][current[slot]], self.targets)]
+            if graduated:
+                self.report(fleet, graduated, 'graduated')
+            self.notification_phase = '换船失败'
             for source in rule['sources']:
                 if source not in self.inventory_fleets:
                     self.reader.inventory([source])
                     self.inventory_fleets.add(source)
             snapshots = {source: recorded_morale(self.result, source) for source in rule['sources']}
             jobs = []
-            for slot in ready:
-                key = f'{fleet}:{slot}'
-                job = self.saved['pending'].get(key)
-                if job is None:
-                    order = rank_sources(dict(rule, slots=[slot]), snapshots,
-                                         selected_only=self.runner.campaign.emotion.selected_only)
-                    for source in order:
-                        candidate = ships(self.result, source).get(slot)
-                        name = identity(candidate, self.result)
-                        if name is None or excluded(self.saved['records'].get(name, {}), self.targets):
-                            continue
-                        # 候补也实读，避免换入尚未登记但已达到全部目标的舰船。
-                        names = self.inspect(source, [slot])
-                        if slot not in names or excluded(self.saved['records'][name], self.targets):
-                            continue
-                        job = dict(fleet=fleet, slot=slot, source=source, outgoing=current[slot], incoming=name,
-                                   targets=dict(self.targets))
-                        break
-                if job is None:
-                    self.delay(f'第{fleet}舰队{slot}位已培养完成，但没有合适候补，延迟当前任务')
-                jobs.append((key, job))
+            with self.reader.reuse_details():
+                for slot in ready:
+                    key = f'{fleet}:{slot}'
+                    job = self.saved['pending'].get(key)
+                    if job is None:
+                        order = rank_sources(dict(rule, slots=[slot]), snapshots,
+                                             selected_only=self.runner.campaign.emotion.selected_only)
+                        for source in order:
+                            candidate = ships(self.result, source).get(slot)
+                            name = identity(candidate, self.result)
+                            if name is None or excluded(self.saved['records'].get(name, {}), self.targets):
+                                continue
+                            # 候补也实读，避免换入尚未登记但已达到全部目标的舰船。
+                            names = self.inspect(source, [slot])
+                            if slot not in names or excluded(self.saved['records'][name], self.targets):
+                                continue
+                            job = dict(fleet=fleet, slot=slot, source=source, outgoing=current[slot], incoming=name,
+                                       targets=dict(self.targets))
+                            break
+                    if job is None and rule.get('favourite'):
+                        job = self.favourite_job(fleet, slot, current[slot],
+                                                 reserved=[job['incoming'] for _, job in jobs])
+                    if job is None:
+                        self.delay(f'第{fleet}舰队{slot}位已培养完成，但没有合适候补，延迟当前任务')
+                    jobs.append((key, job))
             if not jobs:
                 continue
             self.prepare(fleet)
@@ -190,16 +284,22 @@ class TrainingSession:
             for key, job in jobs:
                 if goals(self.config) != self.targets:
                     break
-                snapshots = self.manager.rotate_slot(job['source'], job['slot'], fleet)
+                if job['source'] == 0:
+                    from module.retire.fleet_favourite import FavouriteShips
+                    snapshots = FavouriteShips(self.manager).replace(fleet, job['slot'], job['candidate'])
+                else:
+                    snapshots = self.manager.rotate_slot(job['source'], job['slot'], fleet)
                 self.config.cross_set_many(calibration_changes(self.config.data, snapshots, now()))
                 self.runner.campaign.emotion.calibrate_selected(snapshots)
                 actual = identity(ships(self.result, fleet).get(job['slot']), self.result)
                 if actual != job['incoming']:
                     raise FleetManagementError('培养换船后的身份未确认，保留待确认记录')
+                self.changes.append(job)
                 del self.saved['pending'][key]
                 self.save()
             self.manager.finish_rotation()
             self.replaced_fleets.add(fleet)
+            self.report_replaced(fleet, rule['slots'], [job for _, job in jobs if job in self.changes])
             if equipment is not None:
                 equipment.apply_pending()
             if goals(self.config) == self.targets:
@@ -229,6 +329,62 @@ class TrainingSession:
         return []
 
 
+def rotate_favourite_fallback(runner, manager, context, rules, selected, fleet, rule, snapshots, needed,
+                               states, training=None):
+    """整队候补不可用时逐舰位核对，仍先用对应候补舰位，最后才使用常用。"""
+    session = training or TrainingSession(runner, manager, context, rules, selected)
+    config = runner.campaign.config
+    jobs = []
+    for slot in rule['slots']:
+        order = rank_sources(dict(rule, slots=[slot]), snapshots, needed,
+                             selected_only=runner.campaign.emotion.selected_only)
+        if training is not None:
+            order = training.filter_sources(order, dict(rule, slots=[slot]), fleet)
+        outgoing = ships(session.result, fleet).get(slot, {}).get('name') or '未确认舰名'
+        if order:
+            source = order[0]
+            incoming = ships(session.result, source).get(slot, {}).get('name') or '未确认舰名'
+            jobs.append(dict(fleet=fleet, slot=slot, source=source, incoming=incoming, outgoing=outgoing))
+        else:
+            job = session.favourite_job(fleet, slot, outgoing, needed=needed,
+                                       reserved=[item['incoming'] for item in jobs])
+            if job:
+                jobs.append(job)
+    if not jobs:
+        return []
+    equipment = None
+    if config.cross_get(EQUIPMENT_PATH + '.Enabled', False) is True:
+        equipment = FleetRotationEquipment(manager)
+        equipment.clear_outgoing(fleet, [job['slot'] for job in jobs])
+        session.equipment_used = True
+    changes = []
+    for job in jobs:
+        if config.cross_get(ROTATION_PATH + '.Enabled', False) is not True:
+            break
+        states[str(fleet)] = dict(source=job['source'], pending=dict(slot=job['slot']), rescan=True)
+        config.cross_set(ROTATION_PATH + '.State', states)
+        if job['source'] == 0:
+            from module.retire.fleet_favourite import FavouriteShips
+            values = FavouriteShips(manager).replace(fleet, job['slot'], job['candidate'])
+            if identity(ships(session.result, fleet).get(job['slot']), session.result) != job['incoming']:
+                raise FleetManagementError('常用换船后目标舰位身份未确认，下次重扫实际编队')
+        else:
+            manager.prepare_rotation(fleet, slots=[job['slot']], scan=False)
+            values = manager.rotate_slot(job['source'], job['slot'], fleet)
+        config.cross_set_many(calibration_changes(config.data, values, now()))
+        runner.campaign.emotion.calibrate_selected(values)
+        changes.append(job)
+        states[str(fleet)] = dict(last_source=job['source'], favourite=job['source'] == 0,
+                                 completed_at=now().isoformat(timespec='seconds'))
+        config.cross_set(ROTATION_PATH + '.State', states)
+    if equipment is not None:
+        equipment.apply_pending()
+    manager.finish_rotation()
+    if training is not None:
+        training.report_replaced(fleet, rule['slots'], changes)
+    return changes
+
+
 def recover_reading(runner, mode):
     """在选关导航之前退出已登记的读取页面，避免好感弹窗被当作未知界面。
 
@@ -244,6 +400,7 @@ def recover_reading(runner, mode):
         FleetTrainingReader(manager).recover_page()
 
 
+@notify_failure('培养换船失败', '本轮培养检查或换船未完成，保留原有恢复处理。')
 def training_only(runner, battle, mode):
     """仅培养调度也实读选船页舰名与心情；达标才执行同号互换。
 
@@ -262,7 +419,9 @@ def training_only(runner, battle, mode):
     selected_only = config.cross_get(ROTATION_PATH + '.SelectedOnly', False) is True
     rules = parse_rules(config.cross_get(ROTATION_PATH + '.Rules', '{}'))
     selected = {role: actual for role, actual in active_fleets(config).items()
-                if rules.get(str(actual), {}).get('slots') and rules[str(actual)].get('sources')
+                if rules.get(str(actual), {}).get('slots')
+                and (rules[str(actual)].get('sources') or rules[str(actual)].get('favourite')
+                     or (goals(config) and config.cross_get('FleetInfo.FleetTraining.StopOnComplete', False) is True))
                 and _required(runner.campaign.emotion, role, battle)[1] is not None}
     if not selected:
         return False
@@ -283,7 +442,8 @@ def training_only(runner, battle, mode):
         session.reader.recover_page()
     if check_due or session.saved['pending']:
         # 确认后、保存前中断时两边旧记录都可能过时，恢复前必须实读双方。
-        recovery_fleets = {job[side] for job in session.saved['pending'].values() for side in ('fleet', 'source')}
+        recovery_fleets = {job[side] for job in session.saved['pending'].values() for side in ('fleet', 'source')
+                           if job[side] > 0}
         inventory = set(selected.values()) | recovery_fleets
         result = session.reader.inventory(inventory,
             slots={fleet: rules[str(fleet)]['slots'] for fleet in selected.values()})
@@ -320,7 +480,9 @@ def after_battle_due(runner, mode):
         return False
     rules = parse_rules(config.cross_get(ROTATION_PATH + '.Rules', '{}'))
     selected = {role: actual for role, actual in active_fleets(config).items()
-                if rules.get(str(actual), {}).get('slots') and rules[str(actual)].get('sources')
+                if rules.get(str(actual), {}).get('slots')
+                and (rules[str(actual)].get('sources') or rules[str(actual)].get('favourite')
+                     or (goals(config) and config.cross_get('FleetInfo.FleetTraining.StopOnComplete', False) is True))
                 and _required(runner.campaign.emotion, role, runner.campaign._map_battle)[1] is not None}
     context = runner.__dict__.get('_fleet_rotation_context', {})
     mood = config.cross_get(ROTATION_PATH + '.Enabled', False) is True

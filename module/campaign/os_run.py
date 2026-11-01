@@ -22,6 +22,7 @@ from module.logger import logger
 from module.os.config import OSConfig
 from module.os.map_operation import OSMapOperation
 from module.os.operation_siren import OperationSiren
+from module.os.tasks.smart_explore import delay_task_for_smart_explore
 from module.os_handler.action_point import ActionPointLimit
 
 
@@ -130,6 +131,8 @@ class OSCampaignRun(OSMapOperation):
 
         # 新月末开关在地图初始化前检查，避免非购买日触发首次搜索或导航。
         defer_month_end_shop(self.config)
+        if delay_task_for_smart_explore(self.config):
+            return
         try:
             self._run_opsi_task_with_ap_overflow_guard(lambda campaign: campaign.os_shop())
         except ActionPointLimit as e:
@@ -144,6 +147,8 @@ class OSCampaignRun(OSMapOperation):
 
     def opsi_daily(self):
         """执行大世界每日任务。"""
+        if delay_task_for_smart_explore(self.config):
+            return
         try:
             self._run_opsi_task_with_ap_overflow_guard(lambda campaign: campaign.os_daily())
         except ActionPointLimit as e:
@@ -229,6 +234,8 @@ class OSCampaignRun(OSMapOperation):
 
     def opsi_prevent_action_point_overflow(self):
         """执行大世界防止行动力溢出任务。"""
+        if delay_task_for_smart_explore(self.config):
+            return
         campaign = self.load_campaign()
         campaign.os_prevent_action_point_overflow()
 

@@ -123,6 +123,8 @@ run() 先处理一个已知 bug：卡在战术课堂界面（`TACTICAL_CLASS_STA
 
 **领奖**（`commission_receive`）：在奖励页与委托页之间循环，点击 `REWARD_1`/`REWARD_1_WHITE` 小红点、`REWARD_GOTO_COMMISSION` 跳转、`EXP_INFO_S_REWARD`（经验弹窗，一次代表一条委托完成）与 `GET_ITEMS_1/2/3`（物品弹窗）。物品弹窗出现时复制截图到本地队列；下一次经验弹窗出现即认为上一组物品弹窗结束，触发收入识别与持久化。CN 服遇到 `OIL_MAXED` 抛 `OilMaxed`：原调度开启石油控制时安全关闭提示、退出本轮并提交清油请求，受阻领取保留待恢复；先刷可运行的图，图冷却时购粮。实际油量下降后重试，最多三次清理仍受阻则将委托延后五分钟，让其他可运行任务继续。关闭石油控制或自定义调度保留原先最多三次固定后宅购粮重试。每次经验弹窗计数会进入 `finally` 块更新 T 类科研剩余委托数。独立资源账本旁路解析这些已有奖励画面，详见 [资源管理](../webui/resource-management.md)。
 
+物品弹窗标题出现后，父循环持续截图至少 0.5 秒，且同一弹窗仍正向可见时才保存新帧，避免把刚出现的空白奖励动画入账。每次确认经验或物品后继续截图，至少 0.3 秒后才处理下一次操作；不在领取循环中固定休眠。弹窗类型变化时丢弃待截标记、重新识别，不把新画面归入旧弹窗。逐弹窗收益、经验弹窗分批及保存失败时不结算到期钻石委托的保护保持不变；回归见 `tests/test_reward_render_capture.py` 和 `tests/test_commission_settlement.py`。
+
 **扫描**（`_commission_scan_all`）：紧急列表是懒加载的，先切到 urgent 强制刷新；再分别切到 daily/urgent，滚动条翻页（上限 15 页）逐屏 `commission_detect`。检测用 `lines_detect` 找委托卡片底部白色分割线（scipy `find_peaks`），对每条分割线裁剪出 `(188, y-119, 1199, y)` 区域交给 `Commission` 解析；发现无效委托（通常 info_bar 未消失）时重试。紧急列表中的 `extra_*` 委托统一 `convert_to_night` 归类为 `night_*`，与 21:00~次日 02:00 生效的 `_night` 过滤预设对应。
 
 **选择**（`_commission_choose`，按 `Commission_DynamicProgramming` 分派）：

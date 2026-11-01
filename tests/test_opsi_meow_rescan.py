@@ -151,12 +151,12 @@ class MeowRescanTests(unittest.TestCase):
         runner = SimpleNamespace(
             map=map_, camera=camera, map_data_init=Mock(), handle_info_bar=Mock(), update=Mock(),
             map_init=Mock(), map_rescan_current=Mock(return_value=False),
-            focus_to=Mock(), focus_to_grid_center=Mock(),
+            focus_to_scan_target=Mock(), focus_to_grid_center=Mock(),
         )
-        runner.focus_to.side_effect = lambda target, **kwargs: setattr(runner, 'camera', target.location)
+        runner.focus_to_scan_target.side_effect = lambda target, **kwargs: setattr(runner, 'camera', target.location)
         with patch('module.os.map.logger') as logger:
             OSMap.map_rescan_once(runner)
-        targets = [entry.args[0] for entry in runner.focus_to.call_args_list]
+        targets = [entry.args[0] for entry in runner.focus_to_scan_target.call_args_list]
         logged = [entry.args[0] for entry in logger.hr.call_args_list if entry.args[0].startswith('重新扫描 ')]
         self.assertEqual(logged, [f'重新扫描 {target} ({index + 1}/{len(targets)})'
                                   for index, target in enumerate(targets)])

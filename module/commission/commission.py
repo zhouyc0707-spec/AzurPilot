@@ -2142,6 +2142,9 @@ class RewardCommission(Dock, UI, InfoHandler):
 
         reward = False
         click_timer = Timer(1)
+        render_timer = Timer(0.5)
+        reward_click_timer = Timer(0.3)
+        pending_reward = None
         self._commission_reward_images = []
         completed_commission_count = 0
         income_recorded = True
@@ -2162,29 +2165,52 @@ class RewardCommission(Dock, UI, InfoHandler):
                     if self.ui_page_appear(page_commission, offset=(20, 20)):
                         break
 
-                    for button in [EXP_INFO_S_REWARD, GET_ITEMS_1, GET_ITEMS_2, GET_ITEMS_3]:
-                        if self.appear(button, interval=1):
-                            self.ensure_no_info_bar(timeout=1)
+                    if not reward_click_timer.reached():
+                        continue
 
-                            if drop:
-                                drop.add(self.device.image)
-
-                            if button is EXP_INFO_S_REWARD:
-                                completed_commission_count += 1
-                                if self._commission_reward_images:
-                                    income_recorded = self._record_commission_income() and income_recorded
-                                    self._commission_reward_images = []
-                            else:
-                                self._commission_reward_images.append(self.device.image.copy())
-                                logger.info(f'[委托-收入] 收集奖励截图 (触发按钮={button.name})')
-
-                            REWARD_SAVE_CLICK.name = button.name
-                            self.device.click(REWARD_SAVE_CLICK)
-                            if button is EXP_INFO_S_REWARD:
-                                self.device.sleep(0.3)
-                            click_timer.reset()
-                            reward = True
+                    button = None
+                    if pending_reward is not None:
+                        # 渲染期间持续截图；只在同一弹窗仍可见时保存新帧。
+                        if self.appear(pending_reward):
+                            if not render_timer.reached():
+                                continue
+                            button = pending_reward
+                        else:
+                            # 不让通用弹窗处理器在重新分类前点掉尚未记录的新奖励。
+                            pending_reward = None
                             continue
+                        pending_reward = None
+                    else:
+                        for candidate in [EXP_INFO_S_REWARD, GET_ITEMS_1, GET_ITEMS_2, GET_ITEMS_3]:
+                            if self.appear(candidate, interval=1):
+                                button = candidate
+                                break
+                        if button is not None:
+                            self.ensure_no_info_bar(timeout=1)
+                            if button in [GET_ITEMS_1, GET_ITEMS_2, GET_ITEMS_3]:
+                                pending_reward = button
+                                render_timer.reset()
+                                continue
+
+                    if button is not None:
+                        if drop:
+                            drop.add(self.device.image)
+
+                        if button is EXP_INFO_S_REWARD:
+                            completed_commission_count += 1
+                            if self._commission_reward_images:
+                                income_recorded = self._record_commission_income() and income_recorded
+                                self._commission_reward_images = []
+                        else:
+                            self._commission_reward_images.append(self.device.image.copy())
+                            logger.info(f'[委托-收入] 收集奖励截图 (触发按钮={button.name})')
+
+                        REWARD_SAVE_CLICK.name = button.name
+                        self.device.click(REWARD_SAVE_CLICK)
+                        reward_click_timer.reset()
+                        click_timer.reset()
+                        reward = True
+                        continue
                     if click_timer.reached() and self.appear_then_click(REWARD_1, offset=(20, 20), interval=1):
                         self.interval_reset(GET_SHIP)
                         click_timer.reset()

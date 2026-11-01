@@ -11,6 +11,8 @@
 继承自 OSMapOperation 和 Camera，组合了大世界地图操作和相机控制能力。
 """
 
+import copy
+
 import cv2
 import numpy as np
 
@@ -172,8 +174,61 @@ class OSCamera(OSMapOperation, Camera):
                     self.map_swipe((-x, -y))
         return record
 
-    # def focus_to(self, location, swipe_limit=(4, 3)):
-    #     return super().focus_to(location, swipe_limit=swipe_limit)
+    def focus_to_scan_target(self, location, swipe_limit=(6, 5)):
+        """完整扫描专用定位：沿用通用滑动，只认可画面位移或可见边缘。
+
+        普通定位继续跟随上游。此入口不能用请求向量补足缺失的位移证据，
+        否则内部坐标相等也可能漏扫真实地图。证据不足或未推进时交由上层恢复。
+
+        Raises:
+            MapDetectionError: 无法确认位移、目标未到达或有限扫描定位未完成。
+        """
+        target = location_ensure(location)
+        tolerance = min(self.config.MAP_SWIPE_DROP, 0.3)
+        # 每次有效整格移动至少缩短一格；另留格心校准，不使用通用定位的旧恢复算法。
+        attempts = int(np.sum(np.array(self.map.shape) + 1)) + 1
+        try:
+            for _ in range(attempts):
+                previous = self.camera
+                previous_view = copy.copy(self.view)
+                offset_before = np.linalg.norm(previous_view.center_offset - 0.5)
+                vector = np.subtract(target, previous)
+                swipe = tuple(np.minimum(np.abs(vector), swipe_limit) * np.sign(vector))
+                requested = np.add(swipe, 0.5 - previous_view.center_offset)
+                moved = self.map_swipe(swipe)
+                if moved:
+                    observed = None
+                    if self.config.MAP_SWIPE_PREDICT:
+                        observed = previous_view.predict_swipe(
+                            self.view,
+                            with_current_fleet=self.config.MAP_SWIPE_PREDICT_WITH_CURRENT_FLEET,
+                            with_sea_grids=self.config.MAP_SWIPE_PREDICT_WITH_SEA_GRIDS,
+                        )
+                    edges = (self.view.left_edge or self.view.right_edge,
+                             self.view.upper_edge or self.view.lower_edge)
+                    if observed is None and any(value and not edge for value, edge in zip(requested, edges)):
+                        self.camera = previous
+                        raise MapDetectionError(f'全图扫描缺少位移证据：{location2node(previous)} -> {location2node(target)}')
+                    verified = np.array(previous if observed is None else np.add(previous, observed))
+                    if edges[0]:
+                        verified[0] = (self.view.center_loca[0] if self.view.left_edge else
+                                       self.map.shape[0] - self.view.shape[0] + self.view.center_loca[0])
+                    if edges[1]:
+                        verified[1] = (self.map.shape[1] - self.view.shape[1] + self.view.center_loca[1]
+                                       if self.view.upper_edge else self.view.center_loca[1])
+                    self.camera = tuple(verified)
+                distance = np.sum(np.abs(np.subtract(target, self.camera)))
+                if distance == 0 and np.all(np.abs(self.view.center_offset - 0.5) <= tolerance):
+                    return
+                progressed = distance < np.sum(np.abs(vector)) or (
+                    distance == 0 and np.linalg.norm(self.view.center_offset - 0.5) < offset_before
+                )
+                if not moved or not progressed:
+                    raise MapDetectionError(f'全图扫描定位未推进：{location2node(self.camera)} -> {location2node(target)}')
+            raise MapDetectionError(f'全图扫描定位次数已耗尽：{location2node(target)}')
+        finally:
+            self._prev_view = None
+            self._prev_swipe = None
 
     def _get_map_outside_button(self):
         """获取地图外的空白点击区域按钮。

@@ -55,7 +55,7 @@ class TestOSMapScanCoverage(unittest.TestCase):
         runner.handle_info_bar = Mock()
         runner.update = Mock()
         runner.map_init = Mock()
-        runner.focus_to = Mock(side_effect=lambda target, **kwargs: setattr(runner, 'camera', target.location))
+        runner.focus_to_scan_target = Mock(side_effect=lambda target, **kwargs: setattr(runner, 'camera', target.location))
         runner.focus_to_grid_center = Mock()
         runner.map_rescan_current = Mock(return_value=False)
         return runner
@@ -198,22 +198,22 @@ class TestOSMapScanCoverage(unittest.TestCase):
         checked = []
         runner.map_rescan_current.side_effect = lambda **kwargs: checked.append(runner.camera) or False
         self.assertFalse(runner.map_rescan_once(drop='离线记录'))
-        self.assertEqual(runner.focus_to.call_count, 9)
+        self.assertEqual(runner.focus_to_scan_target.call_count, 9)
         self.assertEqual(runner.focus_to_grid_center.call_count, 9)
         self.assertEqual(len(checked), 10)
         self.assertEqual(set(checked[1:]), set(runner.map.camera_data.location))
-        for call in runner.focus_to.call_args_list:
+        for call in runner.focus_to_scan_target.call_args_list:
             self.assertEqual(call.kwargs, {'swipe_limit': (6, 5)})
         for call in runner.map_rescan_current.call_args_list:
             self.assertEqual(call.kwargs, {'drop': '离线记录'})
 
     def test_failed_focus_never_checks_wrong_view_or_returns_no_event(self):
         runner = self.make_scan_runner()
-        runner.focus_to.side_effect = None
+        runner.focus_to_scan_target.side_effect = None
         with self.assertRaises(MapDetectionError):
             runner.map_rescan_once()
         runner.map_rescan_current.assert_called_once_with(drop=None)
-        runner.focus_to.assert_called_once()
+        runner.focus_to_scan_target.assert_called_once()
 
     def test_grid_center_drift_is_also_rejected(self):
         runner = self.make_scan_runner()
@@ -229,7 +229,7 @@ class TestOSMapScanCoverage(unittest.TestCase):
             runner.map_rescan_once()
         runner.map_rescan_current.assert_not_called()
         runner.map_init.assert_not_called()
-        runner.focus_to.assert_not_called()
+        runner.focus_to_scan_target.assert_not_called()
 
     def test_edge_failure_prevents_full_scan_and_following_action(self):
         """当前无事件但全图坐标无法定位时，异常阻止执行后续跳图动作。"""
@@ -241,7 +241,7 @@ class TestOSMapScanCoverage(unittest.TestCase):
             runner.map_rescan_once()
             following_action()
         runner.map_rescan_current.assert_called_once_with(drop=None)
-        runner.focus_to.assert_not_called()
+        runner.focus_to_scan_target.assert_not_called()
         following_action.assert_not_called()
 
     def test_current_mode_does_not_visit_full_map(self):
@@ -249,20 +249,20 @@ class TestOSMapScanCoverage(unittest.TestCase):
         self.assertFalse(runner.map_rescan_once(rescan_mode='current'))
         runner.map_rescan_current.assert_called_once_with(drop=None)
         runner.map_init.assert_not_called()
-        runner.focus_to.assert_not_called()
+        runner.focus_to_scan_target.assert_not_called()
 
     def test_current_event_can_end_scan_successfully(self):
         runner = self.make_scan_runner()
         runner.map_rescan_current.return_value = True
         self.assertTrue(runner.map_rescan_once())
         runner.map_init.assert_not_called()
-        runner.focus_to.assert_not_called()
+        runner.focus_to_scan_target.assert_not_called()
 
     def test_event_found_at_later_target_can_end_scan_successfully(self):
         runner = self.make_scan_runner()
         runner.map_rescan_current.side_effect = (False, False, False, True)
         self.assertTrue(runner.map_rescan_once())
-        self.assertEqual(runner.focus_to.call_count, 3)
+        self.assertEqual(runner.focus_to_scan_target.call_count, 3)
         self.assertEqual(runner.map_rescan_current.call_count, 4)
 
     def test_meow_scan_failure_stops_real_stay_flow_and_next_round(self):

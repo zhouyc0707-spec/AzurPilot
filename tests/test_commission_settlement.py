@@ -424,16 +424,18 @@ class TestCommissionIncomeBoundary(unittest.TestCase):
         def is_commission_page(*_, **__):
             nonlocal frame
             frame += 1
-            return frame == 3
+            return frame == 5
 
         def appear(button, **_):
-            return button is [module.GET_ITEMS_1, module.EXP_INFO_S_REWARD, module.GET_ITEMS_1][frame]
+            return button is [module.GET_ITEMS_1, module.GET_ITEMS_1, module.EXP_INFO_S_REWARD,
+                              module.GET_ITEMS_1, module.GET_ITEMS_1][frame]
 
         handler.ui_page_appear.side_effect = is_commission_page
         handler.appear.side_effect = appear
-        timer = Mock()
-        timer.reached.return_value = False
-        with patch.object(module, "Timer", return_value=timer), patch.object(database, "db") as db:
+        def timer(limit):
+            return Mock(reached=Mock(return_value=limit < 1))
+
+        with patch.object(module, "Timer", side_effect=timer), patch.object(database, "db") as db:
             self.assertTrue(self.reward_class._commission_receive(handler))
         self.assertEqual(handler._record_commission_income.call_count, 2)
         db.settle_expired_gem_commissions.assert_not_called()
