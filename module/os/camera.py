@@ -11,8 +11,6 @@
 继承自 OSMapOperation 和 Camera，组合了大世界地图操作和相机控制能力。
 """
 
-import copy
-
 import cv2
 import numpy as np
 
@@ -22,12 +20,10 @@ from module.exception import MapDetectionError
 from module.logger import logger
 from module.map.camera import Camera
 from module.map.map_base import location2node, location_ensure
-from module.map.utils import random_direction
 from module.map_detection.os_grid import OSGrid
 from module.map_detection.view import View
 from module.os.map_operation import OSMapOperation
 from module.os.radar import Radar
-from module.os.scan_movement import predict_scan_swipe
 
 
 class OSCamera(OSMapOperation, Camera):
@@ -108,130 +104,11 @@ class OSCamera(OSMapOperation, Camera):
             x = 0
         return x == 0 and y == 0
 
-    def ensure_edge_insight(self, reverse=False, preset=None, swipe_limit=(4, 3), skip_first_update=True):
-        """确认大世界地图的横纵边缘，建立摄像机绝对坐标。
-
-        格内单应位置是周期相位，正常滑动整格后也可能不变，不能据此判断
-        镜头没有移动。只有实际识别到两个方向的地图边缘才完成定位。
-
-        Args:
-            reverse (bool): 定位后是否按记录反向滑回原视野。
-            preset (tuple[int, int] | None): 首次定位前的滑动预设。
-            swipe_limit (tuple[int, int]): 每次横纵滑动的最大格数。
-            skip_first_update (bool): 已有有效视图时是否跳过首次截图更新。
-
-        Returns:
-            list[tuple[int, int]]: 定位过程的滑动记录。
-
-        Raises:
-            MapDetectionError: 有限滑动后仍无法确认横纵边缘，交由调度器
-                保存错误现场并恢复，不能使用未定位的坐标继续扫描。
-
-        Pages:
-            in: page_os
-            out: page_os
-        """
-        logger.info('[大世界-摄像机] 确认地图横纵边缘')
-        if not skip_first_update:
-            self.update()
-
-        record = []
-        if preset is not None:
-            self.map_swipe(preset)
-            record.append(preset)
-
-        limits = np.abs(np.array(swipe_limit, dtype=int))
-        if np.any(limits == 0):
-            raise MapDetectionError('大世界边缘定位的滑动步长必须大于零')
-        direction = random_direction(self.config.MAP_ENSURE_EDGE_INSIGHT_CORNER)
-        x_swipe, y_swipe = np.multiply(limits, direction)
-        # 地图 shape 是右下格坐标；加一后换算最坏情况下跨越两轴的次数。
-        max_swipes = int(np.ceil((np.array(self.map.shape) + 1) / limits).sum()) + 2
-
-        for _ in range(max_swipes + 1):
-            horizontal_edge = self.view.left_edge or self.view.right_edge
-            vertical_edge = self.view.lower_edge or self.view.upper_edge
-            if horizontal_edge and vertical_edge:
-                # update_os() 只刷新视图；已有双边时也显式锚定，避免沿用旧坐标。
-                x = (self.view.center_loca[0] if self.view.left_edge else
-                     self.map.shape[0] - self.view.shape[0] + self.view.center_loca[0])
-                y = (self.map.shape[1] - self.view.shape[1] + self.view.center_loca[1]
-                     if self.view.upper_edge else self.view.center_loca[1])
-                self.camera = (x, y)
-                logger.attr('大世界边缘定位', location2node(self.camera))
-                break
-            if len(record) >= max_swipes:
-                raise MapDetectionError(
-                    f'大世界地图边缘定位失败：横边={horizontal_edge}，'
-                    f'纵边={vertical_edge}，滑动={len(record)} 次；停止本轮扫描'
-                )
-            vector = (0 if horizontal_edge else x_swipe, 0 if vertical_edge else y_swipe)
-            self.map_swipe(vector)
-            record.append(vector)
-
-        if reverse:
-            for x, y in reversed(record):
-                if x != 0 or y != 0:
-                    self.map_swipe((-x, -y))
-        return record
-
-    def focus_to_scan_target(self, location, swipe_limit=(6, 5)):
-        """完整扫描专用定位：沿用通用滑动，只认可画面位移或可见边缘。
-
-        普通定位继续跟随上游。此入口不能用请求向量补足缺失的位移证据，
-        否则内部坐标相等也可能漏扫真实地图。证据不足或未推进时交由上层恢复。
-
-        Raises:
-            MapDetectionError: 无法确认位移、目标未到达或有限扫描定位未完成。
-        """
-        target = location_ensure(location)
-        tolerance = self.config.MAP_SWIPE_DROP
-        # 完整扫描必须保留相邻画面的共同内容；大步跨越会使舰队和地形
-        # 同时离开有效识别区域，无法从下一帧证明实际移动量。
-        swipe_limit = np.minimum(swipe_limit, (3, 2))
-        # 每次有效整格移动至少缩短一格；另留格心校准，不使用通用定位的旧恢复算法。
-        attempts = int(np.sum(np.array(self.map.shape) + 1)) + 1
-        try:
-            for _ in range(attempts):
-                previous = self.camera
-                previous_view = copy.copy(self.view)
-                offset_before = np.linalg.norm(previous_view.center_offset - 0.5)
-                vector = np.subtract(target, previous)
-                swipe = tuple(np.minimum(np.abs(vector), swipe_limit) * np.sign(vector))
-                requested = np.add(swipe, 0.5 - previous_view.center_offset)
-                moved = self.map_swipe(swipe)
-                if moved:
-                    # 大世界默认关闭通用预测；完整扫描独立获取画面证据，
-                    # 不修改该开关，也不采用重复海面格子的宽松投票。
-                    observed = predict_scan_swipe(previous_view, self.view)
-                    edges = (self.view.left_edge or self.view.right_edge,
-                             self.view.upper_edge or self.view.lower_edge)
-                    if observed is None and any(abs(value) > tolerance and not edge
-                                                for value, edge in zip(requested, edges)):
-                        self.camera = previous
-                        raise MapDetectionError(f'全图扫描缺少位移证据：{location2node(previous)} -> {location2node(target)}')
-                    verified = np.array(previous if observed is None else np.add(previous, observed))
-                    # 已确认的画面位移优先；只有没有位移匹配时才用边缘锚定，
-                    # 避免一次边缘误识别覆盖可靠的前后帧证据。
-                    if observed is None and edges[0]:
-                        verified[0] = (self.view.center_loca[0] if self.view.left_edge else
-                                       self.map.shape[0] - self.view.shape[0] + self.view.center_loca[0])
-                    if observed is None and edges[1]:
-                        verified[1] = (self.map.shape[1] - self.view.shape[1] + self.view.center_loca[1]
-                                       if self.view.upper_edge else self.view.center_loca[1])
-                    self.camera = tuple(verified)
-                distance = np.sum(np.abs(np.subtract(target, self.camera)))
-                if distance == 0 and np.all(np.abs(self.view.center_offset - 0.5) <= tolerance):
-                    return
-                progressed = distance < np.sum(np.abs(vector)) or (
-                    distance == 0 and np.linalg.norm(self.view.center_offset - 0.5) < offset_before
-                )
-                if not moved or not progressed:
-                    raise MapDetectionError(f'全图扫描定位未推进：{location2node(self.camera)} -> {location2node(target)}')
-            raise MapDetectionError(f'全图扫描定位次数已耗尽：{location2node(target)}')
-        finally:
-            self._prev_view = None
-            self._prev_swipe = None
+    # def ensure_edge_insight(self, reverse=False, preset=None, swipe_limit=(4, 3)):
+    #     return super().ensure_edge_insight(reverse=reverse, preset=preset, swipe_limit=swipe_limit)
+    #
+    # def focus_to(self, location, swipe_limit=(4, 3)):
+    #     return super().focus_to(location, swipe_limit=swipe_limit)
 
     def _get_map_outside_button(self):
         """获取地图外的空白点击区域按钮。

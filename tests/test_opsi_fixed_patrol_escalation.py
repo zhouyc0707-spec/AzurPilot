@@ -501,11 +501,13 @@ class TestFixedPatrolPrecheckedPrimary(unittest.TestCase):
         self.assertEqual(stub.current_fleet, 1)
         stub.recover.assert_called_once_with()
 
-    def test_l2_scan_detection_failure_remains_recoverable_error(self):
+    def test_l2_scan_detection_failure_follows_upstream_continue_behavior(self):
         stub = FleetMoveStub(move_on_fleet=1)
-        stub.map_rescan = Mock(side_effect=MapDetectionError('全图定位未完成'))
-        with self.assertRaises(MapDetectionError):
+        stub.map_rescan = Mock(side_effect=MapDetectionError('地图识别失败'))
+        with patch('module.os.map.logger') as logger:
             self.run_l2(stub, through_recovery=True)
+        logger.debug.assert_called_once_with('[大世界] 单队移动后的重扫异常，继续: 地图识别失败', exc_info=True)
+        self.assertEqual([fleet for fleet, _ in stub.move_calls], [1, 2, 3, 4])
         self.assertFalse(stub._in_akashi_recovery)
         self.assertEqual(stub.current_fleet, 1)
         stub.recover.assert_called_once_with()

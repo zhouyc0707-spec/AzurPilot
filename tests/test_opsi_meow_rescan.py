@@ -149,22 +149,20 @@ class MeowRescanTests(unittest.TestCase):
         map_.shape = 'T20'
         camera = map_.camera_data[-1].location
         runner = SimpleNamespace(
-            map=map_, camera=camera, view=SimpleNamespace(image=object()),
+            map=map_, camera=camera,
             map_data_init=Mock(), handle_info_bar=Mock(), update=Mock(),
             map_init=Mock(), map_rescan_current=Mock(return_value=False),
-            focus_to_scan_target=Mock(), focus_to_grid_center=Mock(),
+            focus_to=Mock(), focus_to_grid_center=Mock(),
         )
-        runner.focus_to_scan_target.side_effect = lambda target, **kwargs: setattr(runner, 'camera', target.location)
         with patch('module.os.map.logger') as logger:
             OSMap.map_rescan_once(runner)
-        targets = [entry.args[0] for entry in runner.focus_to_scan_target.call_args_list]
+        targets = [entry.args[0] for entry in runner.focus_to.call_args_list]
         logged = [entry.args[0] for entry in logger.hr.call_args_list if entry.args[0].startswith('重新扫描 ')]
-        self.assertEqual(logged, [f'重新扫描 {target} ({index + 1}/{len(targets)})'
-                                  for index, target in enumerate(targets)])
+        self.assertEqual(logged, [f'重新扫描 {target}' for target in targets])
         self.assertEqual(targets[0].location, camera)
         transitions = [entry for entry in logger.attr.call_args_list if entry.args[0] == '扫描相机/目标']
-        self.assertEqual(transitions, [call('扫描相机/目标', f'{targets[max(0, index - 1)]} -> {target}')
-                                       for index, target in enumerate(targets)])
+        self.assertEqual(transitions, [call('扫描相机/目标', f'{targets[0]} -> {target}') for target in targets])
+        self.assertEqual(runner.focus_to_grid_center.call_args_list, [call(0.3)] * len(targets))
 
 
 if __name__ == '__main__':

@@ -2017,10 +2017,6 @@ class OSMap(MapEventResumeMixin, OSFleet, Map, GlobeCamera, StorageHandler, Stra
 
         Returns:
             bool: 是否解决了地图随机事件。
-
-        Raises:
-            MapDetectionError: 识别或摄像机定位失败，交由上层保存现场并恢复；
-                失败不能作为“全图没有事件”的依据。
         """
         result = False
         # 新一轮重扫重新给每个事件一次机会，清掉上一轮的“到不了”记录
@@ -2030,7 +2026,17 @@ class OSMap(MapEventResumeMixin, OSFleet, Map, GlobeCamera, StorageHandler, Stra
         logger.hr("重新扫描当前地图", level=2)
         self.map_data_init(map_=None)
         self.handle_info_bar()
-        self.update()
+        try:
+            self.update()
+        except MapDetectionError:
+            if getattr(self, "_opsi_meowfficer_cleanup", False):
+                raise
+            # 地图可能已清理完毕，单应性变换无法检测到有效格子
+            logger.warning(
+                "[大世界-扫描] 当前地图重新扫描单应性变换失败 (分数低于0.8), "
+                "地图可能已清理或检测不稳定, 可能遗漏未处理的事件"
+            )
+            return False
         if self.map_rescan_current(drop=drop):
             logger.info("[大世界-扫描] 地图重新扫描一次结束, 结果=True")
             return True
@@ -2039,34 +2045,17 @@ class OSMap(MapEventResumeMixin, OSFleet, Map, GlobeCamera, StorageHandler, Stra
             logger.hr("完全重新扫描地图", level=2)
             self.map_init(map_=None)
             queue = self.map.camera_data
-            scan_count = len(queue)
-            scanned = 0
-            logger.attr('全图扫描范围', f'{location2node(self.map.shape)}，{scan_count} 个视野节点')
             while len(queue) > 0:
                 queue = queue.sort_by_camera_distance(self.camera)
-                target = queue[0]
-                logger.hr(f"重新扫描 {target} ({scanned + 1}/{scan_count})")
-                logger.attr("扫描相机/目标", f"{location2node(self.camera)} -> {target}")
-                self.focus_to_scan_target(target, swipe_limit=(6, 5))
-                if tuple(self.camera) != tuple(target.location):
-                    raise MapDetectionError(
-                        f'全图扫描未到达目标 {target}，实际摄像机 '
-                        f'{location2node(self.camera)}；停止本轮扫描'
-                    )
+                logger.hr(f"重新扫描 {queue[0]}")
+                logger.attr("扫描相机/目标", f"{location2node(self.camera)} -> {queue[0]}")
+                self.focus_to(queue[0], swipe_limit=(6, 5))
+                self.focus_to_grid_center(0.3)
 
-                scanned += 1
-                scan_image = self.view.image
                 if self.map_rescan_current(drop=drop):
                     result = True
                     break
-                if self.view.image is not scan_image:
-                    # 未完成的事件交互也可能带动镜头；update_os 只重建视图，
-                    # 不能用交互前的绝对坐标继续累计下一次相对位移。
-                    logger.info('[大世界-扫描] 事件交互后视图改变，重新确认地图边缘')
-                    self.ensure_edge_insight(skip_first_update=False)
                 queue = queue[1:]
-            if not result:
-                logger.info(f'[大世界-扫描] 全部 {scanned}/{scan_count} 个视野节点扫描完成，未发现事件')
 
         logger.info(f"[大世界-扫描] 地图重新扫描一次结束, 结果={result}")
         return result
@@ -2505,7 +2494,6 @@ class OSMap(MapEventResumeMixin, OSFleet, Map, GlobeCamera, StorageHandler, Stra
                 try:
                     self.map_rescan(rescan_mode="full")
                 except (
-                    MapDetectionError,
                     TaskEnd,
                     GameStuckError,
                     GameTooManyClickError,
