@@ -91,7 +91,7 @@ class OpsiShop(OSMap):
             if self.appear(OS_SHOP_CHECK):
                 not_empty = self.handle_port_supply_buy()
                 if action_point_only:
-                    # 第一轮已开 29 张普通海域，超过全部行动力解锁所需的 25 张。
+                    # 第一轮已开 30 张普通海域，超过全部行动力解锁所需的 25 张。
                     # 不以其他商品是否解锁或可识别来确认行动力售罄；中断续购无库存也算完成。
                     not_empty = True
             else:

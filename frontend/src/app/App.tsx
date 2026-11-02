@@ -212,8 +212,8 @@ export function App() {
   /* 主页与五个二级菜单也走旧版外壳：它们没有实例内容，顶栏只写居中的页名。 */
   const legacyHomeShell = (location.pathname === '/' || PRIMARY_NAV_PATHS.includes(location.pathname)) && usesLegacyLayout(theme) && instancesLoaded
   // 旧版把调度器与任务计划放进实例页左列，右栏整体让位，否则同一块内容会出现两处。
-  // 交易页由 Activity 隐藏普通外壳，保留它的右栏布局，返回总览时不重新改变列宽。
-  const showRail = showsRightRail(theme, instance) && !schedulerEditor && currentTask !== FLEET_ANALYSIS && currentTask !== FLEET_SWITCH && currentTask !== FLEET_TRAINING && currentTask !== FLEET_LEVEL_TRAINING && currentTask !== FLEET_AFFINITY_TRAINING && currentTask !== FLEET_EQUIPMENT && currentTask !== FLEET_ROTATION && !location.pathname.endsWith('/resources') && !location.pathname.endsWith('/task/FleetInfo') && !(location.pathname.endsWith('/statistics') && new URLSearchParams(location.search).get('view') === 'management')
+  // 注册页沿用上游普通外壳且隐藏右栏，总览与注册页内容分别由 Activity 保留。
+  const showRail = showsRightRail(theme, instance) && !schedulerEditor && currentTask !== FLEET_ANALYSIS && currentTask !== FLEET_SWITCH && currentTask !== FLEET_TRAINING && currentTask !== FLEET_LEVEL_TRAINING && currentTask !== FLEET_AFFINITY_TRAINING && currentTask !== FLEET_EQUIPMENT && currentTask !== FLEET_ROTATION && !stockExchange && !location.pathname.endsWith('/resources') && !location.pathname.endsWith('/task/FleetInfo') && !(location.pathname.endsWith('/statistics') && new URLSearchParams(location.search).get('view') === 'management')
   /* 紧凑主题可把调度与任务计划栏换到内容区左侧。换位走 DOM 顺序而不是 CSS order，
      键盘 Tab 的顺序才会跟看到的顺序一致；列宽与顶栏跨栏方向由 compact.css 按同一偏好调整。 */
   const railFirst = theme === 'extreme' && compactRailSide === 'left'
@@ -264,7 +264,7 @@ export function App() {
   </span>
   // 旧版顶栏的第三列是居中的页面名：实例页写任务名，无实例时写导航项名。
   const pageTitle = instance
-    ? currentTask ? currentTaskLabel : location.pathname.endsWith('/resources') ? ui('nav.resources') : location.pathname.endsWith('/statistics') ? ui('nav.statistics') : ui('nav.overview')
+    ? currentTask ? currentTaskLabel : stockExchange ? ui('stock.name') : location.pathname.endsWith('/resources') ? ui('nav.resources') : location.pathname.endsWith('/statistics') ? ui('nav.statistics') : ui('nav.overview')
     : activeSection
   /* 分页模式把所有实例铺在顶栏一行；原模式仍把实例收在下拉里。两种模式共用这一个开关。 */
   const tabsMode = topbarMode === 'tabs' && instances.length > 0
@@ -339,9 +339,8 @@ export function App() {
      隧道远程访问首帧就走 auth，React 会直接抛 #300 崩掉整页。 */
   if (connection === 'auth') return <Login/>
   const hasDockedInspector = inspector.open && inspector.docked && !inspector.minimized
-  return <InstancePageActivities key={instance ?? 'home'} exchange={stockExchange} exchangeReady={Boolean(schema && instancesLoaded && current)}>
-  <div className={`app-shell ${layout.sidebarCollapsed ? 'nav-collapsed' : ''} ${hasDockedInspector ? 'has-docked-inspector' : ''} ${showRail ? 'with-rail' : ''} ${currentTask ? 'task-config-shell' : ''} ${legacyShell ? 'legacy-shell' : ''} ${legacyHomeShell ? 'legacy-shell legacy-home-shell' : ''} ${mobileOpen ? 'mobile-open' : ''} ${railOpen ? 'rail-open' : ''}`}>
-    <a className="skip-link" href="#main-content" onClick={event => {event.preventDefault(); document.getElementById('main-content')?.focus()}}>{ui('nav.skipContent')}</a>
+  return <div className={`app-shell ${layout.sidebarCollapsed ? 'nav-collapsed' : ''} ${hasDockedInspector ? 'has-docked-inspector' : ''} ${showRail ? 'with-rail' : ''} ${currentTask ? 'task-config-shell' : ''} ${legacyShell ? 'legacy-shell' : ''} ${legacyHomeShell ? 'legacy-shell legacy-home-shell' : ''} ${mobileOpen ? 'mobile-open' : ''} ${railOpen ? 'rail-open' : ''}`}>
+    <a className="skip-link" href={stockExchange ? '#stock-main-content' : '#main-content'} onClick={event => {event.preventDefault(); document.getElementById(stockExchange ? 'stock-main-content' : 'main-content')?.focus()}}>{ui('nav.skipContent')}</a>
     {(legacyShell || legacyHomeShell) && topbar}
     <NavHandle/>
     <aside className="sidebar">
@@ -362,11 +361,11 @@ export function App() {
       {/* 旧版外壳多一行：实例标签条在里面，点标签就能带着当前页型切实例。其它主题此行不开。 */}
       {usesLegacyLayout(theme) && (legacyShell || legacyHomeShell) ? pageNav : null}
       {connection !== 'ready' && <div className="connection-banner" role="status"><WifiOff size={16}/>{ui('connection.connecting')}</div>}
-      {homeFrame ? null : <main id="main-content" tabIndex={-1}>{!schema || ((instance || location.pathname === '/') && !instancesLoaded) ? <Loading/> : !instance || current
+      {homeFrame ? null : <InstancePageActivities key={instance ?? 'home'} exchange={stockExchange} exchangeReady={Boolean(schema && instancesLoaded && current)}><main id="main-content" tabIndex={-1}>{!schema || ((instance || location.pathname === '/') && !instancesLoaded) ? <Loading/> : !instance || current
         ? instance && (stockExchange || location.pathname.endsWith('/overview'))
           ? <Overview key={instance}/>
           : <Outlet context={update} key={instance ?? 'home'}/>
-        : <Loading/>}</main>}
+        : <Loading/>}</main></InstancePageActivities>}
     </div>
     {!railFirst && instance && showRail && !railInFrame && rail}
     <CompactScrollbars/>
@@ -382,5 +381,4 @@ export function App() {
     </Modal>}
     <MaterialInspector/>
   </div>
-  </InstancePageActivities>
 }
