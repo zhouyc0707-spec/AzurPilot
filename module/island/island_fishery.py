@@ -3,9 +3,12 @@
 管理岛屿渔业系统的自动化操作，包括鱼苗商店的分类浏览（淡水/海水/其他）与采购。
 支持渔场库存检测、鱼苗购买与鱼获处理，与仓库 OCR 联动获取物品数量。
 """
+import module.config.server as server
+
 from module.island_fishery.assets import *
 from module.island_rancher.assets import *
 from module.island.island import *
+from module.island.island_fish_meat import FRESHWATER_FISH_MEAT, SALTWATER_FISH_MEAT, IslandFishMeatExchange
 from module.base.button import Button
 
 def _click_area(device, area):
@@ -50,9 +53,10 @@ DISPATCH_STAMINA_MIN = 98
 
 
 from module.island.planned_dispatch import PlannedProductionMixin, recipe_for_local_name
+from module.island.production_planner import planner_active
 
 
-class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
+class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler, IslandFishMeatExchange):
     """岛屿渔场自动化管理器。
 
     继承 Island（岛屿基础操作）、WarehouseOCR（仓库 OCR 识别）和
@@ -71,6 +75,27 @@ class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
         inventory_counts (dict): 仓库库存统计。
         fishery_times (list): 各岗位预计完成时间列表。
     """
+    def run_fish_meat_targets(self):
+        """手工目标沿用库存保护；自动规划调用原有严格兑换入口。"""
+        if planner_active(self.config):
+            from module.island.fish_exchange import ensure_fish_meat_targets
+            return ensure_fish_meat_targets(self)
+        targets = {
+            FRESHWATER_FISH_MEAT: self.config.IslandFishery_MinFreshwaterFishMeat,
+            SALTWATER_FISH_MEAT: self.config.IslandFishery_MinSaltwaterFishMeat,
+        }
+        if not any(target > 0 for target in targets.values()):
+            return
+        from module.island.fish_exchange import FishExchangeSession, get_fish_protection
+        protected = get_fish_protection(self.config)
+        if server.server in ('cn', 'tw'):
+            FishExchangeSession(self).run(targets, protected)
+            self.ui_ensure(page_island)
+        elif server.server in ('en', 'jp'):
+            self.run_fish_meat_exchange(targets, keep=protected)
+        else:
+            logger.warning('[岛屿-鱼肉兑换] 当前语言缺少已核实的加工页识别，保留库存')
+
     def __init__(self, *args, **kwargs):
         Island.__init__(self, *args, **kwargs)
         WarehouseOCR.__init__(self)
@@ -595,7 +620,6 @@ class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
 
         logger.info(f"[岛屿-渔场] \n空闲岗位统计: {len(idle_posts)}个空闲岗位")
 
-        from module.island.production_planner import planner_active
         if planner_active(self.config):
             from module.island.data import DIC_ISLAND_RECIPE
             from module.island.item_ids import LOCAL_TO_ITEM_ID
@@ -675,9 +699,7 @@ class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
 
         logger.info("[岛屿-渔场] \n渔场管理完成！")
 
-        if planner_active(self.config):
-            from module.island.fish_exchange import ensure_fish_meat_targets
-            ensure_fish_meat_targets(self)
+        self.run_fish_meat_targets()
 
         # 设置下次运行时间：合并牧场和渔场的计时器，取最早的时间
         future_finish = []

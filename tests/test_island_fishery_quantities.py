@@ -17,6 +17,7 @@ class FisheryUI:
         config = SimpleNamespace(
             IslandFishery_Positions=positions, IslandFishery_PlantYellowfinTuna=default_posts,
             IslandFishery_RancherFilter='WorkerJuu', task_delay=Mock(),
+            IslandFishery_MinFreshwaterFishMeat=0, IslandFishery_MinSaltwaterFishMeat=0,
         )
         for name in ('Bass', 'YellowfinTuna', 'Shell', 'Shrimp', 'Crab', 'Crayfish', 'Squid', 'SeaCucumber'):
             setattr(config, 'IslandFishery_Min' + name, 0)

@@ -9,6 +9,7 @@ from module.base.decorator import cached_property
 from datetime import timedelta
 from module.config.time_source import now as current_time
 from module.config.utils import get_server_last_update
+import module.config.server as server
 
 
 AIR_DROP_RECEIVE = Button(
@@ -31,6 +32,41 @@ def is_daily_supply_reward(image):
         and TEMPLATE_AIR_DROP_REWARD_CLOSE.match(
             image[545:595, 550:730], similarity=0.9, direct_match=True)
     )
+
+# 补给气泡在固定位置（与 ISLAND_AIR_DROP_A/B/C 同一区域），白色圆角条
+AIR_DROP_BUBBLE_AREA = (800, 378, 1025, 408)
+AIR_DROP_BUBBLE_CLICK_LIMIT = 2
+# 奖励弹窗（每日补给、获得物品）横跨全屏的白色横带，点下方「点击关闭」处关闭
+AIR_DROP_POPUP_CLOSE = Button(area=(560, 588, 720, 612), color=(0, 0, 0), button=(560, 588, 720, 612),
+                              name='AIR_DROP_POPUP_CLOSE')
+# 国际服「分享剩余补给」邀请窗口：底部两个深蓝按钮（公开邀请 / 全部邀请），右上角 ✕
+AIR_DROP_SHARE_DIALOG_BUTTONS = ((470, 585, 640, 615), (685, 585, 855, 615))
+AIR_DROP_SHARE_DIALOG_COLOR = (37, 72, 107)
+AIR_DROP_SHARE_DIALOG_CLOSE = Button(area=(846, 104, 876, 134), color=(0, 0, 0), button=(846, 104, 876, 134),
+                                     name='AIR_DROP_SHARE_DIALOG_CLOSE')
+
+
+def _color_fraction(image, area, color, threshold=30):
+    x1, y1, x2, y2 = area
+    region = image[y1:y2, x1:x2].astype(int)
+    return float((np.abs(region - np.array(color)).max(axis=2) < threshold).mean())
+
+
+def air_drop_bubble_appear(image):
+    """补给气泡区域大部分为白色。"""
+    x1, y1, x2, y2 = AIR_DROP_BUBBLE_AREA
+    return float((image[y1:y2, x1:x2].min(axis=2) > 235).mean()) > 0.6
+
+
+def air_drop_reward_popup_appear(image):
+    """奖励弹窗：画面中部横跨全屏的白色横带。"""
+    return float((image[300:480, :, :].min(axis=2) > 225).mean()) > 0.9
+
+
+def air_drop_share_dialog_appear(image):
+    """分享补给邀请窗口：底部两个深蓝按钮都在。"""
+    return all(_color_fraction(image, area, AIR_DROP_SHARE_DIALOG_COLOR) > 0.5
+               for area in AIR_DROP_SHARE_DIALOG_BUTTONS)
 
 
 class IslandAirDrop(Island):
@@ -281,7 +317,7 @@ class IslandAirDrop(Island):
         self.device.click(stop_button)
         self.device.click_record_clear()
 
-    def island_air_drop(self):
+    def island_air_drop(self, skip_first_screenshot=False):
         """识别日常补给入口并确认结果，分享剩余补给只作为结束状态。
 
         Returns:
@@ -292,10 +328,12 @@ class IslandAirDrop(Island):
             in: 自己或好友岛屿的补给交互／领取过场。
             out: 自己或好友岛屿场景。
         """
+        if server.server == 'en':
+            return self._island_air_drop_en(skip_first_screenshot)
         reward_seen = False
         ready = Timer(0.8, count=2)
         click = Timer(2)
-        for _ in self.loop(skip_first=False, timeout=Timer(self.AIR_DROP_TIMEOUT)):
+        for _ in self.loop(skip_first=skip_first_screenshot, timeout=Timer(self.AIR_DROP_TIMEOUT)):
             # 奖励可能覆盖背景分享按钮，先关闭已识别奖励，不能提前结束留住弹窗。
             if (is_daily_supply_reward(self.device.image)
                     or self.appear(GET_ITEMS_ISLAND, offset=(20, 20))
@@ -343,6 +381,57 @@ class IslandAirDrop(Island):
             ready.clear()
         self.device.save_screenshot(genre='island_air_drop_unknown', interval=0)
         raise GameStuckError('岛屿补给：领取后页面未确认，已保存现场')
+
+    def _island_air_drop_en(self, skip_first_screenshot=False):
+        """点击补给气泡（每日补给 / 领取补给 / 好友岛拿补给），关闭奖励弹窗；不点「分享剩余补给」。
+
+        原来在气泡位置连点 6 次：领取后气泡变为「分享剩余补给」，国际服点它会弹出邀请好友窗口，
+        后续盲点会落在好友的「邀请」按钮上（气泡区域与第三位好友的邀请按钮重叠）。现在每次点击前
+        先看当前画面：奖励弹窗点下方关闭；邀请窗口点右上角 ✕ 关闭、不邀请任何人；气泡已是
+        「分享剩余补给」即领取完成；其余气泡最多点 AIR_DROP_BUBBLE_CLICK_LIMIT 次。
+        气泡消失（如进入空投动画）且一段时间无变化时退出，动画由调用方处理。
+
+        Returns:
+            bool: 已见分享气泡或奖励后返回场景才确认领取；单纯点击不更新领取日期。
+        """
+        reward_seen = False
+        clicked = 0
+        click_timer = Timer(1.5)
+        idle_timer = Timer(2, count=4).start()
+        for image in self.loop(skip_first=skip_first_screenshot, timeout=20):
+            if air_drop_share_dialog_appear(image):
+                logger.info("[岛屿-空投] 关闭分享补给邀请窗口（不邀请好友）")
+                if click_timer.reached():
+                    self.device.click(AIR_DROP_SHARE_DIALOG_CLOSE)
+                    click_timer.reset()
+                idle_timer.reset()
+                continue
+            if air_drop_reward_popup_appear(image):
+                reward_seen = True
+                if click_timer.reached():
+                    self.device.click(AIR_DROP_POPUP_CLOSE)
+                    click_timer.reset()
+                idle_timer.reset()
+                continue
+            if self.appear(ISLAND_AIR_DROP_A, offset=(30, 30)):
+                logger.info("[岛屿-空投] 补给已领取，气泡为「分享剩余补给」，不点击")
+                return True
+            if self.appear(AIR_DROP_SKIP, offset=(20, 20)):
+                self.appear_then_click(AIR_DROP_SKIP, offset=(20, 20), interval=2)
+                idle_timer.reset()
+                continue
+            if reward_seen and (self.appear(ISLAND_CHECK) or self.is_in_friend_island()):
+                return True
+            if air_drop_bubble_appear(image) and clicked < AIR_DROP_BUBBLE_CLICK_LIMIT:
+                if click_timer.reached():
+                    self.device.click(ISLAND_AIR_DROP_A)
+                    clicked += 1
+                    click_timer.reset()
+                idle_timer.reset()
+                continue
+            if idle_timer.reached():
+                break
+        return False
 
     def run_and_get(self):
         """在好友岛屿上跑位寻路并拾取空投补给。

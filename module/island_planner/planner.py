@@ -146,12 +146,13 @@ class IslandProductionPlanner(IslandSeasonTaskScanner, IslandTechnologyScanner):
         本工具不读取本地自动规划保存的卡住季节订单；
         需要独立为订单备货时把物品写进 ExtraTargets。
         """
-        if self.get('ScanSeasonTasks'):
-            targets = self.scan_season_task_targets()
+        targets = self.scan_season_task_targets() if self.get('ScanSeasonTasks') else None
+        if targets is not None:
             text = item_mapping_to_yaml(targets, use_item_name=True) if targets else ''
             # 扫描结果属于规划器自己的输入，预览模式也保存，便于查看和手动修改
             self.config.cross_set(f'{TASK}.{GROUP}.SeasonTaskTargets', text)
         else:
+            # 未扫描或扫描失败（识别不到任务卡片）时沿用上次保存的目标
             text = self.get('SeasonTaskTargets')
         season = parse_targets(text, 'SeasonTaskTargets')
         extra = parse_targets(self.get('ExtraTargets'), 'ExtraTargets')

@@ -1,0 +1,30 @@
+004d22e40d18efcb97a4ba4b4a8c4ca82a71066e fix(island): 商店按商品图标搜索定位，修复格子错位导致买错种子
+c9ac21088f72e48b3cc11dc23a913d99924a412b fix(island): 补充国际服鱿鱼鱼苗图标并扩展商店定位测试
+72a7a555a1c3a40652e5cd2bb842a4f78e6b8098 fix(island): 货物筹备更换无法凑齐的委托，并只选择货物足够的委托
+65933041fc011daf417921bd1c96ae0eb22728e4 feat(assets): 新增货运物品图标模板（来自 ALAS）
+dfd90db421f1333454b680f0b9bacfe8c29a4a35 feat(assets): 新增国际服空投动画「SKIP」识别图
+56e5e51c90dbc7c9ad27402df6a4ae0f3854bbff feat(assets): 新增鱼肉加工所需识别图（来自 ALAS）
+cc46a6e015be6c4a8b9cf7f3d30227c8fdaa966e fix(island): 店铺选品始终找不到商品时本轮跳过，不再判定卡死重启
+7f0d78df0f6e8c27c9aedcdb2ed0e3812f0474db fix(island): 每日采集未能出发时不再等待采集完成页面
+0c79d2af46fa863d0d27dd840afc94df3066f755 fix(island): 岗位按钮停在列表下沿之下时先上推列表再点击
+d26b70c1d10773e805622cc6a57860349b713d4e docs(island): 说明岗位按钮停在列表下沿时的上推处理
+1a23c02cc8ab545e64cc769447470500ddd43307 fix(island): 空投补给按画面点击气泡，不再盲点到好友的邀请按钮
+c2537bd62b20109825830369cf7d40a65f7a1a29 test(island): 截图测试只在本模块内切换为 EN 服并在结束后恢复
+c9fb7faa32679cc49e7569692337067f7b635e4c test(island): 空投截图测试切换服务器时刷新按钮缓存
+01350c90ffc1cc9f7a2d31069f9a20259bc38127 feat(island): 渔场养殖后按目标把鱼兑换成鱼肉，规划器写入鱼肉目标
+9913a837291b08215f8554eae9d7fe2ca7ee2369 test(island): 截图测试只在本模块内切换为 EN 服并在结束后恢复
+600a9d13994c88e0e9325fc45e8463bf4717b908 fix(island): 制造业始终找不到的产品本批跳过，工业线餐具不可用时继续生产铁钉
+3437da3036df8d2b72b998c03d2bf168aacc2493 fix(island_planner): 季节任务扫描读错时不写入错误目标
+b9b12078a8138dbbe1d64bd4ece59e1cae296205 fix(island): 国际服岛屿多项修复（卡死重启、误点邀请、岗位点击过多等）并新增鱼肉加工 / EN island fixes (restart loops, invite misclicks, too-many-clicks) and fish meat processing (#1424)
+af99ea5bb84c6aca382d6a2f1164e53f732da73b feat(assets): 货运物品图标模板（岛屿生产规划器读取货运缺口用） / Cargo item icon templates (for the planner's cargo shortfall) (#1421)
+dff58c62cb591179f274c3319cc4973ac6c8fe80 fix(island): 商店按商品图标搜索定位，修复格子错位导致买错种子 (#1419)
+5030473d20fbf25f7d5bf5574eb286ff5bf56349 fix(island): 货物筹备更换无法凑齐的委托，并只选择货物足够的委托 (#1420)
+d23821e7e71c47ab1c724706cbffe83e864248be fix(recovery): 按模拟器重启次数限制任务并恢复反复闪退
+f5f5d87644e03aa7b8417cc097373aadc8da64a8 fix(recovery): 模拟器重启完成后清零退出计数
+ae3aabd6054cfb0ea174ce9adadf12c9bdecea37 fix(recovery): 修复反复退出未重启模拟器及任务恢复上限误计数 (#1426)
+2e35ac982d5cfd60e1d446346261ccedd22be019 fix(opsi): 智能开荒补币完成后先回纽约港区
+bf3f016be8964672af44879e98a1415a682ad733 fix(opsi): 智能开荒补币完成后先回纽约港区 (#1427)
+d90245a18f285c761de9493c61bc6114f4d66ba7 fix(opsi): 重置新一轮自律寻敌的重试计时
+2efa4749d4f6cb89eeb1fbc843c7423d7fd7c72b feat(webui): add ship JSON export to scan update
+cab6ecad8fb87df24b4a6dba2eba26789daacc2f feat(webui): 支持在扫描更新页导出舰船 JSON (#1430)
+1221441a08e343847473e12015779394180ae49c fix(opsi): 修复智能开荒跨海域时自律寻敌计时误报 (#1428)
