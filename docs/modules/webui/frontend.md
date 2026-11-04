@@ -9,6 +9,8 @@
 
 ## 1. 模块概述
 
+「换装收藏统计」位于实例侧栏「茗喵证券交易所」下方，路径 `/i/:instance/skin-collection`。`pages/SkinCollection.tsx` 使用同源 iframe 加载 `public/skin-collection/index.html`，由 `InstancePageActivities` 懒加载并保留挂载，独立隔离原网页样式与脚本。页面只使用浏览器存储，各实例共享同一份收藏；不调用游戏或统计 API，不向服务端同步。旧文件页面需通过已有 JSON 导出、导入迁移。宿主隐藏或销毁 iframe 前派发 `azurpilot:collection-save`，同步提交原页防抖保存及查看状态，防止导航时丢失刚提交的记录。完整操作说明见 `frontend/README.md` 的「换装收藏统计」。
+
 [资源管理](resource-management.md) 在所有主题均位于「资源统计」内的「资源趋势」旁边，路径为 `/i/:instance/statistics?view=management`；旧 `/resources` 链接统一自动跳转，不再保留一级资源管理入口。旧版独立统计页顶部提供「资源趋势／资源管理」切换，「资源趋势」继续使用本地整页统计；总览内嵌统计不显示切换条、不跟随外层 `view` 参数。切换主题后保留当前资源管理视图。由 `pages/ResourceManagement.tsx` 与 `resources/` 提供 ECharts 桑基图、库存与收支明细。图节点支持资源与任务筛选，明细支持分页和完整区间 CSV 导出；原调度的石油自动控制使用现有配置事务接口保存。五种语言、窄屏和空数据状态均沿用控制台组件与主题。本地保留 `zh-MIAO` 的已保存偏好、原有字典与配置翻译；新增通用文案先继承简体中文，日期格式仍使用 `zh-CN`。
 
 「舰队管理」下并列放置「智能换船」与「舰船数据」。`pages/FleetSwitch.tsx` 在 `/i/:instance/task/FleetSwitch` 整合「舰队信息」「换船配置」「换船调度」「换船装备」四个页签，使用与舰船数据相同的分段按钮样式；查询参数 `tab=info|rotation|training|equipment` 记录当前页签，刷新后保持选择。原 `FleetInfo`、`FleetRotation`、`FleetTraining`、`FleetEquipment` 及等级/好感调度链接自动跳转到对应页签。侧栏树、悬浮菜单及顶栏任务跳转共用 `components/taskNavItems.ts`，只保留一个智能换船入口，不注册新的游戏任务，各页签继续使用原有配置路径与保存接口。原「自动换装备」页面显示名称改为「换船装备」，默认开关和装备码规则不变。

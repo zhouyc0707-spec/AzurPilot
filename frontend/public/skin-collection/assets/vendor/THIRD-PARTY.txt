@@ -1,0 +1,27 @@
+Offline browser dependencies
+============================
+
+pinyin-pro 3.24.2
+Copyright (c) 2022-present zh-lx
+Source: https://cdn.jsdelivr.net/npm/pinyin-pro@3.24.2/dist/index.js
+License: MIT (full project license in pinyin-pro-LICENSE.txt)
+The downloaded JavaScript bundle is unchanged.
+
+Font Awesome 4.7.0 by Dave Gandy
+Source CSS: https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css
+Source font: https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/fonts/fontawesome-webfont.woff2
+Project license declaration: font-awesome-license.html (upstream source snapshot)
+CSS license: MIT (see MIT.txt; copyright attribution is retained in the CSS header)
+Font license: SIL Open Font License 1.1 (see OFL-1.1.txt)
+The font is unchanged. The CSS font-face source list has been reduced to the
+local WOFF2 file; no external font fetch is needed in current browsers.
+
+Tailwind CSS 3.4.19
+Build-only dependency: ../../tools/build-env/node_modules/tailwindcss
+Project license: tailwindcss-LICENSE.txt
+Exact version and transitive dependencies: ../../tools/build-env/package-lock.json
+Build configuration: ../../tools/tailwind.config.cjs
+CSS input preserving the original utility classes: ../../tools/utilities.css
+
+Build command (from the project root):
+node tools/build-env/node_modules/tailwindcss/lib/cli.js -c tools/tailwind.config.cjs -i tools/utilities.css -o assets/vendor/tailwind.css --minify

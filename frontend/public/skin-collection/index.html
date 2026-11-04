@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#176c65">
+  <meta name="description" content="记录碧蓝航线角色与换装，清晰管理收集进度、获取方式与待完成清单。">
+  <title>astral 的换装收藏 · 碧蓝航线</title>
+  <link rel="icon" href="assets/anchor.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/vendor/tailwind.css">
+  <link rel="stylesheet" href="assets/vendor/css/font-awesome.min.css">
+  <link rel="stylesheet" href="assets/workspace.css">
+  <script src="assets/vendor/pinyin-pro.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#search-input">跳到搜索</a>
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="brand">
+        <label for="custom-icon-upload" class="brand-icon" title="更换收藏夹图标">
+          <img id="custom-icon" src="assets/anchor.svg" alt="收藏夹图标">
+          <input type="file" id="custom-icon-upload" accept="image/*" class="hidden" onchange="uploadCustomIcon(event)">
+        </label>
+        <div><strong>astral 的换装收藏</strong><span>碧蓝航线 · 个人收集档案</span></div>
+      </div>
+      <div class="header-actions">
+        <span id="save-status" class="save-status" role="status"><i class="fa fa-check-circle"></i> 本地存储已就绪</span>
+        <div class="history-actions">
+          <button id="undo-btn" class="icon-button" title="撤销上一步" aria-label="撤销上一步" disabled><i class="fa fa-undo"></i></button>
+          <button id="redo-btn" class="icon-button" title="重做上一步" aria-label="重做上一步" disabled><i class="fa fa-repeat"></i></button>
+        </div>
+        <button id="import-btn" class="btn btn-outline"><i class="fa fa-upload"></i><span>导入</span></button>
+        <button id="export-btn" class="btn btn-outline"><i class="fa fa-download"></i><span>导出备份</span></button>
+      </div>
+    </div>
+  </header>
+  <main class="app-main">
+    <section class="page-heading" aria-label="收藏概览">
+      <div><div class="eyebrow">MY COLLECTION / 我的收藏</div><h1>每一份收藏，都有迹可循<span class="heading-dot">.</span></h1><p>记录角色与换装，轻松找到下一份心仪收藏。</p></div>
+      <div class="create-actions"><button id="quick-add-btn" class="btn btn-outline"><i class="fa fa-list-ul"></i> 批量录入</button><button id="new-character-btn" class="btn btn-primary"><i class="fa fa-plus"></i> 新建角色</button></div>
+    </section>
+    <section class="overview-grid" aria-label="收集统计">
+      <article class="stat-card"><div class="stat-label"><span>角色档案</span><i class="fa fa-address-book-o"></i></div><div class="stat-number"><strong id="stat-characters">0</strong><span>位角色</span></div><p>你的专属角色收藏册</p></article>
+      <article class="stat-card"><div class="stat-label"><span>已拥有换装</span><i class="fa fa-shopping-bag"></i></div><div class="stat-number"><strong id="stat-owned">0</strong><span>/ <span id="stat-skins">0</span> 件</span></div><div class="stat-progress"><span id="owned-progress"></span></div><p id="owned-caption">添加换装，开始记录</p></article>
+      <article class="stat-card"><div class="stat-label"><span>角色收集进度</span><i class="fa fa-flag-o"></i></div><div class="stat-number"><strong id="stat-completed">0</strong><span>位独立完成</span></div><p><span id="stat-pending">0</span> 位待完成 · 含 <span id="stat-shared">0</span> 位共享达标</p></article>
+      <article class="stat-card stat-value"><div class="stat-label"><span>待收换装预算</span><i class="fa fa-diamond"></i></div><div id="uncollected-value" class="stat-number"><span>0</span><small>钻石</small></div><p>按未拥有换装已填写的数值估算</p></article>
+    </section>
+    <div class="workspace-navigation">
+      <div class="view-tabs" role="tablist" aria-label="切换收藏视图"><button id="tab-collection" class="view-tab active" role="tab" aria-selected="true" aria-controls="collection-workspace"><i class="fa fa-th-large"></i>角色档案 <span id="tab-total">0</span></button><button id="tab-incomplete" class="view-tab" role="tab" aria-selected="false" aria-controls="incomplete-panel"><i class="fa fa-check-square-o"></i>待完成清单 <span id="tab-pending">0</span></button></div>
+      <div class="activity-strip"><span class="activity-label">最近操作</span><button id="recent-activity" type="button" aria-label="查看最近操作记录" aria-expanded="false" onclick="toggleActivityDropdown()"></button><div id="recent-activity-dropdown" class="hidden"></div></div>
+    </div>
+    <div class="workspace-layout">
+      <aside class="filter-panel panel">
+        <div class="panel-heading"><h2><i class="fa fa-sliders"></i> 获取方式</h2><button id="reset-filters" class="text-button">重置</button></div>
+        <p class="filter-caption">按获取方式与换装状态筛选<br><span>来源数字为待收数量，“位”为角色数</span></p>
+        <div id="acquisition-filter" class="scrollbar-thin"></div>
+        <div class="sidebar-note"><i class="fa fa-lightbulb-o"></i><p>支持拖动获取方式排序。<br>记录仅保存在此浏览器，请定期导出备份。</p></div>
+      </aside>
+      <section id="collection-workspace" class="collection-workspace" role="tabpanel" aria-labelledby="tab-collection">
+        <section class="archive-panel panel">
+          <div class="panel-heading"><h2>角色档案 <span id="result-count" class="count-label">0 位</span></h2><label class="sort-label"><i class="fa fa-sort-amount-desc"></i><select id="sort-select" aria-label="角色排序"><option value="updated">最近更新</option><option value="name">名称排序</option><option value="remaining">待收数量</option></select></label></div>
+          <div class="search-box"><i class="fa fa-search"></i><input type="search" id="search-input" placeholder="搜索角色、换装或获取方式" aria-label="搜索角色、换装或获取方式" autocomplete="off"><button type="button" id="clear-search-btn" class="hidden" aria-label="清空角色搜索"><i class="fa fa-times"></i></button><kbd>/</kbd></div>
+          <div class="archive-filters"><select id="status-select" aria-label="按收集状态筛选"><option value="all">全部收集状态</option><option value="pending">待完成</option><option value="completed">独立完成</option><option value="shared">共享达标</option></select><select id="archive-rarity" aria-label="按角色稀有度筛选"><option value="">全部稀有度</option><option value="ultra_rare">海上传奇</option><option value="super_rare">超稀有</option><option value="elite">精锐</option><option value="rare">稀有</option><option value="common">普通</option></select></div>
+          <p id="query-context" class="query-context">支持中文、拼音和首字母查询</p>
+          <div id="character-list" class="scrollbar-thin" aria-label="角色搜索结果"></div>
+          <div class="list-footer"><span><i class="fa fa-circle"></i> 独立完成</span><span><i class="fa fa-circle shared-dot"></i> 共享达标</span><span>选择角色查看详情 <i class="fa fa-angle-right"></i></span></div>
+        </section>
+        <section class="detail-panel panel">
+          <div id="detail-empty" class="empty-state detail-empty"><div class="empty-illustration"><i class="fa fa-anchor"></i><span>COLLECTION ARCHIVE</span></div><h2>打开一份角色档案</h2><p>从左侧选择角色，即可查看换装、<br>调整收集数量与记录获取方式。</p><div class="empty-steps"><span>01 搜索角色</span><i class="fa fa-angle-right"></i><span>02 记录收藏</span></div></div>
+          <div id="character-detail" class="hidden">
+            <div class="detail-toolbar"><span id="detail-rarity" class="badge badge-rarity"></span><div class="detail-actions"><button id="edit-character-btn" class="btn btn-outline"><i class="fa fa-pencil"></i>编辑角色</button><button id="delete-character-btn" class="icon-button delete-button" title="删除角色" aria-label="删除角色"><i class="fa fa-trash-o"></i></button></div></div>
+            <div class="detail-title-row"><div><div class="eyebrow">CHARACTER FILE</div><h2 id="detail-name"></h2></div></div>
+            <div class="collection-section"><div class="section-label">角色收集数量 <span>现有数量（含共享）/ 目标</span></div><div id="collection-progress-container"></div><p class="detail-help">现有数量含共享贡献；独立完成仍按原有规则判定。</p></div>
+            <div id="detail-acquisition"></div>
+            <div class="skin-section"><div id="skins-title-row"><h3>换装记录 <span id="skin-count-label" class="count-label"></span></h3><button id="add-skin-btn" class="text-button"><i class="fa fa-plus"></i> 添加换装</button></div><div id="extra-stats-container"></div><p class="detail-help">勾选表示已拥有 · 点击获取方式可直接编辑</p><div id="skins-list" class="scrollbar-thin"></div></div>
+          </div>
+        </section>
+      </section>
+      <section id="incomplete-panel" class="incomplete-panel panel hidden" role="tabpanel" aria-labelledby="tab-incomplete">
+        <div class="panel-heading"><div><h2>待完成清单</h2><p class="filter-caption">查看已录入换装、尚未独立完成的角色。</p></div><button type="button" id="hide-unavailable-btn" class="btn btn-outline"><i class="fa fa-filter"></i><span id="hide-unavailable-label">隐藏无法获取角色</span></button></div>
+        <div class="search-box incomplete-search-box"><i class="fa fa-search"></i><input type="search" id="incomplete-search" placeholder="搜索待完成角色、换装或获取方式" aria-label="搜索待完成角色" autocomplete="off"><button type="button" id="clear-incomplete-search-btn" class="hidden" aria-label="清空待完成搜索"><i class="fa fa-times"></i></button></div>
+        <div class="rarity-tabs"><button id="rarity-filter-all" class="btn btn-outline active">全部</button><button id="rarity-filter-ultra_rare" class="btn btn-outline">海上传奇</button><button id="rarity-filter-super_rare" class="btn btn-outline">超稀有</button><button id="rarity-filter-elite" class="btn btn-outline">精锐</button><button id="rarity-filter-rare" class="btn btn-outline">稀有</button><button id="rarity-filter-common" class="btn btn-outline">普通</button></div>
+        <div id="incomplete-list" class="space-y-4"></div>
+      </section>
+    </div>
+    <footer class="app-footer"><span><i class="fa fa-anchor"></i> 为每一份热爱，留一份记录。</span><span>浏览器本地保存 <b>·</b> 支持离线使用 <b>·</b> JSON 备份</span></footer>
+  </main>
+  <div id="detail-drawer" class="character-drawer-layer hidden">
+    <div class="character-drawer-backdrop" aria-hidden="true"></div>
+    <aside class="character-drawer" role="dialog" aria-modal="true" aria-labelledby="detail-drawer-title" tabindex="-1">
+      <header class="character-drawer-header">
+        <div><h2 id="detail-drawer-title">角色详情</h2><p>待完成清单 · 查看与记录</p></div>
+        <button id="close-detail-drawer" type="button" class="icon-button" aria-label="关闭角色详情" title="关闭（Esc）"><i class="fa fa-times" aria-hidden="true"></i></button>
+      </header>
+      <div id="detail-drawer-body" class="character-drawer-body scrollbar-thin"></div>
+      <div class="character-drawer-footer">关闭详情后，继续查看当前清单。</div>
+    </aside>
+  </div>
+  <div id="toast-region" role="status" aria-live="polite"></div>
+      <div id="character-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md mx-4 transform transition-all duration-300">
+            <h3 id="modal-title" class="text-xl font-bold text-primary mb-5">添加角色</h3>
+            <form id="character-form">
+                <input type="hidden" id="character-id">
+                <div class="mb-4">
+                    <label for="character-name" class="block text-gray-700 font-medium mb-2">角色名称</label>
+                    <input type="text" id="character-name" class="form-input" required>
+                </div>
+                <div class="mb-4">
+                    <label for="character-rarity" class="block text-gray-700 font-medium mb-2">稀有度</label>
+                    <select id="character-rarity" class="form-input" required>
+                        <option value="common">普通</option>
+                        <option value="rare">稀有</option>
+                        <option value="elite">精锐</option>
+                        <option value="super_rare">超稀有</option>
+                        <option value="ultra_rare">海上传奇</option>
+                    </select>
+                </div>
+                <div class="mb-4" id="acquisition-field">
+                    <label for="character-acquisition" class="block text-gray-700 font-medium mb-2">获取方式</label>
+                    <input type="text" id="character-acquisition" placeholder="如：建造、活动（多个来源用顿号分隔）" class="form-input">
+                </div>
+                <div class="mb-4 hidden" id="custom-target-field">
+                    <label for="character-custom-target" class="block text-gray-700 font-medium mb-2">
+                        目标收集数量
+                        <span class="text-xs text-gray-500 font-normal ml-1">（留空则使用默认计算规则）</span>
+                    </label>
+                    <input type="number" id="character-custom-target" class="form-input" min="0" max="999" step="1" placeholder="留空使用默认值">
+                    <p id="custom-target-error" class="text-xs text-red-600 mt-1 hidden"></p>
+                    <p class="text-xs text-gray-500 mt-1">输入正整数可自定义该角色所需收集的总数量；留空则按"换装数量+1（联动角色为换装数量）"自动计算。</p>
+                </div>
+                <div class="mb-4 hidden" id="extra-count-field">
+                    <label for="character-shareable-skin-count" class="block text-gray-700 font-medium mb-2 flex items-center">
+                        <i class="fa fa-share-alt mr-1.5 text-indigo-600"></i>可共享换装角色数量
+                    </label>
+                    <input type="number" id="character-shareable-skin-count" class="form-input" min="0" max="999" step="1" value="0">
+                    <p class="text-xs text-gray-500 mt-1">记录该角色可以共享换装的角色数量。</p>
+                </div>
+                <div class="flex justify-end space-x-3 mt-6">
+                    <button type="button" id="cancel-character-btn" class="btn btn-outline">取消</button>
+                    <button type="submit" id="save-character-btn" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div id="skin-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md mx-4">
+            <h3 id="skin-modal-title" class="text-xl font-bold text-primary mb-5">添加换装</h3>
+            <form id="skin-form">
+                <input type="hidden" id="skin-id">
+                <input type="hidden" id="skin-character-id">
+                <div class="mb-4">
+                    <label for="skin-name" class="block text-gray-700 font-medium mb-2">换装名称</label>
+                    <input type="text" id="skin-name" class="form-input" required>
+                </div>
+                <div class="mb-4">
+                    <label for="skin-acquisition" class="block text-gray-700 font-medium mb-2">获取方式</label>
+                    <input type="text" id="skin-acquisition" placeholder="如：商店、活动，或钻石价格 880" class="form-input">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 font-medium mb-2">是否拥有</label>
+                    <div class="flex items-center">
+                        <input type="checkbox" id="skin-owned" class="w-5 h-5 text-blue-600 rounded focus:ring-blue-500">
+                        <label for="skin-owned" class="ml-2 text-gray-700">已拥有</label>
+                    </div>
+                </div>
+                <div class="flex justify-end space-x-3 mt-6">
+                    <button type="button" id="cancel-skin-btn" class="btn btn-outline">取消</button>
+                    <button type="submit" id="save-skin-btn" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div id="quick-add-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden" role="dialog" aria-modal="true" aria-labelledby="quick-add-title">
+        <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-5xl mx-4 max-h-[90vh] flex flex-col relative">
+            <div id="quick-add-loading" class="absolute inset-0 bg-white/85 backdrop-blur-sm flex items-center justify-center z-20 rounded-2xl hidden" role="status" aria-live="polite">
+                <div class="flex flex-col items-center">
+                    <i class="fa fa-spinner fa-spin fa-2x text-primary mb-2"></i>
+                    <span class="text-sm text-gray-600">提交中...</span>
+                </div>
+            </div>
+            <div class="flex items-center justify-between mb-4">
+                <h3 id="quick-add-title" class="text-xl font-bold text-primary">批量录入角色与换装</h3>
+                <span class="text-xs text-gray-500" id="quick-add-row-count">共 0 栏</span>
+            </div>
+            <p class="text-xs text-gray-500 mb-3"><i class="fa fa-info-circle mr-1"></i>带 <span class="text-red-500">*</span> 为必填；换装名称可留空，多个换装用空格分隔（如：礼服 泳装）；完全空白的行会自动跳过。</p>
+            <div id="quick-add-rows" class="flex-1 overflow-y-auto space-y-2 pr-1" aria-label="录入栏列表"></div>
+            <div class="mt-3 flex items-center gap-2">
+                <button type="button" id="add-quick-row-btn" class="btn btn-outline btn-sm flex items-center" aria-label="新增录入栏">
+                    <i class="fa fa-plus mr-1"></i>新增录入栏
+                </button>
+                <button type="button" id="reset-quick-rows-btn" class="btn btn-outline btn-sm flex items-center" aria-label="清空所有录入栏">
+                    <i class="fa fa-eraser mr-1"></i>清空
+                </button>
+            </div>
+            <div id="quick-add-feedback" class="mt-3 hidden" role="alert" aria-live="polite"></div>
+            <div class="flex justify-end space-x-3 mt-4">
+                <button id="cancel-quick-add-btn" class="btn btn-outline">取消</button>
+                <button id="confirm-quick-add-btn" class="btn btn-primary">提交</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="import-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md mx-4">
+            <h3 class="text-xl font-bold text-primary mb-5">导入数据</h3>
+            <div class="mb-4">
+                <label class="block text-gray-700 font-medium mb-2">选择文件</label>
+                <input type="file" id="import-file" accept=".json" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <p class="text-sm text-gray-500 mt-1">支持原版导出的 JSON 文件。导入将替换当前记录，建议先导出备份；导入后可撤销。</p>
+            </div>
+            <div class="mb-4">
+                <label for="import-data" class="block text-gray-700 font-medium mb-2">或粘贴数据</label>
+                <textarea id="import-data" class="form-input h-32" placeholder="在此粘贴导出的数据..."></textarea>
+            </div>
+            <div class="flex justify-end space-x-3 mt-6">
+                <button id="cancel-import-btn" class="btn btn-outline">取消</button>
+                <button id="confirm-import-btn" class="btn btn-primary">导入</button>
+            </div>
+        </div>
+    </div>
+    
+
+  <script src="assets/app.js"></script>
+  <script src="assets/workspace.js"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+#skin-collection-main-content {display: flex; flex-direction: column; min-height: 0; height: calc(100dvh - var(--topbar-height, 69px)); padding: 12px 16px 16px}
+.skin-collection-page {display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; gap: 10px}
+.skin-collection-hint {margin: 0; color: var(--muted); font-size: 12px; line-height: 1.6}
+.skin-collection-frame {display: block; flex: 1; width: 100%; min-height: 320px; border: 1px solid var(--border); border-radius: 12px; background: #f4f7fb}
+@media (max-width: 950px) {
+  #skin-collection-main-content {height: calc(100dvh - 58px); padding: 8px}
+}

@@ -48,8 +48,9 @@ const router = createHashRouter([
     {path: 'task/MindCalculator', element: <Navigate to="../FleetAnalysis?tab=mind" relative="path" replace/>},
     {path: 'task/FleetTechnology', element: <Navigate to="../FleetAnalysis?tab=technology" relative="path" replace/>},
     {path: 'resources', element: <Navigate to="../statistics?view=management" replace/>},
-    // 交易页由 App 的实例 Activity 托管，来回切换不销毁总览与股票接入页状态。
+    // 交易与收藏页由 App 的实例 Activity 托管，来回切换保留页面状态。
     {path: 'stock-exchange', element: null},
+    {path: 'skin-collection', element: null},
     {path: 'logs', element: <Navigate to="../overview" replace/>}, {path: 'statistics', element: <Statistics/>}, {path: 'scheduler', element: <Navigate to="../task/SchedulerProgram" replace/>}, {path: 'settings', element: <Navigate to="/settings" replace/>},
     {path: 'task/SchedulerProgram', element: <Suspense fallback={<div>{translateCurrentUi('common.loading')}</div>}><SchedulerProgram/></Suspense>},
     {path: 'task/FleetAnalysis', element: <Suspense fallback={<div>{translateCurrentUi('common.loading')}</div>}><FleetAnalysis/></Suspense>},
