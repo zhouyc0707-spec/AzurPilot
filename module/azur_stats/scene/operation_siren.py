@@ -79,6 +79,8 @@ class SceneOperationSiren(SceneBase, OpsiReward, GetItems, OpsiZone):
         """奖励汇总页保留完整数字，避免四、五位凭证数量丢掉首位。"""
         grid = super().auto_search_item_group
         grid.amount_area = (15, 49, 63, 63)
+        # 报告数量很少，沿用普通奖励的宽度避开左侧纸角；保留完整字高及货币宽区。
+        grid.amount_area_rules = [('OrdnanceTestingReport', (35, 49, 63, 63))]
         grid.amount_max = dict(OPSI_AMOUNT_MAX)
         return grid
 

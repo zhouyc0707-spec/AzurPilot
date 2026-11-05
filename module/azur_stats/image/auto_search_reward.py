@@ -187,7 +187,7 @@ class AutoSearchReward(ImageBase):
         """
         return bool(self.classify_server(AUTO_SEARCH_REWARD, image, offset=(50, 50)))
 
-    def parse_auto_search_reward(self, image, name=True, amount=True, tag=True) -> t.Iterator[AutoSearchItem]:
+    def parse_auto_search_reward(self, image, name=True, amount=True, tag=True, grid=None) -> t.Iterator[AutoSearchItem]:
         """解析自律结算界面中的掉落物品列表。
 
         Args:
@@ -195,13 +195,17 @@ class AutoSearchReward(ImageBase):
             name (bool): 是否识别物品名称。
             amount (bool): 是否识别物品数量。
             tag (bool): 是否识别物品标签。
+            grid (ButtonGrid): 已按滚动量定位的网格；单页解析仍通过标题定位。
 
         Yields:
             AutoSearchItem: 解析出的掉落物品对象。
 
         数量无法确认的单格保留日志并跳过，其他已确认物品照常返回。
         """
-        self._auto_search_get_items_load(image)
+        if grid is None:
+            self._auto_search_get_items_load(image)
+        else:
+            self.auto_search_item_group.grids = grid
 
         if self.auto_search_item_group.grids is None:
             return
@@ -256,8 +260,9 @@ class AutoSearchReward(ImageBase):
         ref_edge = _cv2.Canny(_cv2.cvtColor(ref, _cv2.COLOR_RGB2GRAY), 60, 160)
         cur_edge = _cv2.Canny(_cv2.cvtColor(cur, _cv2.COLOR_RGB2GRAY), 60, 160)
 
-        band_top = ref_edge.shape[0] // 4
-        band_bottom = ref_edge.shape[0] * 3 // 4
+        # 采集端每次上滑约 151px；横条不能占半屏，否则只允许测出 ±105px。
+        band_top = ref_edge.shape[0] * 3 // 8
+        band_bottom = ref_edge.shape[0] * 5 // 8
         band = ref_edge[band_top:band_bottom, :]
         if band.shape[0] < 40 or cur_edge.shape[0] <= band.shape[0]:
             return None
@@ -267,47 +272,35 @@ class AutoSearchReward(ImageBase):
             return None
         return float(loc[1] - band_top), float(score)
 
-    def realign_reward_page(self, image, grid, residual):
-        """把当前页的列表内容竖直平移 residual 像素，使其与上一页行对齐。
-
-        滑动距离不是行高整数倍时，格子会落在网格行之间，直接解析会切到图标
-        中间。这里把列表区内容平移回对齐位置，其余部分（面板边框、标题、
-        「离开」按钮）保持不变；平移后空出来的一条用相邻行填充，落在行间
-        空隙里，不影响识别。
+    @staticmethod
+    def _scrolled_reward_grid(grid, shift):
+        """沿用首帧网格及累计位移，只保留滚动列表内完整可见的物品格。
 
         Args:
-            image (np.ndarray): 当前页截图。
-            grid (ButtonGrid): 网格。
-            residual (float): 需要平移的像素（正数表示内容下移）。
+            grid (ButtonGrid): 首帧定位的网格。
+            shift (float): 相对首帧的累计垂直位移。
 
         Returns:
-            np.ndarray: 对齐后的截图。
+            ButtonGrid: 原点随内容移动、行号仍相对首帧的网格。
         """
-        offset = int(round(residual))
-        if offset == 0:
-            return image
-
-        x1, y1, x2, y2 = self._reward_list_area(grid)
-        region = crop(image, (x1, y1, x2, y2))
-        shifted = np.empty_like(region)
-        if offset > 0:
-            shifted[:offset] = region[0]
-            shifted[offset:] = region[:-offset]
-        else:
-            shifted[offset:] = region[-1]
-            shifted[:offset] = region[-offset:]
-
-        aligned = image.copy()
-        aligned[y1:y2, x1:x2] = shifted
-        return aligned
+        origin = (grid.origin[0], grid.origin[1] + shift)
+        # 固定大标题下方到列表底边，不包含「离开」按钮或上下被裁掉的半格。
+        top, bottom = 130, AUTO_SEARCH_REWARD.button[1] - 8
+        rows = max(0, int(np.floor((bottom - origin[1] - grid.button_shape[1]) / grid.delta[1])) + 1)
+        scrolled = ButtonGrid(origin=origin, delta=grid.delta, button_shape=grid.button_shape,
+                              grid_shape=(grid.grid_shape[0], rows))
+        scrolled.buttons = [button for button in scrolled.buttons
+                            if button.area[1] >= top and button.area[3] <= bottom]
+        return scrolled
 
     def parse_auto_search_reward_pages(self, images, name=True, amount=True, tag=True) -> t.Iterator[AutoSearchItem]:
         """解析一页或多页（列表滚动后的）结算奖励，按行对齐合并。
 
         奖励面板放不下时脚本会在面板内向上滑动并逐页截图，相邻两页存在重叠
         行；直接相加会重复计数（历史上有过把重叠页重复入库的记录）。这里先
-        估计每页相对上一页的竖直位移，换算成行号，再按「绝对行号 + 列号」
-        去重，保证既不重复也不遗漏。位移估计失败时按整页追加并记 warning。
+        估计每页相对上一张成功解析页的竖直位移，移动网格而不平移图像，
+        再按「绝对行号 + 列号」去重。标题滚出后不再要求重新定位标题；
+        位移无法确认时保留已确认物品并跳过该页，避免重复入库。
 
         Args:
             images (list[np.ndarray]): 同一结算的奖励页截图（按截图顺序）。
@@ -336,39 +329,35 @@ class AutoSearchReward(ImageBase):
         else:
             return
         images = images[first_valid:]
+        first_grid = self.auto_search_item_group.grids
+        reference = images[0]
         for index, image in enumerate(images):
+            shift = delta_total
+            grid = first_grid
             if index > 0:
-                measured = self.reward_list_shift(
-                    images[index - 1], image, self.auto_search_item_group.grids)
+                measured = self.reward_list_shift(reference, image, first_grid)
                 if measured is None:
-                    logger.warning(f'奖励页第 {index + 1} 页滚动量无法估计，按整页追加，可能重复计数')
-                else:
-                    delta_total += measured[0]
-                    logger.attr(f'奖励页第 {index + 1} 页滚动量',
-                                f'{measured[0]:.1f}px(匹配 {measured[1]:.2f})')
-
-            page = image
-            if index > 0:
-                row_height = float(self.auto_search_item_group.grids.delta[1])
-                residual = delta_total - round(delta_total / row_height) * row_height
-                if abs(residual) >= 2:
-                    page = self.realign_reward_page(page, self.auto_search_item_group.grids, residual)
-                    logger.info(f'奖励页第 {index + 1} 页滚动量不是行高整数倍，已平移 {residual:.1f}px 对齐')
+                    logger.warning(f'奖励页第 {index + first_valid + 1} 页滚动量无法确认，跳过该页并保留已确认物品')
+                    continue
+                shift += measured[0]
+                logger.attr(f'奖励页第 {index + first_valid + 1} 页滚动量',
+                            f'{measured[0]:.1f}px(匹配 {measured[1]:.2f})')
+                grid = self._scrolled_reward_grid(first_grid, shift)
 
             try:
-                items = list(self.parse_auto_search_reward(page, name=name, amount=amount, tag=tag))
+                items = list(self.parse_auto_search_reward(image, name=name, amount=amount, tag=tag, grid=grid))
             except ImageError as error:
                 logger.warning(f'奖励页第 {index + first_valid + 1} 页无法解析，保留其他页: {error}')
                 continue
-            grid = self.auto_search_item_group.grids
             if grid is None or not grid.buttons:
                 continue
+            reference = image
+            delta_total = shift
             row_height = float(grid.delta[1])
-            row_offset = -delta_total / row_height
             for item in items:
                 area = item.area
                 col = int(round((area[0] - grid.origin[0]) / grid.delta[0]))
-                row = int(round((area[1] - grid.origin[1]) / row_height + row_offset))
+                row = int(round((area[1] - grid.origin[1]) / row_height))
                 if (row, col) in merged:
                     continue
                 merged[(row, col)] = item
