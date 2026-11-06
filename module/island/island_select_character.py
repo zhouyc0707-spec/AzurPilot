@@ -721,12 +721,10 @@ class SelectCharacter(UI):
             return None
 
         if character_list == ["WorkerJuu"]:
-            if not self.select_character_filter():
+            if not self._set_character_sort(ascending=False):
+                logger.warning("[岛屿] 未确认角色降序，暂不选择工作啾")
                 return None
-            if not self._set_character_sort(ascending=True):
-                logger.warning("[岛屿] 未确认体力升序，暂不选择工作啾")
-                return None
-            # 与 ALAS 的工作啾专用流程一致：排序后仍按身份和空闲状态查找，
+            # 工作啾无需打开筛选，直接确认降序后按身份和空闲状态查找；
             # 箭头出现不代表卡片已刷新，也不能据此把首格认作工作啾。
             for screenshot in self.loop(timeout=4, skip_first=False):
                 if self.is_character_filter_visible():

@@ -11,7 +11,7 @@
 4. 只点击确认按钮右侧安全段（与选餐页确认按钮等其它页面按钮不重叠）。
 
 角色筛选测试额外覆盖云手机角色页先出现标题、底部筛选按钮稍后渲染的时序，
-并确认工作啾必须成功切换体力筛选及升序后核对身份，失败时停止选人。
+并确认工作啾不打开筛选，直接确认降序后核对身份，失败时停止选人。
 """
 import unittest
 from types import MethodType
@@ -260,11 +260,11 @@ class CharacterConfirmHelperTest(unittest.TestCase):
         )
         self.assertGreaterEqual(device.screenshot_count, 3)
 
-    def test_workerjuu_requires_stamina_filter_then_ascending_and_identity(self):
-        """成功筛选和升序后仍须识别实际工作啾，不假定首格身份。"""
+    def test_workerjuu_requires_descending_and_identity_without_opening_filter(self):
+        """直接确认降序后识别实际工作啾，不打开筛选、不假定首格身份。"""
         device = FilterFlowDevice(self.clock)
         stub = self.bind_filter_helper(device)
-        stub.select_character_filter = Mock(return_value=True)
+        stub.select_character_filter = Mock(side_effect=AssertionError('工作啾不应打开筛选'))
         stub._set_character_sort = Mock(return_value=True)
         stub.recognize_target_characters = Mock(return_value=[{
             'character_name': 'WorkerJuu', 'grid_position': (2, 0), 'is_working': False,
@@ -276,31 +276,35 @@ class CharacterConfirmHelperTest(unittest.TestCase):
         calls.attach_mock(stub.recognize_target_characters, 'recognize')
 
         self.assertEqual(stub._select_first_available_character(["WorkerJuu"]), (2, 0))
-        self.assertEqual([call[0] for call in calls.mock_calls], ['filter', 'sort', 'recognize'])
-        stub.select_character_filter.assert_called_once_with()
-        stub._set_character_sort.assert_called_once_with(ascending=True)
+        self.assertEqual([call[0] for call in calls.mock_calls], ['sort', 'recognize'])
+        stub.select_character_filter.assert_not_called()
+        stub._set_character_sort.assert_called_once_with(ascending=False)
         self.assertEqual(stub.recognize_target_characters.call_args.args[1], ['WorkerJuu'])
 
-    def test_workerjuu_sort_is_skipped_when_filter_fails(self):
-        """筛选失败后停止，不绕过失败继续选人。"""
+    def test_workerjuu_does_not_open_filter_when_identity_is_missing(self):
+        """当前页没有工作啾时停止，不通过打开筛选尝试选择其他角色。"""
         device = FilterFlowDevice(self.clock)
         stub = self.bind_filter_helper(device)
         stub.select_character_filter = Mock(return_value=False)
-        stub._set_character_sort = Mock(return_value=False)
+        stub._set_character_sort = Mock(return_value=True)
+        stub.recognize_target_characters = Mock(return_value=[])
 
         self.assertIsNone(stub._select_first_available_character(["WorkerJuu"]))
-        stub.select_character_filter.assert_called_once_with()
-        stub._set_character_sort.assert_not_called()
+        stub.select_character_filter.assert_not_called()
+        stub._set_character_sort.assert_called_once_with(ascending=False)
+        stub.recognize_target_characters.assert_called()
 
     def test_workerjuu_does_not_return_first_slot_when_sort_confirmation_fails(self):
         device = FilterFlowDevice(self.clock)
         stub = self.bind_filter_helper(device)
         stub.select_character_filter = Mock(return_value=True)
         stub._set_character_sort = Mock(return_value=False)
+        stub.recognize_target_characters = Mock()
 
         self.assertIsNone(stub._select_first_available_character(["WorkerJuu"]))
-        stub.select_character_filter.assert_called_once_with()
-        stub._set_character_sort.assert_called_once_with(ascending=True)
+        stub.select_character_filter.assert_not_called()
+        stub._set_character_sort.assert_called_once_with(ascending=False)
+        stub.recognize_target_characters.assert_not_called()
 
 
 if __name__ == "__main__":

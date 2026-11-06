@@ -80,7 +80,7 @@ class SelectionDevice(FakeDevice):
             self.pending_sort = None
         if self.popup:
             return FILTER_POPUP
-        characters = [(0, "WorkerJuu", False)] if self.stamina and self.ascending else []
+        characters = [(0, "WorkerJuu", False)] if not self.ascending else []
         return character_frame(
             SELECT_CHARACTER_SORT_ASC if self.ascending else SELECT_CHARACTER_SORT_DESC,
             characters=characters,
@@ -104,7 +104,7 @@ class CharacterSelectionDevice(FakeDevice):
 
     def __init__(self, clock, *, characters=None, selected=(), accept_click=True):
         self.characters = characters if characters is not None else [(0, "WorkerJuu", False)]
-        self.ascending = True
+        self.ascending = False
         self.selected = set(selected)
         self.accept_click = accept_click
         self.after_click = None
@@ -236,23 +236,23 @@ class WorkerJuuSelectionTest(unittest.TestCase):
 
     def test_worker_juu_returns_verified_position_without_stamina_ocr(self):
         selector, device = self.make_selector(character_frame(
-            SELECT_CHARACTER_SORT_ASC,
+            SELECT_CHARACTER_SORT_DESC,
             characters=[(0, 'ChaoHo', False), (2, 'WorkerJuu', False)],
             selected=[0],
         ))
         selector.select_character_filter = Mock(return_value=True)
         self.assertEqual(selector._select_first_available_character(["WorkerJuu"]), (2, 0))
         self.assertEqual(device.clicks, [])
-        selector.select_character_filter.assert_called_once_with()
+        selector.select_character_filter.assert_not_called()
         selector._get_stamina_value.assert_not_called()
 
-    def test_worker_juu_filter_failure_stops_before_sort_or_selection(self):
-        selector, device = self.make_selector(character_frame(SELECT_CHARACTER_SORT_DESC))
+    def test_worker_juu_selection_does_not_depend_on_filter_availability(self):
+        device = CharacterSelectionDevice(self.clock)
+        selector = self.selector(device)
         selector.select_character_filter = Mock(return_value=False)
-        selector._set_character_sort = Mock()
-        self.assertFalse(selector.select_character('WorkerJuu'))
-        selector._set_character_sort.assert_not_called()
-        self.assertEqual(device.clicks, [])
+        self.assertTrue(selector.select_character('WorkerJuu'))
+        selector.select_character_filter.assert_not_called()
+        self.assertEqual([name for _, name, _ in device.clicks], ['SELECT_CHARACTER_GRID_0_0'])
         selector._get_stamina_value.assert_not_called()
 
     def test_worker_juu_unknown_arrow_never_selects_first_slot(self):
@@ -262,8 +262,8 @@ class WorkerJuuSelectionTest(unittest.TestCase):
         self.assertEqual(device.clicks, [])
         selector._get_stamina_value.assert_not_called()
 
-    def test_worker_juu_popup_blocks_selection_even_when_ascending_arrow_is_visible(self):
-        frame = np.maximum(character_frame(SELECT_CHARACTER_SORT_ASC), FILTER_POPUP)
+    def test_worker_juu_popup_blocks_selection_even_when_descending_arrow_is_visible(self):
+        frame = np.maximum(character_frame(SELECT_CHARACTER_SORT_DESC), FILTER_POPUP)
         selector, device = self.make_selector(frame)
         selector.select_character_filter = Mock(return_value=True)
         self.assertFalse(selector.select_character('WorkerJuu'))
@@ -289,32 +289,28 @@ class WorkerJuuSelectionTest(unittest.TestCase):
         self.assertEqual(status["stamina"], 34)
         selector._get_stamina_value.assert_called_once()
 
-    def test_stamina_filter_then_existing_ascending_needs_no_sort_click(self):
+    def test_existing_descending_needs_no_sort_or_filter_click(self):
+        device = SelectionDevice(self.clock)
+        selector = self.selector(device)
+        selector.select_character_filter = Mock(side_effect=AssertionError('工作啾不应打开筛选'))
+        self.assertEqual(selector._select_first_available_character(["WorkerJuu"]), (0, 0))
+        self.assertEqual(device.clicks, [])
+        self.assertFalse(device.stamina)
+        self.assertFalse(device.ascending)
+        selector._get_stamina_value.assert_not_called()
+
+    def test_ascending_list_switches_to_descending_once_without_filter(self):
         device = SelectionDevice(self.clock)
         device.ascending = True
         device.image = device.frame(0)
         selector = self.selector(device)
+        selector.select_character_filter = Mock(side_effect=AssertionError('工作啾不应打开筛选'))
         self.assertEqual(selector._select_first_available_character(["WorkerJuu"]), (0, 0))
         self.assertEqual([name for _, name, _ in device.clicks], [
-            SELECT_CHARACTER_FILTER.name,
-            SELECT_CHARACTER_FILTER_STAMINA.name,
-            SELECT_CHARACTER_FILTER_CONFIRM.name,
-        ])
-        self.assertTrue(device.stamina)
-        self.assertTrue(device.ascending)
-        selector._get_stamina_value.assert_not_called()
-
-    def test_descending_list_filters_then_switches_to_ascending_once(self):
-        device = SelectionDevice(self.clock)
-        selector = self.selector(device)
-        self.assertEqual(selector._select_first_available_character(["WorkerJuu"]), (0, 0))
-        self.assertEqual([name for _, name, _ in device.clicks], [
-            SELECT_CHARACTER_FILTER.name,
-            SELECT_CHARACTER_FILTER_STAMINA.name,
-            SELECT_CHARACTER_FILTER_CONFIRM.name,
             SELECT_CHARACTER_SORT_CLICK.name,
         ])
-        self.assertTrue(device.ascending)
+        self.assertFalse(device.ascending)
+        self.assertFalse(device.stamina)
         selector._get_stamina_value.assert_not_called()
 
     def test_mixed_priority_keeps_named_character_before_visible_worker(self):
@@ -426,10 +422,10 @@ class WorkerJuuSelectionTest(unittest.TestCase):
 
     def test_worker_lookup_waits_for_delayed_list_refresh(self):
         waiting = character_frame(
-            SELECT_CHARACTER_SORT_ASC, characters=[(0, 'ChaoHo', False)], selected=[0],
+            SELECT_CHARACTER_SORT_DESC, characters=[(0, 'ChaoHo', False)], selected=[0],
         )
         ready = character_frame(
-            SELECT_CHARACTER_SORT_ASC,
+            SELECT_CHARACTER_SORT_DESC,
             characters=[(0, 'ChaoHo', False), (3, 'WorkerJuu', False)], selected=[0],
         )
         device = FakeDevice(self.clock, lambda t: waiting if t < 1.2 else ready, screenshot_cost=0.2)
