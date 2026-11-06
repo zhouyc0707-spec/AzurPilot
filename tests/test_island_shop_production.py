@@ -33,7 +33,8 @@ class ShopUI:
             IslandJuuEatery_ChefFilter='WorkerJuu',
             IslandRestaurant_DoubleBambooShoots=seasonal,
             IslandTeahouse_Seasonal=seasonal,
-            cross_get=Mock(return_value=season),
+            cross_get=Mock(side_effect=lambda path, default=None: season
+                           if path == 'IslandPlan.IslandPlan.Season' else default),
             task_delay=Mock(),
         )
 

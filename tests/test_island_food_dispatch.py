@@ -425,7 +425,7 @@ class FoodDispatchTests(unittest.TestCase):
         self.mock_ocr(device)
         shop = FoodUI(device)
         shop.name_to_config['latte']['generic_recipe'] = True
-        with patch('module.island.planned_dispatch.PlannedProductionMixin._planned_open_product_page',
+        with patch('module.island.production_recipe.ProductionRecipeMixin._open_product_page',
                    return_value=True) as open_product, \
                 patch('module.island.manufacture_selector.select_manufacture_recipe',
                       return_value=True) as select_recipe, \
@@ -446,7 +446,7 @@ class FoodDispatchTests(unittest.TestCase):
                 self.mock_ocr(device)
                 shop = FoodUI(device)
                 shop.name_to_config['latte']['generic_recipe'] = True
-                with patch('module.island.planned_dispatch.PlannedProductionMixin._planned_open_product_page',
+                with patch('module.island.production_recipe.ProductionRecipeMixin._open_product_page',
                            return_value=True), \
                         patch('module.island.manufacture_selector.select_manufacture_recipe',
                               return_value=selected), \

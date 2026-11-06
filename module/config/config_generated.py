@@ -907,29 +907,6 @@ class GeneratedConfig:
     IslandPlan_Season = 'spring'  # spring, summer, autumn, winter
     IslandPlan_TaskAlignment = 'half_hour'  # half_hour, hour, disabled
 
-    # 配置组 `IslandProductionPlanner`
-    IslandProductionPlanner_Enabled = True
-    IslandProductionPlanner_TechnologyStatus = None
-    IslandProductionPlanner_RescanTechnology = False
-    IslandProductionPlanner_FieldsEfficiency = 0.0  # 0, 0.04, 0.12
-    IslandProductionPlanner_OrchardEfficiency = 0.0  # 0, 0.04, 0.12
-    IslandProductionPlanner_NurseryEfficiency = 0.0  # 0, 0.04, 0.12
-    IslandProductionPlanner_DailyProfitLowerLimit = 0
-    IslandProductionPlanner_DailyBufferSafetyMargin = 0.0
-    IslandProductionPlanner_TaskTarget = '{}'
-    IslandProductionPlanner_HardFloorItems = '{}'
-    IslandProductionPlanner_DailyBufferItems = '{}'
-    IslandProductionPlanner_IdleAccumulatingItems = '{}'
-    IslandProductionPlanner_PlannerTargets = '{}'
-    IslandProductionPlanner_PlannerStatus = None
-    IslandProductionPlanner_PlannerReport = '{}'
-    IslandProductionPlanner_PlanFingerprint = None
-    IslandProductionPlanner_OrderManufactureTargets = '{}'
-    IslandProductionPlanner_OrderManufactureFinalTargets = '{}'
-    IslandProductionPlanner_AutoManufactureActive = False
-    IslandProductionPlanner_AutoManufactureNextRun = None
-    IslandProductionPlanner_CompletedManufactureOrderId = 0
-
     # 配置组 `IslandFarm`
     IslandFarm_Positions = 3  # 1, 2, 3, 4
     IslandFarm_WorkerFilter = 'WorkerJuu'
@@ -988,6 +965,7 @@ class GeneratedConfig:
     IslandFishery_MinSaltwaterFishMeat = 0
     IslandFishery_PlantYellowfinTuna = 3  # 0, 1, 2, 3
     IslandFishery_RancherFilter = 'WorkerJuu'
+    IslandFishery_DefaultFish = 'yellowfin_tuna'  # shell, catfish, koi_carp, common_carp, shrimp, crayfish, bass, crab, squid, mackerel, tuna, salmon, red_sea_bream, yellowfin_tuna, sea_cucumber
 
     # 配置组 `IslandMine`
     IslandMine_Positions = 1  # 1, 2, 3, 4
@@ -998,6 +976,7 @@ class GeneratedConfig:
     IslandMine_MinIron = 50
     IslandMine_MinSulphur = 50
     IslandMine_MinSilver = 50
+    IslandMine_DefaultOre = 'Silver'  # Copper, Aluminium, Iron, Sulphur, Silver
 
     # 配置组 `IslandForest`
     IslandForest_Positions = 1  # 1, 2, 3, 4
@@ -1006,6 +985,7 @@ class GeneratedConfig:
     IslandForest_MinElegant = 50
     IslandForest_MinPractical = 50
     IslandForest_MinSelected = 50
+    IslandForest_DefaultWood = 'Elegant'  # Practical, Selected, Elegant
 
     # 配置组 `IslandDailyGather`
     IslandDailyGather_WorkerFilter = ''
@@ -1130,15 +1110,19 @@ class GeneratedConfig:
 
     # 配置组 `WoodProcessing`
     WoodProcessing_Positions = 2  # 0, 1, 2
+    WoodProcessing_Products = ''
 
     # 配置组 `ElectronicProcessing`
     ElectronicProcessing_Positions = 2  # 0, 1, 2
+    ElectronicProcessing_Products = ''
 
     # 配置组 `Industrial`
     Industrial_Positions = 2  # 0, 1, 2
+    Industrial_Products = ''
 
     # 配置组 `Handmade`
     Handmade_Positions = 2  # 0, 1, 2
+    Handmade_Products = ''
 
     # 配置组 `IslandAirDrop`
     IslandAirDrop_LastSteal = datetime.datetime(2020, 1, 1, 0, 0)
@@ -1172,7 +1156,6 @@ class GeneratedConfig:
 
     # 配置组 `IslandBusinessShop1`
     IslandBusinessShop1_Grade = 'bronze'  # bronze, silver, gold, diamond
-    IslandBusinessShop1_PlannedMenu = None
     IslandBusinessShop1_Char1 = 'None'  # None, WorkerJuu, Cheshire, YingSwei, Saratoga, Akashi, NewJersey, Tashkent, LeMalin, Shimakaze, Amagi_chan, Unicorn, ChaoHo, ChenHai, WilliamDPorter, Helena, Friedrich, Atago, Yixian, August, Eugen, Hood, Javelin, Laffey, Explorer, Navigator, OceanCrosser, FeiYun, Takao, Anchorage, Belfast, ChangFeng, Mogador, RoyalFortune, DaVinci, Taihou, Nagato, Agir, HwahJah, Argus, Ognevoy
     IslandBusinessShop1_Char2 = 'None'  # None, WorkerJuu, Cheshire, YingSwei, Saratoga, Akashi, NewJersey, Tashkent, LeMalin, Shimakaze, Amagi_chan, Unicorn, ChaoHo, ChenHai, WilliamDPorter, Helena, Friedrich, Atago, Yixian, August, Eugen, Hood, Javelin, Laffey, Explorer, Navigator, OceanCrosser, FeiYun, Takao, Anchorage, Belfast, ChangFeng, Mogador, RoyalFortune, DaVinci, Taihou, Nagato, Agir, HwahJah, Argus, Ognevoy
     IslandBusinessShop1_Product1 = 'None'  # None, double_bamboo_shoots, tofu_meat, tofu_combo, hearty_meal, fo_tiao, amaranth_rice_ball, matsutake_chicken_soup, persimmon_cake, shiitake_chicken_soup, green_jujube_porridge
@@ -1185,7 +1168,6 @@ class GeneratedConfig:
 
     # 配置组 `IslandBusinessShop2`
     IslandBusinessShop2_Grade = 'bronze'  # bronze, silver, gold, diamond
-    IslandBusinessShop2_PlannedMenu = None
     IslandBusinessShop2_Char1 = 'None'  # None, WorkerJuu, Cheshire, YingSwei, Saratoga, Akashi, NewJersey, Tashkent, LeMalin, Shimakaze, Amagi_chan, Unicorn, ChaoHo, ChenHai, WilliamDPorter, Helena, Friedrich, Atago, Yixian, August, Eugen, Hood, Javelin, Laffey, Explorer, Navigator, OceanCrosser, FeiYun, Takao, Anchorage, Belfast, ChangFeng, Mogador, RoyalFortune, DaVinci, Taihou, Nagato, Agir, HwahJah, Argus, Ognevoy
     IslandBusinessShop2_Char2 = 'None'  # None, WorkerJuu, Cheshire, YingSwei, Saratoga, Akashi, NewJersey, Tashkent, LeMalin, Shimakaze, Amagi_chan, Unicorn, ChaoHo, ChenHai, WilliamDPorter, Helena, Friedrich, Atago, Yixian, August, Eugen, Hood, Javelin, Laffey, Explorer, Navigator, OceanCrosser, FeiYun, Takao, Anchorage, Belfast, ChangFeng, Mogador, RoyalFortune, DaVinci, Taihou, Nagato, Agir, HwahJah, Argus, Ognevoy
     IslandBusinessShop2_Product1 = 'None'  # None, spring_flower_tea, strawberry_lemon, strawberry_honey, floral_fruity, fruit_paradise, lavender_tea, sunny_honey, watermelon_juice, chrysanthemum_tea, carrot_pear_juice
@@ -1198,7 +1180,6 @@ class GeneratedConfig:
 
     # 配置组 `IslandBusinessShop3`
     IslandBusinessShop3_Grade = 'bronze'  # bronze, silver, gold, diamond
-    IslandBusinessShop3_PlannedMenu = None
     IslandBusinessShop3_Char1 = 'None'  # None, WorkerJuu, Cheshire, YingSwei, Saratoga, Akashi, NewJersey, Tashkent, LeMalin, Shimakaze, Amagi_chan, Unicorn, ChaoHo, ChenHai, WilliamDPorter, Helena, Friedrich, Atago, Yixian, August, Eugen, Hood, Javelin, Laffey, Explorer, Navigator, OceanCrosser, FeiYun, Takao, Anchorage, Belfast, ChangFeng, Mogador, RoyalFortune, DaVinci, Taihou, Nagato, Agir, HwahJah, Argus, Ognevoy
     IslandBusinessShop3_Char2 = 'None'  # None, WorkerJuu, Cheshire, YingSwei, Saratoga, Akashi, NewJersey, Tashkent, LeMalin, Shimakaze, Amagi_chan, Unicorn, ChaoHo, ChenHai, WilliamDPorter, Helena, Friedrich, Atago, Yixian, August, Eugen, Hood, Javelin, Laffey, Explorer, Navigator, OceanCrosser, FeiYun, Takao, Anchorage, Belfast, ChangFeng, Mogador, RoyalFortune, DaVinci, Taihou, Nagato, Agir, HwahJah, Argus, Ognevoy
     IslandBusinessShop3_Product1 = 'None'  # None, orchard_duo, succulently_sweet, berry_orange, strawberry_charlotte, seafood_rice, water_chestnut_cake, sugar_tangerine_daifuku
@@ -1210,7 +1191,6 @@ class GeneratedConfig:
 
     # 配置组 `IslandBusinessShop4`
     IslandBusinessShop4_Grade = 'bronze'  # bronze, silver, gold, diamond
-    IslandBusinessShop4_PlannedMenu = None
     IslandBusinessShop4_Char1 = 'None'  # None, WorkerJuu, Cheshire, YingSwei, Saratoga, Akashi, NewJersey, Tashkent, LeMalin, Shimakaze, Amagi_chan, Unicorn, ChaoHo, ChenHai, WilliamDPorter, Helena, Friedrich, Atago, Yixian, August, Eugen, Hood, Javelin, Laffey, Explorer, Navigator, OceanCrosser, FeiYun, Takao, Anchorage, Belfast, ChangFeng, Mogador, RoyalFortune, DaVinci, Taihou, Nagato, Agir, HwahJah, Argus, Ognevoy
     IslandBusinessShop4_Char2 = 'None'  # None, WorkerJuu, Cheshire, YingSwei, Saratoga, Akashi, NewJersey, Tashkent, LeMalin, Shimakaze, Amagi_chan, Unicorn, ChaoHo, ChenHai, WilliamDPorter, Helena, Friedrich, Atago, Yixian, August, Eugen, Hood, Javelin, Laffey, Explorer, Navigator, OceanCrosser, FeiYun, Takao, Anchorage, Belfast, ChangFeng, Mogador, RoyalFortune, DaVinci, Taihou, Nagato, Agir, HwahJah, Argus, Ognevoy
     IslandBusinessShop4_Product1 = 'None'  # None, roasted_skewer, stir_fried_chicken, steak_bowl, crayfish_stir_fry, carnival, double_energy
@@ -1222,7 +1202,6 @@ class GeneratedConfig:
 
     # 配置组 `IslandBusinessShop5`
     IslandBusinessShop5_Grade = 'bronze'  # bronze, silver, gold, diamond
-    IslandBusinessShop5_PlannedMenu = None
     IslandBusinessShop5_Char1 = 'None'  # None, WorkerJuu, Cheshire, YingSwei, Saratoga, Akashi, NewJersey, Tashkent, LeMalin, Shimakaze, Amagi_chan, Unicorn, ChaoHo, ChenHai, WilliamDPorter, Helena, Friedrich, Atago, Yixian, August, Eugen, Hood, Javelin, Laffey, Explorer, Navigator, OceanCrosser, FeiYun, Takao, Anchorage, Belfast, ChangFeng, Mogador, RoyalFortune, DaVinci, Taihou, Nagato, Agir, HwahJah, Argus, Ognevoy
     IslandBusinessShop5_Char2 = 'None'  # None, WorkerJuu, Cheshire, YingSwei, Saratoga, Akashi, NewJersey, Tashkent, LeMalin, Shimakaze, Amagi_chan, Unicorn, ChaoHo, ChenHai, WilliamDPorter, Helena, Friedrich, Atago, Yixian, August, Eugen, Hood, Javelin, Laffey, Explorer, Navigator, OceanCrosser, FeiYun, Takao, Anchorage, Belfast, ChangFeng, Mogador, RoyalFortune, DaVinci, Taihou, Nagato, Agir, HwahJah, Argus, Ognevoy
     IslandBusinessShop5_Product1 = 'None'  # None, cheese, citrus_coffee, strawberry_milkshake, morning_light, wake_up_call, fruity_fruitier
@@ -1289,25 +1268,30 @@ class GeneratedConfig:
     BoxDisassemble_UseWhiteBox = True
     BoxDisassemble_WhiteBoxLimit = 2000
 
-    # 配置组 `IslandPlannerTool`
-    IslandPlannerTool_ApplySettings = False  # True, False
-    IslandPlannerTool_RescanTechnology = True  # True, False
-    IslandPlannerTool_ScanSeasonTasks = True  # True, False
-    IslandPlannerTool_SeasonTaskTargets = None
-    IslandPlannerTool_ScanCargoOrders = True  # True, False
-    IslandPlannerTool_CargoTargets = None
-    IslandPlannerTool_CargoTargetDays = 1
-    IslandPlannerTool_ExtraTargets = None
-    IslandPlannerTool_DailyProfitLowerLimit = 50000
-    IslandPlannerTool_DailyBufferSafetyMargin = 0
-    IslandPlannerTool_FieldsEfficiency = 0  # 0, 4, 12
-    IslandPlannerTool_OrchardEfficiency = 0  # 0, 4, 12
-    IslandPlannerTool_NurseryEfficiency = 0  # 0, 4, 12
-    IslandPlannerTool_RestaurantGrade = 'bronze'  # bronze, silver, gold, diamond
-    IslandPlannerTool_TeahouseGrade = 'bronze'  # bronze, silver, gold, diamond
-    IslandPlannerTool_JuuEateryGrade = 'bronze'  # bronze, silver, gold, diamond
-    IslandPlannerTool_GrillGrade = 'bronze'  # bronze, silver, gold, diamond
-    IslandPlannerTool_JuuCoffeeGrade = 'bronze'  # bronze, silver, gold, diamond
+    # 配置组 `IslandProductionPlanner`
+    IslandProductionPlanner_ApplySettings = False  # True, False
+    IslandProductionPlanner_Season = 'auto'  # auto, season_1, season_2, season_3, season_4, season_5
+    IslandProductionPlanner_Priority = 'pt'  # pt, coins
+    IslandProductionPlanner_FillSparePosts = True  # True, False
+    IslandProductionPlanner_AutoPositions = True  # True, False
+    IslandProductionPlanner_UnlockedFish = ['shell', 'catfish', 'koi_carp', 'common_carp', 'shrimp', 'crayfish', 'bass', 'crab', 'squid', 'mackerel', 'tuna', 'salmon', 'red_sea_bream', 'yellowfin_tuna', 'sea_cucumber']  # shell, catfish, koi_carp, common_carp, shrimp, crayfish, bass, crab, squid, mackerel, tuna, salmon, red_sea_bream, yellowfin_tuna, sea_cucumber
+    IslandProductionPlanner_RescanTechnology = True  # True, False
+    IslandProductionPlanner_ScanSeasonTasks = True  # True, False
+    IslandProductionPlanner_SeasonTaskTargets = None
+    IslandProductionPlanner_ScanCargoOrders = True  # True, False
+    IslandProductionPlanner_CargoTargets = None
+    IslandProductionPlanner_CargoTargetDays = 1
+    IslandProductionPlanner_ExtraTargets = None
+    IslandProductionPlanner_DailyProfitLowerLimit = 50000
+    IslandProductionPlanner_DailyBufferSafetyMargin = 0
+    IslandProductionPlanner_FieldsEfficiency = 0  # 0, 4, 12
+    IslandProductionPlanner_OrchardEfficiency = 0  # 0, 4, 12
+    IslandProductionPlanner_NurseryEfficiency = 0  # 0, 4, 12
+    IslandProductionPlanner_RestaurantGrade = 'bronze'  # bronze, silver, gold, diamond
+    IslandProductionPlanner_TeahouseGrade = 'bronze'  # bronze, silver, gold, diamond
+    IslandProductionPlanner_JuuEateryGrade = 'bronze'  # bronze, silver, gold, diamond
+    IslandProductionPlanner_GrillGrade = 'bronze'  # bronze, silver, gold, diamond
+    IslandProductionPlanner_JuuCoffeeGrade = 'bronze'  # bronze, silver, gold, diamond
 
     # 配置组 `AutoEquip`
     AutoEquip_ShipLimit = 0

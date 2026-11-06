@@ -219,7 +219,7 @@ def _close_probe_product_page(main):
 def _open_probe_product_page(main, button, product, characters):
     """进入空岗的选品页，只选角色而不提交生产。"""
     from module.island.assets import POST_MANAGE_PRODUCTION
-    from module.island.planned_dispatch import PlannedProductionMixin
+    from module.island.production_recipe import ProductionRecipeMixin
 
     main.goto_postmanage()
     main.post_manage_mode(POST_MANAGE_PRODUCTION)
@@ -232,7 +232,7 @@ def _open_probe_product_page(main, button, product, characters):
             return False
     if not main.post_open(button):
         return False
-    stage = PlannedProductionMixin._planned_dispatch_stage(main)
+    stage = ProductionRecipeMixin._dispatch_stage(main)
     if stage == 'characters':
         if getattr(main, 'special_character', False):
             selected = main.select_special_character(product)
@@ -241,7 +241,7 @@ def _open_probe_product_page(main, button, product, characters):
         if not selected or not main.confirm_selected_character('本轮库存只读复核'):
             _close_probe_product_page(main)
             return False
-        if PlannedProductionMixin._planned_dispatch_stage(main) != 'products':
+        if ProductionRecipeMixin._dispatch_stage(main) != 'products':
             _close_probe_product_page(main)
             return False
     elif stage != 'products':

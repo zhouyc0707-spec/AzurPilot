@@ -399,7 +399,6 @@ Island:
     IslandPlan:
       - Scheduler
       - IslandPlan
-      - IslandProductionPlanner
       - IslandWalk
     IslandBusiness:
       - Scheduler
@@ -528,7 +527,7 @@ Tool:
     MeowfficerScore:
       - MeowfficerScore
     IslandProductionPlanner:
-      - IslandPlannerTool
+      - IslandProductionPlanner
 Dashboard:
   page: dashboard
   tasks:

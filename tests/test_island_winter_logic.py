@@ -386,31 +386,31 @@ class WinterPlannerDataTests(unittest.TestCase):
         )
 
         winter_dishes = {
-            'shiitake_chicken_soup': 4049,
-            'green_jujube_porridge': 4050,
-            'water_chestnut_cake': 4051,
-            'sugar_tangerine_daifuku': 4052,
+            'shiitake_chicken_soup': 4051,
+            'green_jujube_porridge': 4052,
+            'water_chestnut_cake': 4053,
+            'sugar_tangerine_daifuku': 4054,
         }
         for name, item_id in winter_dishes.items():
             self.assertEqual(sm.DISH_ITEM_IDS[name], item_id)
             self.assertIn(item_id, DIC_ISLAND_ITEM)
 
-        self.assertEqual(sm.CROP_ITEM_IDS['orchard']['sugar_tangerine'], 2023)
-        self.assertEqual(sm.CROP_ITEM_IDS['orchard']['green_jujube'], 2024)
-        for recipe_id in (501008, 501009, 9900025, 9900026, 9900027, 9900028):
+        self.assertEqual(sm.CROP_ITEM_IDS['orchard']['sugar_tangerine'], 4047)
+        self.assertEqual(sm.CROP_ITEM_IDS['orchard']['green_jujube'], 4049)
+        for recipe_id in range(9900025, 9900033):
             self.assertIn(recipe_id, DIC_ISLAND_RECIPE)
 
-        self.assertEqual(DIC_ISLAND_RECIPE[501008]['commission_product'], {2023: 8})
-        self.assertEqual(DIC_ISLAND_RECIPE[501009]['commission_product'], {2024: 12})
-        self.assertEqual(DIC_ISLAND_RECIPE[9900026]['commission_cost'], {2024: 2, 2002: 5})
-        self.assertEqual(DIC_ISLAND_RECIPE[9900027]['commission_cost'], {4044: 2})
-        self.assertEqual(DIC_ISLAND_RECIPE[9900028]['commission_cost'], {2023: 2, 3004: 3})
-        self.assertEqual(DIC_ISLAND_RECIPE[9900029]['commission_cost'], {4045: 3})
-        self.assertEqual(DIC_ISLAND_RECIPE[9900030]['commission_cost'], {4045: 1, 4046: 4})
+        self.assertEqual(DIC_ISLAND_RECIPE[9900025]['commission_product'], {4047: 8})
+        self.assertEqual(DIC_ISLAND_RECIPE[9900026]['commission_product'], {4049: 12})
+        self.assertEqual(DIC_ISLAND_RECIPE[9900028]['commission_cost'], {4049: 2, 2002: 5})
+        self.assertEqual(DIC_ISLAND_RECIPE[9900029]['commission_cost'], {4046: 2})
+        self.assertEqual(DIC_ISLAND_RECIPE[9900030]['commission_cost'], {4047: 2, 3004: 3})
+        self.assertEqual(DIC_ISLAND_RECIPE[9900031]['commission_cost'], {4043: 3})
+        self.assertEqual(DIC_ISLAND_RECIPE[9900032]['commission_cost'], {4043: 1, 4044: 4})
 
-        self.assertEqual(DIC_ISLAND_RESTAURANT_MENU_TO_RECIPE[601][4049], 9900025)
-        self.assertEqual(DIC_ISLAND_RESTAURANT_MENU_TO_RECIPE[603][4052], 9900028)
-        self.assertTrue({4047, 4048} <= sm.MANUFACTURE_LINES['manufacturing_crafts'][1])
+        self.assertEqual(DIC_ISLAND_RESTAURANT_MENU_TO_RECIPE[601][4051], 9900027)
+        self.assertEqual(DIC_ISLAND_RESTAURANT_MENU_TO_RECIPE[603][4054], 9900030)
+        self.assertTrue({4055, 4056} <= sm.MANUFACTURE_LINES['manufacturing_crafts'][1])
 
 
 if __name__ == '__main__':

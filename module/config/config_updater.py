@@ -42,6 +42,7 @@ from module.config.fleet_legacy import LEGACY_PATHS
 from module.config.server import VALID_CHANNEL_PACKAGE, VALID_PACKAGE, VALID_SERVER_LIST, to_package, to_server
 from module.config.redirect_utils.shop import migrate_shop_options
 from module.config.redirect_utils.meta import migrate_meta_assist
+from module.config.redirect_utils.island_planner import migrate_island_planner
 from module.config.task_priority import get_scheduler_tasks, merge_task_priority
 from module.config.utils import *
 from module.config.redirect_utils.utils import *
@@ -889,6 +890,7 @@ class ConfigUpdater:
                     merge_task_priority(new_priority, template_priority, get_scheduler_tasks(self.args)),
                 )
         if not is_template:
+            new = migrate_island_planner(old, new)
             new = migrate_meta_assist(old, new)
             new, shop_warnings = migrate_shop_options(old, new)
             for task, reason in shop_warnings:

@@ -64,7 +64,7 @@ class PlanCropsToRestockTest(unittest.TestCase):
 
 
 class FarmPlannerIntegrationTest(unittest.TestCase):
-    """实际农场入口同时保留自动目标、手工目标以及季节/忽略保护。"""
+    """实际农场只执行手工目标，并保留季节与忽略保护。"""
 
     def make_farm(self, enabled=False, fingerprint='ready'):
         values = {
@@ -104,13 +104,13 @@ class FarmPlannerIntegrationTest(unittest.TestCase):
             'farm': ['wheat', 'rice'], 'orchard': ['apple'], 'nursery': ['carrot'],
         })
 
-    def test_active_plan_overrides_manual_targets_without_modifying_them(self):
+    def test_old_plan_cannot_override_manual_targets(self):
         farm, values = self.make_farm(enabled=True)
         original = dict(values)
         self.check(farm)
-        # 手工 corn=0 不截断自动订单需求，自动未需要 rice 不回落到手工阈值。
+        # 旧自动目标仍在配置时也不能覆盖手工禁种和最低库存。
         self.assertEqual(farm.to_plant_lists, {
-            'farm': ['corn'], 'orchard': ['apple'], 'nursery': ['carrot'],
+            'farm': ['wheat', 'rice'], 'orchard': ['apple'], 'nursery': ['carrot'],
         })
         self.assertEqual(farm.crop_targets['farm'], {'wheat': 80, 'corn': 0})
         self.assertEqual(values, original)

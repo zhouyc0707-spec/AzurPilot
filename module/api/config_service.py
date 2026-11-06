@@ -316,7 +316,9 @@ class ConfigService:
                 merged['FleetInfo'][group].pop('CheckInterval', None)
         from module.config.redirect_utils.shop import migrate_shop_options
         from module.config.redirect_utils.meta import migrate_meta_assist
+        from module.config.redirect_utils.island_planner import migrate_island_planner
 
+        merged = migrate_island_planner(data, merged)
         try:
             merged = migrate_meta_assist(data, merged)
         except ValueError as exc:
@@ -360,13 +362,6 @@ class ConfigService:
         data, revision = self.read(name)
         # 内部身份不属于参数契约，编辑界面只接收参数组。
         data.pop('_stockInstance', None)
-        planner = data.get('IslandPlan', {}).get('IslandProductionPlanner')
-        if isinstance(planner, dict) and planner.get('PlanFingerprint'):
-            # 旧版本只保存了目标与菜单，读取时派生详情，不写用户配置或触发游戏扫描。
-            from module.island.planner_report import get_planner_report
-            report = get_planner_report(data)
-            if report is not None:
-                planner['PlannerReport'] = json.dumps(report, ensure_ascii=False, sort_keys=True)
         options = {f'{task}.Campaign.Event': candidates
                    for task, candidates in campaign_event_options(data, self.args).items()}
         return {'instance': name, 'revision': revision, 'values': data, 'options': options}

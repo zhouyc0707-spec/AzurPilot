@@ -53,8 +53,7 @@ from module.island.data import DIC_ISLAND_RECIPE
 DISPATCH_STAMINA_MIN = 98
 
 
-from module.island.planned_dispatch import PlannedProductionMixin, recipe_for_local_name
-from module.island.production_planner import planner_active
+from module.island.production_recipe import recipe_for_local_name
 
 
 # 可兑换鱼肉的鱼：渔场产品名 -> 物品 ID（兑换时按对应的养殖底线保留）
@@ -71,7 +70,7 @@ FISH_MEAT_FISH_IDS = {
 }
 
 
-class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler, IslandFishMeatExchange):
+class IslandFishery(Island, WarehouseOCR, LoginHandler, IslandFishMeatExchange):
     """岛屿渔场自动化管理器。
 
     继承 Island（岛屿基础操作）、WarehouseOCR（仓库 OCR 识别）和
@@ -91,10 +90,7 @@ class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler, 
         fishery_times (list): 各岗位预计完成时间列表。
     """
     def run_fish_meat_targets(self):
-        """手工目标沿用库存保护；自动规划调用原有严格兑换入口。"""
-        if planner_active(self.config):
-            from module.island.fish_exchange import ensure_fish_meat_targets
-            return ensure_fish_meat_targets(self)
+        """按手工鱼肉目标兑换，并保留养殖底线、订单及经营原料。"""
         targets = {
             FRESHWATER_FISH_MEAT: self.config.IslandFishery_MinFreshwaterFishMeat,
             SALTWATER_FISH_MEAT: self.config.IslandFishery_MinSaltwaterFishMeat,
@@ -103,7 +99,7 @@ class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler, 
             return
         from module.island.fish_exchange import FishExchangeSession, get_fish_protection
         protected = get_fish_protection(self.config)
-        # 手工鱼肉目标遵守养殖底线；自动计划在前面返回，仍采用原订单与硬保留。
+        # 鱼肉兑换不得消耗用户配置的养殖最低库存。
         for name, fish_id in FISH_MEAT_FISH_IDS.items():
             protected[fish_id] = max(protected.get(fish_id, 0), self.fishery_threshold.get(name, 0))
         if server.server in ('cn', 'tw'):
@@ -138,6 +134,7 @@ class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler, 
             'sea_cucumber': self.config.IslandFishery_MinSeaCucumber,
         }
         self.plant_yellowfin_tuna = self.config.IslandFishery_PlantYellowfinTuna
+        self.default_fish = getattr(self.config, 'IslandFishery_DefaultFish', 'yellowfin_tuna')
         self.rancher_filter = self.config.IslandFishery_RancherFilter
 
         # 产品配置
@@ -239,8 +236,7 @@ class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler, 
             if ledger is not None and ledger.get(item_name) is None:
                 continue
             count = inventory.get(item_name, 0)
-            from module.island.production_planner import planner_target
-            threshold = planner_target(self.config, item_name, self.fishery_threshold.get(item_name, 50))
+            threshold = self.fishery_threshold.get(item_name, 50)
             yield_amount = item_config.get('yield', 1)
             if count < threshold:
                 deficit = threshold - count
@@ -707,9 +703,6 @@ class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler, 
         """
         self.island_error = False
 
-        self._planner_actual_stocks = {}
-        self._planner_dispatched = {}
-        self._planner_in_production = {}
 
         if not getattr(self, 'island_round', None):
             self.prepare_round(collect_all=False)
@@ -727,26 +720,6 @@ class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler, 
 
         logger.info(f"[岛屿-渔场] \n空闲岗位统计: {len(idle_posts)}个空闲岗位")
 
-        if planner_active(self.config):
-            from module.island.data import DIC_ISLAND_RECIPE
-            from module.island.item_ids import LOCAL_TO_ITEM_ID
-            from module.island.production_planner import get_planned_recipe_items
-            unknown = any(info.get('state') == 'working' and
-                          (not info.get('crop') or not info.get('runs')) for info in self.posts.values())
-            for info in self.posts.values():
-                if info.get('state') == 'working' and info.get('crop') and info.get('runs'):
-                    name = info['crop']
-                    item = LOCAL_TO_ITEM_ID[name]
-                    recipe = DIC_ISLAND_RECIPE[recipe_for_local_name(name)]
-                    self._planner_in_production[item] = self._planner_in_production.get(item, 0) + info['runs'] * recipe['commission_product'][item]
-            if unknown:
-                logger.info('[岛屿-生产规划] 渔场有未知在制品，收获前暂停追加')
-            elif idle_posts:
-                self._planned_dispatch_category(idle_posts, get_planned_recipe_items(self.config, 'fishery', self.FISHERY_ITEMS),
-                                                self.inventory_counts, self.rancher_filter)
-                for post in idle_posts:
-                    self.fishery_times[post['index']] = getattr(self, post['time_var_name'], None)
-            idle_posts = []
 
         if not idle_posts:
             logger.info("[岛屿-渔场] 没有空闲岗位，跳过养殖")
@@ -755,22 +728,24 @@ class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler, 
             products_to_plant, remaining_idle, supply_post_counts = self._build_supply_plant_products(len(idle_posts))
             default_post_counts = {}
 
-            # 继续用剩余空闲岗位满足默认黄鳍金枪鱼岗位数
+            # 继续用剩余空闲岗位满足默认产品岗位数，未知产品退回黄鳍金枪鱼。
+            configured_fish = getattr(self, 'default_fish', 'yellowfin_tuna')
+            default_fish = configured_fish if configured_fish in self.name_to_config else 'yellowfin_tuna'
             already_planted_default = 0
             for i in range(self.fishery_positions):
                 post_id = f'ISLAND_FISHERY_POST{i + 1}'
-                if self.posts[post_id]['crop'] == 'yellowfin_tuna':
+                if self.posts[post_id]['crop'] == default_fish:
                     already_planted_default += 1
 
-            logger.info(f"[岛屿-渔场] 已有{already_planted_default}个岗位养殖了黄鳍金枪鱼，配置要求{self.plant_yellowfin_tuna}个")
+            logger.info(f"[岛屿-渔场] 已有{already_planted_default}个岗位养殖了默认产品{default_fish}，配置要求{self.plant_yellowfin_tuna}个")
 
             need_default = max(0, self.plant_yellowfin_tuna - already_planted_default)
 
             if remaining_idle > 0 and need_default > 0:
                 actual_default = min(remaining_idle, need_default)
                 for _ in range(actual_default):
-                    products_to_plant.append('yellowfin_tuna')
-                    default_post_counts['yellowfin_tuna'] = default_post_counts.get('yellowfin_tuna', 0) + 1
+                    products_to_plant.append(default_fish)
+                    default_post_counts[default_fish] = default_post_counts.get(default_fish, 0) + 1
 
             if products_to_plant:
                 logger.info(f"[岛屿-渔场] \n需要养殖的产品: {products_to_plant}")

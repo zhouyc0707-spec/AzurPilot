@@ -155,7 +155,6 @@ class LiveLoopTests(unittest.TestCase):
 
         self.script.restart = restart
         with patch('module.island.production_round.current_time', side_effect=lambda: self.time), \
-                patch('module.island.production_planner.planner_enabled', return_value=False), \
                 patch('module.island.production_round.IslandProductionRound',
                       side_effect=GameStuckError('详情未安全关闭')) as prepare:
             self.script.loop()

@@ -16444,130 +16444,6 @@
         ]
       }
     },
-    "IslandProductionPlanner": {
-      "Enabled": {
-        "type": "checkbox",
-        "value": true
-      },
-      "TechnologyStatus": {
-        "type": "textarea",
-        "value": "",
-        "display": "hide",
-        "persist": true
-      },
-      "RescanTechnology": {
-        "type": "checkbox",
-        "value": false
-      },
-      "FieldsEfficiency": {
-        "type": "select",
-        "value": 0.0,
-        "option": [
-          0,
-          0.04,
-          0.12
-        ]
-      },
-      "OrchardEfficiency": {
-        "type": "select",
-        "value": 0.0,
-        "option": [
-          0,
-          0.04,
-          0.12
-        ]
-      },
-      "NurseryEfficiency": {
-        "type": "select",
-        "value": 0.0,
-        "option": [
-          0,
-          0.04,
-          0.12
-        ]
-      },
-      "DailyProfitLowerLimit": {
-        "type": "input",
-        "value": 0
-      },
-      "DailyBufferSafetyMargin": {
-        "type": "input",
-        "value": 0.0
-      },
-      "TaskTarget": {
-        "type": "textarea",
-        "value": "{}"
-      },
-      "HardFloorItems": {
-        "type": "textarea",
-        "value": "{}"
-      },
-      "DailyBufferItems": {
-        "type": "textarea",
-        "value": "{}",
-        "display": "hide",
-        "persist": true
-      },
-      "IdleAccumulatingItems": {
-        "type": "textarea",
-        "value": "{}",
-        "display": "hide",
-        "persist": true
-      },
-      "PlannerTargets": {
-        "type": "textarea",
-        "value": "{}",
-        "display": "hide",
-        "persist": true
-      },
-      "PlannerStatus": {
-        "type": "state",
-        "value": "",
-        "persist": true
-      },
-      "PlannerReport": {
-        "type": "textarea",
-        "value": "{}",
-        "display": "hide",
-        "persist": true
-      },
-      "PlanFingerprint": {
-        "type": "input",
-        "value": "",
-        "display": "hide",
-        "persist": true
-      },
-      "OrderManufactureTargets": {
-        "type": "input",
-        "value": "{}",
-        "display": "hide",
-        "persist": true
-      },
-      "OrderManufactureFinalTargets": {
-        "type": "input",
-        "value": "{}",
-        "display": "hide",
-        "persist": true
-      },
-      "AutoManufactureActive": {
-        "type": "checkbox",
-        "value": false,
-        "display": "hide",
-        "persist": true
-      },
-      "AutoManufactureNextRun": {
-        "type": "input",
-        "value": "",
-        "display": "hide",
-        "persist": true
-      },
-      "CompletedManufactureOrderId": {
-        "type": "input",
-        "value": 0,
-        "display": "hide",
-        "persist": true
-      }
-    },
     "IslandWalk": {
       "AirDrop": {
         "type": "textarea",
@@ -16846,12 +16722,6 @@
           "diamond"
         ]
       },
-      "PlannedMenu": {
-        "type": "textarea",
-        "value": "",
-        "display": "hide",
-        "persist": true
-      },
       "Char1": {
         "type": "select",
         "value": "None",
@@ -17063,12 +16933,6 @@
           "gold",
           "diamond"
         ]
-      },
-      "PlannedMenu": {
-        "type": "textarea",
-        "value": "",
-        "display": "hide",
-        "persist": true
       },
       "Char1": {
         "type": "select",
@@ -17282,12 +17146,6 @@
           "diamond"
         ]
       },
-      "PlannedMenu": {
-        "type": "textarea",
-        "value": "",
-        "display": "hide",
-        "persist": true
-      },
       "Char1": {
         "type": "select",
         "value": "None",
@@ -17468,12 +17326,6 @@
           "diamond"
         ]
       },
-      "PlannedMenu": {
-        "type": "textarea",
-        "value": "",
-        "display": "hide",
-        "persist": true
-      },
       "Char1": {
         "type": "select",
         "value": "None",
@@ -17648,12 +17500,6 @@
           "gold",
           "diamond"
         ]
-      },
-      "PlannedMenu": {
-        "type": "textarea",
-        "value": "",
-        "display": "hide",
-        "persist": true
       },
       "Char1": {
         "type": "select",
@@ -18225,6 +18071,27 @@
       "RancherFilter": {
         "type": "textarea",
         "value": "WorkerJuu"
+      },
+      "DefaultFish": {
+        "type": "select",
+        "value": "yellowfin_tuna",
+        "option": [
+          "shell",
+          "catfish",
+          "koi_carp",
+          "common_carp",
+          "shrimp",
+          "crayfish",
+          "bass",
+          "crab",
+          "squid",
+          "mackerel",
+          "tuna",
+          "salmon",
+          "red_sea_bream",
+          "yellowfin_tuna",
+          "sea_cucumber"
+        ]
       }
     },
     "Storage": {
@@ -18333,6 +18200,17 @@
       "MinSilver": {
         "type": "input",
         "value": 50
+      },
+      "DefaultOre": {
+        "type": "select",
+        "value": "Silver",
+        "option": [
+          "Copper",
+          "Aluminium",
+          "Iron",
+          "Sulphur",
+          "Silver"
+        ]
       }
     },
     "IslandForest": {
@@ -18372,6 +18250,15 @@
       "MinSelected": {
         "type": "input",
         "value": 50
+      },
+      "DefaultWood": {
+        "type": "select",
+        "value": "Elegant",
+        "option": [
+          "Practical",
+          "Selected",
+          "Elegant"
+        ]
       }
     },
     "Storage": {
@@ -19829,6 +19716,11 @@
           1,
           2
         ]
+      },
+      "Products": {
+        "type": "input",
+        "value": "",
+        "preserve_empty": true
       }
     },
     "ElectronicProcessing": {
@@ -19840,6 +19732,11 @@
           1,
           2
         ]
+      },
+      "Products": {
+        "type": "input",
+        "value": "",
+        "preserve_empty": true
       }
     },
     "Industrial": {
@@ -19851,6 +19748,11 @@
           1,
           2
         ]
+      },
+      "Products": {
+        "type": "input",
+        "value": "",
+        "preserve_empty": true
       }
     },
     "Handmade": {
@@ -19862,6 +19764,11 @@
           1,
           2
         ]
+      },
+      "Products": {
+        "type": "input",
+        "value": "",
+        "preserve_empty": true
       }
     },
     "Storage": {
@@ -21184,13 +21091,86 @@
     }
   },
   "IslandProductionPlanner": {
-    "IslandPlannerTool": {
+    "IslandProductionPlanner": {
       "ApplySettings": {
         "type": "checkbox",
         "value": false,
         "option": [
           true,
           false
+        ]
+      },
+      "Season": {
+        "type": "select",
+        "value": "auto",
+        "option": [
+          "auto",
+          "season_1",
+          "season_2",
+          "season_3",
+          "season_4",
+          "season_5"
+        ]
+      },
+      "Priority": {
+        "type": "select",
+        "value": "pt",
+        "option": [
+          "pt",
+          "coins"
+        ]
+      },
+      "FillSparePosts": {
+        "type": "checkbox",
+        "value": true,
+        "option": [
+          true,
+          false
+        ]
+      },
+      "AutoPositions": {
+        "type": "checkbox",
+        "value": true,
+        "option": [
+          true,
+          false
+        ]
+      },
+      "UnlockedFish": {
+        "type": "multiselect",
+        "value": [
+          "shell",
+          "catfish",
+          "koi_carp",
+          "common_carp",
+          "shrimp",
+          "crayfish",
+          "bass",
+          "crab",
+          "squid",
+          "mackerel",
+          "tuna",
+          "salmon",
+          "red_sea_bream",
+          "yellowfin_tuna",
+          "sea_cucumber"
+        ],
+        "option": [
+          "shell",
+          "catfish",
+          "koi_carp",
+          "common_carp",
+          "shrimp",
+          "crayfish",
+          "bass",
+          "crab",
+          "squid",
+          "mackerel",
+          "tuna",
+          "salmon",
+          "red_sea_bream",
+          "yellowfin_tuna",
+          "sea_cucumber"
         ]
       },
       "RescanTechnology": {

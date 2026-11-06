@@ -200,11 +200,7 @@ class IslandProductionRound:
 
 def run_production_task(owner, task, cls):
     """接到单个原调度任务后准备或复用本轮；异常不会遗留库存供恢复使用。"""
-    from module.island.production_planner import planner_enabled
 
-    if planner_enabled(owner.config):
-        owner._island_production_round = None
-        return cls(config=owner.config, device=owner.device).run()
     session = getattr(owner, '_island_production_round', None)
     try:
         if session is None or not session.matches(owner.config, task):

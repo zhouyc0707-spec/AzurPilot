@@ -19,8 +19,7 @@ from module.island.order_detail import get_order_detail_signature, order_detail_
 from module.island.order_ocr import OrderDigitCounter, validate_requirements
 from module.island.order_selection import find_selected_order_positions
 from module.island.order_stock import get_menu_reserve_items, get_order_effective_stock, menu_reservations_known
-from module.island.planner_report import invalidate_planner_stocks, record_planner_stocks
-from module.island.utils import get_active_island_activity_ids, load_hard_floor_items, normalize_item_keys
+from module.island.utils import get_active_island_activity_ids
 from module.island_daily_order.assets import (
     ALAS_ORDER_ACCEPT, ALAS_ORDER_BACKGROUND, ALAS_ORDER_COOLDOWN_SPEED_UP,
     ALAS_ORDER_COOLDOWN_TIME, ALAS_ORDER_LEVEL_UP, ALAS_ORDER_REJECT,
@@ -355,7 +354,6 @@ class IslandOrder(IslandDailyOrder):
             logger.warning('[岛屿-订单] 需求未完整识别，保留订单，五分钟后复查')
             self._record_deadline(timedelta(minutes=5))
             return False
-        record_planner_stocks(self.config, {item: counter[0] for item, counter in requirements.items()}, '订单需求页')
         if kind == 'regular' and self._filter_rejects(requirements):
             return self._reject_order()
         force = kind == 'regular' and (
@@ -371,7 +369,6 @@ class IslandOrder(IslandDailyOrder):
                 self._reenter()
                 return True
             if result:
-                invalidate_planner_stocks(self.config, requirements, '订单交付后')
                 return True
         if kind == 'regular':
             return self._reject_order()
@@ -384,14 +381,6 @@ class IslandOrder(IslandDailyOrder):
             season_id = get_season_order_id(requirements, current_time() - server_time_offset())
             if season_id is not None:
                 self.stuck_season_order_id = season_id
-                completed = self.config.cross_get(
-                    'IslandPlan.IslandProductionPlanner.CompletedManufactureOrderId', 0)
-                if completed == season_id:
-                    from module.island.production_planner import manufacture_order_targets
-                    _, final = manufacture_order_targets(season_id)
-                    if any(requirements.get(item, (0, 0, 0))[0] < target for item, target in final.items()):
-                        self.config.cross_set('IslandPlan.IslandProductionPlanner.CompletedManufactureOrderId', 0)
-                        self._needs_production_plan = True
             else:
                 logger.warning('[岛屿-订单] 季节需求无法对应当前活动，保留原规划，不猜订单编号')
                 self._record_deadline(timedelta(hours=1))
@@ -411,15 +400,12 @@ class IslandOrder(IslandDailyOrder):
                 self.config.IslandDailyOrder_UrgentDetectRefreshTime = self.DEFAULT_URGENT_REFRESH_TIME
         self.reject_count = self.config.IslandDailyOrder_RejectCount
         self._submit_unconfirmed_count = 0
-        self._needs_production_plan = False
         self.next_runtime = []
         refresh = self._get_urgent_refresh_time()
         if refresh and refresh > current_time():
             self.next_runtime.append(refresh)
         self.stuck_season_order_id = int(getattr(self.config, 'IslandDailyOrder_StuckSeasonOrderId', 0) or 0)
-        old_season_id = self.stuck_season_order_id
-        self.hard_floor = normalize_item_keys(load_hard_floor_items(
-            self.config.cross_get('IslandPlan.IslandProductionPlanner.HardFloorItems', '{}')))
+        self.hard_floor = {}
         self.reserve = get_menu_reserve_items(self.config)
         self.reserve_known = menu_reservations_known(self.config)
         self._enter_daily_order()
@@ -525,16 +511,6 @@ class IslandOrder(IslandDailyOrder):
         with self.config.multi_set():
             self.config.IslandDailyOrder_RejectCount = self.reject_count
             self.config.IslandDailyOrder_StuckSeasonOrderId = self.stuck_season_order_id
-            if not self.stuck_season_order_id:
-                self.config.cross_set('IslandPlan.IslandProductionPlanner.CompletedManufactureOrderId', 0)
-        from module.island.production_planner import IslandPlanningError, IslandProductionPlanner
-        if self._needs_production_plan or old_season_id != self.stuck_season_order_id or not self.config.cross_get(
-                'IslandPlan.IslandProductionPlanner.PlanFingerprint', ''):
-            try:
-                IslandProductionPlanner(self.config, self.device).run(stuck_season_order_id=self.stuck_season_order_id)
-            except IslandPlanningError as exc:
-                logger.warning(f'[岛屿-订单] 规划未更新，保留原计划及季节订单：{exc}')
-                self._record_deadline(timedelta(hours=1))
         self.ui_ensure(page_island_phone)
         if self.next_runtime:
             self.config.task_delay(target=min(self.next_runtime), server_update=True)

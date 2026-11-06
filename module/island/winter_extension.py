@@ -1,8 +1,7 @@
-"""Local island data for the winter season.
+"""手工执行、库存识别与订单使用的冬季兼容数据。
 
-ALAS' generated ``data.py`` still ends at the summer season. Keep the winter
-extension separate so the upstream file can be replaced verbatim when ALAS
-publishes the new data, and apply it once while the planner package initializes.
+独立规划器使用上游官方数据，通过产品名称写回配置，不应用本地旧编号。
+此兼容表只作用于 module.island.data，避免改变既有仓库识别和配方映射。
 """
 
 WINTER_ITEMS = {
@@ -35,7 +34,8 @@ WINTER_ITEMS = {
         'pt_num': 10, 'manage_influence': 0, 'order_price': 65,
     },
     4046: {
-        'name': {'cn': '冬季花卉', 'en': 'Winter Flower', 'jp': '冬の花', 'tw': '冬季花卉'},
+        # 与上游冬季花束中「梅花 1 + 水仙花 4」唯一对应；保留手工执行旧编号。
+        'name': {'cn': '水仙花', 'en': 'Daffodils', 'jp': 'スイセン', 'tw': '水仙花'},
         'pt_num': 10, 'manage_influence': 0, 'order_price': 65,
     },
     4047: {

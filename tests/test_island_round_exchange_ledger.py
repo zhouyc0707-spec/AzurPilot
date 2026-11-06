@@ -2,7 +2,7 @@
 
 import unittest
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 from module.exception import GameStuckError
 from module.island.data import DIC_ISLAND_EXCHANGE_RECIPE
@@ -27,9 +27,7 @@ class RoundFishExchangeLedgerTests(unittest.TestCase):
 
     def test_success_consumes_selected_fish_and_observes_meat(self):
         session, ledger, meat, output = self.session()
-        with patch('module.island.fish_exchange.invalidate_planner_stocks'), \
-                patch('module.island.fish_exchange.record_planner_stocks'):
-            self.assertTrue(session.run({meat: output}, {}))
+        self.assertTrue(session.run({meat: output}, {}))
         self.assertEqual(ledger.get(5007), 2)
         self.assertEqual(ledger.get(meat), output)
         session._exchange_batch.assert_called_once()

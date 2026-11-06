@@ -146,7 +146,7 @@ LOCAL_TO_ITEM_ID.update({
     'cloth': 3035, 'rope': 3037, 'gloves': 3038, 'aroma_sachet': 3039,
     'wound_dressings': 3041, 'charcoal_brush': 3042, 'cable': 3043,
     'chemicals': 3045, 'gunpowder': 3046, 'paper': 3048, 'notebook': 3049,
-    'chair_and_desk': 3050, 'choice_wooden_barrel': 3051,
+    'chair_and_desk': 3050, 'chair_desk': 3050, 'choice_wooden_barrel': 3051,
     'ink_cartridge': 3053, 'clock': 3054, 'battery': 3055,
     'ornamental_painting': 3117, 'lemon_shrimp': 3115,
 })

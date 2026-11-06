@@ -19,17 +19,10 @@ class FishEntryTest(unittest.TestCase):
         self.main.ui_ensure = Mock()
         self.main.fishery_threshold = {'koi_carp': 30, 'yellowfin_tuna': 5}
 
-    def test_local_plan_takes_precedence_without_second_exchange(self):
-        with patch.object(fishery, 'planner_active', return_value=True), \
-                patch.object(local, 'ensure_fish_meat_targets', return_value=True) as planned:
-            self.assertTrue(self.main.run_fish_meat_targets())
-        planned.assert_called_once_with(self.main)
-        self.main.run_fish_meat_exchange.assert_not_called()
 
     def test_cn_tw_manual_targets_reuse_strict_executor_and_protection(self):
         for language in ('cn', 'tw'):
             with self.subTest(server=language), patch.object(server, 'server', language), \
-                    patch.object(fishery, 'planner_active', return_value=False), \
                     patch.object(local, 'get_fish_protection', return_value={5003: 20}) as protection, \
                     patch.object(local, 'FishExchangeSession') as session:
                 self.main.run_fish_meat_targets()
@@ -43,7 +36,6 @@ class FishEntryTest(unittest.TestCase):
         for language in ('en', 'jp'):
             self.main.run_fish_meat_exchange.reset_mock()
             with self.subTest(server=language), patch.object(server, 'server', language), \
-                    patch.object(fishery, 'planner_active', return_value=False), \
                     patch.object(local, 'get_fish_protection', return_value={5003: 20, 5107: 8}):
                 self.main.run_fish_meat_targets()
             expected = {fish_id: 0 for fish_id in fishery.FISH_MEAT_FISH_IDS.values()}
@@ -53,8 +45,7 @@ class FishEntryTest(unittest.TestCase):
     def test_default_zero_targets_never_open_exchange(self):
         self.main.config.IslandFishery_MinFreshwaterFishMeat = 0
         self.main.config.IslandFishery_MinSaltwaterFishMeat = 0
-        with patch.object(fishery, 'planner_active', return_value=False), \
-                patch.object(local, 'FishExchangeSession') as session:
+        with patch.object(local, 'FishExchangeSession') as session:
             self.main.run_fish_meat_targets()
         session.assert_not_called()
         self.main.run_fish_meat_exchange.assert_not_called()

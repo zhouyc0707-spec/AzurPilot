@@ -136,16 +136,6 @@ class OrderPolicyTests(unittest.TestCase):
         self.order._reject_order.assert_not_called()
         self.assertEqual(self.order.next_runtime, [self.now + timedelta(minutes=5)])
 
-    def test_same_season_order_replans_only_after_actual_factory_stock_shortage(self):
-        self.order.config.cross_get = Mock(return_value=88)
-        self.order.config.cross_set = Mock()
-        self.order.scan_current_order_requirements = Mock(return_value={3101: (0, 30, -30)})
-        with patch('module.island.order.get_season_order_id', return_value=88), patch(
-                'module.island.production_planner.manufacture_order_targets', return_value=({3101: 30}, {3101: 30})):
-            self.assertFalse(self.order._process_order((200, 200), 'season'))
-        self.order.config.cross_set.assert_called_once_with(
-            'IslandPlan.IslandProductionPlanner.CompletedManufactureOrderId', 0)
-        self.assertTrue(self.order._needs_production_plan)
 
     def test_unknown_submit_reenters_instead_of_rejecting(self):
         self.order.scan_current_order_requirements = Mock(return_value={LOCAL_TO_ITEM_ID['wheat']: (100, 10, 90)})

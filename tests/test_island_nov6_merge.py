@@ -7,7 +7,7 @@ from module.island.data import DIC_ISLAND_ITEM, DIC_ISLAND_RECIPE
 from module.island.item_ids import LOCAL_TO_ITEM_ID
 from module.island.order import IslandOrder, ISLAND_LEVEL_UP
 from module.island.order_stock import get_business_menu_items
-from module.island.planned_dispatch import recipe_for_local_name
+from module.island.production_recipe import recipe_for_local_name
 from module.island.recipe_groups import SEASONAL_RECIPE_GROUPS
 from tests.test_island_farm_locked_post import make_farm
 

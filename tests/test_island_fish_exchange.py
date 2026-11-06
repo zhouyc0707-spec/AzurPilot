@@ -59,6 +59,15 @@ class ExchangeMain:
 
 
 class TestFishExchange(unittest.TestCase):
+    def test_season_order_protection_survives_removal_of_old_auto_targets(self):
+        config = ReadConfig({'IslandPlan.IslandProductionPlanner.HardFloorItems': 'catfish: 999',
+                             'IslandPlan.IslandProductionPlanner.TaskTarget': 'catfish: 999'})
+        with patch('module.island.fish_exchange.get_stuck_season_order_requirements', return_value={5002: 6}):
+            protection = get_fish_protection(config)
+        self.assertEqual(protection[5002], 6)
+        self.assertEqual(plan_fish_exchange(2521, 4, {5002: 6}, protection), ({}, 0))
+        self.assertEqual(plan_fish_exchange(2521, 4, {5002: 7}, protection), ({5002: 1}, 4))
+
     def test_exact_deficit_uses_fewest_excess_meat_not_select_all(self):
         selection, produced = plan_fish_exchange(2521, 5, {5002: 100, 5003: 100, 5004: 100})
         self.assertEqual(produced, 5)
@@ -106,37 +115,8 @@ class TestFishExchange(unittest.TestCase):
                 detection('100', 105, 65)]
         self.assertEqual(parse_exchange_cards(rows, 2521), {})
 
-    def test_protection_contains_hard_floor_and_direct_task_not_manual_min(self):
-        config = ReadConfig({
-            'IslandPlan.IslandProductionPlanner.HardFloorItems': 'catfish: 10',
-            'IslandPlan.IslandProductionPlanner.TaskTarget': 'catfish: {count: 7, period: 1}',
-            'IslandRancher.IslandFishery.MinBass': 999,
-        })
-        protection = get_fish_protection(config)
-        self.assertEqual(protection[5002], 17)
-        self.assertEqual(protection[5007], 0)
 
-    def test_nested_task_target_preserves_total_count_not_daily_rate(self):
-        config = ReadConfig({
-            'IslandPlan.IslandProductionPlanner.TaskTarget':
-                'catfish: {count: 18, period: 6}\nkoi_carp: {count: 20, rate_per_day: 4}',
-        })
-        protection = get_fish_protection(config)
-        self.assertEqual(protection[5002], 18)
-        self.assertEqual(protection[5003], 20)
 
-    def test_task_deadlines_and_season_request_add_to_fish_floor(self):
-        config = ReadConfig({
-            'IslandPlan.IslandProductionPlanner.HardFloorItems': 'catfish: 2',
-            'IslandPlan.IslandProductionPlanner.TaskTarget':
-                'catfish:\n  deadlines:\n    - {count: 3, period: 1}\n    - {count: 4, days: 5}',
-        })
-        with patch('module.island.fish_exchange.get_stuck_season_order_requirements',
-                   return_value={5002: 6}):
-            protection = get_fish_protection(config)
-        self.assertEqual(protection[5002], 15)
-        self.assertEqual(plan_fish_exchange(2521, 4, {5002: 15}, protection), ({}, 0))
-        self.assertEqual(plan_fish_exchange(2521, 4, {5002: 16}, protection), ({5002: 1}, 4))
 
     def session(self, main):
         session = FishExchangeSession(main)

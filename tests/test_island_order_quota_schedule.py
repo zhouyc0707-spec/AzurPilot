@@ -56,7 +56,6 @@ class DailyOrderQuotaScheduleTests(unittest.TestCase):
         self.enterContext(patch('module.island.order.get_nearest_weekday_date', return_value=self.urgent_reset))
         self.enterContext(patch('module.island.order.get_menu_reserve_items', return_value={}))
         self.enterContext(patch('module.island.order.menu_reservations_known', return_value=True))
-        self.planner = self.enterContext(patch('module.island.production_planner.IslandProductionPlanner'))
         self.enterContext(patch('module.island.order.logger'))
 
     @staticmethod
@@ -82,7 +81,6 @@ class DailyOrderQuotaScheduleTests(unittest.TestCase):
         self.assertEqual(self.order.next_runtime, [self.urgent_reset, self.daily_reset])
         self.assertTrue(self.config.Scheduler_Enable)
         self.assertEqual(self.config.IslandDailyOrder_RejectCount, 7)
-        self.planner.assert_not_called()
 
     def test_unknown_then_two_zero_frames_can_confirm_in_three_frames(self):
         self.order._ocr_daily_remaining.side_effect = [None, 0, 0]
@@ -377,8 +375,7 @@ class DailyOrderQuotaScheduleTests(unittest.TestCase):
         self.order.scan_current_order_requirements = Mock(return_value={2001: (0, 5, -5)})
         self.order._read_time.return_value = timedelta(minutes=30)
         self.order._submit_order = Mock(side_effect=AssertionError('缺料不得提交'))
-        with patch('module.island.order.record_planner_stocks'):
-            self.order.run()
+        self.order.run()
         deadline = self.now + timedelta(minutes=30)
         self.order._click_order.assert_called_once()
         self.order._submit_order.assert_not_called()

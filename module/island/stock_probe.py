@@ -10,7 +10,6 @@ from module.exception import GameStuckError
 from module.island.assets import ISLAND_INFO_EXIT
 from module.island.data import DIC_ISLAND_ITEM
 from module.island.item_ids import resolve_item_id
-from module.island.planner_report import record_planner_stocks
 from module.island.warehouse import WarehouseOCR
 from module.logger import logger
 from module.ocr.ocr import Ocr
@@ -244,5 +243,4 @@ def read_item_stocks(main, item_ids, *, max_swipes=MAX_WAREHOUSE_SWIPES, reset_t
     if not normalized:
         return {}
     observed = StockProbeSession(main).run(normalized, max_swipes=max_swipes, reset_to_top=reset_to_top)
-    record_planner_stocks(getattr(main, 'config', None), observed, '仓库详情页')
     return observed

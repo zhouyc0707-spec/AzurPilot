@@ -4559,105 +4559,6 @@
       "disabled": "不启用"
     }
   },
-  "IslandProductionPlanner": {
-    "_info": {
-      "name": "自动生产规划",
-      "help": "按 ALAS 规划生产与经营菜单。保留原手工配置；关闭后恢复手工生产。首次运行会读取实际科技，店铺等级请在经营配置中核对。"
-    },
-    "Enabled": {
-      "name": "自动生产规划",
-      "help": "按 ALAS 规划生产与经营菜单。保留原手工配置；关闭后恢复手工生产。首次运行会读取实际科技，店铺等级请在经营配置中核对。"
-    },
-    "TechnologyStatus": {
-      "name": "已检测岛屿科技",
-      "help": "自动扫描后保存的科技状态。清空或开启重新扫描后，将重新读取游戏。"
-    },
-    "RescanTechnology": {
-      "name": "重新扫描科技",
-      "help": "下一次规划时重新读取岛屿科技，扫描成功后自动关闭。"
-    },
-    "FieldsEfficiency": {
-      "name": "农田额外效率",
-      "help": "科技效果以外的农田生产效率加成（0.04 为 4%，0.12 为 12%）。",
-      "0": "0%",
-      "0.04": "4%",
-      "0.12": "12%"
-    },
-    "OrchardEfficiency": {
-      "name": "果园额外效率",
-      "help": "科技效果以外的果园生产效率加成（0.04 为 4%，0.12 为 12%）。",
-      "0": "0%",
-      "0.04": "4%",
-      "0.12": "12%"
-    },
-    "NurseryEfficiency": {
-      "name": "苗圃额外效率",
-      "help": "科技效果以外的苗圃生产效率加成（0.04 为 4%，0.12 为 12%）。",
-      "0": "0%",
-      "0.04": "4%",
-      "0.12": "12%"
-    },
-    "DailyProfitLowerLimit": {
-      "name": "每日净收益下限",
-      "help": "规划须达到的每日最低净收益；0 表示不额外要求。"
-    },
-    "DailyBufferSafetyMargin": {
-      "name": "每日库存缓冲比例",
-      "help": "在每天原料消耗基础上增加的安全缓冲比例。 例如 0.2 表示增加 20%。"
-    },
-    "TaskTarget": {
-      "name": "额外生产目标",
-      "help": "需要额外积累的物品与数量，支持 ALAS 物品名称或编号；无额外目标时保持空字典。"
-    },
-    "HardFloorItems": {
-      "name": "库存保留线",
-      "help": "普通订单与生产材料消耗需保护的最低库存。紧急、季节和临近每日刷新两小时的普通订单按 ALAS 优先规则使用现货；芝士／豆腐过滤始终优先。"
-    },
-    "DailyBufferItems": {
-      "name": "每日缓冲库存",
-      "help": "自动规划生成的日常原料库存。"
-    },
-    "IdleAccumulatingItems": {
-      "name": "空闲积累物品",
-      "help": "自动规划生成的余岗积累目标。"
-    },
-    "PlannerTargets": {
-      "name": "各生产地点目标",
-      "help": "自动规划生成的生产目标，不覆盖手工槽位。"
-    },
-    "PlannerStatus": {
-      "name": "规划状态",
-      "help": "显示最近一次规划的结果；失败会保留已有计划。"
-    },
-    "PlannerReport": {
-      "name": "只读规划详情数据",
-      "help": "仅用于展示规划目标与最近可信观测，不参与生产决策。"
-    },
-    "PlanFingerprint": {
-      "name": "计划有效标记",
-      "help": "用于判断输入、科技或季节变化后是否需要重新规划。"
-    },
-    "OrderManufactureTargets": {
-      "name": "订单制造依赖目标",
-      "help": ""
-    },
-    "OrderManufactureFinalTargets": {
-      "name": "订单制造成品目标",
-      "help": ""
-    },
-    "AutoManufactureActive": {
-      "name": "工坊临时启用状态",
-      "help": ""
-    },
-    "AutoManufactureNextRun": {
-      "name": "工坊原调度时间",
-      "help": ""
-    },
-    "CompletedManufactureOrderId": {
-      "name": "已完成制造的订单",
-      "help": ""
-    }
-  },
   "IslandFarm": {
     "_info": {
       "name": "农田",
@@ -4923,11 +4824,11 @@
     },
     "MinFreshwaterFishMeat": {
       "name": "淡水鱼肉底线",
-      "help": "渔场养殖完成后，把鱼兑换为淡水鱼肉补到此目标；0为不兑换。本地自动生产规划启用时优先使用其目标和材料预留，否则使用此值；独立规划工具可按货运与菜品需求写入。兑换保留订单、菜单和明确底线所需原鱼，识别或到账无法确认时停止。 手工鱼肉目标额外保留对应鱼种的养殖最低库存；有效自动规划仍采用原订单、菜单和显式硬底线，不额外套用养殖阈值。"
+      "help": "渔场养殖完成后，把鱼兑换为淡水鱼肉补到此目标；0 为不兑换。独立规划工具可按货运与菜品需求写入此值。兑换时保留季节订单、经营菜单所需原鱼及对应鱼种的养殖最低库存；识别或到账无法确认时停止。"
     },
     "MinSaltwaterFishMeat": {
       "name": "海水鱼肉底线",
-      "help": "同上，针对海水鱼肉。 手工鱼肉目标额外保留对应鱼种的养殖最低库存；有效自动规划仍采用原订单、菜单和显式硬底线，不额外套用养殖阈值。"
+      "help": "同上，针对海水鱼肉。"
     },
     "PlantYellowfinTuna": {
       "name": "养黄鳍金枪鱼",
@@ -4940,6 +4841,25 @@
     "RancherFilter": {
       "name": "使用角色",
       "help": "以>连接，例如肇和 新泽西 小天城：ChaoHo > NewJersey > Amagi_chan\n小加加：Saratoga > 明石：Akashi > 塔什干：Tashkent > 应瑞：YingSwei\n恶毒：LeMalin > 独角兽：Unicorn > 岛风：Shimakaze > 柴郡：Cheshire\n镇海：ChenHai > 威廉D波特：WilliamDPorter\n海伦娜：Helena > 大帝：Friedrich > 愛宕：Atago\n逸仙：Yixian > 奥古斯特：August > 欧根亲王：Eugen > 胡德：Hood > 标枪：Javelin > 拉菲：Laffey > 探索者：Explorer > 领航员：Navigator > 领洋者：OceanCrosser > 飞云：FeiYun > 高雄：Takao > 安克雷奇：Anchorage > 贝尔法斯特：Belfast > 长风：ChangFeng > 莫加多尔：Mogador > 皇家财富号：RoyalFortune > 达芬奇：DaVinci > 大凤：Taihou > 长门：Nagato > 埃吉尔：Agir > 华甲：HwahJah > 百眼巨人：Argus > 火力：Ognevoy\n仅识别默认排序前两排；指定舰娘不可用时回退 WorkerJuu。"
+    },
+    "DefaultFish": {
+      "name": "默认养殖产品",
+      "help": "所有产品达到底线后，空余渔场岗位养殖的产品（岗位数见上一项）。岛屿生产规划器会选已解锁的产品。",
+      "shell": "贝类",
+      "catfish": "鲶鱼",
+      "koi_carp": "鲤鱼",
+      "common_carp": "鲫鱼",
+      "shrimp": "小河虾",
+      "crayfish": "小龙虾",
+      "bass": "鲈鱼",
+      "crab": "螃蟹",
+      "squid": "鱿鱼",
+      "mackerel": "马鲛鱼",
+      "tuna": "金枪鱼",
+      "salmon": "三文鱼",
+      "red_sea_bream": "红鲷鱼",
+      "yellowfin_tuna": "黄鳍金枪鱼",
+      "sea_cucumber": "海参"
     }
   },
   "IslandMine": {
@@ -4987,6 +4907,15 @@
     "MinSilver": {
       "name": "银矿最低库存",
       "help": "仓库中银矿数量低于此值时，矿山岗位才会生产"
+    },
+    "DefaultOre": {
+      "name": "默认矿石",
+      "help": "所有矿石达到底线后，空余矿山岗位生产的矿石（岗位数见上一项）。",
+      "Copper": "铜矿",
+      "Aluminium": "铝矿",
+      "Iron": "铁矿",
+      "Sulphur": "硫矿",
+      "Silver": "银矿"
     }
   },
   "IslandForest": {
@@ -5026,6 +4955,13 @@
     "MinSelected": {
       "name": "精选木材最低库存",
       "help": "仓库中精选木材数量低于此值时，林场岗位才会生产"
+    },
+    "DefaultWood": {
+      "name": "默认木材",
+      "help": "所有木材达到底线后，空余林场岗位生产的木材（岗位数见上一项）。",
+      "Practical": "实用之木",
+      "Selected": "精选之木",
+      "Elegant": "典雅之木"
     }
   },
   "IslandDailyGather": {
@@ -6069,6 +6005,10 @@
       "0": "0",
       "1": "1",
       "2": "2"
+    },
+    "Products": {
+      "name": "生产顺序",
+      "help": "按顺序生产的产品，用「>」分隔（如「paper > notebook」），材料不足时尝试下一个。留空使用内置规则。岛屿生产规划器会写入。可选产品：file_cabinet, paper, notebook, chair_desk"
     }
   },
   "ElectronicProcessing": {
@@ -6082,6 +6022,10 @@
       "0": "0",
       "1": "1",
       "2": "2"
+    },
+    "Products": {
+      "name": "生产顺序",
+      "help": "按顺序生产的产品，用「>」分隔（如「paper > notebook」），材料不足时尝试下一个。留空使用内置规则。岛屿生产规划器会写入。可选产品：filter_element, ink_cartridge"
     }
   },
   "Industrial": {
@@ -6095,6 +6039,10 @@
       "0": "0",
       "1": "1",
       "2": "2"
+    },
+    "Products": {
+      "name": "生产顺序",
+      "help": "按顺序生产的产品，用「>」分隔（如「paper > notebook」），材料不足时尝试下一个。留空使用内置规则。岛屿生产规划器会写入。可选产品：iron_nail, cutlery, charcoal_brush, cable"
     }
   },
   "Handmade": {
@@ -6108,6 +6056,10 @@
       "0": "0",
       "1": "1",
       "2": "2"
+    },
+    "Products": {
+      "name": "生产顺序",
+      "help": "按顺序生产的产品，用「>」分隔（如「paper > notebook」），材料不足时尝试下一个。留空使用内置规则。岛屿生产规划器会写入。可选产品：leather, boot, peanut_oil, cloth, rope, shepherd_purse, summer_bouquet, plum_blossom_sachet, winter_bouquet"
     }
   },
   "IslandAirDrop": {
@@ -6246,10 +6198,6 @@
       "silver": "银牌",
       "gold": "金牌",
       "diamond": "钻石"
-    },
-    "PlannedMenu": {
-      "name": "规划菜单",
-      "help": ""
     },
     "Char1": {
       "name": "角色1",
@@ -6449,10 +6397,6 @@
       "gold": "金牌",
       "diamond": "钻石"
     },
-    "PlannedMenu": {
-      "name": "规划菜单",
-      "help": ""
-    },
     "Char1": {
       "name": "角色1",
       "help": "",
@@ -6651,10 +6595,6 @@
       "gold": "金牌",
       "diamond": "钻石"
     },
-    "PlannedMenu": {
-      "name": "规划菜单",
-      "help": ""
-    },
     "Char1": {
       "name": "角色1",
       "help": "",
@@ -6823,10 +6763,6 @@
       "gold": "金牌",
       "diamond": "钻石"
     },
-    "PlannedMenu": {
-      "name": "规划菜单",
-      "help": ""
-    },
     "Char1": {
       "name": "角色1",
       "help": "",
@@ -6989,10 +6925,6 @@
       "silver": "银牌",
       "gold": "金牌",
       "diamond": "钻石"
-    },
-    "PlannedMenu": {
-      "name": "规划菜单",
-      "help": ""
     },
     "Char1": {
       "name": "角色1",
@@ -7352,16 +7284,63 @@
       "help": ""
     }
   },
-  "IslandPlannerTool": {
+  "IslandProductionPlanner": {
     "_info": {
       "name": "岛屿生产规划器",
       "help": "首次使用：填好下方各店铺等级，商区角色在「经营模块」中设置；先不勾选「写入配置」运行一次，在日志中查看方案，再勾选写入。解锁新科技/岗位、改店铺等级或角色、换季后重新运行。"
     },
     "ApplySettings": {
       "name": "写入配置",
-      "help": "关闭时不写生产设置；科技、季节任务及货运扫描仍可能操作游戏、领取奖励及保存扫描输入。开启后覆盖店铺 Meal/MealNumber、AwayCook、经营商品、逐作物补种目标、矿山/林场/渔场最低库存、牧场底线及开关、制造业岗位数，以及空余岗位的默认作物/产品与岗位数。有效自动计划的目标和菜单仍优先；岗位数是共享设置，会影响后续自动规划。",
+      "help": "关闭时只在日志中预览方案；开启后覆盖各店铺 Meal/MealNumber、AwayCook、经营商品，农田「按作物设置补种目标」，矿山/林场/渔场最低库存，牧场鸡肉/猪肉底线与牛奶/羊毛开关，、制造业各产线岗位数，以及空余岗位的默认作物/产品与岗位数。",
       "True": "开启",
       "False": "关闭"
+    },
+    "Season": {
+      "name": "季节",
+      "help": "按哪个岛屿季节规划。自动：本服务器当前进行中的季节。选具体季节时按该季的采集与配方规划，不在进行中的季节以整季天数作为目标期限。游戏数据只为岗位列出最新一季的配方，选更早的季节时只规划采集与任务，不规划该季的限定菜品与作物。",
+      "auto": "自动（当前季节）",
+      "season_1": "第 1 季",
+      "season_2": "第 2 季",
+      "season_3": "第 3 季",
+      "season_4": "第 4 季",
+      "season_5": "第 5 季（冬季）"
+    },
+    "Priority": {
+      "name": "优先级",
+      "help": "满足目标与每日岛币下限之后。季节 PT：先最大化季节 PT，再最大化岛币。岛币：先最大化每日岛币，再最大化季节 PT。",
+      "pt": "季节 PT",
+      "coins": "岛币"
+    },
+    "FillSparePosts": {
+      "name": "填满空余岗位",
+      "help": "开启：底线都达标后，农田、果园、苗圃、矿山、林场、渔场所有已解锁岗位都生产默认产品；默认产品取计划的闲时产品，没有时取价值最高的已解锁产品。关闭：只写计划闲时产出需要的岗位数。",
+      "True": "开启",
+      "False": "关闭"
+    },
+    "AutoPositions": {
+      "name": "自动岗位数",
+      "help": "开启：按岛屿科技已解锁的岗位写入各区域岗位数（农田、果园、苗圃、矿山、林场、渔场与各店铺后厨），并按全部岗位规划。关闭：在已配置的岗位数内规划。",
+      "True": "开启",
+      "False": "关闭"
+    },
+    "UnlockedFish": {
+      "name": "已解锁的鱼",
+      "help": "渔场可以养殖的产品。游戏数据无法判断哪些鱼已解锁，请取消勾选尚未解锁的鱼；规划器不会为它们排产，也不会用于空余岗位。",
+      "shell": "贝类",
+      "catfish": "鲶鱼",
+      "koi_carp": "鲤鱼",
+      "common_carp": "鲫鱼",
+      "shrimp": "小河虾",
+      "crayfish": "小龙虾",
+      "bass": "鲈鱼",
+      "crab": "螃蟹",
+      "squid": "鱿鱼",
+      "mackerel": "马鲛鱼",
+      "tuna": "金枪鱼",
+      "salmon": "三文鱼",
+      "red_sea_bream": "红鲷鱼",
+      "yellowfin_tuna": "黄鳍金枪鱼",
+      "sea_cucumber": "海参"
     },
     "RescanTechnology": {
       "name": "重新扫描科技",
@@ -7395,7 +7374,7 @@
     },
     "ExtraTargets": {
       "name": "额外目标",
-      "help": "手动追加本工具的备货目标，格式同上，也可写「物品: {count: 数量, period: 天数}」指定期限。本地自动季节订单规划继续独立工作，不会自动把订单同步到本工具。无法生产的物品会被忽略并在日志中提示。"
+      "help": "手动追加的备货目标，格式同上，也可写「物品: {count: 数量, period: 天数}」指定期限。AzurPilot 不自动处理季节订单，需要为订单备货时把订单物品写在这里。无法生产的物品会被忽略并在日志中提示。"
     },
     "DailyProfitLowerLimit": {
       "name": "每日岛币净收入下限",
@@ -7813,42 +7792,6 @@
       "SearchPlaceholder": "搜索配置",
       "SearchNoResult": "未找到匹配的配置",
       "SearchResultCount": "共 {count} 项结果"
-    },
-    "IslandPlannerReport": {
-      "Title": "查看规划详情",
-      "GeneratedAt": "规划生成时间",
-      "DailyRevenue": "理论日均收入",
-      "DailyProfit": "理论日均净收益",
-      "Disabled": "自动规划已关闭，以下保留最近规划供查阅。",
-      "LegacyNotice": "旧计划仅能恢复目标和菜单；生产配方详情等待下一轮规划补齐。",
-      "ObservationNotice": "现货是所列时间的最近实读结果。缺口仅按该次观测计算；最近下单仅表示预计产出，不抵扣现货缺口。菜单为最近保存的规划安排；实际经营可能按季节或加成换菜，以经营任务当前结果为准。",
-      "Items": "物品目标",
-      "Item": "物品",
-      "Target": "目标现货",
-      "Floor": "库存保留线",
-      "Buffer": "原料周转量",
-      "Reserve": "预留量",
-      "Demand": "额外及订单需求",
-      "IdlePerDay": "余岗积累／日",
-      "Observations": "最近巡检与下单",
-      "Stock": "最近实读现货",
-      "ObservedAt": "观测时间",
-      "Source": "来源",
-      "Shortfall": "按该次观测的现货缺口",
-      "DispatchAmount": "最近下单预计产出",
-      "DispatchAt": "下单时间",
-      "PendingInspect": "待巡检",
-      "PendingReview": "待复核",
-      "NoDispatch": "暂无下单记录",
-      "Production": "日均生产安排",
-      "Recipe": "配方",
-      "Place": "生产地点",
-      "BatchesPerDay": "日均批次",
-      "Menus": "经营菜单",
-      "Menu": "店铺",
-      "Capacity": "一货架数量",
-      "PerDay": "理论日销量",
-      "Empty": "暂无规划详情。"
     },
     "FleetManagement": {
       "StartScan": "开始扫描",

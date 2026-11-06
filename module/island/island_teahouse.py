@@ -385,7 +385,7 @@ class IslandTeahouse(IslandShopBase):
                 return 0
             else:
                 self.post_add_one(number - 1)
-                number = self._limit_planned_food_batch(product, number)
+                number = self._limit_food_batch(product, number)
                 if number <= 0:
                     self.back_to_postmanage_from_dispatch()
                     return 0

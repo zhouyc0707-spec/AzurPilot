@@ -3,20 +3,20 @@ import {translateConfig} from './configTranslation'
 
 describe('配置名称与含小数点的选项翻译', () => {
   const translations = {
-    IslandProductionPlanner: {
-      _info: {name: '自动生产规划'},
+    ExampleGroup: {
+      _info: {name: '示例配置'},
       FieldsEfficiency: {name: '农田额外效率', '0': '0%', '0.04': '4%', '0.12': '12%'},
     },
   }
 
   it('保持普通组名和参数名的解析', () => {
-    expect(translateConfig(translations, 'IslandProductionPlanner._info.name')).toBe('自动生产规划')
-    expect(translateConfig(translations, 'IslandProductionPlanner.FieldsEfficiency.name')).toBe('农田额外效率')
+    expect(translateConfig(translations, 'ExampleGroup._info.name')).toBe('示例配置')
+    expect(translateConfig(translations, 'ExampleGroup.FieldsEfficiency.name')).toBe('农田额外效率')
   })
 
   it('数值选项的完整小数键显示百分比', () => {
     for (const [value, label] of [[0, '0%'], [0.04, '4%'], [0.12, '12%']] as const) {
-      expect(translateConfig(translations, `IslandProductionPlanner.FieldsEfficiency.${value}`)).toBe(label)
+      expect(translateConfig(translations, `ExampleGroup.FieldsEfficiency.${value}`)).toBe(label)
     }
   })
 

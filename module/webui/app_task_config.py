@@ -53,7 +53,7 @@ from module.webui.app_helpers import (
     build_copyable_device_id,
     is_demo_mode,
 )
-from module.webui.app_island_planner_report import IslandPlannerReportMixin
+from module.webui.app_types import WebUIMixinBase
 from module.webui.config_search import (
     ConfigSearchEntry,
     build_config_search_result_click_script,
@@ -65,7 +65,7 @@ from module.webui.config_search import (
 )
 
 
-class TaskConfigMixin(IslandPlannerReportMixin):
+class TaskConfigMixin(WebUIMixinBase):
     """WebUI任务菜单和配置表单"""
 
     CONFIG_SEARCH_PIN = "config_search_keyword"
@@ -506,8 +506,6 @@ class TaskConfigMixin(IslandPlannerReportMixin):
         for arg_name, output in output_list:
             field_scope = config_search_field_scope(task, group_name, arg_name)
             field_outputs = [output]
-            if task == "IslandPlan" and group_name == "IslandProductionPlanner" and arg_name == "PlannerStatus":
-                field_outputs.append(self._build_island_planner_details(config))
             content.append(put_scope(field_scope, content=field_outputs))
 
         # 在掉落记录组中显示可复制的设备ID

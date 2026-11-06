@@ -4559,105 +4559,6 @@
       "disabled": "不啟用"
     }
   },
-  "IslandProductionPlanner": {
-    "_info": {
-      "name": "自動生產規劃",
-      "help": "依 ALAS 規劃生產與經營菜單。保留原手動設定；關閉後恢復手動生產。首次執行會讀取實際科技，請在經營設定核對店鋪等級。"
-    },
-    "Enabled": {
-      "name": "自動生產規劃",
-      "help": "依 ALAS 規劃生產與經營菜單。保留原手動設定；關閉後恢復手動生產。首次執行會讀取實際科技，請在經營設定核對店鋪等級。"
-    },
-    "TechnologyStatus": {
-      "name": "已偵測島嶼科技",
-      "help": "自動掃描後儲存的科技狀態。清空或啟用重新掃描後，將重新讀取遊戲。"
-    },
-    "RescanTechnology": {
-      "name": "重新掃描科技",
-      "help": "下次規劃時重新讀取島嶼科技，掃描成功後自動關閉。"
-    },
-    "FieldsEfficiency": {
-      "name": "農田額外效率",
-      "help": "科技效果以外的農田生產效率加成（0.04 為 4%，0.12 為 12%）。",
-      "0": "0%",
-      "0.04": "4%",
-      "0.12": "12%"
-    },
-    "OrchardEfficiency": {
-      "name": "果園額外效率",
-      "help": "科技效果以外的果園生產效率加成（0.04 為 4%，0.12 為 12%）。",
-      "0": "0%",
-      "0.04": "4%",
-      "0.12": "12%"
-    },
-    "NurseryEfficiency": {
-      "name": "苗圃額外效率",
-      "help": "科技效果以外的苗圃生產效率加成（0.04 為 4%，0.12 為 12%）。",
-      "0": "0%",
-      "0.04": "4%",
-      "0.12": "12%"
-    },
-    "DailyProfitLowerLimit": {
-      "name": "每日淨收益下限",
-      "help": "規劃須達到的每日最低淨收益；0 表示不額外要求。"
-    },
-    "DailyBufferSafetyMargin": {
-      "name": "每日庫存緩衝比例",
-      "help": "在每天原料消耗基礎上增加的安全緩衝比例。 例如 0.2 表示增加 20%。"
-    },
-    "TaskTarget": {
-      "name": "額外生產目標",
-      "help": "需要額外累積的物品與數量，支援 ALAS 物品名稱或編號；無額外目標時保留空字典。"
-    },
-    "HardFloorItems": {
-      "name": "庫存保留線",
-      "help": "普通訂單與生產材料消耗需保護的最低庫存。緊急、季節及距每日更新不足兩小時的普通訂單依 ALAS 優先規則使用現貨；起司／豆腐篩選始終優先。"
-    },
-    "DailyBufferItems": {
-      "name": "每日緩衝庫存",
-      "help": "自動規劃產生的日常原料庫存。"
-    },
-    "IdleAccumulatingItems": {
-      "name": "閒置累積物品",
-      "help": "自動規劃產生的空閒崗位累積目標。"
-    },
-    "PlannerTargets": {
-      "name": "各生產地點目標",
-      "help": "自動規劃產生的生產目標，不覆蓋手動欄位。"
-    },
-    "PlannerStatus": {
-      "name": "規劃狀態",
-      "help": "顯示最近一次規劃結果；失敗時保留既有計畫。"
-    },
-    "PlannerReport": {
-      "name": "唯讀規劃詳情資料",
-      "help": "僅用於顯示規劃目標與最近可信觀測，不參與生產決策。"
-    },
-    "PlanFingerprint": {
-      "name": "計畫有效標記",
-      "help": "用於判斷輸入、科技或季節變更後是否需要重新規劃。"
-    },
-    "OrderManufactureTargets": {
-      "name": "訂單製造依賴目標",
-      "help": ""
-    },
-    "OrderManufactureFinalTargets": {
-      "name": "訂單製造成品目標",
-      "help": ""
-    },
-    "AutoManufactureActive": {
-      "name": "工坊暫時啟用狀態",
-      "help": ""
-    },
-    "AutoManufactureNextRun": {
-      "name": "工坊原排程時間",
-      "help": ""
-    },
-    "CompletedManufactureOrderId": {
-      "name": "已完成製造的訂單",
-      "help": ""
-    }
-  },
   "IslandFarm": {
     "_info": {
       "name": "農田",
@@ -4923,11 +4824,11 @@
     },
     "MinFreshwaterFishMeat": {
       "name": "淡水魚肉底線",
-      "help": "漁場養殖完成後，把魚兌換為淡水魚肉補到此目標；0為不兌換。本地自動生產規劃啟用時優先使用其目標和材料預留，否則使用此值；獨立規劃工具可按貨運與菜品需求寫入。兌換保留訂單、菜單和明確底線所需原魚，辨識或入帳無法確認時停止。 手動魚肉目標額外保留對應魚種的養殖最低庫存；有效自動規劃仍採原訂單、菜單及明確硬下限，不額外套用養殖門檻。"
+      "help": "漁場養殖完成後，把魚兌換為淡水魚肉補到此目標；0 為不兌換。獨立規劃工具可按貨運與菜品需求寫入此值。兌換時保留季節訂單、經營菜單所需原魚及對應魚種的養殖最低庫存；辨識或入帳無法確認時停止。"
     },
     "MinSaltwaterFishMeat": {
       "name": "海水魚肉底線",
-      "help": "同上，針對海水魚肉。 手動魚肉目標額外保留對應魚種的養殖最低庫存；有效自動規劃仍採原訂單、菜單及明確硬下限，不額外套用養殖門檻。"
+      "help": "同上，針對海水魚肉。"
     },
     "PlantYellowfinTuna": {
       "name": "養黃鰭鮪魚",
@@ -4940,6 +4841,25 @@
     "RancherFilter": {
       "name": "使用角色",
       "help": "以>連接，例如肇和 新澤西 小天城：ChaoHo > NewJersey > Amagi_chan\n小加加：Saratoga > 明石：Akashi > 塔什干：Tashkent > 應瑞：YingSwei\n惡毒：LeMalin > 獨角獸：Unicorn > 島風：Shimakaze > 柴郡：Cheshire\n鎮海：ChenHai > 威廉D波特：WilliamDPorter\n海倫娜：Helena > 大帝：Friedrich > 愛宕：Atago\n逸仙：Yixian > 奧古斯特：August > 歐根親王：Eugen > 胡德：Hood > 標槍：Javelin > 拉菲：Laffey > 探索者：Explorer > 領航員：Navigator > 領洋者：OceanCrosser > 飛雲：FeiYun > 高雄：Takao > 安克雷奇：Anchorage > 貝爾法斯特：Belfast > 長風：ChangFeng > 莫加多爾：Mogador > 皇家財富號：RoyalFortune > 達芬奇：DaVinci > 大鳳：Taihou > 長門：Nagato > 埃吉爾：Agir > 華甲：HwahJah > 百眼巨人：Argus > 火力：Ognevoy\n僅識別預設排序前兩排；指定艦娘不可用時回退 WorkerJuu。"
+    },
+    "DefaultFish": {
+      "name": "預設養殖產品",
+      "help": "所有產品達到底線後，空餘漁場崗位養殖的產品（崗位數見上一項）。島嶼生產規劃器會選已解鎖的產品。",
+      "shell": "貝類",
+      "catfish": "鯰魚",
+      "koi_carp": "鯉魚",
+      "common_carp": "鯽魚",
+      "shrimp": "小河蝦",
+      "crayfish": "小龍蝦",
+      "bass": "鱸魚",
+      "crab": "螃蟹",
+      "squid": "魷魚",
+      "mackerel": "馬鮫魚",
+      "tuna": "金槍魚",
+      "salmon": "三文魚",
+      "red_sea_bream": "紅鯛魚",
+      "yellowfin_tuna": "黃鰭金槍魚",
+      "sea_cucumber": "海參"
     }
   },
   "IslandMine": {
@@ -4987,6 +4907,15 @@
     "MinSilver": {
       "name": "銀礦最低庫存",
       "help": "倉庫中銀礦數量低於此值時，礦山崗位才會生產"
+    },
+    "DefaultOre": {
+      "name": "預設礦石",
+      "help": "所有礦石達到底線後，空餘礦山崗位生產的礦石（崗位數見上一項）。",
+      "Copper": "銅礦",
+      "Aluminium": "鋁礦",
+      "Iron": "鐵礦",
+      "Sulphur": "硫礦",
+      "Silver": "銀礦"
     }
   },
   "IslandForest": {
@@ -5026,6 +4955,13 @@
     "MinSelected": {
       "name": "精選木材最低庫存",
       "help": "倉庫中精選木材數量低於此值時，林場崗位才會生產"
+    },
+    "DefaultWood": {
+      "name": "預設木材",
+      "help": "所有木材達到底線後，空餘林場崗位生產的木材（崗位數見上一項）。",
+      "Practical": "實用之木",
+      "Selected": "精選之木",
+      "Elegant": "典雅之木"
     }
   },
   "IslandDailyGather": {
@@ -6069,6 +6005,10 @@
       "0": "0",
       "1": "1",
       "2": "2"
+    },
+    "Products": {
+      "name": "生產順序",
+      "help": "按順序生產的產品，用「>」分隔（如「paper > notebook」），材料不足時嘗試下一個。留空使用內建規則。島嶼生產規劃器會寫入。可選產品：file_cabinet, paper, notebook, chair_desk"
     }
   },
   "ElectronicProcessing": {
@@ -6082,6 +6022,10 @@
       "0": "0",
       "1": "1",
       "2": "2"
+    },
+    "Products": {
+      "name": "生產順序",
+      "help": "按順序生產的產品，用「>」分隔（如「paper > notebook」），材料不足時嘗試下一個。留空使用內建規則。島嶼生產規劃器會寫入。可選產品：filter_element, ink_cartridge"
     }
   },
   "Industrial": {
@@ -6095,6 +6039,10 @@
       "0": "0",
       "1": "1",
       "2": "2"
+    },
+    "Products": {
+      "name": "生產順序",
+      "help": "按順序生產的產品，用「>」分隔（如「paper > notebook」），材料不足時嘗試下一個。留空使用內建規則。島嶼生產規劃器會寫入。可選產品：iron_nail, cutlery, charcoal_brush, cable"
     }
   },
   "Handmade": {
@@ -6108,6 +6056,10 @@
       "0": "0",
       "1": "1",
       "2": "2"
+    },
+    "Products": {
+      "name": "生產順序",
+      "help": "按順序生產的產品，用「>」分隔（如「paper > notebook」），材料不足時嘗試下一個。留空使用內建規則。島嶼生產規劃器會寫入。可選產品：leather, boot, peanut_oil, cloth, rope, shepherd_purse, summer_bouquet, plum_blossom_sachet, winter_bouquet"
     }
   },
   "IslandAirDrop": {
@@ -6246,10 +6198,6 @@
       "silver": "銀牌",
       "gold": "金牌",
       "diamond": "鑽石"
-    },
-    "PlannedMenu": {
-      "name": "規劃菜單",
-      "help": ""
     },
     "Char1": {
       "name": "角色1",
@@ -6449,10 +6397,6 @@
       "gold": "金牌",
       "diamond": "鑽石"
     },
-    "PlannedMenu": {
-      "name": "規劃菜單",
-      "help": ""
-    },
     "Char1": {
       "name": "角色1",
       "help": "",
@@ -6651,10 +6595,6 @@
       "gold": "金牌",
       "diamond": "鑽石"
     },
-    "PlannedMenu": {
-      "name": "規劃菜單",
-      "help": ""
-    },
     "Char1": {
       "name": "角色1",
       "help": "",
@@ -6823,10 +6763,6 @@
       "gold": "金牌",
       "diamond": "鑽石"
     },
-    "PlannedMenu": {
-      "name": "規劃菜單",
-      "help": ""
-    },
     "Char1": {
       "name": "角色1",
       "help": "",
@@ -6989,10 +6925,6 @@
       "silver": "銀牌",
       "gold": "金牌",
       "diamond": "鑽石"
-    },
-    "PlannedMenu": {
-      "name": "規劃菜單",
-      "help": ""
     },
     "Char1": {
       "name": "角色1",
@@ -7352,16 +7284,63 @@
       "help": ""
     }
   },
-  "IslandPlannerTool": {
+  "IslandProductionPlanner": {
     "_info": {
       "name": "島嶼生產規劃器",
       "help": "首次使用：填好下方各店鋪等級，商區角色在「經營模組」中設定；先不勾選「寫入設定」執行一次，在日誌中查看方案，再勾選寫入。解鎖新科技/崗位、改店鋪等級或角色、換季後重新執行。"
     },
     "ApplySettings": {
       "name": "寫入設定",
-      "help": "關閉時不寫入生產設定；科技、季節任務及貨運掃描仍可能操作遊戲、領取獎勵及儲存掃描輸入。開啟後覆寫店鋪 Meal/MealNumber、AwayCook、經營商品、各作物補種目標、礦山／林場／漁場最低庫存、牧場下限與開關、製造業崗位數，以及空餘崗位的預設作物／產品與崗位數。有效自動計畫的目標與菜單仍優先；崗位數是共用設定，會影響後續自動規劃。",
+      "help": "關閉時只在日誌中預覽方案；開啟後覆蓋各店鋪 Meal/MealNumber、AwayCook、經營商品，農田「按作物設定補種目標」，礦山/林場/漁場最低庫存，牧場雞肉/豬肉底線與牛奶/羊毛開關，、製造業各產線崗位數，以及空餘崗位的預設作物/產品與崗位數。",
       "True": "開啟",
       "False": "關閉"
+    },
+    "Season": {
+      "name": "季節",
+      "help": "按哪個島嶼季節規劃。自動：本伺服器目前進行中的季節。選具體季節時按該季的採集與配方規劃，不在進行中的季節以整季天數作為目標期限。遊戲資料只為崗位列出最新一季的配方，選更早的季節時只規劃採集與任務，不規劃該季的限定菜品與作物。",
+      "auto": "自動（目前季節）",
+      "season_1": "第 1 季",
+      "season_2": "第 2 季",
+      "season_3": "第 3 季",
+      "season_4": "第 4 季",
+      "season_5": "第 5 季（冬季）"
+    },
+    "Priority": {
+      "name": "優先級",
+      "help": "滿足目標與每日島幣下限之後。季節 PT：先最大化季節 PT，再最大化島幣。島幣：先最大化每日島幣，再最大化季節 PT。",
+      "pt": "季節 PT",
+      "coins": "島幣"
+    },
+    "FillSparePosts": {
+      "name": "填滿空餘崗位",
+      "help": "開啟：底線都達標後，農田、果園、苗圃、礦山、林場、漁場所有已解鎖崗位都生產預設產品；預設產品取計劃的閒時產品，沒有時取價值最高的已解鎖產品。關閉：只寫計劃閒時產出需要的崗位數。",
+      "True": "開啟",
+      "False": "關閉"
+    },
+    "AutoPositions": {
+      "name": "自動崗位數",
+      "help": "開啟：按島嶼科技已解鎖的崗位寫入各區域崗位數（農田、果園、苗圃、礦山、林場、漁場與各店鋪後廚），並按全部崗位規劃。關閉：在已設定的崗位數內規劃。",
+      "True": "開啟",
+      "False": "關閉"
+    },
+    "UnlockedFish": {
+      "name": "已解鎖的魚",
+      "help": "漁場可以養殖的產品。遊戲資料無法判斷哪些魚已解鎖，請取消勾選尚未解鎖的魚；規劃器不會為它們排產，也不會用於空餘崗位。",
+      "shell": "貝類",
+      "catfish": "鯰魚",
+      "koi_carp": "鯉魚",
+      "common_carp": "鯽魚",
+      "shrimp": "小河蝦",
+      "crayfish": "小龍蝦",
+      "bass": "鱸魚",
+      "crab": "螃蟹",
+      "squid": "魷魚",
+      "mackerel": "馬鮫魚",
+      "tuna": "金槍魚",
+      "salmon": "三文魚",
+      "red_sea_bream": "紅鯛魚",
+      "yellowfin_tuna": "黃鰭金槍魚",
+      "sea_cucumber": "海參"
     },
     "RescanTechnology": {
       "name": "重新掃描科技",
@@ -7395,7 +7374,7 @@
     },
     "ExtraTargets": {
       "name": "額外目標",
-      "help": "手動追加本工具的備貨目標，格式同上，也可寫「物品: {count: 數量, period: 天數}」指定期限。本機自動季節訂單規劃繼續獨立運作，不會自動將訂單同步至本工具。無法生產的物品會被忽略並在日誌中提示。"
+      "help": "手動追加的備貨目標，格式同上，也可寫「物品: {count: 數量, period: 天數}」指定期限。AzurPilot 不自動處理季節訂單，需要為訂單備貨時把訂單物品寫在這裡。無法生產的物品會被忽略並在日誌中提示。"
     },
     "DailyProfitLowerLimit": {
       "name": "每日島幣淨收入下限",
@@ -7813,42 +7792,6 @@
       "SearchPlaceholder": "搜尋設定",
       "SearchNoResult": "找不到相符的設定",
       "SearchResultCount": "共 {count} 項結果"
-    },
-    "IslandPlannerReport": {
-      "Title": "查看規劃詳情",
-      "GeneratedAt": "規劃產生時間",
-      "DailyRevenue": "理論平均每日收入",
-      "DailyProfit": "理論平均每日淨收益",
-      "Disabled": "自動規劃已關閉，以下保留最近規劃供查閱。",
-      "LegacyNotice": "舊計畫僅能還原目標和菜單；生產配方詳情等待下一輪規劃補齊。",
-      "ObservationNotice": "庫存是所列時間最近實際讀取的結果。缺口僅按該次觀測計算；最近下單僅代表預期產量，不抵扣庫存缺口。菜單為最近儲存的規劃安排；實際經營可能依季節或加成更換菜色，以經營任務目前結果為準。",
-      "Items": "物品目標",
-      "Item": "物品",
-      "Target": "目標庫存",
-      "Floor": "庫存保留線",
-      "Buffer": "原料周轉量",
-      "Reserve": "預留量",
-      "Demand": "額外及訂單需求",
-      "IdlePerDay": "剩餘崗位累積／日",
-      "Observations": "最近盤點與下單",
-      "Stock": "最近實際讀取庫存",
-      "ObservedAt": "觀測時間",
-      "Source": "來源",
-      "Shortfall": "按該次觀測的庫存缺口",
-      "DispatchAmount": "最近下單預期產量",
-      "DispatchAt": "下單時間",
-      "PendingInspect": "待盤點",
-      "PendingReview": "待複核",
-      "NoDispatch": "暫無下單紀錄",
-      "Production": "平均每日生產安排",
-      "Recipe": "配方",
-      "Place": "生產地點",
-      "BatchesPerDay": "平均每日批次",
-      "Menus": "經營菜單",
-      "Menu": "店鋪",
-      "Capacity": "單一貨架數量",
-      "PerDay": "理論每日銷量",
-      "Empty": "暫無規劃詳情。"
     },
     "FleetManagement": {
       "StartScan": "開始掃描",

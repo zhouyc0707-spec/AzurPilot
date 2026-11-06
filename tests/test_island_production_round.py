@@ -85,7 +85,6 @@ class ProductionRoundTests(unittest.TestCase):
             return {2000: 0, 2009: 10, 3005: 0}
         self.warehouse_scan = self.enterContext(patch(
             'module.island.round_warehouse.read_round_warehouse_stocks', side_effect=warehouse_scan))
-        self.enterContext(patch('module.island.production_planner.planner_enabled', return_value=False))
         self.owner = SimpleNamespace(config=self.config, device=object())
 
     def test_harvest_all_then_warehouse_snapshot_once_before_any_dispatch(self):

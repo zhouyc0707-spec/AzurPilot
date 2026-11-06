@@ -16,11 +16,6 @@ from module.base.timer import Timer
 from module.base.utils import crop, get_color, color_similar
 from module.exception import GameStuckError
 from module.island.island_season import SEASONAL_ITEMS
-from module.island.order_stock import (
-    SHOP_TO_RESTAURANT, get_planned_menu, planner_enabled, sync_active_menu,
-)
-from module.island.item_ids import LOCAL_TO_ITEM_ID
-from module.island.planner_report import invalidate_planner_stocks
 from datetime import timedelta
 
 from module.config.time_source import now as current_time
@@ -428,7 +423,7 @@ class IslandBusiness(Island):
 
         if replaced:
             self.active_products[shop_name] = self._unique_business_products(new_products)
-            self._sync_planned_shop_menu(shop_name)
+            self._sync_active_shop_products(shop_name)
             if fallback_already_selected:
                 logger.info(f"[岛屿-经营] 备用餐品 {self._item_cn(fallback_name)} 已在菜单中，保留原位置且不重复选择")
             logger.info(f"[岛屿-经营] {shop_name}商品已替换: {self._item_cn(seasonal_product_name)} → {self._item_cn(fallback_name)}")
@@ -814,7 +809,7 @@ class IslandBusiness(Island):
         old_name = products[slot_index]['name']
         products[slot_index] = replacement
         self.active_products[shop_name] = products
-        self._sync_planned_shop_menu(shop_name)
+        self._sync_active_shop_products(shop_name)
         logger.info(f"[岛屿-经营] 加成餐品替换: {old_name} → {replacement_name} (槽位 {slot_index + 1})")
         return True
 
@@ -924,26 +919,13 @@ class IslandBusiness(Island):
         return unique
 
     def _load_shop_configs(self):
-        """优先加载规划菜单；未生成时保留手工餐品，均按季节过滤。"""
+        """加载手工餐品配置，并按当前季节过滤。"""
         self.active_products = {}
-        self._planned_disabled_shops = set()
 
         for shop in self.shops:
             shop_name = shop['name']
             ck = shop['config_key']
             module_key = self.SHOP_SEASON_MAP.get(shop_name, '')
-            planned = get_planned_menu(self.config, SHOP_TO_RESTAURANT[int(ck)], self.season_config.season)
-            if planned is not None:
-                self.active_products[shop_name] = self._unique_business_products([
-                    product for name in planned for product in self.shop_products[shop_name]
-                    if product['name'] == name
-                ])
-                if not planned:
-                    self._planned_disabled_shops.add(shop_name)
-                    logger.info(f"[岛屿-经营] {shop_name}: 规划菜单为空，本轮仅领取已有收益")
-                else:
-                    logger.info(f"[岛屿-经营] {shop_name}: 使用规划菜单 {list(planned)}")
-                continue
 
             # 读取餐品配置（最多5个）
             products = []
@@ -969,13 +951,11 @@ class IslandBusiness(Island):
                 self.active_products[shop_name] = self._unique_business_products(products)
                 logger.info(f"[岛屿-经营] {shop_name}: 配置 {len(self.active_products[shop_name])} 餐品")
 
-    def _sync_planned_shop_menu(self, shop_name):
-        """将季节备选和加成替换的结果同步给订单保护及生产补货。"""
+    def _sync_active_shop_products(self, shop_name):
+        """保留季节备选和加成替换后的实际餐品，并去除重复项。"""
         shop = next((shop for shop in self.shops if shop['name'] == shop_name), None)
         if shop is not None:
             self.active_products[shop_name] = self._unique_business_products(self.active_products.get(shop_name, []))
-            sync_active_menu(self.config, SHOP_TO_RESTAURANT[int(shop['config_key'])],
-                             [product['name'] for product in self.active_products.get(shop_name, [])])
 
     def _load_shop_characters(self, shop):
         """为指定商店加载角色优先级列表"""
@@ -1122,10 +1102,6 @@ class IslandBusiness(Island):
 
         if self.batch_enabled:
             self._run_batch_mode()
-        elif planner_enabled(self.config):
-            # 不分批的规划经营也使用逐店状态循环，以便空菜单跳过开业但仍领取旧收益。
-            started_shop_names = self._run_batch(self.shops)
-            self._trigger_shop_refill(started_shop_names)
         else:
             self._run_legacy_mode()
 
@@ -1162,8 +1138,7 @@ class IslandBusiness(Island):
                     self.device.click(ISLAND_BACK)
                     self.device.sleep(1)
                     continue
-                if self._confirm_business_start():
-                    self._invalidate_business_stocks(shop_name)
+                self._confirm_business_start()
                 self.post_manage_mode(POST_MANAGE_BUSINESS)
                 self.device.sleep(0.5)
             elif status == 'yellow':
@@ -1445,8 +1420,7 @@ class IslandBusiness(Island):
         self._select_business_product(shop_name)
 
         # 确认经营并返回
-        if self._confirm_business_start():
-            self._invalidate_business_stocks(shop_name)
+        self._confirm_business_start()
         self.post_manage_mode(POST_MANAGE_BUSINESS)
         self.device.sleep(0.5)
 
@@ -1563,10 +1537,6 @@ class IslandBusiness(Island):
                     continue
 
                 if status == 'blue':
-                    if shop_name in getattr(self, '_planned_disabled_shops', set()):
-                        logger.info(f"[岛屿-经营] {shop_name}: 规划菜单为空，跳过开始经营")
-                        processed_shop_names.add(shop_name)
-                        continue
                     self._has_seen_blue = True
                     logger.info(f"[岛屿-经营] {shop_name}: 蓝色可经营，点击进入")
 
@@ -2204,13 +2174,6 @@ class IslandBusiness(Island):
                 self.device.click(offset_btn)
                 self.device.sleep(0.5)
 
-    def _invalidate_business_stocks(self, shop_name):
-        """经营可能已上架消耗成品，只将旧观测标待复核，不猜实际售卖数量。"""
-        products = getattr(self, 'active_products', {}).get(
-            shop_name, getattr(self, 'shop_products', {}).get(shop_name, []))
-        items = [LOCAL_TO_ITEM_ID[product['name']] for product in products
-                 if product.get('name') in LOCAL_TO_ITEM_ID]
-        invalidate_planner_stocks(self.config, items, '经营操作后')
 
     def _confirm_business_start(self):
         """确认开始经营，处理奖励弹窗并确认返回岗位管理。

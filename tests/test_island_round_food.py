@@ -17,7 +17,7 @@ from module.island.island_restaurant import IslandRestaurant
 from module.island.island_shop_base import IslandShopBase
 from module.island.island_teahouse import IslandTeahouse
 from module.island.item_ids import LOCAL_TO_ITEM_ID
-from module.island.planned_dispatch import recipe_for_local_name
+from module.island.production_recipe import recipe_for_local_name
 from module.island.round_inventory import IslandRoundInventory
 from module.island_manufacture.assets import ALAS_RECIPE_AMOUNT
 from tests.test_island_food_dispatch import (
@@ -46,7 +46,6 @@ class RoundCollectionConfirmationTests(unittest.TestCase):
         task.posts = {name: {'button': button} for name, button in task.post_buttons.items()}
         task.post_check_meal = {}
         task._unknown_working_categories = set()
-        task._manufacture_scheduled = {}
         task.post_list_is_empty = Mock(return_value=False)
         task.post_open = Mock(return_value=True)
         task.appear = lambda button, **kwargs: button is ISLAND_WORK_COMPLETE
@@ -90,7 +89,7 @@ class WarehouseRoundTestCase(unittest.TestCase):
         log = patch('module.island.island_shop_base.logger')
         log.start()
         self.addCleanup(log.stop)
-        opening = patch('module.island.planned_dispatch.PlannedProductionMixin._planned_open_product_page',
+        opening = patch('module.island.production_recipe.ProductionRecipeMixin._open_product_page',
                         return_value=True)
         self.opening = opening.start()
         self.addCleanup(opening.stop)
@@ -341,7 +340,6 @@ class RoundDispatchQuantityTests(WarehouseRoundTestCase):
         shop.name_to_config = {'iced_coffee': {'selection': POST_ADD_ORDER, 'selection_check': POST_ADD_ORDER}}
         shop.island_round = IslandRoundInventory({'iced_coffee': 0, 'coffee_bean': 324})
         shop._reserved_targets = {}
-        shop._planner_protection = {}
         shop.to_post_products = {'iced_coffee': 14}
         return shop, device
 
@@ -456,9 +454,9 @@ class RoundDispatchServerOCRTests(unittest.TestCase):
 class RoundManufactureTests(WarehouseRoundTestCase):
     def factory(self, product='file_cabinet', stocks=None):
         factory = IslandManufacture.__new__(IslandManufacture)
+        factory.config = SimpleNamespace()
         factory.island_round = IslandRoundInventory(recipe_stocks(product, batches=4) if stocks is None else stocks)
         factory._reserved_targets = {}
-        factory._planner_protection = {}
         factory.chef_unavailable_products = set()
         factory._unknown_working_categories = set()
         factory.name_to_config = {product: {
@@ -466,7 +464,7 @@ class RoundManufactureTests(WarehouseRoundTestCase):
             'selection_check': Mock(area=(1, 2, 3, 4))}}
         factory.special_materials = {}
         factory._post_time_vars = {'ISLAND_WOOD_PROCESSING_POST1': 'time1'}
-        factory._prepare_planned_recipe_page = Mock(return_value=True)
+        factory._prepare_recipe_page = Mock(return_value=True)
         factory.back_to_postmanage_from_dispatch = Mock(return_value=True)
         factory.select_product = Mock(return_value=True)
         factory.post_add_one = Mock()
@@ -498,7 +496,7 @@ class RoundManufactureTests(WarehouseRoundTestCase):
                 item = factory.name_to_config[product]
                 for _ in range(2):
                     self.assertIsNone(factory.select_product_with_material_check('ISLAND_WOOD_PROCESSING_POST1', [item]))
-                factory._prepare_planned_recipe_page.assert_called_once()
+                factory._prepare_recipe_page.assert_called_once()
                 factory.confirm_food_dispatch.assert_not_called()
                 factory.post_add_one.assert_not_called()
                 self.assertEqual(factory.island_round.in_production, {})
@@ -514,7 +512,7 @@ class RoundManufactureTests(WarehouseRoundTestCase):
                 self.assertEqual(factory.island_round.get(raw), cost)
                 factory = self.factory(product, {product: 0, raw: 0})
                 self.assertIsNone(factory.select_product_with_material_check('ISLAND_WOOD_PROCESSING_POST1', [item]))
-                factory._prepare_planned_recipe_page.assert_not_called()
+                factory._prepare_recipe_page.assert_not_called()
 
     def test_manufacture_uses_old_selection_and_actual_batches_for_all_materials(self):
         factory = self.factory()
@@ -538,7 +536,7 @@ class RoundManufactureTests(WarehouseRoundTestCase):
                     factory.island_round.observe(material, stock)
                 self.assertIsNone(factory.select_product_with_material_check(
                     'ISLAND_WOOD_PROCESSING_POST1', [factory.name_to_config['file_cabinet']]))
-                factory._prepare_planned_recipe_page.assert_not_called()
+                factory._prepare_recipe_page.assert_not_called()
 
     def test_industrial_threshold_uses_shared_warehouse_without_scanning(self):
         factory = self.factory()
@@ -550,7 +548,7 @@ class RoundManufactureTests(WarehouseRoundTestCase):
         factory.get_idle_posts_by_category = Mock(return_value=['ISLAND_INDUSTRIAL_POST1'])
         factory.select_product_with_material_check = Mock()
         factory.schedule_industrial_production()
-        factory._prepare_planned_recipe_page.assert_not_called()
+        factory._prepare_recipe_page.assert_not_called()
         self.assertEqual(factory.select_product_with_material_check.call_args.args[1],
                          [{'name': 'cutlery'}, {'name': 'iron_nail'}])
 

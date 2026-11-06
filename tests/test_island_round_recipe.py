@@ -84,7 +84,7 @@ class MillUnknownRecoveryTests(unittest.TestCase):
             return {item: {'stock': 0, 'cost': recipe['commission_cost'].get(item, 0)}
                     for item in set(recipe['commission_product']) | set(recipe['commission_cost'])}
 
-        with patch('module.island.planned_dispatch.PlannedProductionMixin._planned_dispatch_stage',
+        with patch('module.island.production_recipe.ProductionRecipeMixin._dispatch_stage',
                    side_effect=['characters', 'products'] * 8), \
                 patch('module.island.manufacture_selector.select_manufacture_recipe', return_value=True), \
                 patch('module.island.manufacture_selector.read_selected_recipe_inventory', side_effect=stock_for_recipe):
@@ -115,7 +115,7 @@ class MillUnknownRecoveryTests(unittest.TestCase):
             posts={'farm1': {'state': 'working', 'crop': 'wheat'},
                    'farm2': {'state': 'idle', 'round_enabled': True}},
             worker_filters={'farm': ['WorkerJuu']})
-        with patch('module.island.planned_dispatch.PlannedProductionMixin._planned_dispatch_stage',
+        with patch('module.island.production_recipe.ProductionRecipeMixin._dispatch_stage',
                    return_value='products'), \
                 patch('module.island.manufacture_selector.select_manufacture_recipe', return_value=True), \
                 patch('module.island.manufacture_selector.read_selected_recipe_inventory',
@@ -137,7 +137,7 @@ class MillUnknownRecoveryTests(unittest.TestCase):
                               name_to_config={'chicken_potato': {}}, chef_config=['WorkerJuu'])
         inventory = {3030: {'stock': 0, 'cost': 0}, 2602: {'stock': 0, 'cost': 2},
                      2005: {'stock': 10, 'cost': 1}}
-        with patch('module.island.planned_dispatch.PlannedProductionMixin._planned_dispatch_stage',
+        with patch('module.island.production_recipe.ProductionRecipeMixin._dispatch_stage',
                    return_value='products'), \
                 patch('module.island.manufacture_selector.select_manufacture_recipe', return_value=True), \
                 patch('module.island.manufacture_selector.read_selected_recipe_inventory', return_value=inventory):
@@ -151,7 +151,7 @@ class MillUnknownRecoveryTests(unittest.TestCase):
                               posts_ranch={'ISLAND_RANCH_POST2': 'ranch2'},
                               config=SimpleNamespace(IslandRancher_PigFilter=['WorkerJuu']))
         inventory = {2600: {'stock': 0, 'cost': 0}, 3001: {'stock': 50, 'cost': 2}}
-        with patch('module.island.planned_dispatch.PlannedProductionMixin._planned_dispatch_stage',
+        with patch('module.island.production_recipe.ProductionRecipeMixin._dispatch_stage',
                    return_value='products'), \
                 patch('module.island.manufacture_selector.select_manufacture_recipe', return_value=True), \
                 patch('module.island.manufacture_selector.read_selected_recipe_inventory', return_value=inventory):
@@ -185,7 +185,7 @@ class MillUnknownRecoveryTests(unittest.TestCase):
         runner = probe_runner(ledger, posts={'coffee1': {'status': 'idle', 'button': 'coffee1'}},
                               name_to_config={'apple_pie': {}}, chef_config=['WorkerJuu'])
         runner.select_character.return_value = False
-        with patch('module.island.planned_dispatch.PlannedProductionMixin._planned_dispatch_stage',
+        with patch('module.island.production_recipe.ProductionRecipeMixin._dispatch_stage',
                    return_value='characters'):
             self.assertEqual(probe_round_missing_stocks([runner], ledger, (3004,)), {3004})
         runner.back_to_postmanage_from_dispatch.assert_called_once()
@@ -198,7 +198,7 @@ class MillUnknownRecoveryTests(unittest.TestCase):
                               name_to_config={'apple_pie': {}}, chef_config=['WorkerJuu'])
         runner.back_to_postmanage_from_dispatch.return_value = False
         next_runner = probe_runner(ledger)
-        with patch('module.island.planned_dispatch.PlannedProductionMixin._planned_dispatch_stage',
+        with patch('module.island.production_recipe.ProductionRecipeMixin._dispatch_stage',
                    return_value='products'), \
                 patch('module.island.manufacture_selector.select_manufacture_recipe', return_value=False):
             with self.assertRaises(GameStuckError):
@@ -212,7 +212,7 @@ class MillUnknownRecoveryTests(unittest.TestCase):
                               name_to_config={'apple_pie': {}}, chef_config=['WorkerJuu'])
         runner.select_character.return_value = False
         runner.back_to_postmanage_from_dispatch.return_value = False
-        with patch('module.island.planned_dispatch.PlannedProductionMixin._planned_dispatch_stage',
+        with patch('module.island.production_recipe.ProductionRecipeMixin._dispatch_stage',
                    return_value='characters'):
             with self.assertRaises(GameStuckError):
                 probe_round_missing_stocks([runner], ledger, (3004,))

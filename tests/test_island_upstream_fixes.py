@@ -1,6 +1,5 @@
-"""验证上游岛屿修复与本地生产规划的融合，不连接游戏账号。"""
+"""验证上游岛屿修复、手工开关和安全派遣的融合，不连接游戏账号。"""
 
-import json
 import unittest
 from datetime import datetime, timedelta
 from types import SimpleNamespace
@@ -10,19 +9,16 @@ from module.base.utils import load_image
 from module.island.assets import ISLAND_POST_SELECT, ISLAND_SELECT_PRODUCT_CHECK
 from module.island.island_mine_forest import IslandMineForest, POST_ADD_ORDER
 from module.island.island_rancher import IslandRancher
-from module.island.item_ids import LOCAL_TO_ITEM_ID
-from module.island.production_planner import CONFIG_PREFIX
 from module.island_mine_forest.assets import (
     SELECT_ALUMINIUM, SELECT_ALUMINIUM_CHECK, SELECT_COPPER_CHECK,
 )
-from tests.test_island_production_planner import MemoryConfig
 
 
 class RanchSwitchMergeTests(unittest.TestCase):
     def setUp(self):
         self.enterContext(patch('module.island.island_rancher.logger'))
         self.task = IslandRancher.__new__(IslandRancher)
-        self.task.config = MemoryConfig(**{f'{CONFIG_PREFIX}.Enabled': False})
+        self.task.config = SimpleNamespace()
         self.task.config.IslandRancher_Milk = False
         self.task.config.IslandRancher_Wool = False
         self.task.ranch_chicken_threshold = self.task.ranch_pork_threshold = 100
@@ -42,47 +38,13 @@ class RanchSwitchMergeTests(unittest.TestCase):
         self.assertIn(('cattle_feed', 11), self.task.check_mill_supplement_needs())
         self.assertNotIn(('sheep_feed', 11), self.task.check_mill_supplement_needs())
 
-    def test_valid_planner_keeps_feed_dependency_then_restores_manual_switches(self):
-        config = self.task.config
-        config.values[f'{CONFIG_PREFIX}.Enabled'] = True
-        config.values[f'{CONFIG_PREFIX}.PlanFingerprint'] = 'valid'
-        config.values[f'{CONFIG_PREFIX}.PlannerTargets'] = json.dumps({
-            LOCAL_TO_ITEM_ID[name]: 50 for name in ('cattle_feed', 'sheep_feed')
-        })
-        self.assertTrue(self.task.is_ranch_post_enabled('ISLAND_RANCH_POST3'))
-        self.assertTrue(self.task.is_ranch_post_enabled('ISLAND_RANCH_POST4'))
-        needs = self.task.check_mill_supplement_needs()
-        self.assertIn(('cattle_feed', 5), needs)
-        self.assertIn(('sheep_feed', 5), needs)
-        self.assertFalse(config.IslandRancher_Milk)
-        self.assertFalse(config.IslandRancher_Wool)
-        self.assertEqual(config.writes, [])
-        config.values[f'{CONFIG_PREFIX}.Enabled'] = False
+    def test_old_planner_cache_cannot_reenable_disabled_ranch_posts(self):
+        self.task.config.cross_get = Mock(return_value=True)
         self.assertFalse(self.task.is_ranch_post_enabled('ISLAND_RANCH_POST3'))
         self.assertFalse(self.task.is_ranch_post_enabled('ISLAND_RANCH_POST4'))
         self.assertEqual(self.task.check_mill_supplement_needs(), [('chicken_feed', 11), ('pig_feed', 11)])
+        self.task.config.cross_get.assert_not_called()
 
-    def test_planned_leather_demand_keeps_existing_cow_dispatch_with_manual_switch_off(self):
-        config = self.task.config
-        config.values.update({f'{CONFIG_PREFIX}.Enabled': True,
-                              f'{CONFIG_PREFIX}.PlanFingerprint': 'valid',
-                              f'{CONFIG_PREFIX}.PlannerTargets': '{"2604":5}'})
-        for name in ('ChickenFilter', 'PigFilter', 'RancherFilter', 'WoolWorkerFilter'):
-            setattr(config, f'IslandRancher_{name}', 'WorkerJuu')
-        configs = [(f'ISLAND_RANCH_POST{i}', f'time_ranch{i}') for i in range(1, 5)]
-        self.task.posts_ranch = {pid: object() for pid, _ in configs}
-        for name in ('goto_postmanage', 'post_manage_mode', 'post_manage_swipe_to_top', 'post_close'):
-            setattr(self.task, name, Mock())
-        self.task.post_open = self.task.post_get_and_close = Mock(return_value=True)
-        self.task.loop = Mock(side_effect=lambda **kwargs: iter((object(),)))
-        self.task.appear = Mock(side_effect=lambda button, **kwargs: button is ISLAND_POST_SELECT)
-        self.task._probe_ranch_secondary_stock = Mock(return_value=0)
-        self.task._planned_dispatch_recipe = Mock(return_value=16)
-        with patch('module.island.production_planner.planner_idle_products', return_value=[]):
-            self.task.run_planned_ranch(configs)
-        self.task._planned_dispatch_recipe.assert_called_once_with(
-            'ISLAND_RANCH_POST3', 'milk', 0, 'time_ranch3', 'WorkerJuu', extra_stocks={2604: 0})
-        self.assertFalse(config.IslandRancher_Milk)
 
 
 class MineProductMergeTests(unittest.TestCase):

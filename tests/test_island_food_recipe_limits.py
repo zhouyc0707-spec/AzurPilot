@@ -7,9 +7,7 @@ from module.island.data import DIC_ISLAND_RECIPE, DIC_ISLAND_RESTAURANT_MENU_TO_
 from module.island.island_season import SEASONAL_ITEMS
 from module.island.island_shop_base import IslandShopBase
 from module.island.item_ids import ITEM_ID_TO_LOCAL
-from module.island.planned_dispatch import recipe_for_local_name
-from module.island.production_planner import CONFIG_PREFIX
-from tests.test_island_production_planner import MemoryConfig
+from module.island.production_recipe import recipe_for_local_name
 
 
 class FoodRecipeLimitsTests(unittest.TestCase):
@@ -47,20 +45,17 @@ class FoodRecipeLimitsTests(unittest.TestCase):
         self.assertEqual(IslandShopBase.UNKNOWN_PRODUCT_PRODUCE_LIMIT, 7)
         self.assertEqual(self.ui.get_product_production_limit('unregistered_food'), 7)
 
-    def test_disabled_planner_still_caps_batches_without_reading_stocks(self):
-        self.ui.config = MemoryConfig(**{f'{CONFIG_PREFIX}.Enabled': False})
+    def test_manual_batches_respect_recipe_capacity_without_reading_stocks(self):
         with patch('module.island.manufacture_selector.select_manufacture_recipe') as selector, \
                 patch('module.island.manufacture_selector.read_selected_recipe_inventory') as inventory, \
-                patch('module.island.manufacture_selector.set_manufacture_quantity') as quantity, \
-                patch('module.island.production_planner.load_planner_targets') as targets:
+                patch('module.island.manufacture_selector.set_manufacture_quantity') as quantity:
             for product, expected in (('latte', 12), ('fo_tiao', 8), ('pineapple_juice', 5)):
                 with self.subTest(product=product):
-                    self.assertEqual(self.ui._limit_planned_food_batch(product, 30), expected)
-                    self.assertEqual(self.ui._limit_planned_food_batch(product, 3), 3)
+                    self.assertEqual(self.ui._limit_food_batch(product, 30), expected)
+                    self.assertEqual(self.ui._limit_food_batch(product, 3), 3)
             selector.assert_not_called()
             inventory.assert_not_called()
             quantity.assert_not_called()
-            targets.assert_not_called()
 
 
 if __name__ == '__main__':

@@ -13,10 +13,10 @@ NOW = datetime(2026, 9, 20, 12)
 
 
 class FisheryUI:
-    def __init__(self, demand=None, fry_stock=None, positions=3, default_posts=0, working=None):
+    def __init__(self, demand=None, fry_stock=None, positions=3, default_posts=0, working=None, default_fish='yellowfin_tuna'):
         config = SimpleNamespace(
             IslandFishery_Positions=positions, IslandFishery_PlantYellowfinTuna=default_posts,
-            IslandFishery_RancherFilter='WorkerJuu', task_delay=Mock(),
+            IslandFishery_RancherFilter='WorkerJuu', task_delay=Mock(), IslandFishery_DefaultFish=default_fish,
             IslandFishery_MinFreshwaterFishMeat=0, IslandFishery_MinSaltwaterFishMeat=0,
         )
         for name in ('Bass', 'YellowfinTuna', 'Shell', 'Shrimp', 'Crab', 'Crayfish', 'Squid', 'SeaCucumber',
@@ -143,6 +143,16 @@ class IslandFisheryQuantityTests(unittest.TestCase):
         ui.run()
         self.assertEqual(ui.orders, [('shrimp', 8), ('bass', 5), ('shrimp', 1)])
         self.assertEqual(ui.fishery.to_plant_list, ['bass'])
+
+    def test_upstream_default_fish_is_used_after_manual_targets_are_met(self):
+        ui = FisheryUI({}, positions=2, default_posts=2, default_fish='shrimp')
+        ui.run()
+        self.assertEqual(ui.orders, [('shrimp', 8), ('shrimp', 8)])
+
+    def test_unknown_default_fish_falls_back_to_tuna(self):
+        ui = FisheryUI({}, positions=1, default_posts=1, default_fish='unknown')
+        ui.run()
+        self.assertEqual(ui.orders, [('yellowfin_tuna', 5)])
 
     def test_default_posts_remain_full_after_small_supply_order(self):
         ui = FisheryUI({'yellowfin_tuna': 1}, default_posts=2)

@@ -16,14 +16,6 @@ class IslandMealMaterialPlanningTests(unittest.TestCase):
             patcher = patch(target)
             patcher.start()
             self.addCleanup(patcher.stop)
-        # 所有测试只使用内存中的岗位、库存和保护线。
-        protection = patch(
-            'module.island.production_planner.load_production_protection',
-            return_value={},
-        )
-        self.load_protection = protection.start()
-        self.addCleanup(protection.stop)
-
     def restaurant(self, *, meat=22, soup=0, working=None):
         return ShopUI(
             IslandRestaurant,
@@ -93,31 +85,27 @@ class IslandMealMaterialPlanningTests(unittest.TestCase):
         self.assertEqual(ui.orders, [('tofu_meat', 1, None)])
         self.assertEqual(ui.shop.warehouse_counts['tofu_meat'], 13)
 
-    def test_hard_protection_is_preserved_when_target_can_be_borrowed(self):
-        # 订单、菜单及显式最低库存由加载器合为一条硬保留线，达到生产目标也不释放。
-        self.load_protection.return_value = {'tofu_meat': 14}
+    def test_old_automatic_protection_does_not_take_over_manual_materials(self):
         ui = self.restaurant(soup=14)
+        ui.shop._planner_protection = {'tofu_meat': 14}
         ui.run()
         self.assertEqual(ui.orders, [
-            ('tofu_meat', 6, None),
-            ('tofu_combo', 8, None),
+            ('tofu_combo', 12, None),
+            ('tofu_meat', 4, None),
         ])
-        self.assertEqual(ui.shop.warehouse_counts['tofu_meat'], 14)
-        self.assertEqual(ui.shop.warehouse_counts['cabbage_tofu'], 6)
+        self.assertEqual(ui.shop.warehouse_counts['tofu_meat'], 10)
+        self.assertEqual(ui.shop.warehouse_counts['cabbage_tofu'], 2)
 
-    def test_hard_protection_on_missing_material_is_included_in_replenishment(self):
-        self.load_protection.return_value = {'cabbage_tofu': 5}
+    def test_missing_material_replenishment_uses_only_manual_target(self):
         ui = self.restaurant(
             soup=7,
             working={'ISLAND_RESTAURANT_POST1': ('salad', 1)},
         )
-        # 现货七份只有两份可用；补足十四份套餐需再产十二份，不能只补七份。
         ui.run()
-        self.assertEqual(ui.orders, [('cabbage_tofu', 12, None)])
+        self.assertEqual(ui.orders, [('cabbage_tofu', 7, None)])
         self.assertEqual(ui.shop.warehouse_counts['cabbage_tofu'], 7)
 
-    def test_protection_is_applied_after_combining_stock_and_existing_production(self):
-        self.load_protection.return_value = {'cabbage_tofu': 10}
+    def test_stock_and_pending_outputs_reduce_replenishment_but_only_stock_can_be_used(self):
         ui = self.restaurant(
             soup=5,
             working={'ISLAND_RESTAURANT_POST1': ('cabbage_tofu', 7)},
@@ -125,15 +113,11 @@ class IslandMealMaterialPlanningTests(unittest.TestCase):
         ui.read_stock()
         ui.check_post('ISLAND_RESTAURANT_POST1', 'time_restaurant1')
         shop = ui.shop
-        shop._planner_protection = self.load_protection(shop.config)
         shop._reserved_targets = {'tofu_meat': 14}
         shop.current_totals = shop._rebuild_current_totals({})
-
-        # 计划可抵扣量应为 5 + 7 - 10 = 2；不能把现货先清零，再放行全部在制。
         plan = shop.process_meal_requirements({'tofu_combo': 14})
-        self.assertEqual(plan, {'tofu_combo': 14, 'cabbage_tofu': 12})
-        # 实际下单只能消耗现货，五份汤全部受保护，仍不得提前做套餐。
-        self.assertEqual(shop.get_max_producible('tofu_combo', 14), 0)
+        self.assertEqual(plan, {'tofu_combo': 14, 'cabbage_tofu': 2})
+        self.assertEqual(shop.get_max_producible('tofu_combo', 14), 5)
         self.assertEqual(shop.warehouse_counts['cabbage_tofu'], 5)
 
 

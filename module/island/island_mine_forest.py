@@ -17,10 +17,7 @@ from module.config.time_source import now as current_time
 DISPATCH_STAMINA_MIN = 80
 
 
-from module.island.planned_dispatch import PlannedProductionMixin, recipe_for_local_name
-
-
-class IslandMineForest(PlannedProductionMixin, Island,LoginHandler):
+class IslandMineForest(Island,LoginHandler):
     def __init__(self, *args, **kwargs):
         Island.__init__(self, *args, **kwargs)
         self.dispatch_stamina_min = DISPATCH_STAMINA_MIN
@@ -95,8 +92,7 @@ class IslandMineForest(PlannedProductionMixin, Island,LoginHandler):
             manual = getattr(self.config, f'IslandForest_Min{product_name}', 0)
         else:
             manual = 0
-        from module.island.production_planner import planner_target
-        return planner_target(self.config, product_name, manual)
+        return manual
 
     @staticmethod
     def _post_available_for_dispatch(post_info):
@@ -579,12 +575,7 @@ class IslandMineForest(PlannedProductionMixin, Island,LoginHandler):
           4. 执行生产
         """
         self.island_error = False
-        self._planner_actual_stocks = {}
-        self._planner_dispatched = {}
-        self._planner_in_production = {}
 
-        from module.island.production_planner import refresh_production_plan
-        refresh_production_plan(self.config, self.device)
 
         if not getattr(self, 'island_round', None):
             self.prepare_round(collect_all=False)
@@ -609,33 +600,6 @@ class IslandMineForest(PlannedProductionMixin, Island,LoginHandler):
 
         logger.info(f"[岛屿-矿山林场] 空闲岗位: 矿山 {len(idle_posts['mine'])} 个, 林场 {len(idle_posts['forest'])} 个")
 
-        from module.island.production_planner import planner_active
-        if planner_active(self.config):
-            from module.island.data import DIC_ISLAND_RECIPE
-            from module.island.item_ids import LOCAL_TO_ITEM_ID
-            from module.island.production_planner import get_planned_recipe_items
-            for category, post_ids in (('mine', self.mine_post_ids), ('forest', self.forest_post_ids)):
-                unknown = any(self.posts[pid].get('state') == 'working' and
-                              (not self.posts[pid].get('crop') or not self.posts[pid].get('runs')) for pid in post_ids)
-                for pid in post_ids:
-                    info = self.posts[pid]
-                    if info.get('state') == 'working' and info.get('crop') and info.get('runs'):
-                        name = info['crop']
-                        item = LOCAL_TO_ITEM_ID[name]
-                        recipe = DIC_ISLAND_RECIPE[recipe_for_local_name(name)]
-                        self._planner_in_production[item] = self._planner_in_production.get(item, 0) + info['runs'] * recipe['commission_product'][item]
-                if unknown:
-                    logger.info(f'[岛屿-生产规划] {category} 有未知在制品，收获前暂停追加')
-                elif idle_posts[category]:
-                    if category == 'mine':
-                        self.post_manage_swipe_to_top()
-                    else:
-                        self.post_manage_swipe_until_appear(ISLAND_FOREST_POST1, min_swipes=1)
-                    posts = [{'post_id': pid, 'time_var_name': f'time_{pid}'} for pid in idle_posts[category]]
-                    group = 'wood' if category == 'forest' else category
-                    items = get_planned_recipe_items(self.config, group, self.inventory_config[category]['items'])
-                    self._planned_dispatch_category(posts, items, self.inventory_counts[category], self.worker_filters[category])
-                idle_posts[category] = []
 
         # 产物有缺口的先分配（库存最少优先轮转），剩下的默认
         all_to_plant = {'mine': [], 'forest': []}
@@ -671,16 +635,19 @@ class IslandMineForest(PlannedProductionMixin, Island,LoginHandler):
 
             # 所有缺口产物岗位需求满足后，剩余空闲 → 按配置分配默认产物
             remaining = idle_count - len(all_to_plant[category])
+            # 沿用岗位数配置，默认产物可由手工设置或独立规划工具写入。
             if category == 'mine':
-                # MineSilver: 几个空闲岗位产银矿，其余空着
-                silver_count = min(self.config.IslandMine_MineSilver, remaining)
-                for _ in range(silver_count):
-                    all_to_plant['mine'].append(('Silver', None))
+                default_count = min(self.config.IslandMine_MineSilver, remaining)
+                default_product = getattr(self.config, 'IslandMine_DefaultOre', 'Silver')
+                if default_product not in ('Copper', 'Aluminium', 'Iron', 'Sulphur', 'Silver'):
+                    default_product = 'Silver'
             else:
-                # CutElegant: 几个空闲岗位产典雅之木，其余空着
-                elegant_count = min(self.config.IslandForest_CutElegant, remaining)
-                for _ in range(elegant_count):
-                    all_to_plant['forest'].append(('Elegant', None))
+                default_count = min(self.config.IslandForest_CutElegant, remaining)
+                default_product = getattr(self.config, 'IslandForest_DefaultWood', 'Elegant')
+                if default_product not in ('Practical', 'Selected', 'Elegant'):
+                    default_product = 'Elegant'
+            for _ in range(default_count):
+                all_to_plant[category].append((default_product, None))
 
             if all_to_plant[category]:
                 logger.info(

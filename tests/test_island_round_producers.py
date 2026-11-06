@@ -20,7 +20,6 @@ class RoundProducerTests(unittest.TestCase):
     def setUp(self):
         for name in ('island', 'island_farm', 'island_fishery', 'island_rancher', 'island_mine_forest'):
             self.enterContext(patch(f'module.island.{name}.logger'))
-        self.enterContext(patch('module.island.production_planner.refresh_production_plan'))
         self.scan = self.enterContext(patch('module.island.round_recipe.scan_post_product_stocks',
                                            side_effect=AssertionError('不能再从生产列表盘点')))
         self.selected = self.enterContext(patch('module.island.round_recipe.observe_selected_recipe',
@@ -241,11 +240,10 @@ class RoundProducerTests(unittest.TestCase):
             return True
 
         task.process_mill_item = Mock(side_effect=process)
-        with patch('module.island.production_planner.load_production_protection', return_value={'wheat': 20}):
-            self.assertTrue(task.process_mill_item_with_inventory('chicken_feed', 11))
-            self.assertTrue(task.process_mill_item_with_inventory('wheat_flour', 200))
+        self.assertTrue(task.process_mill_item_with_inventory('chicken_feed', 11))
+        self.assertTrue(task.process_mill_item_with_inventory('wheat_flour', 200))
         self.assertEqual(task.process_mill_item.call_args_list[0].kwargs, {'quantity': 6})
-        self.assertEqual(task.process_mill_item.call_args_list[1].kwargs, {'quantity': 20})
+        self.assertEqual(task.process_mill_item.call_args_list[1].kwargs, {'quantity': 23})
         self.assertEqual(task.island_round.get('wheat'), 122)
         self.assertEqual(task.island_round.get('chicken_feed'), 20)
         self.assertEqual(task.island_round.get('wheat_flour'), 3)
@@ -352,6 +350,29 @@ class RoundProducerTests(unittest.TestCase):
         task.ui_goto.assert_not_called()
         task.warehouse_inventory.assert_not_called()
         self.scan.assert_not_called()
+
+    def test_upstream_default_ore_and_wood_are_executed_after_targets(self):
+        config = SimpleNamespace(IslandMine_WorkerFilter='WorkerJuu', IslandForest_WorkerFilter='WorkerJuu',
+                                 IslandMine_Positions=1, IslandForest_Positions=1,
+                                 IslandMine_MineSilver=1, IslandForest_CutElegant=1,
+                                 IslandMine_DefaultOre='Copper', IslandForest_DefaultWood='Practical',
+                                 task_delay=Mock())
+        def init(task, config):
+            task.config, task.device = config, Mock()
+        with patch.object(Island, '__init__', init):
+            task = IslandMineForest(config)
+        for name in ('goto_postmanage', 'post_manage_mode', 'post_close', 'post_manage_swipe_to_top',
+                     'post_manage_down_swipe', 'ui_goto'):
+            setattr(task, name, Mock())
+        task.collect_and_detect_post = Mock(side_effect=lambda button, post_id, *args:
+                                            task.posts[post_id].update(state='idle'))
+        task.prepare_round()
+        task.island_round = IslandRoundInventory({'Copper': 50, 'Practical': 50})
+        task.post_plant = Mock(return_value=True)
+        task.run()
+        self.assertEqual([call.args[1:3] for call in task.post_plant.call_args_list],
+                         [('Copper', 'mine'), ('Practical', 'forest')])
+        self.assertTrue(all(call.kwargs['need_count'] is None for call in task.post_plant.call_args_list))
 
     def test_mine_small_deficit_preserves_its_selected_single_batch(self):
         task = IslandMineForest.__new__(IslandMineForest)

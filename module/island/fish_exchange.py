@@ -13,11 +13,8 @@ from module.exception import GameStuckError
 from module.island.data import DIC_ISLAND_EXCHANGE_RECIPE, DIC_ISLAND_ITEM, DIC_ISLAND_RECIPE
 from module.island.order_stock import get_menu_reserve_items
 from module.island.planner_utils import (
-    get_current_season_remaining_days, get_stuck_season_order_requirements, load_item_mapping,
-    normalize_item_keys, normalize_item_needs, resolve_stuck_season_order_id,
+    get_stuck_season_order_requirements, resolve_stuck_season_order_id,
 )
-from module.island.production_planner import load_planner_targets, read_config
-from module.island.planner_report import invalidate_planner_stocks, record_planner_stocks
 from module.island.assets import GET_ITEMS_ISLAND
 from module.island_exchange.assets import ALAS_EXCHANGE_CONFIRM
 from module.logger import logger
@@ -45,10 +42,7 @@ def _number(value):
 
 
 def get_fish_protection(config):
-    """原料保底、直接任务和经营下一架原料不参与鱼肉兑换。"""
-    floor = normalize_item_keys(load_item_mapping(read_config(config, 'HardFloorItems', '{}')))
-    task = normalize_item_needs(load_item_mapping(read_config(config, 'TaskTarget', '{}')),
-                                default_period=get_current_season_remaining_days())
+    """季节订单与经营下一架原料不参与鱼肉兑换；养殖底线由调用方叠加。"""
     cross_get = getattr(config, 'cross_get', None)
     stuck_id = cross_get('IslandDailyOrder.IslandDailyOrder.StuckSeasonOrderId', 0) if callable(cross_get) else 0
     stuck_id = resolve_stuck_season_order_id(stuck_id)
@@ -65,8 +59,8 @@ def get_fish_protection(config):
         for source, cost in recipe['commission_cost'].items():
             ingredients[source] += math.ceil(count * cost / amount)
     fish_ids = {source for recipe in DIC_ISLAND_EXCHANGE_RECIPE.values() for source in recipe['resource_consume']}
-    return {fish: _number(floor.get(fish, 0)) + _number(reserve.get(fish, 0))
-            + _number(ingredients.get(fish, 0)) + _number(task.get(fish, {}).get('total_need_count', 0))
+    return {fish: _number(reserve.get(fish, 0))
+            + _number(ingredients.get(fish, 0))
             + _number(pending.get(fish, 0))
             for fish in fish_ids}
 
@@ -333,28 +327,9 @@ class FishExchangeSession:
                 if ledger is not None:
                     ledger.consume(selection)
                     ledger.observe(meat_id, after)
-                config = getattr(self.main, 'config', None)
-                invalidate_planner_stocks(config, [meat_id, *selection], '鱼肉兑换后')
-                record_planner_stocks(config, {meat_id: after}, '鱼肉兑换到账页')
                 changed = True
                 if after >= target:
                     break
             else:
                 logger.warning('[岛屿-鱼肉兑换] 已达本轮有限批次上限，剩余需求留待下轮')
         return changed
-
-
-def ensure_fish_meat_targets(main):
-    """仅在有效规划要求鱼肉时兑换；返回 True 表示真实库存已经变化。
-
-    Pages:
-        in: 可导航的岛屿页面。
-        out: page_island_exchange_shop。调用者随后按原有流程进入仓库/岗位。
-    """
-    targets = load_planner_targets(main.config)
-    if not any(targets.get(item, 0) > 0 for item in FISH_MEAT_IDS):
-        return False
-    if server.server not in ('cn', 'tw'):
-        logger.warning('[岛屿-鱼肉兑换] 当前语言缺少已核实的逐鱼选择识别，保留库存')
-        return False
-    return FishExchangeSession(main).run(targets, get_fish_protection(main.config))

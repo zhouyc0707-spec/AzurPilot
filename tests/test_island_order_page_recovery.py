@@ -70,7 +70,6 @@ class IslandOrderPageRecoveryTests(unittest.TestCase):
         self.enterContext(patch('module.island.order.get_nearest_weekday_date', return_value=self.urgent_reset))
         self.enterContext(patch('module.island.order.get_menu_reserve_items', return_value={}))
         self.enterContext(patch('module.island.order.menu_reservations_known', return_value=True))
-        self.planner = self.enterContext(patch('module.island.production_planner.IslandProductionPlanner'))
         self.enterContext(patch('module.island.order.logger'))
 
     @staticmethod
@@ -115,7 +114,6 @@ class IslandOrderPageRecoveryTests(unittest.TestCase):
         self.config.task_delay.assert_called_once_with(target=self.daily_reset, server_update=True)
         self.order._back_to_island_phone.assert_called_once()
         self.order.device.save_screenshot.assert_not_called()
-        self.planner.assert_not_called()
 
     def test_upgrade_click_then_unrecognized_animation_returns_to_order_page(self):
         self.run_frames([

@@ -3229,29 +3229,6 @@
       "Season": "spring",
       "TaskAlignment": "half_hour"
     },
-    "IslandProductionPlanner": {
-      "Enabled": true,
-      "TechnologyStatus": null,
-      "RescanTechnology": false,
-      "FieldsEfficiency": 0.0,
-      "OrchardEfficiency": 0.0,
-      "NurseryEfficiency": 0.0,
-      "DailyProfitLowerLimit": 0,
-      "DailyBufferSafetyMargin": 0.0,
-      "TaskTarget": "{}",
-      "HardFloorItems": "{}",
-      "DailyBufferItems": "{}",
-      "IdleAccumulatingItems": "{}",
-      "PlannerTargets": "{}",
-      "PlannerStatus": null,
-      "PlannerReport": "{}",
-      "PlanFingerprint": null,
-      "OrderManufactureTargets": "{}",
-      "OrderManufactureFinalTargets": "{}",
-      "AutoManufactureActive": false,
-      "AutoManufactureNextRun": null,
-      "CompletedManufactureOrderId": 0
-    },
     "IslandWalk": {
       "AirDrop": "up 3000, right 800, up 2000, jump, up 1200, right 2000, up 6500, right 1000, up 2300, right 2000, up 4000, right 2600, up 500, jump, up 1300",
       "AirDropEnable": false,
@@ -3319,7 +3296,6 @@
     },
     "IslandBusinessShop1": {
       "Grade": "bronze",
-      "PlannedMenu": null,
       "Char1": "None",
       "Char2": "None",
       "Product1": "None",
@@ -3332,7 +3308,6 @@
     },
     "IslandBusinessShop2": {
       "Grade": "bronze",
-      "PlannedMenu": null,
       "Char1": "None",
       "Char2": "None",
       "Product1": "None",
@@ -3345,7 +3320,6 @@
     },
     "IslandBusinessShop3": {
       "Grade": "bronze",
-      "PlannedMenu": null,
       "Char1": "None",
       "Char2": "None",
       "Product1": "None",
@@ -3357,7 +3331,6 @@
     },
     "IslandBusinessShop4": {
       "Grade": "bronze",
-      "PlannedMenu": null,
       "Char1": "None",
       "Char2": "None",
       "Product1": "None",
@@ -3369,7 +3342,6 @@
     },
     "IslandBusinessShop5": {
       "Grade": "bronze",
-      "PlannedMenu": null,
       "Char1": "None",
       "Char2": "None",
       "Product1": "None",
@@ -3466,7 +3438,8 @@
       "MinFreshwaterFishMeat": 0,
       "MinSaltwaterFishMeat": 0,
       "PlantYellowfinTuna": 3,
-      "RancherFilter": "WorkerJuu"
+      "RancherFilter": "WorkerJuu",
+      "DefaultFish": "yellowfin_tuna"
     },
     "Storage": {
       "Storage": {}
@@ -3491,7 +3464,8 @@
       "MinAluminium": 50,
       "MinIron": 50,
       "MinSulphur": 50,
-      "MinSilver": 50
+      "MinSilver": 50,
+      "DefaultOre": "Silver"
     },
     "IslandForest": {
       "Positions": 1,
@@ -3499,7 +3473,8 @@
       "WorkerFilter": "WorkerJuu",
       "MinElegant": 50,
       "MinPractical": 50,
-      "MinSelected": 50
+      "MinSelected": 50,
+      "DefaultWood": "Elegant"
     },
     "Storage": {
       "Storage": {}
@@ -3710,16 +3685,20 @@
       "Sensitive": false
     },
     "WoodProcessing": {
-      "Positions": 2
+      "Positions": 2,
+      "Products": ""
     },
     "ElectronicProcessing": {
-      "Positions": 2
+      "Positions": 2,
+      "Products": ""
     },
     "Industrial": {
-      "Positions": 2
+      "Positions": 2,
+      "Products": ""
     },
     "Handmade": {
-      "Positions": 2
+      "Positions": 2,
+      "Products": ""
     },
     "Storage": {
       "Storage": {}
@@ -4066,8 +4045,29 @@
     }
   },
   "IslandProductionPlanner": {
-    "IslandPlannerTool": {
+    "IslandProductionPlanner": {
       "ApplySettings": false,
+      "Season": "auto",
+      "Priority": "pt",
+      "FillSparePosts": true,
+      "AutoPositions": true,
+      "UnlockedFish": [
+        "shell",
+        "catfish",
+        "koi_carp",
+        "common_carp",
+        "shrimp",
+        "crayfish",
+        "bass",
+        "crab",
+        "squid",
+        "mackerel",
+        "tuna",
+        "salmon",
+        "red_sea_bream",
+        "yellowfin_tuna",
+        "sea_cucumber"
+      ],
       "RescanTechnology": true,
       "ScanSeasonTasks": true,
       "SeasonTaskTargets": null,

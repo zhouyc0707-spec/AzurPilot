@@ -194,7 +194,7 @@ class ScanPostStocksTests(unittest.TestCase):
 
     def test_unknown_post_page_cannot_enter_scanning(self):
         main = probe_runner(IslandRoundInventory())
-        with patch('module.island.planned_dispatch.PlannedProductionMixin._planned_dispatch_stage',
+        with patch('module.island.production_recipe.ProductionRecipeMixin._dispatch_stage',
                    return_value='unknown'), \
                 patch('module.island.round_recipe.scan_recipe_product_stocks') as scan:
             self.assertEqual(scan_post_product_stocks(main, 'post1', ['wheat'], []), {})
@@ -207,7 +207,7 @@ class ScanPostStocksTests(unittest.TestCase):
         calls = Mock()
         for name in ('post_manage_swipe_to_top', 'post_manage_swipe_until_appear', 'post_open'):
             calls.attach_mock(getattr(main, name), name)
-        with patch('module.island.planned_dispatch.PlannedProductionMixin._planned_dispatch_stage',
+        with patch('module.island.production_recipe.ProductionRecipeMixin._dispatch_stage',
                    return_value='products'):
             self.assertTrue(_open_probe_product_page(main, 'nursery1', 'pineapple', ['WorkerJuu']))
         self.assertEqual([call[0] for call in calls.mock_calls],
@@ -217,7 +217,7 @@ class ScanPostStocksTests(unittest.TestCase):
     def test_visible_post_keeps_position_and_preserves_special_character_selection(self):
         main = probe_runner(IslandRoundInventory(), special_character=True,
                             select_special_character=Mock(return_value=True))
-        with patch('module.island.planned_dispatch.PlannedProductionMixin._planned_dispatch_stage',
+        with patch('module.island.production_recipe.ProductionRecipeMixin._dispatch_stage',
                    side_effect=['characters', 'products']):
             self.assertTrue(_open_probe_product_page(main, 'food1', 'apple_pie', ['WorkerJuu']))
         main.device.screenshot.assert_called_once()
