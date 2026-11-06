@@ -31,6 +31,59 @@ def is_post_title_confirmed(image, post):
             and TEMPLATE_POST_ORCHARD_TITLE_COMPAT.match(title, similarity=0.90, direct_match=True))
 
 
+def match_post_title(image, post):
+    """在目标所在列的完整列表高度定位标题，成功后才保留本帧坐标。"""
+    post.clear_offset()
+    if not isinstance(image, np.ndarray) or image.shape != (720, 1280, 3):
+        return False
+    offset = (-3, 69 - post.area[1], 3, 655 - post.area[3])
+    if post.match(image, offset=offset) and is_post_title_confirmed(image, post):
+        return True
+    # Button.match 即使失败也会写偏移，不能让失败坐标被下一次点击复用。
+    post.clear_offset()
+    return False
+
+
+def post_scroll_direction(image, post, server='cn'):
+    """用本帧可靠类别判断方向：-1 向前、1 向后，0 表示不能确认。
+
+    国服八行顺序经同一账号连续实屏确认；其他服务器没有等效证据，交由回顶搜索。
+    模板采集时的原始纵坐标来自不同滚动位置，不参与类别排序。
+    """
+    if server != 'cn':
+        return 0
+    from importlib import import_module
+
+    rows = (
+        (('island', 'FARM'), ('island_rancher', 'RANCH')),
+        (('island_rancher', 'FISHERY'), ('island_mine_forest', 'MINE')),
+        (('island_mine_forest', 'FOREST'), ('island_farm', 'ORCHARD')),
+        (('island_farm', 'NURSERY'), ('island_restaurant', 'RESTAURANT')),
+        (('island_teahouse', 'TEAHOUSE'), ('island_juu_eatery', 'JUU_EATERY')),
+        (('island_grill', 'GRILL'), ('island_manufacture', 'WOOD_PROCESSING')),
+        (('island_manufacture', 'INDUSTRIAL'), ('island_manufacture', 'ELECTRONIC_PROCESSING')),
+        (('island_manufacture', 'HANDMADE'), ('island_juu_coffee', 'JUU_COFFEE')),
+    )
+    name, separator, number = post.name.rpartition('_POST')
+    if not separator or not number.isdigit():
+        return 0
+    target = next((index for index, row in enumerate(rows)
+                   if any(name == f'ISLAND_{category}' for _, category in row)), None)
+    if target is None:
+        return 0
+    visible = []
+    for index, row in enumerate(rows):
+        for module, category in row:
+            anchor = getattr(import_module(f'module.{module}.assets'), f'ISLAND_{category}_POST1')
+            if match_post_title(image, anchor):
+                visible.append(index)
+    if visible and target < min(visible):
+        return -1
+    if visible and target > max(visible):
+        return 1
+    return 0
+
+
 def is_empty_post_slot(image, button):
     """仅以完整灰色加号卡片确认空岗，不根据商品识别失败推断。
 

@@ -253,7 +253,6 @@ class IslandRancher(Island, WarehouseOCR, LoginHandler):
         self.goto_postmanage()
         self.post_manage_mode(POST_MANAGE_PRODUCTION)
         self.post_close()
-        self.post_manage_swipe(0)
 
         if not self.goto_mill_from_any_ranch_post():
             self.raise_if_island_error()
@@ -851,7 +850,6 @@ class IslandRancher(Island, WarehouseOCR, LoginHandler):
         self._round_ranch_states = {}
         self.goto_postmanage()
         self.post_manage_mode(POST_MANAGE_PRODUCTION)
-        self.post_manage_swipe_to_top()
         for index, (post_id, button) in enumerate(self.posts_ranch.items(), 1):
             setattr(self, f'time_ranch{index}', None)
             self.post_close()
@@ -925,7 +923,6 @@ class IslandRancher(Island, WarehouseOCR, LoginHandler):
         self.goto_postmanage()
         self.post_manage_mode(POST_MANAGE_PRODUCTION)
         self.post_close()
-        self.post_manage_swipe(0)
 
         all_needs = []
 

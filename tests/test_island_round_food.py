@@ -64,6 +64,7 @@ class RoundCollectionConfirmationTests(unittest.TestCase):
                 self.assertFalse(task._round_prepared)
                 task.post_get_and_close.assert_called_once()
                 task.post_open.assert_called_once()
+                task.post_manage_swipe.assert_not_called()
 
     def test_independent_post_check_keeps_existing_failure_handling(self):
         for kind in (IslandJuuCoffee, IslandManufacture):
@@ -354,6 +355,7 @@ class RoundFoodTests(WarehouseRoundTestCase):
         self.assertEqual(len(shop.get_idle_posts()), 1)
         ui.run()
         self.assertEqual(shop.post_check.call_count, 2)
+        shop.post_manage_swipe.assert_not_called()
 
 
 class RoundDispatchQuantityTests(WarehouseRoundTestCase):
@@ -532,6 +534,29 @@ class RoundManufactureTests(WarehouseRoundTestCase):
         factory.posts = {'ISLAND_WOOD_PROCESSING_POST1': {'status': 'idle'}}
         factory.to_post_products = {}
         return factory
+
+    def test_prepared_run_reuses_collection_and_never_scrolls_to_a_fixed_region(self):
+        factory = self.factory()
+        factory._round_prepared = True
+        factory.time1 = NOW + timedelta(hours=1)
+        factory.config.task_delay = Mock()
+        for method in ('goto_postmanage', 'post_manage_mode', 'post_close'):
+            setattr(factory, method, Mock())
+        for method in ('post_manage_swipe', 'post_manage_up_swipe', 'post_manage_down_swipe'):
+            setattr(factory, method, Mock(side_effect=AssertionError('岗位调用层不得固定滑动')))
+        factory.post_check = Mock(side_effect=AssertionError('共享轮不得重复巡检'))
+        factory.warehouse_filter = Mock(side_effect=AssertionError('共享轮不得重读仓库'))
+        factory.schedule_manufacture = Mock()
+
+        factory.run()
+
+        factory.schedule_manufacture.assert_called_once()
+        factory.config.task_delay.assert_called_once()
+        factory.post_check.assert_not_called()
+        factory.warehouse_filter.assert_not_called()
+        factory.post_manage_swipe.assert_not_called()
+        factory.post_manage_up_swipe.assert_not_called()
+        factory.post_manage_down_swipe.assert_not_called()
 
     def test_unknown_legacy_manufacture_materials_use_button_without_inventing_stock(self):
         for product, materials in (

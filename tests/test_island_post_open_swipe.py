@@ -1,153 +1,154 @@
-"""岗位列表滑动定位（post_open 恢复分支）的离线回归测试。
+"""岗位定位从当前画面开始，只有缺少方向依据时才归顶的状态回归。"""
 
-旧实现在恢复时无论目标岗位在哪都按 swipe_count 下滑一步：目标正好在列表顶部时
-（例如餐厅 ISLAND_RESTAURANT_POST1）会被这一滑推出可视区，而重试次数只有 1 次，
-于是干等到 45 秒超时并抛「打开岗位详情超时」（2026-09-20/22/25 三次实例，日志里
-retry_swipe_used 始终为 0）。
-
-修复后：先回到列表顶部，**先检测再滑**——顶部就能看到目标岗位时不滑动；
-看不到才用 post_manage_swipe_until_appear(min_swipes=0) 边滑边找。
-"""
 import unittest
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 import numpy as np
 
-import module.base.timer as timer_module
+from module.base.button import Button
 from module.base.timer import Timer
+from module.exception import GameStuckError
 from module.island.island import Island
-from module.island_restaurant.assets import ISLAND_RESTAURANT_POST1
-
-POST = ISLAND_RESTAURANT_POST1
 
 
-class FakeClock:
-    def __init__(self):
-        self.now = 1000.0
-
-    def advance(self, seconds):
-        self.now += seconds
-
-
-class FakeDevice:
-    def __init__(self, clock, appear_after=None):
-        self.clock = clock
-        self.appear_after = appear_after or 0
-        self.image = np.zeros((720, 1280, 3), dtype=np.uint8)
-        self.calls = []
-        self.swipes = 0
-
-    def screenshot(self):
-        self.clock.advance(0.2)
-        return self.image
-
-    def click(self, button, control_check=True):
-        self.calls.append(('click', getattr(button, 'name', str(button))))
-        self.clock.advance(0.1)
-
-    def sleep(self, seconds):
-        self.clock.advance(seconds)
-
-    def swipe_vector(self, vector=None, box=None, name=None, **kwargs):
-        self.swipes += 1
-        self.calls.append(('swipe', name))
-        self.clock.advance(0.3)
-
-    def stuck_record_add(self, button):
-        return None
-
-
-class StubIsland:
-    """绑定 Island 上被测试的真实方法。"""
-
-    post_open = Island.post_open
-    post_manage_swipe_to_top = Island.post_manage_swipe_to_top
-    post_manage_swipe_until_appear = Island.post_manage_swipe_until_appear
-    post_manage_swipe = Island.post_manage_swipe
-    post_manage_up_swipe = Island.post_manage_up_swipe
-    post_manage_down_swipe = Island.post_manage_down_swipe
-
-    def __init__(self, device):
-        self.device = device
-        self.interval_timer = {}
-        self.config = type("Config", (), {"BUTTON_OFFSET": 30})()
-        self.post_open_retry_swipe = True
-        self.post_open_retry_swipe_limit = 1
-        self.post_open_full_retry_limit = 1
-        self.post_manage_swipe_count = 1
-        self.state = {'visible': False, 'swipes_before_visible': 0, 'recovered': False}
-        self.swipe_to_top_calls = 0
-        self.search_calls = []
-
-    def loop(self, skip_first=True, timeout=None):
-        timeout = Timer.from_seconds(timeout).start() if timeout is not None else None
-        while 1:
-            if timeout is not None and timeout.reached():
-                return
-            if skip_first:
-                skip_first = False
-            else:
-                self.device.screenshot()
-            yield self.device.image
-
-    @staticmethod
-    def ensure_button(button):
-        return button
-
-    def appear(self, button, offset=0):
-        # 只认目标岗位；其余模板一律不命中，模拟“卡在岗位管理页找不到目标”
-        return self.state['visible']
-
-    def post_manage_swipe_to_top(self, max_swipes=None):
-        self.swipe_to_top_calls += 1
-        self.state['visible'] = self.state['swipes_before_visible'] <= 0
-        return True
-
-    def post_manage_swipe_until_appear(self, post, min_swipes=1, max_swipes=None, offset=300):
-        self.search_calls.append(min_swipes)
-        while self.device.swipes < self.state['swipes_before_visible']:
-            self.post_manage_up_swipe(100)
-        self.state['visible'] = True
-        return True
-
-    def interval_clear(self, button):
-        return None
-
-
-class PostOpenRetrySwipeTest(unittest.TestCase):
+class PostLocateTests(unittest.TestCase):
     def setUp(self):
-        self.clock = FakeClock()
-        self._real_time = timer_module.time
-        timer_module.time = lambda: self.clock.now
+        self.clock = SimpleNamespace(now=1000.0)
+        self.enterContext(patch('module.base.timer.time', side_effect=lambda: self.clock.now))
+        self.enterContext(patch('module.island.island.logger'))
+        self.enterContext(patch('module.island.island.TEMPLATE_POST_LOCK.match', return_value=False))
 
-    def tearDown(self):
-        timer_module.time = self._real_time
+    def make_task(self, row, scroll=0, direction=True):
+        with patch.object(Island, '__init__', lambda self: None):
+            task = Island()
+        task.config = SimpleNamespace(SERVER='cn')
+        task.post_open_full_retry_limit = 1
+        post = Button(area=(200, 100, 280, 125), color=(), button=(260, 150, 330, 225), name='TARGET')
+        state = SimpleNamespace(scroll=scroll, opened=False, rows=row, missing=False)
+        task.device = Mock()
+        task.device.image = np.zeros((720, 1280, 3), dtype=np.uint8)
 
-    def build(self):
-        device = FakeDevice(self.clock)
-        return device, StubIsland(device)
+        def screenshot():
+            self.clock.now += 0.2
+            return task.device.image
 
-    def test_top_post_is_not_swiped_away(self):
-        """目标岗位就在列表顶部：只回顶部，不得再下滑把它推出可视区。"""
-        device, stub = self.build()
-        stub.state['swipes_before_visible'] = 0
+        task.device.screenshot.side_effect = screenshot
 
-        stub.post_open(POST)
+        def loop(skip_first=True, timeout=None):
+            timer = Timer.from_seconds(timeout).start()
+            while not timer.reached():
+                if skip_first:
+                    skip_first = False
+                else:
+                    screenshot()
+                yield task.device.image
 
-        self.assertEqual(stub.swipe_to_top_calls, 1)
-        self.assertEqual(stub.search_calls, [])          # 顶部已看到 → 不触发下滑搜索
-        self.assertEqual(device.swipes, 0)               # 一次下滑都没有
+        task.loop = loop
+        task.is_post_detail_visible = lambda: state.opened
+        task.ui_page_appear = Mock(return_value=True)
+        task.post_close = Mock()
+        task.goto_postmanage = Mock()
+        task.post_manage_mode = Mock()
+        task.post_manage_swipe = Mock(side_effect=AssertionError('不得调用固定区域滑动'))
+        task.post_manage_swipe_to_top = Mock(side_effect=AssertionError('不得嵌套旧归顶循环'))
 
-    def test_deep_post_searches_downwards_while_checking(self):
-        """目标岗位在列表深处：回顶部后边滑边找，且 min_swipes=0（先看再滑）。"""
-        device, stub = self.build()
-        stub.state['swipes_before_visible'] = 3
+        def move(amount):
+            state.scroll = min(900, max(0, state.scroll + amount))
+            task._post_list_recently_scrolled = True
 
-        stub.post_open(POST)
+        task.post_manage_up_swipe = Mock(side_effect=lambda distance: move(distance))
+        task.post_manage_down_swipe = Mock(side_effect=lambda distance: move(-distance))
 
-        self.assertEqual(stub.swipe_to_top_calls, 1)
-        self.assertEqual(stub.search_calls, [0])
-        self.assertGreaterEqual(device.swipes, 3)
+        def match(image, button):
+            if state.missing:
+                return False
+            target_row = row if button is post else 0
+            y = 100 + 184 * target_row - state.scroll
+            if 69 <= y and y + 25 <= 655:
+                button._button_offset = (260, y + 50, 330, y + 125)
+                return True
+            return False
+
+        self.enterContext(patch('module.island.island.match_post_title', side_effect=match))
+        self.enterContext(patch('module.island.island.post_scroll_direction', side_effect=lambda *a, **kw:
+                                (1 if 100 + 184 * row - state.scroll > 655 else -1) if direction else 0))
+        task.device.click.side_effect = lambda button: setattr(state, 'opened', True)
+        return task, post, state
+
+    def test_current_visible_post_opens_without_scrolling_or_reset(self):
+        task, post, _ = self.make_task(6, scroll=900)
+        self.assertTrue(task.post_open(post))
+        task.device.click.assert_called_once_with(post)
+        task.post_manage_up_swipe.assert_not_called()
+        task.post_manage_down_swipe.assert_not_called()
+        task.goto_postmanage.assert_not_called()
+
+    def test_visible_empty_inspection_only_locates_and_never_opens(self):
+        task, post, _ = self.make_task(5, scroll=900)
+        self.assertTrue(task.post_locate(post))
+        task.device.click.assert_not_called()
+        task.post_manage_up_swipe.assert_not_called()
+        task.post_manage_down_swipe.assert_not_called()
+
+    def test_existing_other_post_detail_is_closed_before_target_is_opened(self):
+        task, post, state = self.make_task(6, scroll=900)
+        state.opened = True
+        task.post_close.side_effect = lambda: setattr(state, 'opened', False)
+        self.assertTrue(task.post_open(post))
+        task.post_close.assert_called_once()
+        task.device.click.assert_called_once_with(post)
+        task.post_manage_up_swipe.assert_not_called()
+        task.post_manage_down_swipe.assert_not_called()
+
+    def test_nearby_lower_target_does_not_return_to_top(self):
+        task, post, _ = self.make_task(7, scroll=450)
+        self.assertTrue(task.post_locate(post))
+        task.post_manage_up_swipe.assert_called_once_with(450)
+        task.post_manage_down_swipe.assert_not_called()
+        task.device.click.assert_not_called()
+        task.goto_postmanage.assert_not_called()
+
+    def test_nearby_upper_target_scrolls_back_only_as_far_as_needed(self):
+        task, post, _ = self.make_task(3, scroll=900)
+        self.assertTrue(task.post_locate(post))
+        task.post_manage_down_swipe.assert_called_once_with(450)
+        task.post_manage_up_swipe.assert_not_called()
+        task.goto_postmanage.assert_not_called()
+
+    def test_unknown_direction_returns_top_then_stops_at_target(self):
+        task, post, _ = self.make_task(0, scroll=900, direction=False)
+        self.assertTrue(task.post_locate(post))
+        self.assertEqual(task.post_manage_down_swipe.call_count, 2)
+        task.post_manage_up_swipe.assert_not_called()
+        task.device.click.assert_not_called()
+
+    def test_top_search_checks_before_each_swipe(self):
+        task, post, _ = self.make_task(7, direction=False)
+        self.assertTrue(task.post_locate(post))
+        self.assertEqual(task.post_manage_up_swipe.call_count, 2)
+        task.post_manage_down_swipe.assert_not_called()
+        task.goto_postmanage.assert_not_called()
+
+    def test_repeated_missing_title_has_bounded_reentry_and_never_clicks(self):
+        task, post, state = self.make_task(7, direction=False)
+        state.missing = True
+        with self.assertRaisesRegex(GameStuckError, '完整重试'):
+            task.post_open(post)
+        self.assertEqual(task.post_manage_down_swipe.call_count, 10)
+        task.goto_postmanage.assert_called_once()
+        task.device.click.assert_not_called()
+
+    def test_unrecognized_page_does_not_swipe_or_use_stale_position(self):
+        task, post, _ = self.make_task(4)
+        task.ui_page_appear.return_value = False
+        post._button_offset = (260, 150, 330, 225)
+        with self.assertRaises(GameStuckError):
+            task.post_locate(post)
+        task.post_manage_up_swipe.assert_not_called()
+        task.post_manage_down_swipe.assert_not_called()
+        task.device.click.assert_not_called()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main()

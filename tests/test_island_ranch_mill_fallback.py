@@ -31,6 +31,7 @@ class RanchMillFallbackTests(unittest.TestCase):
         self.task.goto_mill.assert_called_once_with()
         self.task.process_mill_item_with_inventory.assert_called_once_with('wheat_flour', 7)
         self.assertEqual(self.flow.names(), [POST_CLOSE.name] * 4)
+        self.task.post_manage_swipe.assert_not_called()
         self.task.select_character.assert_not_called()
         self.task.confirm_post_add_order.assert_not_called()
 
@@ -39,6 +40,7 @@ class RanchMillFallbackTests(unittest.TestCase):
         self.assertEqual(self.task.process_mill_supplements(), ['wheat_flour'])
         self.task.goto_mill.assert_not_called()
         self.task.process_mill_item_with_inventory.assert_called_once_with('wheat_flour', 7)
+        self.task.post_manage_swipe.assert_not_called()
 
     def test_sufficient_stock_needs_no_navigation(self):
         self.task.check_mill_supplement_needs.return_value = []

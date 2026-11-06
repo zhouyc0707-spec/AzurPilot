@@ -58,6 +58,9 @@ class RoundProducerTests(unittest.TestCase):
         self.assertEqual(farm.decided_lists.call_count, 10)
         self.assertEqual([len(farm._round_idle_posts[name]) for name in ('farm', 'orchard', 'nursery')],
                          [1, 0, 0])
+        farm.post_manage_swipe.assert_not_called()
+        farm.post_manage_swipe_until_appear.assert_not_called()
+        farm.device.sleep.assert_not_called()
 
     def test_farm_run_returns_to_management_and_keeps_working_crop_out_of_restock(self):
         farm = object.__new__(IslandFarm)
@@ -89,6 +92,8 @@ class RoundProducerTests(unittest.TestCase):
         farm.run()
         farm._plant_idle_posts.assert_called_once()
         self.assertEqual(page, ['island', 'postmanage'])
+        farm.post_manage_swipe.assert_not_called()
+        farm.device.sleep.assert_not_called()
 
     def make_round_fishery(self, demand=6, stocks=None):
         ui = FisheryUI({'bass': demand}, positions=1)
@@ -281,8 +286,9 @@ class RoundProducerTests(unittest.TestCase):
         for name in ('ui_ensure', 'warehouse_mill_ranch', 'goto_postmanage', 'post_manage_mode',
                      'post_close', 'post_manage_swipe'):
             setattr(task, name, Mock())
-        task.process_mill_supplements = Mock(return_value=[])
-        task.check_ranch_needs = Mock(return_value=[])
+        task.process_mill_supplements = Mock(return_value=['chicken_feed'])
+        task.check_ranch_needs = Mock(return_value=['ISLAND_RANCH_POST1'])
+        task.ranch_post = Mock(return_value=True)
         task._inv_cn = str
         with patch('module.island.island_fishery.IslandFishery', side_effect=AssertionError('不能重建渔场')):
             task.run()
@@ -290,6 +296,26 @@ class RoundProducerTests(unittest.TestCase):
         self.assertIs(fishery.island_round, task.island_round)
         self.assertIs(fishery.config, task.config)
         task.warehouse_mill_ranch.assert_not_called()
+        task.ranch_post.assert_called_once_with('ISLAND_RANCH_POST1', 'time_ranch1')
+        task.post_manage_swipe.assert_not_called()
+
+    def test_ranch_collection_checks_each_post_without_pre_scrolling(self):
+        task = IslandRancher.__new__(IslandRancher)
+        task.config, task.device = Mock(), Mock()
+        task.posts_ranch = {f'ISLAND_RANCH_POST{index}': Mock() for index in range(1, 5)}
+        for name in ('goto_postmanage', 'post_manage_mode', 'post_close',
+                     'post_manage_swipe_to_top', 'post_open'):
+            setattr(task, name, Mock())
+        task.post_list_is_empty = Mock(return_value=True)
+        fishery = Mock()
+        with patch('module.island.island_fishery.IslandFishery', return_value=fishery):
+            task.prepare_round()
+        self.assertEqual([call.args[0] for call in task.post_list_is_empty.call_args_list],
+                         list(task.posts_ranch.values()))
+        self.assertEqual(task._round_ranch_states, {post: 'idle' for post in task.posts_ranch})
+        task.post_open.assert_not_called()
+        task.post_manage_swipe_to_top.assert_not_called()
+        fishery.prepare_round.assert_called_once_with()
 
     def test_ranch_loads_warehouse_feed_and_materials_without_borrowing_posts(self):
         config = SimpleNamespace(IslandRancher_MinChicken=20, IslandRancher_MinPork=0,
@@ -350,6 +376,9 @@ class RoundProducerTests(unittest.TestCase):
         task.ui_goto.assert_not_called()
         task.warehouse_inventory.assert_not_called()
         self.scan.assert_not_called()
+        task.post_manage_swipe_to_top.assert_not_called()
+        task.post_manage_down_swipe.assert_not_called()
+        task.device.sleep.assert_not_called()
 
     def test_upstream_default_ore_and_wood_are_executed_after_targets(self):
         config = SimpleNamespace(IslandMine_WorkerFilter='WorkerJuu', IslandForest_WorkerFilter='WorkerJuu',
@@ -373,6 +402,8 @@ class RoundProducerTests(unittest.TestCase):
         self.assertEqual([call.args[1:3] for call in task.post_plant.call_args_list],
                          [('Copper', 'mine'), ('Practical', 'forest')])
         self.assertTrue(all(call.kwargs['need_count'] is None for call in task.post_plant.call_args_list))
+        task.post_manage_swipe_to_top.assert_not_called()
+        task.post_manage_down_swipe.assert_not_called()
 
     def test_mine_small_deficit_preserves_its_selected_single_batch(self):
         task = IslandMineForest.__new__(IslandMineForest)

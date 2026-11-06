@@ -532,10 +532,8 @@ class IslandMineForest(Island,LoginHandler):
         self.goto_postmanage()
         self.post_manage_mode(POST_MANAGE_PRODUCTION)
         self.post_close()
-        # 回顶部（滑动距离不够时自动补滑，直到列表首行岗位出现）
-        self.post_manage_swipe_to_top()
 
-        # 矿山（在上方可见）
+        # 按具体岗位定位，依次检查矿山和林场。
         collected_posts = []
         for pid in self.mine_post_ids:
             info = self.posts[pid]
@@ -543,11 +541,6 @@ class IslandMineForest(Island,LoginHandler):
             setattr(self, time_var, None)
             if self.collect_and_detect_post(info['button'], pid, 'mine', time_var):
                 collected_posts.append(pid)
-
-        # 滑动到林场
-        self.device.sleep(1)
-        self.post_manage_down_swipe(600)
-        self.device.sleep(0.5)
 
         # 林场
         for pid in self.forest_post_ids:
@@ -657,10 +650,6 @@ class IslandMineForest(Island,LoginHandler):
 
         # ===== 步骤4：执行种植（无需买种子） =====
         if any(all_to_plant.values()):
-            # 先回到顶部（矿山可见）
-            self.post_manage_swipe_to_top()
-            self.device.sleep(0.5)
-
             # 处理矿山
             for i, pid in enumerate(idle_posts['mine']):
                 if i >= len(all_to_plant['mine']):
@@ -669,11 +658,6 @@ class IslandMineForest(Island,LoginHandler):
                 time_var = f'time_{pid}'
                 logger.info(f"[岛屿-矿山林场] 种植矿山 {pid}: {self._item_cn(product)}")
                 self.post_plant(self.posts[pid]['button'], product, 'mine', time_var, need_count=need_count)
-
-            # 滑动到林场
-            self.device.sleep(1)
-            self.post_manage_down_swipe(600)
-            self.device.sleep(0.5)
 
             # 处理林场
             for i, pid in enumerate(idle_posts['forest']):

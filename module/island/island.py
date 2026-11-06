@@ -28,7 +28,9 @@ from module.base.runtime_params import (
     ISLAND_MAP_DESTINATION_WAIT,
 )
 from module.config.utils import read_run_param
-from module.island.post_list import is_empty_post_slot, is_post_title_confirmed
+from module.island.post_list import (
+    is_empty_post_slot, is_post_title_confirmed, match_post_title, post_scroll_direction,
+)
 from module.island.island_walk import (
     ISLAND_WALK_ACTIONS,
     ISLAND_WALK_MAX_HOLD,
@@ -52,9 +54,9 @@ ISLAND_POST_SWIPE_STEP = 450
 ISLAND_POST_SWIPE_DISTANCE = 550
 ISLAND_POST_SWIPE_TO_TOP_MAX = 5
 ISLAND_POST_SWIPE_SEARCH_MAX = 8
-# 岗位列表可见区域下沿（post_manage_up_swipe 滑动框 y=69~656），按钮下沿超出时先上推列表再点击
+# 完整岗位卡的保守可见下沿，贴边补滑时再留少量回弹余量。
 POST_LIST_VISIBLE_BOTTOM = 640
-POST_EDGE_NUDGE_MARGIN = 120
+POST_EDGE_NUDGE_MARGIN = 40
 POST_EDGE_NUDGE_LIMIT = 3
 
 # 规则里 `switch`（切换到啾咖啡餐厅）的等待上限：点击按钮后等对话关闭、场景切换完成
@@ -1443,6 +1445,11 @@ class Island(SelectCharacter):
         """
         if not isinstance(post, Button):
             return False
+        if (not getattr(self, '_post_list_recently_scrolled', False)
+                and (not self.ui_page_appear(page_island_postmanage) or self.is_post_detail_visible())):
+            return False
+        if not self.post_locate(post):
+            return False
         recently_scrolled = getattr(self, '_post_list_recently_scrolled', False)
         self._post_list_recently_scrolled = False
 
@@ -1450,7 +1457,7 @@ class Island(SelectCharacter):
             if not self.ui_page_appear(page_island_postmanage) or self.is_post_detail_visible():
                 return None
             # match 会修改 button 的偏移，仅使用本次标题匹配成功后的坐标。
-            if not self.appear(post, offset=300):
+            if not match_post_title(self.device.image, post):
                 return None
             if not is_post_title_confirmed(self.device.image, post):
                 return None
@@ -1477,87 +1484,114 @@ class Island(SelectCharacter):
             logger.info(f"[岛屿] {post}: 滑动后四帧未确认稳定空岗，继续详情巡检")
         return False
 
-    def post_open(self, post):
-        """点击并打开指定岗位，支持重试滑动定位。
+    def post_locate(self, post):
+        """从当前画面定位完整岗位；仅滑动列表，不打开或收取岗位。
 
-        Args:
-            post (Button): 目标岗位按钮。
-
-        Returns:
-            bool: 岗位是否成功打开（未解锁返回 False）。
-
-        Raises:
-            GameStuckError: 岗位按钮未识别或打开超时。
+        Pages:
+            in: page_island_postmanage，已关闭岗位详情。
+            out: page_island_postmanage，目标岗位完整可见。
         """
-        template = TEMPLATE_POST_LOCK
-        retry_swipe_timer = Timer(3, count=3).start()
-        retry_swipe_used = 0
-        full_retry_used = 0
-        edge_nudge_used = 0
-        # 补滑轮次放宽后单轮可达十几秒，45 秒预算在低端机上撑不满整条重试链，
-        # 放宽到 90 秒；正常路径在补滑命中时就退出，不受影响。
-        for image in self.loop(timeout=90, skip_first=False):
-            post_appear = self.appear(post, offset=300)
-            if post_appear:
-                retry_swipe_timer.reset()
-                cell_image = crop(image, post.button)
-                if template.match(cell_image, similarity=0.85):
-                    return False
-            if self.appear(ISLAND_POST_CHECK) or self.appear(ISLAND_POST_VACANT_CHECK):
-                return True
-            if self.appear(ISLAND_POST_SELECT, offset=1):
-                return True
-            if post_appear:
-                # 岗位列表可见区域下沿约 y=656（见 post_manage_up_swipe 的滑动框）。岗位按钮匹配在下沿之下时，
-                # 点击落在列表外或画面外（y>720）不会打开岗位，会一直重复点击到 GameTooManyClickError
-                # （啾咖啡岗位 1 在滑动后常停在 y≈680~720）。先把列表上推一点再点击。
-                bottom = post.button[3]
-                if bottom > POST_LIST_VISIBLE_BOTTOM and edge_nudge_used < POST_EDGE_NUDGE_LIMIT:
-                    edge_nudge_used += 1
-                    logger.info(f"[岛屿] 岗位按钮 {post} 位于列表可见区域下沿之下 (y={bottom})，上推列表后再点击")
-                    self.post_manage_up_swipe(bottom - POST_LIST_VISIBLE_BOTTOM + POST_EDGE_NUDGE_MARGIN)
-                    continue
-                self.device.sleep(0.1)
-                self.device.click(post)
-                self.device.sleep(0.5)
-                continue
-            if (
-                    getattr(self, 'post_open_retry_swipe', False)
-                    and retry_swipe_used < getattr(self, 'post_open_retry_swipe_limit', 1)
-                    and retry_swipe_timer.reached()
-            ):
-                retry_swipe_used += 1
-                logger.info(f"[岛屿] 未识别到岗位按钮 {post}，第{retry_swipe_used + 1}次滑动定位岗位列表")
-                # 列表可能停在上一次操作留下的位置，先回到顶部；然后**先看再滑**：
-                # 目标岗位可能本来就在顶部（例如餐厅 ISLAND_RESTAURANT_POST1），
-                # 旧实现无论目标在哪都按 swipe_count 下滑一步，正好把它推出可视区，
-                # 而重试次数只有 1 次，于是只能干等到 45 秒超时、抛
-                # 「打开岗位详情超时」（2026-09-20/22/25 三次实例）。
-                self.post_manage_swipe_to_top()
-                if not self.appear(post, offset=300):
-                    # min_swipes=0：先检测再滑，边滑边找，避免把已在可视区的岗位滑走
-                    self.post_manage_swipe_until_appear(post, min_swipes=0)
-                retry_swipe_timer.reset()
-                continue
-            if (
-                    getattr(self, 'post_open_retry_swipe', False)
-                    and retry_swipe_used >= getattr(self, 'post_open_retry_swipe_limit', 1)
-                    and retry_swipe_timer.reached()
-            ):
-                if full_retry_used < getattr(self, 'post_open_full_retry_limit', 1):
-                    full_retry_used += 1
-                    logger.warning(
-                        f"[岛屿] 岗位按钮 {post} 连续{retry_swipe_used + 1}次滑动定位失败，重新进入岗位管理页重试"
-                    )
+        return self._locate_post(post, open_post=False)
+
+    def post_open(self, post):
+        """按当前帧定位并打开岗位；锁定返回 False，定位失败交上层恢复。"""
+        return self._locate_post(post, open_post=True)
+
+    def _locate_post(self, post, *, open_post):
+        """可见目标优先，按当帧标题补滑；方向未知或搜索失败才归顶重找。"""
+        phase, steps, retries, nudges = 'nearby', 0, 0, 0
+        previous = None
+        clicked = False
+        move_timer = Timer(0.4)
+        click_timer = Timer(2)
+        for image in self.loop(timeout=90, skip_first=not open_post):
+            if self.is_post_detail_visible():
+                if open_post and clicked:
+                    return True
+                if open_post:
+                    # 旧详情不能证明本次目标已打开，先关闭再定位指定岗位。
                     self.post_close()
-                    self.goto_postmanage()
-                    self.post_manage_mode(POST_MANAGE_PRODUCTION)
-                    self.post_manage_swipe(getattr(self, 'post_manage_swipe_count', 1))
-                    retry_swipe_used = 0
-                    retry_swipe_timer.reset()
+                previous = None
+                continue
+            if not self.ui_page_appear(page_island_postmanage):
+                previous = None
+                continue
+            # 滑动停止后仍可能回弹；短暂观察窗口中持续截图，不拿旧位置操作。
+            if not move_timer.reached():
+                continue
+            if match_post_title(image, post):
+                position = tuple(post.button)
+                cx = (position[0] + position[2]) / 2
+                cy = (position[1] + position[3]) / 2
+                if (190 <= cx - 45 and cx + 45 <= 1225
+                        and 115 <= cy - 45 and cy + 45 <= POST_LIST_VISIBLE_BOTTOM):
+                    if getattr(self, '_post_list_recently_scrolled', False):
+                        stable = previous is not None and all(abs(a - b) <= 2 for a, b in zip(previous, position))
+                        previous = position
+                        if not stable:
+                            continue
+                    if not open_post:
+                        return True
+                    if TEMPLATE_POST_LOCK.match(crop(image, position), similarity=0.85):
+                        return False
+                    if click_timer.reached():
+                        self.device.click(post)
+                        clicked = True
+                        click_timer.reset()
                     continue
-                raise GameStuckError(f"岗位按钮 {post} 完整重试后仍未识别")
-        raise GameStuckError(f"打开岗位详情超时: {post}")
+                previous = None
+                if nudges < POST_EDGE_NUDGE_LIMIT:
+                    # 只按当前完整标题给出的卡片位置纠偏，不使用匹配失败留下的偏移。
+                    if cy + 45 > POST_LIST_VISIBLE_BOTTOM:
+                        self.post_manage_up_swipe(min(ISLAND_POST_SWIPE_STEP, int(
+                            cy + 45 - POST_LIST_VISIBLE_BOTTOM + POST_EDGE_NUDGE_MARGIN)))
+                    elif cy - 45 < 115:
+                        self.post_manage_down_swipe(min(ISLAND_POST_SWIPE_STEP, int(
+                            115 - (cy - 45) + POST_EDGE_NUDGE_MARGIN)))
+                    else:
+                        raise GameStuckError(f'岗位位置超出列表横向范围: {post}')
+                    nudges += 1
+                    move_timer.reset()
+                    continue
+                raise GameStuckError(f'岗位边缘补滑后仍不可完整点击: {post}')
+            previous = None
+            if phase == 'nearby':
+                direction = post_scroll_direction(image, post, server=self.config.SERVER)
+                if direction and steps < ISLAND_POST_SWIPE_SEARCH_MAX:
+                    if direction > 0:
+                        self.post_manage_up_swipe(ISLAND_POST_SWIPE_STEP)
+                    else:
+                        self.post_manage_down_swipe(ISLAND_POST_SWIPE_STEP)
+                    steps += 1
+                    move_timer.reset()
+                    continue
+                logger.info(f'[岛屿] {post} 当前区域未定位，回顶部有界搜索')
+                phase, steps = 'top', 0
+            if phase == 'top':
+                if match_post_title(image, ISLAND_FARM_POST1):
+                    phase, steps = 'search', 0
+                    continue
+                if steps < ISLAND_POST_SWIPE_TO_TOP_MAX:
+                    self.post_manage_down_swipe(ISLAND_POST_SWIPE_DISTANCE)
+                    steps += 1
+                    move_timer.reset()
+                    continue
+            elif phase == 'search' and steps < ISLAND_POST_SWIPE_SEARCH_MAX:
+                self.post_manage_up_swipe(ISLAND_POST_SWIPE_STEP)
+                steps += 1
+                move_timer.reset()
+                continue
+            # 保留原有有限的整页恢复；正常可见/相邻岗位不会走到这里。
+            if retries >= getattr(self, 'post_open_full_retry_limit', 2):
+                raise GameStuckError(f'岗位按钮 {post} 完整重试后仍未识别')
+            retries += 1
+            logger.warning(f'[岛屿] {post} 定位失败，重新进入岗位管理页 ({retries})')
+            self.post_close()
+            self.goto_postmanage()
+            self.post_manage_mode(POST_MANAGE_PRODUCTION)
+            phase, steps, nudges = 'nearby', 0, 0
+            clicked = False
+        raise GameStuckError(f'岗位定位或打开详情超时: {post}')
 
     def post_manage_up_swipe(self, distance):
         """在岗位列表中向上滑动指定距离。

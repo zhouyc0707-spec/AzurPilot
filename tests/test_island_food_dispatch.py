@@ -172,15 +172,28 @@ class FoodDispatchTests(unittest.TestCase):
         self.assertEqual(result, 4)
         shop.deduct_materials.assert_called_once_with('tea', 4)
         self.assertEqual(shop.post_open.call_count, 2)
+        shop.post_manage_swipe.assert_not_called()
 
     def test_invalid_time_falls_back_to_actual_post_quantity_and_time(self):
         result, shop, _ = self.produce(duration='02:00:00:1')
         self.assertEqual(result, 4)
         self.assertEqual(shop.post_open.call_count, 2)
-        shop.post_manage_swipe.assert_called_once_with(1)
+        shop.post_manage_swipe.assert_not_called()
         shop.deduct_materials.assert_called_once_with('tea', 4)
         self.assertGreaterEqual(shop.finish_time, NOW + timedelta(hours=1))
         self.assertLess(shop.finish_time, NOW + timedelta(hours=1, seconds=10))
+
+    def test_legacy_selection_retry_reopens_target_without_fixed_region_scroll(self):
+        shop = FoodUI(FakeDevice(self.clock))
+        shop.back_to_postmanage_from_dispatch = Mock(return_value=True)
+        shop.post_manage_mode = Mock()
+
+        self.assertTrue(shop.retry_product_selection_from_postmanage(
+            POST_ADD_ORDER, 'tea', 'tea', 1))
+
+        shop.back_to_postmanage_from_dispatch.assert_called_once()
+        shop.post_open.assert_called_once_with(POST_ADD_ORDER)
+        shop.post_manage_swipe.assert_not_called()
 
     def test_unstable_preview_falls_back_instead_of_guessing(self):
         durations = iter((timedelta(hours=2), timedelta(hours=3), timedelta(hours=4)))

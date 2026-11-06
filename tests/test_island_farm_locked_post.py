@@ -62,6 +62,9 @@ class IslandFarmLockedPostTests(unittest.TestCase):
         category, idle_posts, _ = farm._plant_idle_posts.call_args.args
         self.assertEqual(category, 'nursery')
         self.assertEqual([post['post_id'] for post in idle_posts], ['ISLAND_NURSERY_POST1'])
+        farm.post_manage_swipe.assert_not_called()
+        farm.post_manage_swipe_until_appear.assert_not_called()
+        farm.device.sleep.assert_not_called()
 
     def test_locked_post_is_not_added_to_idle_state(self):
         farm = make_farm()

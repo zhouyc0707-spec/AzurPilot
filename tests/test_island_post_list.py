@@ -82,13 +82,18 @@ class ListFrameDevice:
 
 
 class ListFrameIsland:
-    post_list_is_empty = Island.post_list_is_empty
-
     def __init__(self, frames):
         self.device = ListFrameDevice(frames)
         self.appear_calls = []
+        self.post_locate = Mock(return_value=True)
         self.post = Button(area=(200, 100, 260, 125), color=(120, 190, 220),
                            button=POSITION, name='POST_LIST_TEST')
+
+    def post_list_is_empty(self, post):
+        # 此夹具只编排空岗复核帧，定位导航另测；保留每帧标题失败和位置变化。
+        with patch('module.island.island.match_post_title',
+                   side_effect=lambda image, target: self.appear(target)):
+            return Island.post_list_is_empty(self, post)
 
     @property
     def current(self):
@@ -194,7 +199,8 @@ class EmptyPostListConfirmationTests(unittest.TestCase):
         task = ListFrameIsland([state(), state()])
         self.assertTrue(task.post_list_is_empty(task.post))
         self.assertEqual(task.device.screenshot_count, 1)
-        self.assertEqual([offset for _, offset in task.appear_calls], [300, 300])
+        self.assertEqual([post for post, _ in task.appear_calls], [task.post, task.post])
+        task.post_locate.assert_called_once_with(task.post)
         task.device.click.assert_not_called()
 
     def test_occupied_slot_does_not_add_a_screenshot(self):
@@ -336,6 +342,8 @@ class EmptyPostListRealLocationTests(unittest.TestCase):
         task = Island.__new__(Island)
         task.config = SimpleNamespace(SERVER='cn', BUTTON_OFFSET=30)
         task.interval_timer = {}
+        # 本组检查当前图像能否安全跳过空岗，缺标题负例不启动真实补滑导航。
+        task.post_locate = Mock(return_value=True)
         task.device = ListFrameDevice([{'image': image}, {'image': image.copy()}])
         task.device.stuck_record_add = Mock()
         post = Button(area=source.raw_area, color=source.raw_color,

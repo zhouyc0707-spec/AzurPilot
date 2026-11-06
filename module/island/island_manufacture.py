@@ -104,7 +104,7 @@ class IslandManufacture(IslandShopBase):
         self.shop_type = "manufacture"
         self.time_prefix = "time_manufacture"
 
-        # 设置滑动配置（岗位管理界面需要两次滑动）
+        # 保留旧区域参数，实际岗位由 post_open 按当前画面定位
         self.post_manage_swipe_count = 2
 
         # === 初始化全局季节配置 ===
@@ -303,7 +303,6 @@ class IslandManufacture(IslandShopBase):
         self.goto_postmanage()
         self.post_manage_mode(POST_MANAGE_PRODUCTION)
         self.post_close()
-        self.post_manage_swipe(self.post_manage_swipe_count)
         for index, (post_id, button) in enumerate(all_buttons.items(), 1):
             self.posts.setdefault(post_id, {'status': 'none', 'button': button})
             time_var = f'{self.time_prefix}{index}'
@@ -435,8 +434,6 @@ class IslandManufacture(IslandShopBase):
                     self.wait_until_appear(ISLAND_POSTMANAGE_CHECK)
                     self.device.sleep(0.5)
                     self.post_close()
-                    for _ in range(self.post_manage_swipe_count):
-                        self.post_manage_up_swipe(450)
                     if attempt + 1 >= self.PRODUCT_SELECT_RETRY_LIMIT:
                         # 产品列表里始终找不到，多为岛屿科技尚未解锁（如未解锁的刀叉餐具、鞋靴）。
                         # 记入本批不可用，后续岗位不再重复尝试，改试下一个候选产品
@@ -459,8 +456,6 @@ class IslandManufacture(IslandShopBase):
                     self.wait_until_appear(ISLAND_POSTMANAGE_CHECK)
                     self.device.sleep(0.5)
                     self.post_close()
-                    for _ in range(self.post_manage_swipe_count):
-                        self.post_manage_up_swipe(450)
                     break  # 跳出重试循环 -> 下一个产品
 
                 # 材料充足，派遣生产
@@ -470,8 +465,6 @@ class IslandManufacture(IslandShopBase):
                 self.wait_until_appear(ISLAND_POSTMANAGE_CHECK)
                 self.device.sleep(0.5)
                 self.post_close()
-                for _ in range(self.post_manage_swipe_count):
-                    self.post_manage_up_swipe(450)
 
                 # 获取生产时间和数量
                 self.post_open(post_button)
@@ -698,10 +691,6 @@ class IslandManufacture(IslandShopBase):
         self.post_manage_mode(POST_MANAGE_PRODUCTION)
         self.post_close()
 
-        # 滑动以看到岗位
-        for _ in range(self.post_manage_swipe_count):
-            self.post_manage_up_swipe(450)
-
         # 检查岗位状态
         time_vars = list(self._post_time_vars.values()) if prepared else []
         post_index = 1
@@ -726,8 +715,6 @@ class IslandManufacture(IslandShopBase):
                 self.goto_postmanage()
                 self.post_manage_mode(POST_MANAGE_PRODUCTION)
                 self.post_close()
-                for _ in range(self.post_manage_swipe_count):
-                    self.post_manage_up_swipe(450)
             # 如果有空闲岗位，重新进入岗位管理界面安排生产
             logger.info(f"[岛屿-制造业] 有 {len(idle_posts)} 个空闲岗位，开始安排生产")
 

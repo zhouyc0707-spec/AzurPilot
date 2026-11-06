@@ -676,7 +676,6 @@ class IslandFarm(Island, WarehouseOCR, LoginHandler):
         self.goto_postmanage()
         self.post_manage_mode(POST_MANAGE_PRODUCTION)
         self.post_close()
-        self.post_manage_swipe(0)
 
         self.time_vars = {
             'farm': [None] * (4 if collect_all else self.farm_positions),
@@ -730,11 +729,6 @@ class IslandFarm(Island, WarehouseOCR, LoginHandler):
                         'index': i,
                         'time_var_name': time_var_name
                     })
-
-        # 滑动到苗圃位置（滑动距离不够时自动补滑，直到苗圃岗位出现）
-        self.device.sleep(1)
-        self.post_manage_swipe_until_appear(ISLAND_NURSERY_POST1, min_swipes=1)
-        self.device.sleep(0.5)  # 等待滑动动画完成
 
         # 然后遍历苗圃
         category = 'nursery'
@@ -839,9 +833,6 @@ class IslandFarm(Island, WarehouseOCR, LoginHandler):
         need_to_plant = any(all_plants_to_plant.values())
 
         if need_to_plant:
-            self.post_manage_swipe(0)
-            self.device.sleep(1)
-
             # 先处理农田和果园的播种，种子不足时在产品选择页即时补买。
             for category in ['farm', 'orchard']:
                 if not idle_posts[category]:
@@ -852,8 +843,6 @@ class IslandFarm(Island, WarehouseOCR, LoginHandler):
             # 然后处理苗圃的播种
             category = 'nursery'
             if idle_posts[category]:
-                self.post_manage_swipe_until_appear(ISLAND_NURSERY_POST1, min_swipes=1)
-                self.device.sleep(0.5)
                 self._plant_idle_posts(category, idle_posts[category], all_plants_to_plant[category])
 
         logger.info("[岛屿-农田] \n农田管理完成！")

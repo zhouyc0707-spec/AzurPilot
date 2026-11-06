@@ -108,9 +108,8 @@ class IslandShopBase(Island, WarehouseOCR):
         self.config_post_number = "Island_PostNumber"
 
         # 滑动配置（子类可覆盖）
-        self.post_manage_swipe_count = 1  # 默认滑动1次450
-        # 店铺岗位位于列表较深处，调参滑动后仍识别不到岗位按钮时，
-        # 由 post_open 闭环补滑重新定位（模拟器/云手机滑动距离不够的兜底）
+        self.post_manage_swipe_count = 1  # 保留旧区域参数，岗位由 post_open 按当前画面定位
+        # 店铺岗位位于列表较深处，由 post_open 先检查当前可见目标，再按需补滑。
         self.post_open_retry_swipe = True
 
     # ==================== 季节配置支持 ====================
@@ -283,7 +282,6 @@ class IslandShopBase(Island, WarehouseOCR):
         self.goto_postmanage()
         self.post_manage_mode(POST_MANAGE_PRODUCTION)
         self.post_close()
-        self.post_manage_swipe(self.post_manage_swipe_count)
         self._round_time_vars = []
         enabled = getattr(self.config, self.config_post_number, 2)
         for index, post_id in enumerate(self.post_buttons, 1):
@@ -579,7 +577,6 @@ class IslandShopBase(Island, WarehouseOCR):
             raise GameStuckError(f"{self._item_cn(product)}生产选择餐品失败后无法返回岗位管理页")
 
         self.post_manage_mode(POST_MANAGE_PRODUCTION)
-        self.post_manage_swipe(self.post_manage_swipe_count)
         if not self.post_open(post_button):
             raise GameStuckError(f"{self._item_cn(product)}生产选择餐品失败后无法重新打开岗位")
         self.device.sleep(0.5)
@@ -737,7 +734,6 @@ class IslandShopBase(Island, WarehouseOCR):
             finish_time = confirmed_at + duration
         else:
             post_button = self.posts[post_id]['button']
-            self.post_manage_swipe(self.post_manage_swipe_count)
             if not self.post_open(post_button):
                 raise GameStuckError(f'{self._item_cn(product)}派遣后未能复检岗位')
             number_ocr = Digit(
@@ -863,7 +859,6 @@ class IslandShopBase(Island, WarehouseOCR):
                         else:
                             self.device.click(ISLAND_BACK)
                             self.post_close()
-                            self.post_manage_swipe(self.post_manage_swipe_count)
                             self.device.sleep(0.5)
                             return 0  # 返回0表示原料不足
                     else:
@@ -1071,7 +1066,6 @@ class IslandShopBase(Island, WarehouseOCR):
         self.goto_postmanage()
         self.post_manage_mode(POST_MANAGE_PRODUCTION)
         self.post_close()
-        self.post_manage_swipe(self.post_manage_swipe_count)
 
         # 检查岗位状态
         post_count = getattr(self.config, self.config_post_number, 2)
@@ -1093,7 +1087,6 @@ class IslandShopBase(Island, WarehouseOCR):
                 self.goto_postmanage()
                 self.post_manage_mode(POST_MANAGE_PRODUCTION)
                 self.post_close()
-                self.post_manage_swipe(self.post_manage_swipe_count)
 
             # 计算当前总库存
             self.current_totals = self._rebuild_current_totals({})
