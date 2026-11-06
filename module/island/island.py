@@ -72,6 +72,19 @@ ISLAND_SHOP_ITEM_SIMILARITY = 0.93
 ISLAND_SHOP_ITEM_COLOR_THRESHOLD = 20
 
 
+def is_daily_supply_reward(image):
+    """在固定区域同时确认补给奖励标题与关闭提示，供领取和导航共用。"""
+    if not isinstance(image, np.ndarray) or image.shape[:2] != (720, 1280):
+        return False
+    # 关闭提示叠在动态场景上，实拍可降至 0.899；只校准此项，不降低标题或全局阈值。
+    return (
+        TEMPLATE_AIR_DROP_REWARD_TITLE.match(
+            image[160:240, 490:795], similarity=0.9, direct_match=True)
+        and TEMPLATE_AIR_DROP_REWARD_CLOSE.match(
+            image[545:595, 550:730], similarity=0.88, direct_match=True)
+    )
+
+
 def shop_item_color_matches(button, image, threshold=ISLAND_SHOP_ITEM_COLOR_THRESHOLD):
     """在 `button.match()` 成功后检查匹配位置的颜色是否与模板一致。
 
@@ -418,7 +431,14 @@ class Island(SelectCharacter):
         return False
 
     def ui_additional(self, get_ship=True):
-        """普通岛屿任务也处理信息提示，不依赖 IslandUI 的继承链。"""
+        """岛屿导航先关闭残留补给奖励和信息提示，再处理通用弹窗。"""
+        if is_daily_supply_reward(self.device.image):
+            timer = self.get_interval_timer(ISLAND_CLICK_SAFE_AREA, interval=2, renew=True)
+            if not timer.reached():
+                return False
+            self.device.click(ISLAND_CLICK_SAFE_AREA)
+            timer.reset()
+            return True
         if self.appear(ISLAND_INFO_EXIT, offset=(30, 30)):
             return self.handle_island_info_popup()
         return super().ui_additional(get_ship=get_ship)

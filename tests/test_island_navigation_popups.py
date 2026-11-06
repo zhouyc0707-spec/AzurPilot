@@ -11,10 +11,11 @@ from module.base import utils
 from module.exception import GameStuckError
 from module.island.island import (
     Island, ISLAND_INFO_EXIT, ISLAND_GET, ISLAND_MANAGEMENT_CHECK,
-    ISLAND_POST_SAFE_AREA, POST_MANAGE_PRODUCTION, POST_MANAGE_BUSINESS,
+    ISLAND_POST_SAFE_AREA, ISLAND_CLICK_SAFE_AREA, POST_MANAGE_PRODUCTION, POST_MANAGE_BUSINESS,
     ISLAND_GATHER_COLLECT, ISLAND_GATHER_COLLECT_CHECK,
 )
-from module.ui.page import Page, page_island, page_island_management
+from module.ui.page import Page, page_island, page_island_management, page_island_phone
+from module.ui.assets import ISLAND_GOTO_ISLAND_PHONE
 from module.ui.ui import UI
 from tests.test_island_goto_management import (
     FakeClock, FakeDevice, ISLAND_PAGE, POSTMANAGE_PAGE, ISLAND_GOTO_MANAGEMENT,
@@ -23,6 +24,7 @@ from tests.test_island_reward_state import FrameFlow
 
 
 FIXTURES = Path(__file__).parent / 'fixtures' / 'island_navigation_popups'
+SUPPLY_FIXTURES = Path(__file__).parent / 'fixtures' / 'island_air_drop_reward'
 
 
 class IslandNavigationPopupTests(unittest.TestCase):
@@ -35,7 +37,8 @@ class IslandNavigationPopupTests(unittest.TestCase):
                         utils.TEMPLATE_MATCH_NON_NATIVE_720P,
                         utils.TEMPLATE_MATCH_NON_NATIVE_720P_RESOLUTION)
         utils.set_template_match_non_native_720p(True, resolution=(2560, 1440))
-        for button in (ISLAND_INFO_EXIT, ISLAND_GET, ISLAND_MANAGEMENT_CHECK):
+        for button in (ISLAND_INFO_EXIT, ISLAND_GET, ISLAND_MANAGEMENT_CHECK,
+                       ISLAND_GOTO_ISLAND_PHONE, page_island_phone.check_button):
             self.addCleanup(button.clear_offset)
 
     def island(self, timeline):
@@ -72,6 +75,61 @@ class IslandNavigationPopupTests(unittest.TestCase):
         with patch.object(UI, 'ui_additional', return_value=True) as common:
             self.assertTrue(task.ui_additional(get_ship=False))
             common.assert_called_once_with(get_ship=False)
+
+    def test_daily_supply_reward_cooldown_never_falls_through_to_common_handler(self):
+        reward = utils.load_image(str(SUPPLY_FIXTURES / 'reward_navigation.png'))
+        task = self.island(lambda t: reward)
+        with patch.object(UI, 'ui_additional', return_value=False) as common:
+            self.assertTrue(task.ui_additional(get_ship=False))
+            self.assertFalse(task.ui_additional(get_ship=False))
+            self.clock.advance(1.8)
+            self.assertFalse(task.ui_additional(get_ship=False))
+            self.clock.advance(0.3)
+            task.device.screenshot()
+            self.assertTrue(task.ui_additional(get_ship=False))
+            common.assert_not_called()
+        self.assertEqual([name for _, name in task.device.clicks], [ISLAND_CLICK_SAFE_AREA.name] * 2)
+        stamps = [stamp for stamp, _ in task.device.clicks]
+        self.assertGreaterEqual(stamps[1] - stamps[0], 2)
+
+    def test_shared_navigation_closes_daily_supply_before_clicking_phone_on_new_clean_frames(self):
+        reward = utils.load_image(str(SUPPLY_FIXTURES / 'reward_navigation.png'))
+        # 干净源页及目标页由既有按钮资源组成，不冒充本次现场后续截图。
+        clean = np.maximum(ISLAND_PAGE, utils.load_image(ISLAND_GOTO_ISLAND_PHONE.file))
+        phone = utils.load_image(page_island_phone.check_button.file)
+        self.assertTrue(page_island.check_button.match(reward, offset=(30, 30)))
+        self.assertTrue(ISLAND_GOTO_ISLAND_PHONE.match(reward, offset=(30, 30)))
+        self.assertFalse(ISLAND_GOTO_ISLAND_PHONE.match_template_color(reward, offset=(30, 30)))
+        task = self.island(lambda t: reward if t < 3.2 else clean if t < 5.6 else phone)
+        task.ui_goto = UI.ui_goto.__get__(task, Island)
+        task.handle_guild_popup_cancel = Mock(return_value=False)
+        clicks = []
+        original_click = task.device.click
+
+        def click(button, **kwargs):
+            clicks.append((button.name, task.device.screenshot_count, task.device.image))
+            original_click(button, **kwargs)
+
+        def common_handler(**kwargs):
+            self.assertIsNot(task.device.image, reward, '补给关闭冷却中不能落入通用弹窗处理')
+            return False
+
+        task.device.click = click
+        with patch.object(Page, 'all_pages', {
+                page_island.name: page_island,
+                page_island_phone.name: page_island_phone,
+        }), patch.object(UI, 'ui_additional', side_effect=common_handler):
+            try:
+                task.ui_goto(page_island_phone, get_ship=False)
+            finally:
+                Page.clear_connection()
+        names = [name for _, name in task.device.clicks]
+        self.assertEqual(names, [ISLAND_CLICK_SAFE_AREA.name] * 2 + [ISLAND_GOTO_ISLAND_PHONE.name])
+        self.assertGreaterEqual(task.device.clicks[-1][0], 4.2)
+        self.assertGreater(clicks[-1][1], clicks[-2][1])
+        self.assertIs(clicks[-1][2], clean)
+        self.assertIs(task.device.image, phone)
+        task.ui_get_current_page.assert_not_called()
 
     def test_management_entry_recovers_after_info_and_confirms_new_frames(self):
         info = utils.load_image(str(FIXTURES / 'season_info.png'))

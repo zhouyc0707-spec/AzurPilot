@@ -18,21 +18,6 @@ AIR_DROP_RECEIVE = Button(
 )
 
 
-def is_daily_supply_reward(image):
-    """在归一化截图中同时确认补给奖励标题与空白关闭提示。
-
-    仅在固定奖励区域严格匹配，不随非原生分辨率降低阈值；背景岛屿
-    图标或一处文字单独出现，不能证明当前画面可以点击关闭。
-    """
-    if image is None or image.shape[:2] != (720, 1280):
-        return False
-    return (
-        TEMPLATE_AIR_DROP_REWARD_TITLE.match(
-            image[160:240, 490:795], similarity=0.9, direct_match=True)
-        and TEMPLATE_AIR_DROP_REWARD_CLOSE.match(
-            image[545:595, 550:730], similarity=0.9, direct_match=True)
-    )
-
 # 补给气泡在固定位置（与 ISLAND_AIR_DROP_A/B/C 同一区域），白色圆角条
 AIR_DROP_BUBBLE_AREA = (800, 378, 1025, 408)
 AIR_DROP_BUBBLE_CLICK_LIMIT = 2
@@ -331,13 +316,14 @@ class IslandAirDrop(Island):
         if server.server == 'en':
             return self._island_air_drop_en(skip_first_screenshot)
         reward_seen = False
+        sharing = False
         ready = Timer(0.8, count=2)
         click = Timer(2)
         for _ in self.loop(skip_first=skip_first_screenshot, timeout=Timer(self.AIR_DROP_TIMEOUT)):
             # 奖励可能覆盖背景分享按钮，先关闭已识别奖励，不能提前结束留住弹窗。
             if (is_daily_supply_reward(self.device.image)
                     or self.appear(GET_ITEMS_ISLAND, offset=(20, 20))
-                    or self.appear(ISLAND_GET, offset=30)):
+                    or self.appear(ISLAND_GET, offset=(30, 30))):
                 reward_seen = True
                 ready.clear()
                 if click.reached():
@@ -356,15 +342,28 @@ class IslandAirDrop(Island):
                 ready.clear()
                 self.appear_then_click(ISLAND_SEASON_GOTO_ISLAND, offset=1, interval=2)
                 continue
-            if self.appear(ISLAND_CHECK) or self.is_in_friend_island():
+            friend = self.is_in_friend_island()
+            if self.appear(ISLAND_CHECK) or friend:
+                # 奖励转场仍能透出分享文字，入口颜色恢复后才累计场景稳定时间。
+                entry = AIR_DROP_RUN_AWAY if friend else ISLAND_GOTO_MANAGEMENT
+                if not self.match_template_color(entry, offset=(20, 20)):
+                    ready.clear()
+                    continue
                 # A/B/C 资源均是分享文字，匹配它们只能停止，绝不继续点该位置。
-                if self.appear(ISLAND_AIR_DROP_A, offset=(30, 30)):
-                    logger.info('[岛屿-每日补给] 已显示分享剩余补给，停止领取，不点击分享')
-                    return True
-                action = ''.join(str(self.air_drop_action_ocr.ocr(self.device.image) or '').split())
-                if action == '分享剩余补给':
-                    logger.info('[岛屿-每日补给] 已识别分享剩余补给，停止领取')
-                    return True
+                share = self.appear(ISLAND_AIR_DROP_A, offset=(30, 30))
+                action = '' if share else ''.join(str(self.air_drop_action_ocr.ocr(self.device.image) or '').split())
+                if share or action == '分享剩余补给':
+                    if not sharing:
+                        ready.clear()
+                    sharing = True
+                    ready.start()
+                    if ready.reached():
+                        logger.info('[岛屿-每日补给] 分享状态与正常场景已稳定，停止领取，不点击分享')
+                        return True
+                    continue
+                if sharing:
+                    ready.clear()
+                    sharing = False
                 # 自己岛屿的领取入口实际显示「日常补给」，保留已核实的
                 # 「接收补给」文字兼容；只接受此交互区域中的完整名称。
                 if action in ('日常补给', '接收补给'):

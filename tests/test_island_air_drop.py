@@ -17,6 +17,7 @@ class AirDropFrame:
     name: str
     scene: bool = False
     friend: bool = False
+    dimmed: bool = False
     share: bool = False
     action: str | None = ''
     reward: str = ''
@@ -24,6 +25,11 @@ class AirDropFrame:
     phone: bool = False
     season: bool = False
     elapsed: float = 0.3
+
+
+def stable_scene(name, **state):
+    """提供三帧持续正常入口，覆盖 0.8 秒与最少采样次数。"""
+    return [AirDropFrame(f'{name}{index}', elapsed=0.5, **state) for index in range(3)]
 
 
 class IslandAirDropStateTests(unittest.TestCase):
@@ -42,11 +48,13 @@ class IslandAirDropStateTests(unittest.TestCase):
             save_screenshot=Mock(),
         )
         self.island.appear = Mock(side_effect=self.appear)
+        self.island.match_template_color = Mock(side_effect=self.match_template_color)
         self.island.is_in_friend_island = Mock(side_effect=lambda: self.frame.friend)
         self.island.air_drop_action_ocr = SimpleNamespace(
             ocr=Mock(side_effect=lambda image: image.action),
         )
         self.enterContext(patch('module.base.timer.time', side_effect=lambda: self.monotonic))
+        self.enterContext(patch('module.island.island_air_drop.server.server', 'cn'))
         self.enterContext(patch('module.island.island_air_drop.logger'))
         self.enterContext(patch('module.island.island_air_drop.is_daily_supply_reward',
                                 side_effect=lambda image: image.reward == 'DAILY_SUPPLY'))
@@ -85,6 +93,14 @@ class IslandAirDropStateTests(unittest.TestCase):
             timer.reset()
         return visible
 
+    def match_template_color(self, button, **_):
+        if self.frame.dimmed:
+            return False
+        return {
+            'ISLAND_GOTO_MANAGEMENT': self.frame.scene,
+            'AIR_DROP_RUN_AWAY': self.frame.friend,
+        }.get(button.name, False)
+
     def run_frames(self, frames):
         self.frames = iter(frames)
         return self.island.island_air_drop()
@@ -93,14 +109,15 @@ class IslandAirDropStateTests(unittest.TestCase):
         self.assertFalse(any(name.startswith('ISLAND_AIR_DROP_') for name, _, _ in self.clicks))
 
     def test_share_template_at_entry_finishes_without_any_click(self):
-        result = self.run_frames([AirDropFrame('分享入口', scene=True, share=True)])
+        result = self.run_frames(stable_scene('分享入口', scene=True, share=True))
         self.assertTrue(result)
+        self.assertEqual(self.island.device.screenshot.call_count, 3)
         self.island.device.click.assert_not_called()
         self.island.air_drop_action_ocr.ocr.assert_not_called()
 
     def test_share_text_finishes_without_click_when_template_does_not_match(self):
         result = self.run_frames([
-            AirDropFrame('文字分享入口', scene=True, action='分享剩余补给'),
+            *stable_scene('文字分享入口', scene=True, action='分享剩余补给'),
         ])
         self.assertTrue(result)
         self.island.device.click.assert_not_called()
@@ -109,7 +126,7 @@ class IslandAirDropStateTests(unittest.TestCase):
         result = self.run_frames([
             AirDropFrame('接收入口', scene=True, action='接收补给'),
             AirDropFrame('领取过渡'),
-            AirDropFrame('分享入口', scene=True, share=True),
+            *stable_scene('分享入口', scene=True, share=True),
         ])
         self.assertTrue(result)
         self.assertEqual([name for name, _, _ in self.clicks], [AIR_DROP_RECEIVE.name])
@@ -121,7 +138,7 @@ class IslandAirDropStateTests(unittest.TestCase):
             AirDropFrame('入口点击后转场一', scene=True, action='日常补给'),
             AirDropFrame('入口点击后转场二', scene=True, action='日常补给'),
             AirDropFrame('领取奖励', scene=True, reward='ISLAND_GET', elapsed=2.1),
-            AirDropFrame('领取后分享入口', scene=True, action='分享剩余补给'),
+            *stable_scene('领取后分享入口', scene=True, action='分享剩余补给'),
         ])
         self.assertTrue(result)
         self.assertEqual([name for name, _, _ in self.clicks],
@@ -131,7 +148,7 @@ class IslandAirDropStateTests(unittest.TestCase):
     def test_daily_supply_entry_on_friend_island_uses_same_guarded_click(self):
         result = self.run_frames([
             AirDropFrame('好友日常补给入口', friend=True, action='日常补给'),
-            AirDropFrame('好友领取后分享入口', friend=True, share=True),
+            *stable_scene('好友领取后分享入口', friend=True, share=True),
         ])
         self.assertTrue(result)
         self.assertEqual([name for name, _, _ in self.clicks], ['AIR_DROP_RECEIVE'])
@@ -141,7 +158,7 @@ class IslandAirDropStateTests(unittest.TestCase):
         result = self.run_frames([
             *(AirDropFrame(f'日常补给仍可见{index}', scene=True, action=' 日 常\n补 给 ')
               for index in range(5)),
-            AirDropFrame('分享状态', scene=True, share=True),
+            *stable_scene('分享状态', scene=True, share=True),
         ])
         self.assertTrue(result)
         self.assertEqual([name for name, _, _ in self.clicks], ['AIR_DROP_RECEIVE'])
@@ -158,7 +175,7 @@ class IslandAirDropStateTests(unittest.TestCase):
     def test_receive_text_ignores_ocr_whitespace(self):
         result = self.run_frames([
             AirDropFrame('接收入口', scene=True, action=' 接 收\n补 给 '),
-            AirDropFrame('分享入口', scene=True, action='分享剩余补给'),
+            *stable_scene('分享入口', scene=True, action='分享剩余补给'),
         ])
         self.assertTrue(result)
         self.assertEqual([name for name, _, _ in self.clicks], ['AIR_DROP_RECEIVE'])
@@ -181,7 +198,7 @@ class IslandAirDropStateTests(unittest.TestCase):
             AirDropFrame('接收动画尚未更新一', scene=True, action='接收补给'),
             AirDropFrame('接收动画尚未更新二', scene=True, action='接收补给'),
             AirDropFrame('接收动画尚未更新三', scene=True, action='接收补给'),
-            AirDropFrame('分享入口', scene=True, share=True),
+            *stable_scene('分享入口', scene=True, share=True),
         ])
         self.assertTrue(result)
         self.assertEqual([name for name, _, _ in self.clicks], ['AIR_DROP_RECEIVE'])
@@ -192,7 +209,7 @@ class IslandAirDropStateTests(unittest.TestCase):
                 self.clicks.clear()
                 result = self.run_frames([
                     AirDropFrame('奖励遮住分享', scene=True, share=True, reward=reward),
-                    AirDropFrame('奖励关闭后的分享', scene=True, share=True),
+                    *stable_scene('奖励关闭后的分享', scene=True, share=True),
                 ])
                 self.assertTrue(result)
                 self.assertEqual([name for name, _, _ in self.clicks], ['ISLAND_CLICK_SAFE_AREA'])
@@ -204,22 +221,22 @@ class IslandAirDropStateTests(unittest.TestCase):
             AirDropFrame('首次奖励', scene=True, share=True, reward='GET_ITEMS_ISLAND'),
             AirDropFrame('冷却中仍有奖励一', scene=True, share=True, reward='GET_ITEMS_ISLAND'),
             AirDropFrame('冷却中仍有奖励二', scene=True, share=True, reward='GET_ITEMS_ISLAND'),
-            AirDropFrame('真正恢复分享', scene=True, share=True),
+            *stable_scene('真正恢复分享', scene=True, share=True),
         ])
         self.assertTrue(result)
         self.assertEqual([name for name, _, _ in self.clicks], ['ISLAND_CLICK_SAFE_AREA'])
-        self.assertEqual(self.island.device.screenshot.call_count, 4)
+        self.assertEqual(self.island.device.screenshot.call_count, 6)
         self.island.air_drop_action_ocr.ocr.assert_not_called()
 
     def test_today_supply_reward_is_closed_before_background_share(self):
         result = self.run_frames([
             AirDropFrame('今日补给奖励', scene=True, share=True, reward='DAILY_SUPPLY'),
             AirDropFrame('冷却中仍有今日补给', scene=True, share=True, reward='DAILY_SUPPLY'),
-            AirDropFrame('奖励关闭后分享入口', scene=True, share=True),
+            *stable_scene('奖励关闭后分享入口', scene=True, share=True),
         ])
         self.assertTrue(result)
         self.assertEqual([name for name, _, _ in self.clicks], ['ISLAND_CLICK_SAFE_AREA'])
-        self.assertEqual(self.island.device.screenshot.call_count, 3)
+        self.assertEqual(self.island.device.screenshot.call_count, 5)
         self.island.air_drop_action_ocr.ocr.assert_not_called()
         self.assert_no_share_click()
 
@@ -292,7 +309,7 @@ class IslandAirDropStateTests(unittest.TestCase):
             AirDropFrame('跳过冷却一', scene=True, skip=True, share=True),
             AirDropFrame('跳过冷却二', scene=True, skip=True, share=True),
             AirDropFrame('过场后接收', scene=True, action='接收补给'),
-            AirDropFrame('领取后分享', scene=True, share=True),
+            *stable_scene('领取后分享', scene=True, share=True),
         ])
         self.assertTrue(result)
         self.assertEqual([name for name, _, _ in self.clicks], ['AIR_DROP_SKIP', 'AIR_DROP_RECEIVE'])
@@ -307,7 +324,7 @@ class IslandAirDropStateTests(unittest.TestCase):
                 self.island.air_drop_action_ocr.ocr.reset_mock()
                 result = self.run_frames([
                     AirDropFrame('手机或季节页', scene=True, action='接收补给', **{page: True}),
-                    AirDropFrame('返回后的分享入口', scene=True, share=True),
+                    *stable_scene('返回后的分享入口', scene=True, share=True),
                 ])
                 self.assertTrue(result)
                 expected = 'ISLAND_PHONE_GOTO_ISLAND' if page == 'phone' else 'ISLAND_SEASON_GOTO_ISLAND'
@@ -317,10 +334,153 @@ class IslandAirDropStateTests(unittest.TestCase):
     def test_friend_scene_can_receive_without_own_island_marker(self):
         result = self.run_frames([
             AirDropFrame('好友接收入口', friend=True, action='接收补给'),
-            AirDropFrame('好友分享入口', friend=True, share=True),
+            *stable_scene('好友分享入口', friend=True, share=True),
         ])
         self.assertTrue(result)
         self.assertEqual([name for name, _, _ in self.clicks], ['AIR_DROP_RECEIVE'])
+
+    def test_transient_share_then_missed_reward_mask_waits_for_reward_and_stable_scene(self):
+        for template_share in (True, False):
+            with self.subTest(template_share=template_share):
+                self.clicks.clear()
+                self.island.device.screenshot.reset_mock()
+                self.island.air_drop_action_ocr.ocr.reset_mock()
+                share_state = {'share': True} if template_share else {'action': '分享剩余补给'}
+                result = self.run_frames([
+                    AirDropFrame('领取入口', scene=True, action='接收补给'),
+                    AirDropFrame('动画前短暂分享', scene=True, **share_state),
+                    AirDropFrame('奖励未匹配但背景已变暗', scene=True, dimmed=True, **share_state),
+                    AirDropFrame('真实奖励出现', scene=True, share=True, reward='DAILY_SUPPLY', elapsed=2.1),
+                    *stable_scene('奖励关闭后稳定分享', scene=True, **share_state),
+                ])
+                self.assertTrue(result)
+                self.assertEqual(self.frame.name, '奖励关闭后稳定分享2')
+                self.assertEqual(self.island.device.screenshot.call_count, 7)
+                self.assertEqual([name for name, _, _ in self.clicks],
+                                 ['AIR_DROP_RECEIVE', 'ISLAND_CLICK_SAFE_AREA'])
+                self.assertEqual(self.clicks[1][1], '真实奖励出现')
+                ocr_frames = [args.args[0].name for args in self.island.air_drop_action_ocr.ocr.call_args_list]
+                self.assertNotIn('奖励未匹配但背景已变暗', ocr_frames)
+                self.assert_no_share_click()
+
+    def test_dimmed_own_and_friend_entry_blocks_action_until_normal_scene(self):
+        for scene_kind in ('scene', 'friend'):
+            with self.subTest(scene=scene_kind):
+                self.clicks.clear()
+                self.island.air_drop_action_ocr.ocr.reset_mock()
+                self.island.match_template_color.reset_mock()
+                state = {scene_kind: True}
+                result = self.run_frames([
+                    AirDropFrame('暗幕下领取文字', dimmed=True, action='接收补给', **state),
+                    *stable_scene('正常无入口场景', **state),
+                ])
+                self.assertFalse(result)
+                self.assertEqual(self.clicks, [])
+                self.assertEqual([args.args[0].name for args in self.island.air_drop_action_ocr.ocr.call_args_list],
+                                 ['正常无入口场景0', '正常无入口场景1', '正常无入口场景2'])
+                expected = 'ISLAND_GOTO_MANAGEMENT' if scene_kind == 'scene' else 'AIR_DROP_RUN_AWAY'
+                self.assertEqual({args.args[0].name for args in self.island.match_template_color.call_args_list},
+                                 {expected})
+
+    def test_dimmed_entry_interrupts_share_and_empty_scene_stability(self):
+        for share in (False, True):
+            with self.subTest(share=share):
+                self.island.device.screenshot.reset_mock()
+                result = self.run_frames([
+                    AirDropFrame('第一次正常入口', scene=True, share=share, elapsed=0.5),
+                    AirDropFrame('第二次正常入口', scene=True, share=share, elapsed=0.5),
+                    AirDropFrame('漏识别奖励的暗幕', scene=True, share=share, dimmed=True, elapsed=0.5),
+                    *stable_scene('重新稳定正常入口', scene=True, share=share),
+                ])
+                self.assertEqual(result, share)
+                self.assertEqual(self.island.device.screenshot.call_count, 6)
+                self.assertEqual(self.frame.name, '重新稳定正常入口2')
+                self.assert_no_share_click()
+
+    def test_share_and_empty_scene_cannot_borrow_each_others_stable_time(self):
+        for previous_share, next_share in ((False, True), (True, False)):
+            for template_share in (True, False):
+                with self.subTest(previous_share=previous_share, template_share=template_share):
+                    self.island.device.screenshot.reset_mock()
+                    sharing = {'share': True} if template_share else {'action': '分享剩余补给'}
+                    before = sharing if previous_share else {}
+                    after = sharing if next_share else {}
+                    result = self.run_frames([
+                        AirDropFrame('原状态第一帧', scene=True, elapsed=0.5, **before),
+                        AirDropFrame('原状态第二帧', scene=True, elapsed=0.5, **before),
+                        *stable_scene('新状态重新确认', scene=True, **after),
+                    ])
+                    self.assertEqual(result, next_share)
+                    self.assertEqual(self.island.device.screenshot.call_count, 5)
+                    self.assertEqual(self.frame.name, '新状态重新确认2')
+                    self.assert_no_share_click()
+
+    def test_template_and_text_share_are_the_same_stable_state(self):
+        for first_is_template in (True, False):
+            with self.subTest(first_is_template=first_is_template):
+                self.island.device.screenshot.reset_mock()
+                self.island.air_drop_action_ocr.ocr.reset_mock()
+                states = ({'share': True}, {'action': '分享剩余补给'})
+                first, second = states if first_is_template else states[::-1]
+                result = self.run_frames([
+                    AirDropFrame('分享确认一', scene=True, elapsed=0.5, **first),
+                    AirDropFrame('分享识别方式切换', scene=True, elapsed=0.5, **second),
+                    AirDropFrame('分享确认三', scene=True, elapsed=0.5, **first),
+                ])
+                self.assertTrue(result)
+                self.assertEqual(self.island.device.screenshot.call_count, 3)
+                self.assertEqual(self.island.air_drop_action_ocr.ocr.call_count, 1 if first_is_template else 2)
+                self.assert_no_share_click()
+
+    def test_interactions_interrupt_previous_share_stability(self):
+        for interruption in ({'reward': 'DAILY_SUPPLY'}, {'skip': True}, {'phone': True},
+                             {'season': True}, {'action': '接收补给'}):
+            with self.subTest(interruption=interruption):
+                self.island.device.screenshot.reset_mock()
+                self.island.interval_timer.clear()
+                result = self.run_frames([
+                    AirDropFrame('第一次正常分享', scene=True, share=True, elapsed=0.5),
+                    AirDropFrame('第二次正常分享', scene=True, share=True, elapsed=0.5),
+                    AirDropFrame('中断确认的交互', scene=True, elapsed=0.5, **interruption),
+                    *stable_scene('重新稳定分享', scene=True, share=True),
+                ])
+                self.assertTrue(result)
+                self.assertEqual(self.island.device.screenshot.call_count, 6)
+                self.assertEqual(self.frame.name, '重新稳定分享2')
+                self.assert_no_share_click()
+
+    def test_persistent_dimmed_scene_times_out_without_marking_daily_completion(self):
+        now = datetime(2026, 11, 7, 12)
+        old = now - timedelta(days=1)
+        self.island.config = SimpleNamespace(
+            IslandAirDrop_LastSteal=old, IslandAirDrop_VisitOtherIsland=False, task_delay=Mock())
+        self.island.goto_postmanage = Mock()
+        self.island.ui_goto = Mock()
+        self.island.island_walk_route = Mock()
+        self.island.appear_then_click = Mock(return_value=True)
+        self.frames = iter([
+            AirDropFrame('启动场景', scene=True),
+            *(AirDropFrame('持续暗幕下的分享', scene=True, share=True, dimmed=True, elapsed=1)
+              for _ in range(20)),
+        ])
+        with patch('module.island.island_air_drop.current_time', return_value=now), \
+                patch('module.island.island_air_drop.get_server_last_update', return_value=now.replace(hour=0)):
+            with self.assertRaisesRegex(GameStuckError, '已保存现场'):
+                self.island.run()
+        self.assertEqual(self.island.config.IslandAirDrop_LastSteal, old)
+        self.island.config.task_delay.assert_not_called()
+        self.island.device.click.assert_not_called()
+        self.island.air_drop_action_ocr.ocr.assert_not_called()
+        self.island.device.save_screenshot.assert_called_once_with(genre='island_air_drop_unknown', interval=0)
+
+    def test_en_keeps_existing_bubble_collection_entry(self):
+        self.island._island_air_drop_en = Mock(return_value=True)
+        with patch('module.island.island_air_drop.server.server', 'en'):
+            self.assertTrue(self.island.island_air_drop(skip_first_screenshot=True))
+        self.island._island_air_drop_en.assert_called_once_with(True)
+        self.island.match_template_color.assert_not_called()
+        self.island.air_drop_action_ocr.ocr.assert_not_called()
+        self.island.device.screenshot.assert_not_called()
 
     def test_unconfirmed_page_does_not_ocr_or_click_apparent_action(self):
         self.frames = iter(

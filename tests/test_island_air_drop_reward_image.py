@@ -14,7 +14,7 @@ from module.island.assets import (
     TEMPLATE_AIR_DROP_REWARD_TITLE,
 )
 from module.island.island_air_drop import is_daily_supply_reward
-from module.ui.assets import ISLAND_CHECK
+from module.ui.assets import ISLAND_CHECK, ISLAND_GOTO_ISLAND_PHONE
 
 
 class IslandAirDropRewardImageTest(unittest.TestCase):
@@ -22,6 +22,7 @@ class IslandAirDropRewardImageTest(unittest.TestCase):
     TITLE_AREA = (490, 160, 795, 240)
     CLOSE_AREA = (550, 545, 730, 595)
     OLD_REWARD_AREA = (550, 228, 725, 327)
+    NAVIGATION_AREAS = ((720, 0, 815, 92), (1185, 0, 1275, 90))
 
     def setUp(self):
         previous_mode = utils.TEMPLATE_MATCH_NON_NATIVE_720P
@@ -29,7 +30,7 @@ class IslandAirDropRewardImageTest(unittest.TestCase):
         self.addCleanup(utils.set_template_match_non_native_720p,
                         previous_mode, previous_resolution)
         utils.set_template_match_non_native_720p(True, resolution=(2560, 1440))
-        for button in (GET_ITEMS_ISLAND, ISLAND_GET, ISLAND_CHECK):
+        for button in (GET_ITEMS_ISLAND, ISLAND_GET, ISLAND_CHECK, ISLAND_GOTO_ISLAND_PHONE):
             self.addCleanup(button.clear_offset)
 
     def image(self, index=1):
@@ -50,22 +51,51 @@ class IslandAirDropRewardImageTest(unittest.TestCase):
                     utils.crop(image, self.CLOSE_AREA), similarity=0.9, direct_match=True))
                 self.assertTrue(is_daily_supply_reward(image))
 
+    def test_six_real_frames_match_fixed_title_and_close_thresholds(self):
+        for native in (False, True):
+            utils.set_template_match_non_native_720p(native, resolution=(2560, 1440))
+            for index in range(1, 7):
+                with self.subTest(non_native=native, frame=index):
+                    image = self.image(index)
+                    self.assertTrue(TEMPLATE_AIR_DROP_REWARD_TITLE.match(
+                        utils.crop(image, self.TITLE_AREA), similarity=0.90, direct_match=True))
+                    self.assertTrue(TEMPLATE_AIR_DROP_REWARD_CLOSE.match(
+                        utils.crop(image, self.CLOSE_AREA), similarity=0.88, direct_match=True))
+                    self.assertTrue(is_daily_supply_reward(image))
+
+    def test_actual_new_reward_close_prompt_misses_old_threshold(self):
+        image = self.image(6)
+        close = utils.crop(image, self.CLOSE_AREA)
+        score = cv2.minMaxLoc(cv2.matchTemplate(
+            close, TEMPLATE_AIR_DROP_REWARD_CLOSE.image, cv2.TM_CCOEFF_NORMED))[1]
+        self.assertGreater(score, 0.88)
+        self.assertLess(score, 0.90)
+        self.assertFalse(TEMPLATE_AIR_DROP_REWARD_CLOSE.match(
+            close, similarity=0.90, direct_match=True))
+        self.assertTrue(TEMPLATE_AIR_DROP_REWARD_CLOSE.match(
+            close, similarity=0.88, direct_match=True))
+        self.assertTrue(is_daily_supply_reward(image))
+
     def test_original_reward_templates_do_not_recognize_actual_supply_reward(self):
-        for index in range(1, 6):
+        for index in range(1, 7):
             with self.subTest(frame=index):
                 image = self.image(index)
                 self.assertFalse(GET_ITEMS_ISLAND.match(image, offset=(20, 20)))
                 self.assertFalse(ISLAND_GET.match(image, offset=(30, 30)))
 
     def test_title_without_close_prompt_is_not_a_complete_reward_page(self):
-        image = self.image()
-        self.erase_area(image, self.CLOSE_AREA)
-        self.assertFalse(is_daily_supply_reward(image))
+        for index in range(1, 7):
+            with self.subTest(frame=index):
+                image = self.image(index)
+                self.erase_area(image, self.CLOSE_AREA)
+                self.assertFalse(is_daily_supply_reward(image))
 
     def test_close_prompt_without_title_is_not_a_supply_reward(self):
-        image = self.image()
-        self.erase_area(image, self.TITLE_AREA)
-        self.assertFalse(is_daily_supply_reward(image))
+        for index in range(1, 7):
+            with self.subTest(frame=index):
+                image = self.image(index)
+                self.erase_area(image, self.TITLE_AREA)
+                self.assertFalse(is_daily_supply_reward(image))
 
     def test_visible_island_background_without_reward_text_is_not_a_reward(self):
         image = utils.load_image(ISLAND_CHECK.file).copy()
@@ -73,6 +103,31 @@ class IslandAirDropRewardImageTest(unittest.TestCase):
         self.erase_area(image, self.CLOSE_AREA)
         self.assertTrue(ISLAND_CHECK.match(image))
         self.assertFalse(is_daily_supply_reward(image))
+
+    def test_high_resolution_mode_does_not_lower_close_prompt_threshold(self):
+        """标题完整也不能放行只有通用兼容阈值能识别的破损关闭提示。"""
+        image = self.image(6)
+        close = image[558:583, 577:705]
+        noise = np.random.default_rng(36).normal(0, 12, size=close.shape)
+        close[:] = np.clip(close.astype(np.float64) + noise, 0, 255).astype(np.uint8)
+        close_roi = utils.crop(image, self.CLOSE_AREA)
+        score = cv2.minMaxLoc(cv2.matchTemplate(
+            close_roi, TEMPLATE_AIR_DROP_REWARD_CLOSE.image, cv2.TM_CCOEFF_NORMED))[1]
+        self.assertGreater(score, 0.75)
+        self.assertLess(score, 0.88)
+        self.assertTrue(TEMPLATE_AIR_DROP_REWARD_TITLE.match(
+            utils.crop(image, self.TITLE_AREA), similarity=0.90, direct_match=True))
+        self.assertTrue(TEMPLATE_AIR_DROP_REWARD_CLOSE.match(close_roi, similarity=0.88))
+        self.assertFalse(TEMPLATE_AIR_DROP_REWARD_CLOSE.match(
+            close_roi, similarity=0.88, direct_match=True))
+        self.assertFalse(is_daily_supply_reward(image))
+
+    def test_actual_reward_keeps_navigation_shape_but_blocks_entry_color(self):
+        image = utils.load_image(str(self.FIXTURES / 'reward_navigation.png'))
+        self.assertTrue(ISLAND_CHECK.match(image, offset=(30, 30)))
+        self.assertTrue(ISLAND_GOTO_ISLAND_PHONE.match(image, offset=(20, 20)))
+        self.assertFalse(ISLAND_GOTO_ISLAND_PHONE.match_template_color(image, offset=(20, 20)))
+        self.assertTrue(is_daily_supply_reward(image))
 
     def test_real_scene_before_reward_is_not_a_supply_reward(self):
         image = utils.load_image(str(self.FIXTURES / 'scene_before_reward.png'))
@@ -121,13 +176,19 @@ class IslandAirDropRewardImageTest(unittest.TestCase):
         self.assertFalse(is_daily_supply_reward(image))
 
     def test_fixtures_contain_only_the_required_anonymous_regions(self):
-        for index in range(1, 6):
+        for index in range(1, 7):
             with self.subTest(frame=index):
                 image = self.image(index)
                 self.erase_area(image, self.TITLE_AREA)
                 self.erase_area(image, self.CLOSE_AREA)
                 self.erase_area(image, self.OLD_REWARD_AREA)
                 self.assertEqual(int(np.count_nonzero(image)), 0)
+
+    def test_navigation_fixture_contains_no_other_scene_or_account_pixels(self):
+        image = utils.load_image(str(self.FIXTURES / 'reward_navigation.png'))
+        for area in (self.TITLE_AREA, self.CLOSE_AREA, self.OLD_REWARD_AREA, *self.NAVIGATION_AREAS):
+            self.erase_area(image, area)
+        self.assertEqual(int(np.count_nonzero(image)), 0)
 
 
 if __name__ == '__main__':
