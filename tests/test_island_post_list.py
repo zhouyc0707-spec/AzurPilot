@@ -246,6 +246,67 @@ class EmptyPostListConfirmationTests(unittest.TestCase):
         self.assertFalse(task.post_list_is_empty(SimpleNamespace(button=POSITION)))
         self.assertEqual(task.device.screenshot_count, 0)
 
+    def test_scrolled_first_frame_miss_waits_for_two_stable_frames(self):
+        for overrides in ({'page': False}, {'detail': True}, {'title': False}):
+            with self.subTest(overrides=overrides):
+                task = ListFrameIsland([state(**overrides), state(), state()])
+                task._post_list_recently_scrolled = True
+                self.assertTrue(task.post_list_is_empty(task.post))
+                self.assertEqual(task.device.screenshot_count, 2)
+                self.assertFalse(task._post_list_recently_scrolled)
+                task.device.click.assert_not_called()
+
+    def test_scrolled_position_rebound_waits_for_new_stable_position(self):
+        task = ListFrameIsland([state(), state(position=shifted_position(dy=13)),
+                                state(position=shifted_position(dy=13))])
+        task._post_list_recently_scrolled = True
+        self.assertTrue(task.post_list_is_empty(task.post))
+        self.assertEqual(task.device.screenshot_count, 2)
+        task.device.click.assert_not_called()
+
+    def test_scrolled_confirmation_requires_consecutive_valid_frames(self):
+        for frames, expected in (
+                ([state(title=False), state(title=False), state(), state()], True),
+                ([state(), state(title=False), state(), state()], True),
+                ([state(), state(title=False), state(), state(title=False)], False)):
+            with self.subTest(expected=expected, titles=[frame['title'] for frame in frames]):
+                task = ListFrameIsland(frames)
+                task._post_list_recently_scrolled = True
+                self.assertEqual(task.post_list_is_empty(task.post), expected)
+                self.assertEqual(task.device.screenshot_count, 3)
+                task.device.click.assert_not_called()
+
+    def test_scrolled_continuously_moving_slot_keeps_detail_fallback(self):
+        task = ListFrameIsland([state(position=shifted_position(dy=index * 3))
+                                for index in range(5)])
+        task._post_list_recently_scrolled = True
+        self.assertFalse(task.post_list_is_empty(task.post))
+        self.assertEqual(task.device.screenshot_count, 3)
+        task.device.click.assert_not_called()
+
+    def test_scrolled_occupied_slot_keeps_fallback_and_consumes_retry_budget(self):
+        for fixture in OCCUPIED_FIXTURES + UNCERTAIN_FIXTURES:
+            with self.subTest(fixture=fixture):
+                task = ListFrameIsland([state(fixture)])
+                task._post_list_recently_scrolled = True
+                self.assertFalse(task.post_list_is_empty(task.post))
+                self.assertEqual(task.device.screenshot_count, 3)
+                self.assertFalse(task._post_list_recently_scrolled)
+                self.assertFalse(task.post_list_is_empty(task.post))
+                self.assertEqual(task.device.screenshot_count, 3)
+                task.device.click.assert_not_called()
+
+    def test_list_swipe_arms_only_next_inspection(self):
+        for swipe in (Island.post_manage_up_swipe, Island.post_manage_down_swipe):
+            with self.subTest(swipe=swipe.__name__):
+                task = ListFrameIsland([state(title=False), state(), state()])
+                task.device.swipe_vector = Mock()
+                swipe(task, 450)
+                self.assertTrue(task._post_list_recently_scrolled)
+                task.device.swipe_vector.assert_called_once()
+                self.assertTrue(task.post_list_is_empty(task.post))
+                self.assertFalse(task._post_list_recently_scrolled)
+
 
 class EmptyPostListRealLocationTests(unittest.TestCase):
     """真实页面模板和岗位标题定位，不模拟 appear 或 button 偏移结果。"""
@@ -489,6 +550,59 @@ class EmptyPostCurrentListReplayTests(unittest.TestCase):
                 task, post = self.make_task(ISLAND_ORCHARD_POST2, image)
                 self.assertFalse(task.post_list_is_empty(post))
                 task.device.click.assert_not_called()
+
+
+class EmptyPostStableShopListReplayTests(unittest.TestCase):
+    """六处场所的稳定实屏回放，首岗和后续岗共用真实识别入口。"""
+
+    def test_all_twelve_stable_shop_slots_confirm_without_clicking(self):
+        from importlib import import_module
+
+        groups = (
+            ('module.island_grill.assets', 'ISLAND_GRILL_POST'),
+            ('module.island_manufacture.assets', 'ISLAND_WOOD_PROCESSING_POST'),
+            ('module.island_manufacture.assets', 'ISLAND_INDUSTRIAL_POST'),
+            ('module.island_manufacture.assets', 'ISLAND_ELECTRONIC_PROCESSING_POST'),
+            ('module.island_manufacture.assets', 'ISLAND_HANDMADE_POST'),
+            ('module.island_juu_coffee.assets', 'ISLAND_JUU_COFFEE_POST'),
+        )
+        image = load_image(str(FIXTURES / 'current_stable_shop_list.png'))
+        with patch('module.island.island.logger'), \
+                patch('module.base.utils.TEMPLATE_MATCH_NON_NATIVE_720P', True), \
+                patch('module.base.utils.TEMPLATE_MATCH_NON_NATIVE_720P_THRESHOLD', 0.75):
+            for module, prefix in groups:
+                for index in (1, 2):
+                    source = getattr(import_module(module), f'{prefix}{index}')
+                    with self.subTest(post=source.name):
+                        task, post = EmptyPostListRealLocationTests.make_task(image.copy(), source)
+                        self.assertTrue(task.ui_page_appear(page_island_postmanage))
+                        self.assertFalse(task.is_post_detail_visible())
+                        self.assertTrue(task.post_list_is_empty(post))
+                        self.assertEqual(task.device.screenshot_count, 1)
+                        task.device.click.assert_not_called()
+
+
+class EmptyPostActualScrollReplayTests(unittest.TestCase):
+    """真实三帧回弹：首帧未稳定，后两帧位置一致时才确认空岗。"""
+
+    def test_three_first_slots_wait_for_actual_scroll_to_settle_without_clicking(self):
+        from module.island_grill.assets import ISLAND_GRILL_POST1
+        from module.island_juu_coffee.assets import ISLAND_JUU_COFFEE_POST1
+
+        frames = [load_image(str(FIXTURES / f'current_shop_scroll_{index}.png'))
+                  for index in range(3)]
+        with patch('module.island.island.logger'), \
+                patch('module.base.utils.TEMPLATE_MATCH_NON_NATIVE_720P', True), \
+                patch('module.base.utils.TEMPLATE_MATCH_NON_NATIVE_720P_THRESHOLD', 0.75):
+            for source in (ISLAND_GRILL_POST1, ISLAND_WOOD_PROCESSING_POST1, ISLAND_JUU_COFFEE_POST1):
+                with self.subTest(post=source.name):
+                    task, post = EmptyPostListRealLocationTests.make_task(frames[0].copy(), source)
+                    task.device = ListFrameDevice([{'image': frame.copy()} for frame in frames])
+                    task.device.stuck_record_add = Mock()
+                    task._post_list_recently_scrolled = True
+                    self.assertTrue(task.post_list_is_empty(post))
+                    self.assertEqual(task.device.screenshot_count, 2)
+                    task.device.click.assert_not_called()
 
 
 if __name__ == '__main__':

@@ -1395,9 +1395,10 @@ class Island(SelectCharacter):
         return True
 
     def post_list_is_empty(self, post):
-        """在巡检前用两帧列表画面确认目标空岗，候选外不增加截图。
+        """在巡检前用连续两帧列表画面确认目标空岗。
 
         调用方须先关闭详情，当前帧应为关闭操作取得的最新列表截图。
+        滑动后的首次预检最多检查四帧，等待回弹稳定；其余预检只复核空岗候选。
         只省略领取巡检，后续空岗排产仍使用正常的 ``post_open``。
 
         Args:
@@ -1412,6 +1413,8 @@ class Island(SelectCharacter):
         """
         if not isinstance(post, Button):
             return False
+        recently_scrolled = getattr(self, '_post_list_recently_scrolled', False)
+        self._post_list_recently_scrolled = False
 
         def locate_empty():
             if not self.ui_page_appear(page_island_postmanage) or self.is_post_detail_visible():
@@ -1426,15 +1429,23 @@ class Island(SelectCharacter):
                 return position
             return None
 
-        first = locate_empty()
-        if first is None:
-            return False
-        self.device.screenshot()
-        second = locate_empty()
-        if second is None or any(abs(a - b) > 2 for a, b in zip(first, second)):
-            return False
-        logger.info(f"[岛屿] {post}: 列表确认空岗，跳过领取巡检")
-        return True
+        previous = None
+        for frame in range(4 if recently_scrolled else 2):
+            if frame:
+                self.device.screenshot()
+            position = locate_empty()
+            if position is not None and previous is not None:
+                if all(abs(a - b) <= 2 for a, b in zip(previous, position)):
+                    suffix = f"（滑动后第 {frame + 1} 帧）" if recently_scrolled else ""
+                    logger.info(f"[岛屿] {post}: 列表确认空岗，跳过领取巡检{suffix}")
+                    return True
+            if position is None and not recently_scrolled:
+                return False
+            # 不合格帧打断连续确认；回弹后的新位置成为下一帧的比较基准。
+            previous = position
+        if recently_scrolled:
+            logger.info(f"[岛屿] {post}: 滑动后四帧未确认稳定空岗，继续详情巡检")
+        return False
 
     def post_open(self, post):
         """点击并打开指定岗位，支持重试滑动定位。
@@ -1530,6 +1541,7 @@ class Island(SelectCharacter):
         self.device.swipe_vector(
             vector=(0, -distance), box=(688, 69, 725, 656), name="PostUpSwipe", duration=(0.4, 0.6))
         self.device.click(POST_MANAGE_SWIPE_STOP, control_check=False)
+        self._post_list_recently_scrolled = True
 
     def post_manage_down_swipe(self, distance):
         """在岗位列表中向下滑动指定距离。
@@ -1542,6 +1554,7 @@ class Island(SelectCharacter):
         self.device.swipe_vector(
             vector=(0, distance), box=(688, 69, 725, 656), name="PostDownSwipe", duration=(0.4, 0.6))
         self.device.click(POST_MANAGE_SWIPE_STOP, control_check=False)
+        self._post_list_recently_scrolled = True
 
     def post_manage_swipe_to_top(self, max_swipes=None):
         """向下补滑，直到岗位列表回到顶部（农田/牧场岗位所在的第一行可见）。
