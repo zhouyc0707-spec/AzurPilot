@@ -721,10 +721,11 @@ class SelectCharacter(UI):
             return None
 
         if character_list == ["WorkerJuu"]:
-            if not self._set_character_sort(ascending=False):
-                logger.warning("[岛屿] 未确认角色降序，暂不选择工作啾")
+            if not self._set_character_sort(ascending=True):
+                logger.warning("[岛屿] 未确认角色升序，暂不选择工作啾")
                 return None
-            # 工作啾无需打开筛选，直接确认降序后按身份和空闲状态查找；
+            logger.info("[岛屿] 已确认角色升序，开始识别空闲工作啾")
+            # 生产角色页按工作速度升序找工作啾，不打开筛选切换体力字段；
             # 箭头出现不代表卡片已刷新，也不能据此把首格认作工作啾。
             for screenshot in self.loop(timeout=4, skip_first=False):
                 if self.is_character_filter_visible():

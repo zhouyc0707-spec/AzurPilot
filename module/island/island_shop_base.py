@@ -1627,14 +1627,13 @@ class IslandShopBase(Island, WarehouseOCR):
                 # 安排生产并获取实际生产数量
                 actual_number = self.post_produce(post_id, product, max_producible, time_var_name)
 
-                # 如果实际生产数量为0，说明原料不足
+                # 数量为零也可能由选人或界面确认失败造成，不能据此认定原料不足。
                 if actual_number == 0:
                     if getattr(self, '_round_deficit_satisfied', False):
                         # 本轮首次补读发现已有足量现货，重算后续需求；不是派遣失败。
                         return
-                    logger.info(f"[岛屿] 生产 {self._item_cn(product)} 时检测到原料不足，保留在计划中等待下一轮")
-                    # 游戏 UI 层实际拒绝了生产（常见于基础餐品 get_max_producible 未建模
-                    # 的底层食材，如海鲜饭的米/海鲜料）。标记为本轮不可用，后续所有
+                    logger.info(f"[岛屿] 未能完成 {self._item_cn(product)} 的生产派遣，具体原因见前序日志，保留在计划中等待下一轮")
+                    # 本次派遣没有完成。标记为本轮不可用，后续所有
                     # _compute_base_demands 扫描都会直接跳过，避免同一 run() 内在
                     # while 循环、严格模式中反复执行无效 UI 点击
                     self.chef_unavailable_products.add(product)
