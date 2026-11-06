@@ -46,7 +46,7 @@ class IslandRancher(Island, WarehouseOCR, LoginHandler):
                 ]
             },
             'mill': {
-                'filter': 'processed',
+                'filter': 'other_from',
                 'items': [
                     {'name': 'chicken_feed', 'template': TEMPLATE_CHICKEN_FEED, 'var_name': 'chicken_feed',
                      'category': 'mill', 'number': 11, 'mill': MILL_CHICKEN_FEED, 'required_material': 'wheat'},
@@ -765,7 +765,7 @@ class IslandRancher(Island, WarehouseOCR, LoginHandler):
         if getattr(self, 'island_round', None) is not None:
             self._load_round_inventory()
             return
-        self.warehouse_filter('processed')
+        self.warehouse_filter(self.INVENTORY_CONFIG['mill']['filter'])
         image = self.device.screenshot()
         self.inventory_counts['mill'] = {}
         for item_config in self.INVENTORY_CONFIG['mill']['items']:

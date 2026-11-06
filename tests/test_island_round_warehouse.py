@@ -4,11 +4,13 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 import numpy as np
 
 from module.base.utils import load_image
+from module.island.island import Island
+from module.island.island_rancher import IslandRancher
 from module.island.round_warehouse import (
     UNKNOWN, RoundWarehouseReader, WarehousePage,
     read_round_warehouse_stocks, read_warehouse_page, stocks_from_rows, warehouse_catalog,
@@ -20,6 +22,7 @@ from module.island.item_ids import LOCAL_TO_ITEM_ID
 FIXTURES = Path(__file__).parent / 'fixtures/island_round_warehouse'
 FARM_NAMES = ('wheat', 'corn', 'rice', 'chinese_cabbage', 'potato', 'soybean', 'pasture', 'coffee_bean')
 FARM_STOCKS = (50, 1482, 628, 899, 229, 2409, 914, 324)
+MILL_NAMES = ('chicken_feed', 'pig_feed', 'cattle_feed', 'sheep_feed', 'wheat_flour')
 
 
 def row(*cells):
@@ -27,6 +30,15 @@ def row(*cells):
 
 
 class RoundWarehouseTests(unittest.TestCase):
+    def make_ranch(self):
+        config = SimpleNamespace(IslandRancher_MinChicken=20, IslandRancher_MinPork=0)
+
+        def init(task, config):
+            task.config, task.device = config, Mock()
+
+        with patch.object(Island, '__init__', init):
+            return IslandRancher(config)
+
     def make_main(self, image=None):
         main = SimpleNamespace(device=SimpleNamespace(image=image, click=Mock(), swipe_vector=Mock(),
                                                        click_record_remove=Mock()),
@@ -132,6 +144,49 @@ class RoundWarehouseTests(unittest.TestCase):
         self.assertIn(2521, catalog['other_from'])
         self.assertIn(2522, catalog['other_from'])
         self.assertIn(2606, catalog['other_from'])
+
+    def test_real_ranch_catalog_merges_five_mill_items_with_fish_meat_and_honey(self):
+        ranch = self.make_ranch()
+        catalog = warehouse_catalog([ranch])
+        self.assertEqual(ranch.INVENTORY_CONFIG['mill']['filter'], 'other_from')
+        self.assertEqual(tuple(item['name'] for item in ranch.INVENTORY_CONFIG['mill']['items']),
+                         MILL_NAMES)
+        self.assertEqual(set(catalog['other_from']), {resolve(name) for name in MILL_NAMES}
+                         | {2521, 2522, 2606})
+        self.assertEqual(len(catalog['other_from']), 8)
+        self.assertNotIn('processed', catalog)
+
+    def test_eight_other_origin_items_share_one_filter_and_page_read(self):
+        ranch = self.make_ranch()
+        main = self.make_main()
+        requested = [resolve(name) for name in MILL_NAMES] + [2521, 2522, 2606]
+        stocks = {item: quantity for quantity, item in enumerate(requested)}
+        cells = list(stocks.items())
+        page = WarehousePage((row(*cells[:6]), row(*cells[6:])), (261, 428), True)
+        with patch.object(RoundWarehouseReader, 'stable_page', return_value=page) as read:
+            self.assertEqual(read_round_warehouse_stocks(main, [ranch], requested), stocks)
+        main.warehouse_filter.assert_called_once_with('other_from')
+        read.assert_called_once_with(warehouse_catalog([ranch])['other_from'])
+        self.assertEqual(main.goto_postmanage.call_count, 2)
+        main.device.swipe_vector.assert_not_called()
+        main.device.click.assert_not_called()
+
+    def test_standalone_ranch_reads_original_five_mill_items_from_catalog_origin(self):
+        ranch = self.make_ranch()
+        images = [object(), object(), object()]
+        ranch.device.screenshot.side_effect = images
+        ranch.warehouse_filter = Mock()
+        ranch.ocr_item_quantity = Mock(side_effect=range(10))
+        ranch.warehouse_mill_ranch()
+        self.assertEqual(ranch.warehouse_filter.call_args_list,
+                         [call(ranch.INVENTORY_CONFIG['mill']['filter']), call('ranch'), call('farm')])
+        self.assertEqual(ranch.warehouse_filter.call_args_list[0], call('other_from'))
+        self.assertEqual(ranch.inventory_counts['mill'], dict(zip(MILL_NAMES, range(5))))
+        expected_reads = [call(images[index], item['template'])
+                          for index, category in enumerate(('mill', 'ranch', 'farm'))
+                          for item in ranch.INVENTORY_CONFIG[category]['items']]
+        self.assertEqual(ranch.ocr_item_quantity.call_args_list, expected_reads)
+        self.assertEqual(ranch.device.screenshot.call_count, 3)
 
     def test_only_needed_origins_are_read_once_then_returns_to_management(self):
         main = self.make_main()
