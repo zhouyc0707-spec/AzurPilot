@@ -156,3 +156,163 @@ test('立即离开收藏页与切换实例均保存编辑，返回保留查询�
   await expect(page.locator('.app-shell')).not.toHaveClass(/with-rail/)
   expect(errors).toEqual([])
 })
+
+// 长列表夹具让浏览器产生真实滚动，不用 scrollTo 桩或修改用户收藏。
+const scrollCharacters = Array.from({length: 48}, (_, index) => ({
+  id: `scroll_character_${index}`,
+  name: `滚动测试角色${String(index).padStart(2, '0')}`,
+  rarity: 'super_rare', acquisition: '活动', collected: '0', customTargetCount: 50,
+  createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+}))
+const scrollSkins = scrollCharacters.flatMap((character, index) => Array.from({length: index === 20 ? 36 : 2}, (_, skin) => ({
+  id: `scroll_skin_${index}_${skin}`, characterId: character.id,
+  name: `测试换装${String(skin).padStart(2, '0')}`, acquisition: '活动', owned: false,
+})))
+
+async function prepareScrollCollection(page: Page, theme: string) {
+  const errors = await prepare(page, theme)
+  await page.setViewportSize({width: 1440, height: 900})
+  await page.addInitScript(({characters, skins}) => {
+    // iframe 重建时不能覆盖数据或查看状态，否则无法验证回主页后的恢复。
+    if (localStorage.getItem('azurLaneCharacters') === null) {
+      localStorage.setItem('azurLaneCharacters', JSON.stringify(characters))
+      localStorage.setItem('azurLaneSkins', JSON.stringify(skins))
+    }
+  }, {characters: scrollCharacters, skins: scrollSkins})
+  await page.goto('/#/i/demo-main/skin-collection')
+  await expect(tracker(page).locator('#character-list .character-row')).toHaveCount(scrollCharacters.length)
+  return errors
+}
+
+async function readScrollPosition(page: Page) {
+  return page.evaluate(() => {
+    const iframe = document.querySelector<HTMLIFrameElement>('iframe[title="换装收藏统计"]')!
+    const doc = iframe.contentDocument!
+    const selected = doc.querySelector<HTMLElement>('#character-list .character-row.bg-blue-100')
+    const pending = doc.querySelector<HTMLElement>('#incomplete-list [data-detail-character-id="scroll_character_20"]')
+    const skin = doc.querySelector<HTMLElement>('#skins-list > *:nth-child(8)')
+    const iframeTop = iframe.getBoundingClientRect().top
+    return {
+      outerY: scrollY,
+      hostY: document.querySelector('#skin-collection-main-content')!.scrollTop,
+      pageY: iframe.contentWindow!.scrollY,
+      listY: doc.querySelector('#character-list')!.scrollTop,
+      detailY: doc.querySelector('.detail-panel')!.scrollTop,
+      selectedTop: selected ? iframeTop + selected.getBoundingClientRect().top : null,
+      skinTop: skin && skin.getClientRects().length ? iframeTop + skin.getBoundingClientRect().top : null,
+      pendingTop: pending && pending.getClientRects().length ? iframeTop + pending.getBoundingClientRect().top : null,
+      selectedName: doc.querySelector('#detail-name')!.textContent,
+      view: doc.querySelector('#tab-incomplete')!.getAttribute('aria-selected'),
+    }
+  })
+}
+
+async function settleCollectionLayout(page: Page) {
+  await tracker(page).locator('body').evaluate(async () => {
+    await document.fonts.ready
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+  })
+}
+
+async function scrollArchive(page: Page) {
+  const frame = tracker(page)
+  await frame.locator('#sort-select').selectOption('name')
+  await frame.locator('#character-list [data-id="scroll_character_20"]').click()
+  await expect(frame.locator('#detail-name')).toHaveText('滚动测试角色20')
+  await settleCollectionLayout(page)
+  await frame.locator('body').evaluate(() => {
+    const list = document.querySelector('#character-list')!
+    const selected = document.querySelector('#character-list [data-id="scroll_character_20"]')!
+    list.scrollTop += selected.getBoundingClientRect().top - list.getBoundingClientRect().top - 160
+    document.querySelector('.detail-panel')!.scrollTop = 430
+    scrollTo(0, Math.min(330, (document.documentElement.scrollHeight - innerHeight) / 2))
+  })
+  await settleCollectionLayout(page)
+  const position = await readScrollPosition(page)
+  expect(position.listY).toBeGreaterThan(500)
+  expect(position.detailY).toBeGreaterThan(100)
+  expect(position.pageY).toBeGreaterThan(100)
+  return position
+}
+
+async function expectScrollRestored(page: Page, expected: Awaited<ReturnType<typeof readScrollPosition>>) {
+  await expect(page.locator('#skin-collection-main-content')).toBeVisible()
+  await expect(tracker(page).locator('#detail-name')).toHaveText(expected.selectedName!)
+  // 同时比较真实滚动值及视口中的角色/换装位置，允许 1px 舍入误差。
+  await expect.poll(async () => {
+    const actual = await readScrollPosition(page)
+    return Object.entries(expected).filter(([key, value]) => {
+      const received = actual[key as keyof typeof actual]
+      return typeof value === 'number'
+        ? typeof received !== 'number' || Math.abs(received - value) > 1
+        : received !== value
+    }).map(([key, value]) => ({field: key, expected: value, actual: actual[key as keyof typeof actual]}))
+  }, {message: '返回收藏页应恢复内外层滚动与所选记录的像素位置'}).toEqual([])
+}
+
+for (const theme of ['legacy-light', 'light']) {
+  test(`${theme} 收藏页切换总览后恢复角色列表、详情及页面滚动位置`, async ({page}, testInfo) => {
+    const errors = await prepareScrollCollection(page, theme)
+    const before = await scrollArchive(page)
+    await page.locator('.primary-nav').getByRole('link', {name: '运行总览', exact: true}).click()
+    await expect(page.locator('#main-content')).toBeVisible()
+    await page.locator('.primary-nav').getByRole('link', {name: '换装收藏统计', exact: true}).click()
+    await testInfo.attach('返回总览前的滚动位置', {body: JSON.stringify(before), contentType: 'application/json'})
+    await testInfo.attach('返回总览后的滚动位置', {body: JSON.stringify(await readScrollPosition(page)), contentType: 'application/json'})
+    await expectScrollRestored(page, before)
+
+    // 提交数量后在同一事件里离开，隐藏时间超过原网页 180ms/300ms 防抖。
+    await page.evaluate(() => {
+      const doc = document.querySelector<HTMLIFrameElement>('iframe[title="换装收藏统计"]')!.contentDocument!
+      const input = doc.querySelector<HTMLInputElement>('#collection-progress-container input[data-character-id="scroll_character_20"]')!
+      input.value = '7'
+      input.dispatchEvent(new Event('change', {bubbles: true}))
+      document.querySelector<HTMLAnchorElement>('.primary-nav a[href="#/i/demo-main/overview"]')!.click()
+    })
+    await expect(page.locator('#main-content')).toBeVisible()
+    await page.waitForTimeout(350)
+
+    // 返回后仅过一帧就再次离开，覆盖尚未完成的滚动恢复回调。
+    await page.evaluate(() => new Promise<void>(resolve => {
+      document.querySelector<HTMLAnchorElement>('.primary-nav a[href="#/i/demo-main/skin-collection"]')!.click()
+      requestAnimationFrame(() => {
+        document.querySelector<HTMLAnchorElement>('.primary-nav a[href="#/i/demo-main/overview"]')!.click()
+        resolve()
+      })
+    }))
+    await expect(page.locator('#main-content')).toBeVisible()
+    await page.waitForTimeout(350)
+    await page.locator('.primary-nav').getByRole('link', {name: '换装收藏统计', exact: true}).click()
+    await expectScrollRestored(page, before)
+    await expect(tracker(page).locator('#collection-progress-container input[data-character-id="scroll_character_20"]')).toHaveValue('7')
+    expect(errors).toEqual([])
+  })
+
+  test(`${theme} 待完成清单切换页面与回主页重建后恢复滚动位置`, async ({page}, testInfo) => {
+    const errors = await prepareScrollCollection(page, theme)
+    await scrollArchive(page)
+    const frame = tracker(page)
+    await frame.locator('#tab-incomplete').click()
+    await expect(frame.locator('#incomplete-list [data-detail-character-id]')).toHaveCount(scrollCharacters.length)
+    await settleCollectionLayout(page)
+    await frame.locator('body').evaluate(() => scrollTo(0, 1800))
+    await settleCollectionLayout(page)
+    const before = await readScrollPosition(page)
+    expect(before.pageY).toBeGreaterThan(1000)
+    await page.locator('.primary-nav').getByRole('link', {name: '运行总览', exact: true}).click()
+    await expect(page.locator('#main-content')).toBeVisible()
+    await page.locator('.primary-nav').getByRole('link', {name: '换装收藏统计', exact: true}).click()
+    await testInfo.attach('待完成清单离开前', {body: JSON.stringify(before), contentType: 'application/json'})
+    await testInfo.attach('待完成清单返回后', {body: JSON.stringify(await readScrollPosition(page)), contentType: 'application/json'})
+    await expectScrollRestored(page, before)
+
+    // 通过主页真正卸载实例 iframe，再返回，验证 sessionStorage 恢复路径。
+    await page.locator('.brand-title').first().click()
+    await expect(page).toHaveURL(/#\/$/)
+    await expect(page.locator('iframe[title="换装收藏统计"]')).toHaveCount(0)
+    await page.evaluate(() => { location.hash = '#/i/demo-main/skin-collection' })
+    await expect(frame.locator('#stat-characters')).toHaveText(String(scrollCharacters.length))
+    await expectScrollRestored(page, before)
+    expect(errors).toEqual([])
+  })
+}

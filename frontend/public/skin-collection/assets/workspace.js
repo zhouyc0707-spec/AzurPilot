@@ -20,6 +20,8 @@
   let scrollPositions = {};
   let viewStateReady = false;
   let viewStateTimer;
+  let hostHidden = false;
+  let cancelScrollRestore = null;
 
   function archiveQueryContext(query) {
     return JSON.stringify([query, currentCharacterAcquisitionFilter, ui.status, ui.rarity, ui.sort]);
@@ -41,7 +43,8 @@
     }
   }
   function rememberScrollPositions() {
-    if (!viewStateReady) return;
+    // 宿主的 Activity 隐藏不属于子文档 .hidden；此时浏览器可能返回零坐标。
+    if (!viewStateReady || hostHidden || (window.frameElement && !window.frameElement.getClientRects().length)) return;
     scrollPositions.page = { x: window.scrollX, y: window.scrollY };
     for (const [name, element] of Object.entries(scrollContainers)) {
       // Hidden panels report zero in browsers. Keep their last visible position.
@@ -50,7 +53,7 @@
   }
   function saveViewState() {
     clearTimeout(viewStateTimer);
-    if (!viewStateReady) return;
+    if (!viewStateReady || hostHidden) return;
     syncArchiveOrder(archiveQueryContext(searchInput.value.trim()));
     rememberScrollPositions();
     const state = {
@@ -63,7 +66,7 @@
     try { sessionStorage.setItem(viewStateKey, JSON.stringify(state)); } catch (_) { /* Viewing still works when session storage is disabled or full. */ }
   }
   function scheduleViewStateSave() {
-    if (!viewStateReady) return;
+    if (!viewStateReady || hostHidden) return;
     clearTimeout(viewStateTimer);
     viewStateTimer = setTimeout(saveViewState, 180);
   }
@@ -430,32 +433,44 @@
     renderAcquisitionChart();
     if (ui.view === 'incomplete' && saved.drawerOpen && currentCharacterId) showCharacterDetail(currentCharacterId);
     scrollPositions = saved.scroll;
+    restoreScrollPositions();
+  }
 
+  function restoreScrollPositions() {
+    cancelScrollRestore?.();
+    // 恢复期间冻结采样，避免隐藏后的滚动事件覆盖离开前的坐标。
+    viewStateReady = false;
+    const savedScroll = scrollPositions;
     // Layout and icon fonts must settle before applying pixel offsets. A real
     // interaction cancels the pending restore so it cannot pull the user back.
     let finished = false;
+    let frame;
     const interactionEvents = ['pointerdown','touchstart','wheel','keydown'];
     function finish(restoreScroll) {
       if (finished) return;
       finished = true;
+      cancelAnimationFrame(frame);
+      cancelScrollRestore = null;
       for (const event of interactionEvents) window.removeEventListener(event, cancelRestore, true);
-      if (restoreScroll) {
+      if (restoreScroll && !hostHidden) {
         for (const [name, element] of Object.entries(scrollContainers)) {
           if (!element.closest('.hidden')) {
-            element.scrollLeft = saved.scroll[name].x;
-            element.scrollTop = saved.scroll[name].y;
+            element.scrollLeft = savedScroll[name]?.x || 0;
+            element.scrollTop = savedScroll[name]?.y || 0;
           }
         }
-        window.scrollTo({ left: saved.scroll.page.x, top: saved.scroll.page.y, behavior: 'instant' });
+        window.scrollTo({ left: savedScroll.page?.x || 0, top: savedScroll.page?.y || 0, behavior: 'instant' });
       }
       viewStateReady = true;
       scheduleViewStateSave();
     }
     const cancelRestore = () => finish(false);
+    cancelScrollRestore = cancelRestore;
     for (const event of interactionEvents) window.addEventListener(event, cancelRestore, { capture: true, passive: true });
     const loaded = document.readyState === 'complete' ? Promise.resolve() : new Promise(resolve => window.addEventListener('load', resolve, { once: true }));
     Promise.all([loaded, document.fonts?.ready]).then(() => {
-      requestAnimationFrame(() => requestAnimationFrame(() => finish(true)));
+      if (finished) return;
+      frame = requestAnimationFrame(() => { frame = requestAnimationFrame(() => finish(true)); });
     });
   }
   // Capture also sees controls that stop propagation. Delay saves until their
@@ -467,6 +482,16 @@
   });
   window.addEventListener('pagehide', () => { flushPendingSaves(); saveViewState(); });
   // 宿主隐藏或销毁内嵌页面时，立即保存收藏与已提交的查看状态。
-  window.addEventListener('azurpilot:collection-save', () => { flushPendingSaves(); saveViewState(); });
+  window.addEventListener('azurpilot:collection-save', () => {
+    flushPendingSaves(); saveViewState();
+    hostHidden = true;
+    cancelScrollRestore?.();
+    clearTimeout(viewStateTimer);
+  });
+  window.addEventListener('azurpilot:collection-restore', () => {
+    hostHidden = false;
+    // 只恢复滚动，不重建列表或详情，保留当前筛选、抽屉及未提交输入。
+    restoreScrollPositions();
+  });
   restoreWorkspace();
 })();

@@ -8,6 +8,8 @@ export function SkinCollection() {
   const frame = useRef<HTMLIFrameElement>(null)
   useLayoutEffect(() => {
     const element = frame.current
+    // Activity 重新显示同一 iframe 时不会重新加载文档，需要显式恢复查看位置。
+    element?.contentWindow?.dispatchEvent(new Event('azurpilot:collection-restore'))
     // Activity 隐藏或切换实例销毁 iframe 前，同步落盘尚未完成的防抖保存。
     return () => { element?.contentWindow?.dispatchEvent(new Event('azurpilot:collection-save')) }
   }, [])
