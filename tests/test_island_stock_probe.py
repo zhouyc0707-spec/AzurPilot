@@ -1,16 +1,24 @@
 """仓库详情只读观测：严格名称、明确零值、页面闭环及同任务新截图。"""
 
+import json
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import numpy as np
+from PIL import Image
 
 from module.exception import GameStuckError
+from module.island.assets import ISLAND_INFO_EXIT
 from module.island.data import DIC_ISLAND_ITEM
 from module.island.stock_probe import (
     StockProbeSession, find_warehouse_item_cards, parse_item_detail_stock, read_item_stocks,
 )
+from module.ui.assets import ISLAND_WAREHOUSE_CHECK
+
+
+FIXTURES = Path(__file__).parent / 'fixtures' / 'island_stock_probe'
 
 
 def text_box(text, x, y, width=80, height=18, score=0.99):
@@ -20,8 +28,8 @@ def text_box(text, x, y, width=80, height=18, score=0.99):
 def detail_frame(item=2604, stock=17, language='cn'):
     titles = {'cn': '详情', 'en': 'Details', 'jp': '詳細', 'tw': '詳情'}
     own = {'cn': '已拥有:', 'en': 'Owned:', 'jp': '所持中：', 'tw': '已擁有:'}
-    return [text_box(titles[language], 510, 140), text_box(DIC_ISLAND_ITEM[item]['name'][language], 640, 190),
-            text_box(own[language] + str(stock), 640, 250, width=140)]
+    return [text_box(titles[language], 360, 158), text_box(DIC_ISLAND_ITEM[item]['name'][language], 490, 251, width=150),
+            text_box(own[language] + str(stock), 790, 255, width=140)]
 
 
 class ProbeMain:
@@ -37,6 +45,8 @@ class ProbeMain:
         self.filters = []
         self.screenshots = 0
         self.swipes = 0
+        self.ignored_close_clicks = 0
+        self.close_intervals = []
         self.device = SimpleNamespace(
             image=np.zeros((720, 1280, 3), dtype=np.uint8), click=self.click,
             screenshot=self.screenshot, swipe_vector=self.swipe, save_screenshot=Mock(),
@@ -52,6 +62,8 @@ class ProbeMain:
         if name.startswith('STOCK_PROBE_ITEM_'):
             self.selected = int(name.rsplit('_', 1)[1])
             self.state = 'detail'
+        elif self.ignored_close_clicks:
+            self.ignored_close_clicks -= 1
         else:
             self.state = 'warehouse'
 
@@ -65,8 +77,17 @@ class ProbeMain:
             self.screenshot()
             yield self.device.image
 
-    def match_template_color(self, *args, **kwargs):
+    def match_template_color(self, button, **kwargs):
+        if button is ISLAND_INFO_EXIT:
+            return self.state == 'detail'
         return self.state == 'warehouse'
+
+    def appear_then_click(self, button, interval=0, **kwargs):
+        self.close_intervals.append(interval)
+        if self.match_template_color(button, **kwargs):
+            self.click(button)
+            return True
+        return False
 
     def warehouse_filter(self, kind, origin):
         self.filters.append((kind, origin))
@@ -90,6 +111,43 @@ class StockProbeTests(unittest.TestCase):
     def test_detail_has_real_total_stock_and_explicit_zero(self):
         self.assertEqual(parse_item_detail_stock(detail_frame(stock=17), 2604), 17)
         self.assertEqual(parse_item_detail_stock(detail_frame(stock=0), 2604), 0)
+
+    def test_verified_blue_title_bar_prefix_is_accepted_only_in_title_area(self):
+        frame = detail_frame()
+        frame[0] = text_box('I详情', 344, 158, width=68, height=32)
+        self.assertEqual(parse_item_detail_stock(frame, 2604), 17)
+        for title in ('物品详情', '详情页', 'XX详情', '详情I'):
+            with self.subTest(title=title):
+                self.assertIsNone(parse_item_detail_stock([text_box(title, 344, 158)] + frame[1:], 2604))
+        self.assertIsNone(parse_item_detail_stock([text_box('I详情', 10, 600)] + frame[1:], 2604))
+
+    def test_real_failed_frame_ocr_reads_wheat_without_accepting_wrong_item(self):
+        fixture = json.loads((FIXTURES / 'detail_wheat_50_ocr.json').read_text(encoding='utf-8'))
+        rows = fixture['detections']
+        self.assertEqual(rows[0][0], 'I详情')
+        self.assertEqual(parse_item_detail_stock(rows, 2000), 50)
+        self.assertIsNone(parse_item_detail_stock(rows, 2001))
+
+    def test_real_detail_close_button_is_identifiable_without_ocr(self):
+        # 只保留真实标题、按钮及小麦字段像素，其他区域已遮蔽；不对脱敏画布重跑 OCR。
+        with Image.open(FIXTURES / 'detail_wheat_50.png') as source:
+            image = np.asarray(source.convert('RGB'))
+        self.assertTrue(ISLAND_INFO_EXIT.match_template_color(
+            image, offset=(30, 30), similarity=0.85, threshold=30))
+        self.assertFalse(ISLAND_WAREHOUSE_CHECK.match_template_color(
+            image, offset=(30, 30), similarity=0.85, threshold=30))
+
+    def test_same_row_name_can_start_at_or_below_own_label(self):
+        for name_y in (251, 255, 260):
+            with self.subTest(name_y=name_y):
+                frame = detail_frame()
+                frame[1] = text_box('皮料', 490, name_y, width=100)
+                self.assertEqual(parse_item_detail_stock(frame, 2604), 17)
+
+    def test_name_or_counter_outside_detail_body_is_not_accepted(self):
+        frame = detail_frame()
+        self.assertIsNone(parse_item_detail_stock([frame[0], text_box('皮料', 490, 380), frame[2]], 2604))
+        self.assertIsNone(parse_item_detail_stock(frame[:2] + [text_box('已拥有:17', 100, 255)], 2604))
 
     def test_four_languages_use_verified_own_label(self):
         for language in ('cn', 'en', 'jp', 'tw'):
@@ -133,10 +191,41 @@ class StockProbeTests(unittest.TestCase):
         self.assertEqual(self.session(main).run((2604, 2605)), {2604: 17, 2605: 0})
         self.assertEqual(main.state, 'warehouse')
         self.assertEqual(main.filters, [('all_kind', 'ranch')])
-        self.assertEqual(main.clicks, ['STOCK_PROBE_ITEM_2604', 'ISLAND_CLICK_SAFE_AREA',
-                                      'STOCK_PROBE_ITEM_2605', 'ISLAND_CLICK_SAFE_AREA'])
+        self.assertEqual(main.clicks, ['STOCK_PROBE_ITEM_2604', 'ISLAND_INFO_EXIT',
+                                      'STOCK_PROBE_ITEM_2605', 'ISLAND_INFO_EXIT'])
         self.assertGreaterEqual(main.screenshots, 10)
         main.device.save_screenshot.assert_not_called()
+
+    def test_close_detail_does_not_need_ocr_and_retries_ignored_click(self):
+        main = ProbeMain({2604: 17})
+        main.state = 'detail'
+        main.ignored_close_clicks = 1
+        session = self.session(main)
+        session._detect = Mock(side_effect=AssertionError('关闭详情不应调用OCR'))
+        session._close_detail()
+        self.assertEqual(main.clicks, ['ISLAND_INFO_EXIT', 'ISLAND_INFO_EXIT'])
+        self.assertEqual(main.close_intervals, [2, 2])
+        self.assertEqual(main.state, 'warehouse')
+        self.assertEqual(main.screenshots, 3)
+
+    def test_close_detail_without_positive_page_stays_bounded_and_does_not_guess_click(self):
+        main = ProbeMain({2604: 17})
+        main.state = 'unknown'
+        session = self.session(main)
+        session._detect = Mock(side_effect=AssertionError('关闭详情不应调用OCR'))
+        with self.assertRaises(GameStuckError):
+            session._close_detail()
+        self.assertEqual(main.clicks, [])
+        main.device.save_screenshot.assert_called_once()
+
+    def test_unreadable_detail_still_closes_and_leaves_stock_unknown(self):
+        main = ProbeMain({2604: 17})
+        session = self.session(main)
+        original = main.detections
+        session._detect = lambda: [] if main.state == 'detail' else original()
+        self.assertEqual(session.run((2604,)), {})
+        self.assertEqual(main.clicks, ['STOCK_PROBE_ITEM_2604', 'ISLAND_INFO_EXIT'])
+        self.assertEqual(main.state, 'warehouse')
 
     def test_missing_card_is_none_after_finite_search(self):
         main = ProbeMain({2605: 12})

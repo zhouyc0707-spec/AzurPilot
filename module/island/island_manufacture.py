@@ -378,6 +378,8 @@ class IslandManufacture(IslandShopBase):
 
     def prepare_round(self):
         """收取四类全部岗位；停用岗位保留在制时间，但不重新派遣。"""
+        self._round_prepared = False
+        self._round_collect_all = True
         self.post_check_meal.clear()
         self._unknown_working_categories.clear()
         self._manufacture_scheduled.clear()

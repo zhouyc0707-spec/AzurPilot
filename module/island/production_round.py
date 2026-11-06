@@ -1,11 +1,13 @@
 """手工岛屿生产的单轮准备；任务仍由原调度器分别执行。"""
 
 from copy import copy, deepcopy
-from datetime import datetime
+from datetime import datetime, timedelta
 from importlib import import_module
 
 from module.config.time_source import now as current_time
-from module.config.config import TaskEnd, name_to_function
+from module.config.config import TaskEnd, _round_up_half_hour, _round_up_hour, name_to_function
+from module.config.utils import ensure_time
+from module.exception import GamePageUnknownError, GameStuckError, GameTooManyClickError
 from module.island.round_inventory import IslandRoundInventory
 from module.logger import logger
 
@@ -26,6 +28,49 @@ PRODUCTION_TASKS = {
 def invalidates_round(task):
     """委托、科研等不消耗岛屽物资；岛屿其他玩法和重启使本轮账失效。"""
     return task == 'Restart' or (task.startswith('Island') and task not in PRODUCTION_TASKS)
+
+
+def preparation_retry_deadline(owner, task):
+    """共享准备的冷却跨游戏重启保留，不阻挡委托、科研或恢复入口。"""
+    deadline = getattr(owner, '_island_prepare_retry_at', None)
+    if deadline is None:
+        return None
+    if deadline <= current_time():
+        owner._island_prepare_retry_at = None
+        return None
+    if task not in PRODUCTION_TASKS:
+        return None
+    previous = owner.config.cross_get(f'{task}.Scheduler.NextRun')
+    if isinstance(previous, str):
+        previous = datetime.fromisoformat(previous)
+    return max(deadline, previous) if previous is not None else deadline
+
+
+def delay_failed_preparation(owner, task):
+    """同一准备流程失败时延后整组，避免换一个原任务入口重复触发故障。"""
+    config = owner.config
+    deadline = (current_time() + timedelta(minutes=ensure_time(config.Scheduler_FailureInterval))).replace(microsecond=0)
+    alignment = config.cross_get('IslandPlan.IslandPlan.TaskAlignment', default=config.IslandPlan_TaskAlignment)
+    if alignment == 'half_hour':
+        deadline = _round_up_half_hour(deadline)
+    elif alignment == 'hour':
+        deadline = _round_up_hour(deadline)
+    owner._island_prepare_retry_at = deadline
+    tasks = []
+    with config.multi_set():
+        for name in PRODUCTION_TASKS:
+            scheduler = config.data.get(name, {}).get('Scheduler', {})
+            if name != task and not scheduler.get('Enable', False):
+                continue
+            tasks.append(name)
+            previous = scheduler.get('NextRun')
+            if isinstance(previous, str):
+                previous = datetime.fromisoformat(previous)
+            if previous is None or previous < deadline:
+                # 沿用原整点/半点对齐；已经排得更晚的任务保持不变。
+                config.task_delay(target=deadline, task=name)
+    logger.warning(f'[岛屿单轮] 共享准备失败，生产任务统一冷却至 '
+                   f'{owner._island_prepare_retry_at}，保留更晚排期：{tasks}')
 
 
 def select_unfinished_task(config, task, session):
@@ -169,7 +214,11 @@ def run_production_task(owner, task, cls):
     try:
         if session is None or not session.matches(owner.config, task):
             owner._island_production_round = None
-            session = IslandProductionRound(owner.config, owner.device, task)
+            try:
+                session = IslandProductionRound(owner.config, owner.device, task)
+            except (GameStuckError, GameTooManyClickError, GamePageUnknownError):
+                delay_failed_preparation(owner, task)
+                raise
             owner._island_production_round = session
         else:
             logger.info(f'[岛屿单轮] 继续 {task}，复用本轮库存，剩余任务 {len(session.pending)} 个')

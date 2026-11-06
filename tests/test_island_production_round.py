@@ -8,13 +8,17 @@ from unittest.mock import Mock, patch
 
 from module.island.production_round import (
     PRODUCTION_TASKS, IslandProductionRound, collection_config, invalidates_round,
-    run_production_task, select_unfinished_task,
+    preparation_retry_deadline, run_production_task, select_unfinished_task,
 )
-from module.config.config import AzurLaneConfig
-from module.exception import GameStuckError
+from module.config.config import AzurLaneConfig, TaskEnd
+from module.exception import GameNotRunningError, GamePageUnknownError, GameStuckError, GameTooManyClickError
 
 
 class FakeConfig:
+    Scheduler_FailureInterval = 120
+    IslandPlan_TaskAlignment = 'hour'
+    task_delay = AzurLaneConfig.task_delay
+
     def __init__(self, now):
         self.data = {task: {'Scheduler': {'Enable': task in ('IslandFarm', 'IslandJuuCoffee'),
                                        'NextRun': now + timedelta(hours=6)}} for task in PRODUCTION_TASKS}
@@ -33,6 +37,10 @@ class FakeConfig:
     def cross_set(self, path, value):
         task, group, key = path.split('.')
         self.data[task][group][key] = value
+
+    def cross_get(self, path, default=None):
+        task, group, key = path.split('.')
+        return self.data.get(task, {}).get(group, {}).get(key, default)
 
 
 class ProductionRoundTests(unittest.TestCase):
@@ -85,6 +93,67 @@ class ProductionRoundTests(unittest.TestCase):
         self.assertEqual(session.inventory.get('coffee_bean'), 6)
         self.scan.assert_called_once()
         self.assertIsNone(self.owner._island_production_round)
+
+    def test_failed_preparation_defers_all_enabled_producers_and_preserves_later_schedule(self):
+        self.config.data['IslandMineForest']['Scheduler'].update(Enable=True, NextRun=self.now)
+        self.config.data['Commission'] = {'Scheduler': {'Enable': True, 'NextRun': self.now}}
+        self.config.data['Research'] = {'Scheduler': {'Enable': True, 'NextRun': self.now}}
+        before_disabled = dict(self.config.data['IslandGrill']['Scheduler'])
+        failure_time = self.now + timedelta(minutes=5)
+        deadline = self.now + timedelta(hours=3)
+        error = GameStuckError('详情未安全关闭')
+        self.scan.side_effect = error
+        with patch('module.island.production_round.current_time', return_value=failure_time), \
+                patch('module.config.config.current_time', return_value=failure_time):
+            with self.assertRaises(GameStuckError) as raised:
+                run_production_task(self.owner, 'IslandFarm', self.runner_cls)
+        self.assertIs(raised.exception, error)
+        self.assertIsNone(self.owner._island_production_round)
+        self.assertEqual(self.owner._island_prepare_retry_at, deadline)
+        for name in ('IslandFarm', 'IslandMineForest'):
+            self.assertEqual(self.config.cross_get(f'{name}.Scheduler.NextRun'), deadline)
+        self.assertEqual(self.config.cross_get('IslandJuuCoffee.Scheduler.NextRun'), self.now + timedelta(hours=6))
+        self.assertEqual(self.config.data['IslandGrill']['Scheduler'], before_disabled)
+        for name in ('Commission', 'Research'):
+            self.assertEqual(self.config.cross_get(f'{name}.Scheduler.NextRun'), self.now)
+            self.assertIsNone(preparation_retry_deadline(self.owner, name))
+        self.assertIsNone(preparation_retry_deadline(self.owner, 'Restart'))
+        self.assertEqual(preparation_retry_deadline(self.owner, 'IslandMineForest'), deadline)
+        self.assertEqual(preparation_retry_deadline(self.owner, 'IslandJuuCoffee'), self.now + timedelta(hours=6))
+        with patch('module.island.production_round.current_time', return_value=deadline):
+            self.assertIsNone(preparation_retry_deadline(self.owner, 'IslandMineForest'))
+
+    def test_harvest_and_detail_failures_share_cooldown(self):
+        for error in (GameStuckError('收获未确认'), GameTooManyClickError('重复点击'),
+                      GamePageUnknownError('无法确认页面')):
+            with self.subTest(error=type(error).__name__), \
+                    patch.object(self.runner_cls, 'prepare_round', side_effect=error), \
+                    patch('module.island.production_round.delay_failed_preparation') as delay:
+                with self.assertRaises(type(error)):
+                    run_production_task(self.owner, 'IslandFarm', self.runner_cls)
+                delay.assert_called_once_with(self.owner, 'IslandFarm')
+
+    def test_manual_disabled_entry_with_later_schedule_keeps_failure_interval(self):
+        for values in self.config.data.values():
+            if 'Scheduler' in values:
+                values['Scheduler'].update(Enable=False, NextRun=self.now + timedelta(days=1))
+        self.scan.side_effect = GameStuckError('详情未安全关闭')
+        with patch('module.config.config.current_time', return_value=self.now):
+            with self.assertRaises(GameStuckError):
+                run_production_task(self.owner, 'IslandFarm', self.runner_cls)
+        self.assertEqual(self.owner._island_prepare_retry_at, self.now + timedelta(hours=2))
+        self.assertFalse(self.config.cross_get('IslandFarm.Scheduler.Enable'))
+        self.assertEqual(self.config.cross_get('IslandFarm.Scheduler.NextRun'), self.now + timedelta(days=1))
+
+    def test_stop_and_device_recovery_do_not_delay_production_group(self):
+        for error in (TaskEnd('用户停止'), GameNotRunningError('游戏未运行'), KeyboardInterrupt()):
+            with self.subTest(error=type(error).__name__), \
+                    patch.object(self.runner_cls, 'prepare_round', side_effect=error), \
+                    patch('module.island.production_round.delay_failed_preparation') as delay:
+                with self.assertRaises(type(error)):
+                    run_production_task(self.owner, 'IslandFarm', self.runner_cls)
+                delay.assert_not_called()
+                self.assertIsNone(self.owner._island_production_round)
 
     def test_commission_research_interruptions_keep_stock_even_across_next_hour(self):
         run_production_task(self.owner, 'IslandFarm', self.runner_cls)
@@ -158,6 +227,7 @@ class ProductionRoundTests(unittest.TestCase):
         with self.assertRaises(GameStuckError):
             run_production_task(self.owner, 'IslandFarm', self.runner_cls)
         self.assertIsNone(self.owner._island_production_round)
+        self.assertFalse(hasattr(self.owner, '_island_prepare_retry_at'))
 
     def test_collection_binding_never_reads_or_saves_user_config(self):
         config = AzurLaneConfig.__new__(AzurLaneConfig)

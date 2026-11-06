@@ -2,8 +2,11 @@
 
 import unittest
 from datetime import timedelta
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from module.exception import GameStuckError
+from module.island.assets import ISLAND_WORK_COMPLETE
 from module.island.data import DIC_ISLAND_RECIPE
 from module.island.island_juu_coffee import IslandJuuCoffee
 from module.island.island_juu_eatery import IslandJuuEatery
@@ -14,6 +17,46 @@ from module.island.item_ids import LOCAL_TO_ITEM_ID
 from module.island.planned_dispatch import recipe_for_local_name
 from module.island.round_inventory import IslandRoundInventory
 from tests.test_island_shop_production import NOW, ShopUI
+
+
+class RoundCollectionConfirmationTests(unittest.TestCase):
+    def task(self, kind):
+        task = kind.__new__(kind)
+        task.config = SimpleNamespace()
+        task.config_post_number = 'positions'
+        task.device = Mock()
+        task.time_prefix = 'time_'
+        task.post_manage_swipe_count = 0
+        task.post_buttons = {'ISLAND_WOOD_PROCESSING_POST1': Mock(), 'ISLAND_WOOD_PROCESSING_POST2': Mock()}
+        task.posts = {name: {'button': button} for name, button in task.post_buttons.items()}
+        task.post_check_meal = {}
+        task._unknown_working_categories = set()
+        task._manufacture_scheduled = {}
+        task.post_list_is_empty = Mock(return_value=False)
+        task.post_open = Mock(return_value=True)
+        task.appear = lambda button, **kwargs: button is ISLAND_WORK_COMPLETE
+        task.post_get_and_close = Mock(return_value=False)
+        for name in ('goto_postmanage', 'post_manage_mode', 'post_close', 'post_manage_swipe'):
+            setattr(task, name, Mock())
+        return task
+
+    def test_food_and_manufacture_prepare_abort_when_collection_is_unconfirmed(self):
+        for kind in (IslandJuuCoffee, IslandManufacture):
+            with self.subTest(kind=kind.__name__):
+                task = self.task(kind)
+                task._round_prepared = True
+                with self.assertRaisesRegex(GameStuckError, '收获结果未确认'):
+                    task.prepare_round()
+                self.assertFalse(task._round_prepared)
+                task.post_get_and_close.assert_called_once()
+                task.post_open.assert_called_once()
+
+    def test_independent_post_check_keeps_existing_failure_handling(self):
+        for kind in (IslandJuuCoffee, IslandManufacture):
+            with self.subTest(kind=kind.__name__):
+                task = self.task(kind)
+                task.post_check('ISLAND_WOOD_PROCESSING_POST1', 'time_1')
+                task.post_get_and_close.assert_called_once()
 
 
 class RoundFoodTests(unittest.TestCase):

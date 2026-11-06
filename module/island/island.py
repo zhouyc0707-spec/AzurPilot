@@ -925,9 +925,11 @@ class Island(SelectCharacter):
         """
         ready = Timer(0.5, count=2)
         collection_requested = False
+        awaiting_reward = False
         for _ in self.loop(timeout=20, skip_first=False):
             if self.appear(ISLAND_GET, offset=30):
                 self.handle_island_reward_popup()
+                awaiting_reward = False
                 ready.clear()
                 continue
             if self.is_character_filter_visible():
@@ -945,6 +947,11 @@ class Island(SelectCharacter):
                     if not collection_requested:
                         self.interval_clear(ISLAND_POST_SAFE_AREA)
                     collection_requested = True
+                    awaiting_reward = True
+                ready.clear()
+                continue
+            # 领取动画会短暂露出空岗/列表；先确认奖励实际出现，再等新帧恢复岗位。
+            if awaiting_reward:
                 ready.clear()
                 continue
             in_list = self.ui_page_appear(page_island_postmanage) and not self.is_post_detail_visible()

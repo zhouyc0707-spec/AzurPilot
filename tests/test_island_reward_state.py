@@ -1,9 +1,11 @@
 """岗位奖励和补货弹窗使用当前帧确认，不固定双点或穿透冷却中的遮罩。"""
 
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from module.base import utils
 from module.base.timer import Timer
 from module.island.island import (
     Island, ERROR1, ISLAND_GET, ISLAND_POST_SAFE_AREA, ISLAND_POST_CHECK,
@@ -87,6 +89,61 @@ class FrameFlow:
 
 
 class IslandRewardStateTests(unittest.TestCase):
+    def test_actual_collection_transition_frames_wait_for_reward_then_fresh_post(self):
+        self.addCleanup(utils.set_template_match_non_native_720p,
+                        utils.TEMPLATE_MATCH_NON_NATIVE_720P,
+                        utils.TEMPLATE_MATCH_NON_NATIVE_720P_RESOLUTION)
+        utils.set_template_match_non_native_720p(True, resolution=(2560, 1440))
+        fixture = Path(__file__).parent / 'fixtures/island_collection_transition'
+        actual = [utils.load_image(str(fixture / f'collect_{index}.png')) for index in range(1, 6)]
+        self.assertTrue(ISLAND_POST_VACANT_CHECK.match(actual[0], offset=1))
+        self.assertFalse(ISLAND_GET.match(actual[0], offset=30))
+        self.assertTrue(ISLAND_GET.match(actual[-1], offset=30))
+        frames = [utils.load_image(POST_GET.file), *actual,
+                  *[utils.load_image(ISLAND_POST_SELECT.file)] * 5]
+        flow = FrameFlow([])
+
+        def loop(**kwargs):
+            self.assertFalse(kwargs['skip_first'])
+            for frame in frames:
+                flow.now += flow.step
+                flow.reads += 1
+                flow.task.device.image = frame
+                yield frame
+
+        def appear(button, offset=0, interval=0, **kwargs):
+            if not button.match(flow.task.device.image, offset=offset):
+                return False
+            if interval:
+                timer = flow.task.get_interval_timer(button, interval=interval, renew=True)
+                if not timer.reached():
+                    return False
+                timer.reset()
+            return True
+
+        flow.task.loop = loop
+        flow.task.appear = flow.appear = appear
+        flow.task.ui_page_appear = lambda page: appear(page.check_button, offset=(30, 30))
+        self.assertTrue(flow.run('post_get_stay'))
+        self.assertEqual(flow.names(), ['POST_GET', 'ISLAND_POST_SAFE_AREA'])
+        self.assertGreaterEqual(flow.reads, 10)
+
+    def test_collection_waits_for_reward_even_after_long_transient_ready_page(self):
+        flow = FrameFlow([
+            [POST_GET], *[[ISLAND_POST_VACANT_CHECK]] * 8,
+            [ISLAND_GET, ISLAND_POST_VACANT_CHECK],
+            *[[ISLAND_WORKING]] * 5,
+        ])
+        self.assertTrue(flow.run('post_get_stay'))
+        self.assertEqual(flow.names(), ['POST_GET', 'ISLAND_POST_SAFE_AREA'])
+        self.assertGreaterEqual(flow.reads, 14)
+        flow.task.device.sleep.assert_not_called()
+
+    def test_collection_without_positive_reward_never_reports_success(self):
+        flow = FrameFlow([[POST_GET], *[[page_island_postmanage]] * 12])
+        self.assertFalse(flow.run('post_get_stay'))
+        self.assertEqual(flow.names(), ['POST_GET'])
+
     def test_collection_waits_for_delayed_reward_before_stay(self):
         flow = FrameFlow([
             [POST_GET], [ISLAND_POST_VACANT_CHECK],

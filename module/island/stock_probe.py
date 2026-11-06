@@ -7,7 +7,7 @@ import module.config.server as server
 from module.base.button import Button
 from module.base.timer import Timer
 from module.exception import GameStuckError
-from module.island.assets import ISLAND_CLICK_SAFE_AREA
+from module.island.assets import ISLAND_INFO_EXIT
 from module.island.data import DIC_ISLAND_ITEM
 from module.island.item_ids import resolve_item_id
 from module.island.planner_report import record_planner_stocks
@@ -19,6 +19,8 @@ from module.ui.assets import ISLAND_WAREHOUSE_CHECK
 
 DETAIL_TITLE = {'cn': '详情', 'en': 'Details', 'jp': '詳細', 'tw': '詳情'}
 OWN_LABEL = {'cn': '已拥有:', 'en': 'Owned:', 'jp': '所持中:', 'tw': '已擁有:'}
+DETAIL_TITLE_AREA = (330, 130, 760, 210)
+DETAIL_ITEM_AREA = (480, 220, 940, 340)
 WAREHOUSE_TEXT_AREA = (280, 130, 1230, 550)
 MAX_WAREHOUSE_SWIPES = 8
 ROUND_WAREHOUSE_SWIPES = 64
@@ -37,26 +39,37 @@ def _texts(detections):
     return [(normalize_probe_text(text), _rect(box)) for text, box, score in detections if score >= 0.90]
 
 
+def _inside(rect, area):
+    return area[0] <= rect[0] < rect[2] <= area[2] and area[1] <= rect[1] < rect[3] <= area[3]
+
+
 def parse_item_detail_stock(detections, item_id, language='cn'):
     """解析游戏详情的完整物品名与“已拥有”计数；明确的 0 可返回，未知为 None。
 
-    名称必须位于详情标题下方、已拥有行上方，避免把背景仓库卡片当成弹窗名称。
+    标题、物品名和持有量均限定在详情弹窗区域；名称与持有量处于同一行。
     持有计数有两条、名字重复或分开的数字无法唯一关联时拒绝读取。
     """
     if language not in DETAIL_TITLE or item_id not in DIC_ISLAND_ITEM:
         raise ValueError(f'未知物品或语言：{item_id}/{language}')
     texts = _texts(detections)
-    titles = [rect for text, rect in texts if text == normalize_probe_text(DETAIL_TITLE[language])]
+    title_names = {normalize_probe_text(DETAIL_TITLE[language])}
+    if language == 'cn':
+        # 真实详情页的蓝色竖线会被识别成 I，仅在标题区域接受这个已核实的整词。
+        title_names.add('I详情')
+    titles = [rect for text, rect in texts if text in title_names and _inside(rect, DETAIL_TITLE_AREA)]
     if len(titles) != 1:
         return None
     label = normalize_probe_text(OWN_LABEL[language])
     own = []
     for text, rect in texts:
+        if not _inside(rect, DETAIL_ITEM_AREA):
+            continue
         match = re.fullmatch(re.escape(label) + r'(\d+)', text)
         if match:
             own.append((int(match[1]), rect))
         elif text == label:
             numbers = [(int(value), area) for value, area in texts if re.fullmatch(r'\d+', value)
+                       and _inside(area, DETAIL_ITEM_AREA)
                        and rect[2] <= area[0] <= rect[2] + 120
                        and abs((area[1] + area[3] - rect[1] - rect[3]) / 2) <= 8]
             if len(numbers) == 1:
@@ -68,7 +81,8 @@ def parse_item_detail_stock(detections, item_id, language='cn'):
     count, area = own[0]
     expected = normalize_probe_text(DIC_ISLAND_ITEM[item_id]['name'][language])
     names = [rect for text, rect in texts if text == expected
-             and titles[0][1] <= rect[1] < area[1] and area[1] - rect[3] <= 200]
+             and _inside(rect, DETAIL_ITEM_AREA) and rect[2] <= area[0]
+             and abs((rect[1] + rect[3] - area[1] - area[3]) / 2) <= 20]
     if len(names) != 1:
         return None
     return count
@@ -149,15 +163,14 @@ class StockProbeSession:
         logger.warning('[岛屿-库存观察] 仓库归顶达到滑动上限，未观察到的物品仍保留未知')
 
     def _close_detail(self):
-        clicked = False
         for _ in self.main.loop(skip_first=False, timeout=Timer(10)):
+            # 关闭不依赖文字识别成功；漏点时按冷却重试，下一帧确认真正回到仓库。
+            if self.main.match_template_color(ISLAND_INFO_EXIT, offset=(30, 30),
+                                               similarity=0.85, threshold=30):
+                self.main.appear_then_click(ISLAND_INFO_EXIT, offset=(30, 30), interval=2)
+                continue
             if self._warehouse_view():
                 return
-            title = normalize_probe_text(DETAIL_TITLE[self.language])
-            if not clicked and any(text == title for text, _ in _texts(self._detect())):
-                # 游戏 IslandMsgBox.rtBg 的点击只 HideWindow；不点击材料转化或前往按钮。
-                self.main.device.click(ISLAND_CLICK_SAFE_AREA)
-                clicked = True
         self._unknown('详情未安全关闭')
 
     def _read_card(self, item_id):

@@ -2667,6 +2667,10 @@ class AzurLaneAutoScript:
                     # 即使存在旧的冷却记录，也必须放行重启；敏感任务检查仍由恢复入口执行。
                     self.task_restart_delays.pop(task, None)
                 deadline = self.task_restart_delays.get(task)
+                from module.island.production_round import preparation_retry_deadline
+                island_deadline = preparation_retry_deadline(self, task)
+                if island_deadline is not None:
+                    deadline = max(deadline, island_deadline) if deadline is not None else island_deadline
                 if deadline is not None:
                     if deadline > current_time():
                         # 自定义调度卡片或任务调用也不能绕过本轮故障冷却。

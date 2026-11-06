@@ -119,6 +119,56 @@ class LiveLoopTests(unittest.TestCase):
         self.assertEqual(['Research'], self.calls)
         self.assertEqual('failed', self.runtime.engine.records['results']['Main']['status'])
 
+    def test_takeover_cannot_bypass_island_preparation_cooldown_after_restart(self):
+        self.apply(self.program(task='IslandFarm'))
+        self.script.config.Error_TaskRestartLimit = 0
+        deadline = self.time + timedelta(hours=2)
+        self.script._island_prepare_retry_at = deadline
+        self.runtime.load_program()
+        self.runtime.request('Restart')
+        self.script.restart = lambda: self.calls.append('Restart')
+        self.script.island_farm = Mock()
+        self.script.research = self.finish_research
+        with patch('module.island.production_round.current_time', side_effect=lambda: self.time):
+            self.script.loop()
+        self.script.island_farm.assert_not_called()
+        self.assertEqual(['Restart', 'Research'], self.calls)
+        self.assertEqual('failed', self.runtime.engine.records['results']['IslandFarm']['status'])
+        self.assertEqual(self.script.config.cross_get('IslandFarm.Scheduler.NextRun'), deadline)
+        self.assertFalse(self.script.config.cross_get('IslandFarm.Scheduler.Enable'))
+
+    def test_native_preparation_failure_defers_group_then_research_can_run(self):
+        config = self.script.config
+        with config.multi_set():
+            for name in ('IslandFarm', 'IslandMineForest', 'Research'):
+                config.cross_set(f'{name}.Scheduler.Enable', True)
+                config.cross_set(f'{name}.Scheduler.NextRun', self.time)
+            config.cross_set('General.YukikazeTaskManager.TaskPriorityAdjustment',
+                             'Restart > IslandFarm > IslandMineForest > Research')
+        self.script.save_error_log = Mock()
+        self.script.island_mine_forest = Mock(side_effect=AssertionError('不应换入口重复准备'))
+        self.script.research = self.finish_research
+
+        def restart():
+            self.calls.append('Restart')
+            self.script.config.task_delay(minute=120)
+
+        self.script.restart = restart
+        with patch('module.island.production_round.current_time', side_effect=lambda: self.time), \
+                patch('module.island.production_planner.planner_enabled', return_value=False), \
+                patch('module.island.production_round.IslandProductionRound',
+                      side_effect=GameStuckError('详情未安全关闭')) as prepare:
+            self.script.loop()
+        prepare.assert_called_once()
+        self.script.island_mine_forest.assert_not_called()
+        self.assertEqual(['Restart', 'Research'], self.calls)
+        self.assertEqual(self.script.config.cross_get('IslandFarm.Scheduler.NextRun'),
+                         datetime(2026, 9, 28, 12))
+        self.assertEqual(self.script.config.cross_get('IslandMineForest.Scheduler.NextRun'),
+                         datetime(2026, 9, 28, 12))
+        saved = json.loads(self.path.read_text(encoding='utf-8'))
+        self.assertEqual('2026-09-28 12:00:00', saved['IslandMineForest']['Scheduler']['NextRun'])
+
     def test_real_loop_task_end_wait_reload_and_overlay_cleanup(self):
         original = json.loads(self.path.read_text(encoding='utf-8'))
         self.apply(self.program(overrides={'Campaign_Name': '1-1', 'StopCondition_RunCount': 2}))

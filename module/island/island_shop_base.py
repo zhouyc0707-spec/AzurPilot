@@ -270,6 +270,8 @@ class IslandShopBase(Island, WarehouseOCR):
 
     def prepare_round(self):
         """只巡检收获全部岗位，保留状态供本轮实际派遣使用。"""
+        self._round_prepared = False
+        self._round_collect_all = True
         self.post_check_meal.clear()
         self.goto_postmanage()
         self.post_manage_mode(POST_MANAGE_PRODUCTION)
@@ -464,7 +466,9 @@ class IslandShopBase(Island, WarehouseOCR):
         elif self.appear(ISLAND_POST_SELECT):
             self.posts[post_id]['status'] = 'idle'
             setattr(self, time_var_name, None)
-        self.post_get_and_close()
+        collected = self.post_get_and_close()
+        if not collected and getattr(self, '_round_collect_all', False):
+            raise GameStuckError(f'{post_id} 收获结果未确认，未建立共享库存')
         self.device.sleep(0.5)
 
     def post_product_check(self):
