@@ -851,7 +851,7 @@ class Island(SelectCharacter):
             bool: 关闭成功返回 True，超时返回 False。
         """
         for _ in self.loop(timeout=15, skip_first=False):
-            if self.appear(ISLAND_GET, offset=30):
+            if self.appear(ISLAND_GET, offset=(30, 30)):
                 self.handle_island_reward_popup()
                 continue
             if self.ui_page_appear(page_island_postmanage) and not self.is_post_detail_visible():
@@ -891,7 +891,7 @@ class Island(SelectCharacter):
         return self._collect_post(close=True)
 
     def handle_island_reward_popup(self, click_button=ISLAND_POST_SAFE_AREA,
-                                   button=ISLAND_GET, offset=30, interval=2):
+                                   button=ISLAND_GET, offset=(30, 30), interval=2):
         """奖励仍可见且关闭冷却结束时，点击一次安全区域。
 
         调用方先用不带冷却的检测阻止奖励遮挡时穿透到背景页；此方法只在
@@ -907,13 +907,18 @@ class Island(SelectCharacter):
         return True
 
     def _post_collection_ready(self):
-        """确认当前画面已出现可继续操作的岗位状态。"""
+        """岗位图案和正常颜色同时恢复后，才确认可以继续操作。
+
+        连续奖励之间的暗色或蓝白动画仍能匹配背景按钮的形状，不能累计为就绪帧。
+        """
         return (
-            self.appear(ISLAND_POST_VACANT_CHECK, offset=1)
-            or self.appear(ISLAND_POST_SELECT, offset=1)
-            or self.appear(POST_ADD, offset=1)
-            or self.appear(ISLAND_WORKING, offset=1)
-            or (self.ui_page_appear(page_island_postmanage) and not self.is_post_detail_visible())
+            self.match_template_color(ISLAND_POST_VACANT_CHECK, offset=1)
+            or self.match_template_color(ISLAND_POST_SELECT, offset=1)
+            or self.match_template_color(POST_ADD, offset=1)
+            or self.match_template_color(ISLAND_WORKING, offset=1)
+            or (self.ui_page_appear(page_island_postmanage)
+                and self.match_template_color(ISLAND_POSTMANAGE_CHECK, offset=(30, 30))
+                and not self.is_post_detail_visible())
         )
 
     def _collect_post(self, close):
@@ -927,7 +932,7 @@ class Island(SelectCharacter):
         collection_requested = False
         awaiting_reward = False
         for _ in self.loop(timeout=20, skip_first=False):
-            if self.appear(ISLAND_GET, offset=30):
+            if self.appear(ISLAND_GET, offset=(30, 30)):
                 self.handle_island_reward_popup()
                 awaiting_reward = False
                 ready.clear()
@@ -955,16 +960,11 @@ class Island(SelectCharacter):
                 ready.clear()
                 continue
             in_list = self.ui_page_appear(page_island_postmanage) and not self.is_post_detail_visible()
-            if in_list:
-                ready.start()
-                if ready.reached():
-                    return True
-                continue
             if self._post_collection_ready():
                 ready.start()
                 if not ready.reached():
                     continue
-                if not close:
+                if in_list or not close:
                     return True
                 self.appear_then_click(POST_CLOSE, interval=2)
                 continue
@@ -998,8 +998,8 @@ class Island(SelectCharacter):
                 self.device.click(POST_CLOSE)
                 self.island_error = True
                 return False
-            if self.appear(ISLAND_GET,offset=1):
-                self.handle_island_reward_popup(offset=1)
+            if self.appear(ISLAND_GET, offset=(30, 30)):
+                self.handle_island_reward_popup()
                 collection_pending = True
                 ready.clear()
                 continue

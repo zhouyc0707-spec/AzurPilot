@@ -31,6 +31,7 @@ class FrameFlow:
         self.step = step
         self.now = 1000.0
         self.frame = set()
+        self.real_images = False
         self.reads = 0
         self.clicks = []
         self.task = task_class.__new__(task_class)
@@ -41,7 +42,9 @@ class FrameFlow:
         task.loop = self.loop
         task.appear = self.appear
         task.appear_then_click = self.appear_then_click
-        task.ui_page_appear = lambda page: page in self.frame
+        task.match_template_color = self.match_template_color
+        task.ui_page_appear = lambda page: (self.appear(page.check_button, offset=(30, 30))
+                                           if self.real_images else page in self.frame)
         task.is_character_filter_visible = lambda: 'filter' in self.frame
         task.close_character_filter = Mock()
         task.select_character = Mock(return_value=True)
@@ -56,13 +59,41 @@ class FrameFlow:
         assert kwargs['skip_first'] is False
         while self.reads < len(self.frames):
             frame = self.frames[self.reads]
-            self.frame = set(frame)
+            if self.real_images:
+                self.task.device.image = frame
+            else:
+                self.frame = set(frame)
             self.now += self.step
             self.reads += 1
-            yield None
+            yield self.task.device.image
+
+    def use_images(self, images):
+        """只替换帧来源；按钮识别和颜色识别仍调用实际资源方法。"""
+        self.frames = images
+        self.real_images = True
+        return self
 
     def appear(self, button, offset=0, interval=0, **kwargs):
-        if button not in self.frame:
+        visible = (button.match(self.task.device.image, offset=offset, **kwargs)
+                   if self.real_images else button in self.frame)
+        if not visible:
+            return False
+        if interval:
+            timer = self.task.get_interval_timer(button, interval=interval, renew=True)
+            if not timer.reached():
+                return False
+            timer.reset()
+        return True
+
+    def match_template_color(self, button, offset=(20, 20), interval=0,
+                             similarity=0.85, threshold=30):
+        if not self.real_images:
+            if button in self.frame:
+                return self.appear(button, offset=offset, interval=interval)
+            if not any(getattr(state, 'check_button', None) is button for state in self.frame):
+                return False
+        elif not button.match_template_color(self.task.device.image, offset=offset,
+                                             similarity=similarity, threshold=threshold):
             return False
         if interval:
             timer = self.task.get_interval_timer(button, interval=interval, renew=True)
@@ -101,32 +132,62 @@ class IslandRewardStateTests(unittest.TestCase):
         self.assertTrue(ISLAND_GET.match(actual[-1], offset=30))
         frames = [utils.load_image(POST_GET.file), *actual,
                   *[utils.load_image(ISLAND_POST_SELECT.file)] * 5]
-        flow = FrameFlow([])
-
-        def loop(**kwargs):
-            self.assertFalse(kwargs['skip_first'])
-            for frame in frames:
-                flow.now += flow.step
-                flow.reads += 1
-                flow.task.device.image = frame
-                yield frame
-
-        def appear(button, offset=0, interval=0, **kwargs):
-            if not button.match(flow.task.device.image, offset=offset):
-                return False
-            if interval:
-                timer = flow.task.get_interval_timer(button, interval=interval, renew=True)
-                if not timer.reached():
-                    return False
-                timer.reset()
-            return True
-
-        flow.task.loop = loop
-        flow.task.appear = flow.appear = appear
-        flow.task.ui_page_appear = lambda page: appear(page.check_button, offset=(30, 30))
+        flow = FrameFlow([]).use_images(frames)
         self.assertTrue(flow.run('post_get_stay'))
         self.assertEqual(flow.names(), ['POST_GET', 'ISLAND_POST_SAFE_AREA'])
         self.assertGreaterEqual(flow.reads, 10)
+
+    def test_actual_extra_reward_transition_does_not_finish_on_dimmed_background_post(self):
+        self.addCleanup(utils.set_template_match_non_native_720p,
+                        utils.TEMPLATE_MATCH_NON_NATIVE_720P,
+                        utils.TEMPLATE_MATCH_NON_NATIVE_720P_RESOLUTION)
+        utils.set_template_match_non_native_720p(True, resolution=(2560, 1440))
+        fixture = Path(__file__).parent / 'fixtures/island_collection_extra_reward'
+        actual = [utils.load_image(str(fixture / f'extra_{index}.png')) for index in range(1, 6)]
+        # 整数 offset 只扩展纵向，末帧偏右的奖励标题需显式双轴搜索。
+        self.assertTrue(all(POST_ADD.match(frame, offset=1) for frame in actual[:4]))
+        self.assertFalse(any(ISLAND_GET.match(frame, offset=30) for frame in actual))
+        self.assertTrue(ISLAND_GET.match(actual[-1], offset=(30, 30)))
+        self.assertTrue(POST_ADD.match_template_color(actual[0], offset=1))
+        self.assertFalse(any(POST_ADD.match_template_color(frame, offset=1) for frame in actual[1:]))
+        # 第二层奖励继续复用实际末帧，确保业务二维搜索也被回归锁住。
+        # 第一层完整奖励及最后的干净岗位使用已有资源，均不冒充现场后续画面。
+        reward = utils.load_image(ISLAND_GET.file)
+        clean = utils.load_image(ISLAND_WORKING.file)
+        frames = [utils.load_image(POST_GET.file), reward, *actual,
+                  *[actual[-1]] * 6, *[clean] * 5]
+        first_clean = len(frames) - 5 + 1
+        flow = FrameFlow([]).use_images(frames)
+        self.assertTrue(flow.run('post_get_stay'))
+        self.assertEqual(flow.names(), ['POST_GET', 'ISLAND_POST_SAFE_AREA', 'ISLAND_POST_SAFE_AREA'])
+        safe = [click for click in flow.clicks if click[0] is ISLAND_POST_SAFE_AREA]
+        self.assertGreater(safe[1][1], 7)
+        self.assertGreaterEqual(safe[1][2] - safe[0][2], 2)
+        self.assertGreaterEqual(flow.reads, first_clean + 3)
+        self.assertIs(flow.task.device.image, clean)
+        flow.task.device.sleep.assert_not_called()
+
+    def test_dimmed_management_list_waits_for_normal_colors_after_reward(self):
+        self._assert_dimmed_post_waits_for_normal_colors(ISLAND_POSTMANAGE_CHECK, offset=(30, 30))
+
+    def test_dimmed_empty_post_waits_for_normal_colors_after_reward(self):
+        self._assert_dimmed_post_waits_for_normal_colors(ISLAND_POST_VACANT_CHECK, offset=1)
+
+    def _assert_dimmed_post_waits_for_normal_colors(self, button, offset):
+        # 由已有资源生成的变暗负例，不作为现场截图保存；形状不变，颜色明显不符。
+        clean = utils.load_image(button.file)
+        dimmed = (clean.astype(float) * 0.6).astype('uint8')
+        self.assertTrue(button.match(dimmed, offset=offset))
+        self.assertFalse(button.match_template_color(dimmed, offset=offset))
+        self.assertTrue(button.match_template_color(clean, offset=offset))
+        frames = [utils.load_image(POST_GET.file), utils.load_image(ISLAND_GET.file),
+                  *[dimmed] * 6, *[clean] * 5]
+        flow = FrameFlow([]).use_images(frames)
+        self.assertTrue(flow.run('post_get_stay'))
+        self.assertEqual(flow.names(), ['POST_GET', 'ISLAND_POST_SAFE_AREA'])
+        self.assertGreaterEqual(flow.reads, 12)
+        self.assertIs(flow.task.device.image, clean)
+        flow.task.device.sleep.assert_not_called()
 
     def test_collection_waits_for_reward_even_after_long_transient_ready_page(self):
         flow = FrameFlow([
