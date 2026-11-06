@@ -723,12 +723,23 @@ class SelectCharacter(UI):
         if character_list == ["WorkerJuu"]:
             if not self.select_character_filter():
                 return None
-            if not self._set_character_sort(ascending=False):
-                logger.warning("[岛屿] 未确认体力降序，暂不选择工作啾")
+            if not self._set_character_sort(ascending=True):
+                logger.warning("[岛屿] 未确认体力升序，暂不选择工作啾")
                 return None
-            # 工作啾体力无限，体力降序时位于首位，无需再扫描头像或读取体力。
-            logger.info("[岛屿] 已确认体力降序，直接选择第一位工作啾")
-            return (0, 0)
+            # 与 ALAS 的工作啾专用流程一致：排序后仍按身份和空闲状态查找，
+            # 箭头出现不代表卡片已刷新，也不能据此把首格认作工作啾。
+            for screenshot in self.loop(timeout=4, skip_first=False):
+                if self.is_character_filter_visible():
+                    return None
+                if not self.appear(ISLAND_SELECT_CHARACTER_CHECK, offset=1):
+                    continue
+                for character in self.recognize_target_characters(screenshot, ["WorkerJuu"]):
+                    if not character["is_working"]:
+                        position = character["grid_position"]
+                        logger.info(f"[岛屿] 已识别空闲工作啾，位置 {position}")
+                        return position
+            logger.warning("[岛屿] 当前角色页未识别到空闲工作啾，跳过派遣")
+            return None
 
         # 计算需要识别的角色集合（包含列表角色+最终回退的WorkerJuu）
         target_names = list(character_list)
@@ -1118,6 +1129,43 @@ class SelectCharacter(UI):
 
         # 如果没有找到任何可用角色
         if position is None:
+            return False
+
+        if characters == ["WorkerJuu"]:
+            # 每张新图重新找工作啾，避免排序刷新后沿用旧位置或其他角色的选中标记。
+            selected_position = None
+            selected_frames = 0
+            attempts = 0
+            retry = Timer(2).clear()
+            for screenshot in self.loop(timeout=10, skip_first=False):
+                if self.is_character_filter_visible():
+                    return False
+                if not self.appear(ISLAND_SELECT_CHARACTER_CHECK, offset=1):
+                    selected_frames = 0
+                    continue
+                available = [character for character in
+                             self.recognize_target_characters(screenshot, ["WorkerJuu"])
+                             if not character["is_working"]]
+                if not available:
+                    selected_frames = 0
+                    continue
+                character = available[0]
+                position = character["grid_position"]
+                if character["is_selected"]:
+                    selected_frames = selected_frames + 1 if position == selected_position else 1
+                    selected_position = position
+                    if selected_frames >= 2:
+                        logger.info(f"[岛屿] 已复核工作啾身份及选中状态，位置 {position}")
+                        return True
+                    continue
+                selected_frames = 0
+                if attempts >= 5:
+                    break
+                if retry.reached():
+                    self.device.click(self.select_character_grid[position[0], position[1]])
+                    attempts += 1
+                    retry.reset()
+            logger.warning("[岛屿] 未确认工作啾身份及选中状态，跳过派遣")
             return False
 
         row, col = position
