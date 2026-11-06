@@ -380,7 +380,6 @@ class IslandManufacture(IslandShopBase):
         """收取四类全部岗位；停用岗位保留在制时间，但不重新派遣。"""
         self._round_prepared = False
         self._round_collect_all = True
-        self._round_stock_categories = set()
         self._round_recipe_post = None
         self.post_check_meal.clear()
         self._unknown_working_categories.clear()
@@ -454,6 +453,13 @@ class IslandManufacture(IslandShopBase):
 
         # 其他产品使用父类逻辑（模板匹配 + 向下滑动查找）
         return super().select_product(product_selection, product_selection_check)
+
+    def _select_round_product(self, product):
+        """保留制造业已有的固定位置产品，其他品种沿用模板选择。"""
+        info = self.name_to_config[product]
+        if info.get('selection') == FIXED_SELECT_SHEPHERD_PURSE:
+            return self.select_product(info['selection'], info['selection_check']), True
+        return super()._select_round_product(product)
 
     def select_product_with_material_check(self, post_id, product_list):
         """选择产品并检查材料是否充足。
@@ -631,8 +637,7 @@ class IslandManufacture(IslandShopBase):
         # 检查库存iron_nail
         iron_nail_stock = self.warehouse_counts.get('iron_nail', 0)
         # 根据规则选择产品：铁钉足够时优先餐具；餐具未解锁或材料不足时继续生产铁钉，岗位不空闲
-        ledger = getattr(self, 'island_round', None)
-        if iron_nail_stock >= 20 or (ledger is not None and ledger.get('iron_nail') is None):
+        if iron_nail_stock >= 20:
             items = {item['name']: item for item in self.manufacture['industrial_production']['items']}
             product_list = [items['cutlery'], items['iron_nail']]
         else:
@@ -661,8 +666,7 @@ class IslandManufacture(IslandShopBase):
                 product_list.append(item)
 
         # 如果leather库存>=10，则生产boot
-        ledger = getattr(self, 'island_round', None)
-        if leather_stock >= 10 or (ledger is not None and ledger.get('leather') is None):
+        if leather_stock >= 10:
             boot_item = [item for item in self.manufacture['handmade']['items']
                          if item['name'] == 'boot'][0]
             product_list.append(boot_item)
@@ -676,7 +680,7 @@ class IslandManufacture(IslandShopBase):
             self.select_product_with_material_check(post_id, product_list)
 
     def _open_round_recipe_page(self, post_id, product=None):
-        """制造品共用选人规则，扫描后直接在同一岗位选配方。"""
+        """制造品共用原有选人规则，打开实际派遣的选品页。"""
         if getattr(self, '_round_recipe_post', None) == post_id:
             return True
         self._close_round_recipe_page()
@@ -686,49 +690,39 @@ class IslandManufacture(IslandShopBase):
         return True
 
     def _observe_round_category(self, category, post_id):
-        """每类首个空岗批读该类成品，保留页面并复用本轮结果。"""
+        """各类制造仅复用本轮仓库账，不打开生产页盘点。"""
         if getattr(self, 'island_round', None) is None:
             return
-        from module.island.round_recipe import scan_recipe_product_stocks
-        if not hasattr(self, '_round_stock_categories'):
-            self._round_stock_categories = set()
-        if category in self._round_stock_categories:
-            self._load_round_stock()
-            return
-        if not self._open_round_recipe_page(post_id):
-            return
-        scan_recipe_product_stocks(self, [item['name'] for item in self.manufacture[category]['items']])
-        self._round_stock_categories.add(category)
-        self._load_round_stock()
+        return self._load_round_stock()
 
     def _select_round_manufacture(self, post_id, product_list):
         """按原手工候选顺序，以共享现货确定批次并确认扣料。"""
-        from module.island.planned_dispatch import recipe_for_local_name
-        from module.island.manufacture_selector import select_manufacture_recipe
         if self._post_category(post_id) in self._unknown_working_categories:
             return None
         for item in product_list:
             name = item['name']
-            batches = self._round_max_producible(
-                name, self.get_product_production_limit(name), allow_unknown=True)
+            batches = self._limit_round_food_batch(
+                name, self.get_product_production_limit(name), respect_deficit=False)
+            threshold = {'cutlery': ('iron_nail', 20), 'boot': ('leather', 10)}.get(name)
+            if threshold:
+                stock = self.island_round.get(threshold[0])
+                if stock is None or stock < threshold[1]:
+                    batches = 0
             if batches <= 0:
                 self.island_round.block(name)
                 continue
             if not self._open_round_recipe_page(post_id):
                 return None
-            if not select_manufacture_recipe(self, recipe_for_local_name(name)):
+            selected, fast = self._select_round_product(name)
+            if not selected:
                 self.island_round.block(name)
                 self._close_round_recipe_page()
                 continue
-            batches = self._limit_round_food_batch(name, batches, respect_deficit=False)
-            # 未知原料补读后重走手工阈值，不能把“未知”当成已达到转产条件。
-            threshold = {'cutlery': ('iron_nail', 20), 'boot': ('leather', 10)}.get(name)
-            if threshold and (self.island_round.get(threshold[0]) or 0) < threshold[1]:
-                batches = 0
             if batches <= 0 or self.produce_check():
                 self.island_round.block(name)
                 self._close_round_recipe_page()
                 continue
+            self._set_round_product_quantity(name, batches, fast)
             preview, confirmed_at = self.confirm_food_dispatch(batches, f'{self._item_cn(name)}制造派遣')
             self._round_recipe_post = None
             self.finish_food_dispatch(

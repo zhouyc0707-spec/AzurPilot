@@ -213,9 +213,6 @@ class IslandMineForest(PlannedProductionMixin, Island,LoginHandler):
                 if ledger is not None and ledger.is_blocked(name):
                     continue
                 if ledger is not None and ledger.get(name) is None:
-                    if self._get_threshold(name) > 0:
-                        needs[category].append(name)
-                        self.needs_count[(category, name)] = None
                     continue
                 warehouse_count = inventory.get(name, 0)
 
@@ -379,7 +376,7 @@ class IslandMineForest(PlannedProductionMixin, Island,LoginHandler):
         按缺口数量计算生产次数，避免浪费。
         """
         ledger = getattr(self, 'island_round', None)
-        if ledger is not None and ledger.is_blocked(product):
+        if ledger is not None and (ledger.is_blocked(product) or ledger.get(product) is None):
             logger.warning(f'[岛屿-统一生产] {self._item_cn(product)} 库存未确认，暂不采集')
             return False
         self.post_close()
@@ -454,20 +451,6 @@ class IslandMineForest(PlannedProductionMixin, Island,LoginHandler):
                     self.back_to_postmanage_from_dispatch()
                     return False
 
-                if ledger is not None and ledger.get(product) is None:
-                    from module.island.round_recipe import observe_selected_recipe
-                    if not observe_selected_recipe(self, product):
-                        ledger.block(product)
-                        self.back_to_postmanage_from_dispatch()
-                        return False
-                    stock = ledger.get(product)
-                    self.inventory_counts[category][product] = stock
-                    deficit = max(self._get_threshold(product) - stock, 0)
-                    if deficit <= 0:
-                        self.back_to_postmanage_from_dispatch()
-                        return False
-                    runs = min(max_runs, (deficit + self.UNITS_PER_RUN - 1) // self.UNITS_PER_RUN)
-
                 # 设置生产数量
                 if runs == max_runs:
                     # 满产直接用 POST_MAX
@@ -479,7 +462,8 @@ class IslandMineForest(PlannedProductionMixin, Island,LoginHandler):
                 # runs == 1 时默认就是1次，不用操作
                 if ledger is not None:
                     self._round_material_receipt = None
-                    if not self.confirm_post_add_order(f'{product}矿林派遣', preserve_quantity=True):
+                    if not self.confirm_post_add_order(
+                            f'{product}矿林派遣', preserve_quantity=True, max_batches=runs):
                         raise GameStuckError('矿林派遣未确认，结束本轮')
                 else:
                     self.device.click(POST_ADD_ORDER)
@@ -586,17 +570,6 @@ class IslandMineForest(PlannedProductionMixin, Island,LoginHandler):
         """声明本轮矿石与木材库存。"""
         return {item['name'] for group in self.inventory_config.values() for item in group['items']}
 
-    def _read_round_production_stocks(self):
-        """矿山和林场分别在首个可派工空岗读取生产列表库存。"""
-        from module.island.round_recipe import scan_post_product_stocks
-        for category, post_ids in (('mine', self.mine_post_ids), ('forest', self.forest_post_ids)):
-            post = next((self.posts[pid] for pid in post_ids if self._post_available_for_dispatch(self.posts[pid])
-                         and self.posts[pid].get('round_enabled', True)), None)
-            if post is not None:
-                scan_post_product_stocks(self, post['button'],
-                                         [item['name'] for item in self.inventory_config[category]['items']],
-                                         self.worker_filters[category])
-
     def run(self):
         """
         流程：
@@ -615,8 +588,6 @@ class IslandMineForest(PlannedProductionMixin, Island,LoginHandler):
 
         if not getattr(self, 'island_round', None):
             self.prepare_round(collect_all=False)
-        else:
-            self._read_round_production_stocks()
 
         # ===== 步骤2：退出管理 → 去仓库检查库存 =====
         if getattr(self, 'island_round', None) is None:
@@ -681,9 +652,7 @@ class IslandMineForest(PlannedProductionMixin, Island,LoginHandler):
             posts_needed = {}
             for name in cat_needs:
                 max_units_per_post = self.PRODUCT_MAX_RUNS.get(name, 5) * self.UNITS_PER_RUN
-                # 未知库存先安排一个空岗只读核实，不能把缺项当成零库存计算满产。
-                posts_needed[name] = (1 if remaining_need[name] is None else
-                                      max(1, -(-remaining_need[name] // max_units_per_post)))
+                posts_needed[name] = max(1, -(-remaining_need[name] // max_units_per_post))
             assigned = {name: 0 for name in cat_needs}
 
             # 按库存升序轮转分配岗位（如 A B C A B ...），每个缺口产物至少一岗，
@@ -694,10 +663,8 @@ class IslandMineForest(PlannedProductionMixin, Island,LoginHandler):
                 name = cat_needs[idx % len(cat_needs)]
                 if assigned[name] < posts_needed[name]:
                     max_units_per_post = self.PRODUCT_MAX_RUNS.get(name, 5) * self.UNITS_PER_RUN
-                    post_need = remaining_need[name]
-                    if post_need is not None:
-                        post_need = min(post_need, max_units_per_post)
-                        remaining_need[name] -= post_need
+                    post_need = min(remaining_need[name], max_units_per_post)
+                    remaining_need[name] -= post_need
                     assigned[name] += 1
                     all_to_plant[category].append((name, post_need))
                 idx += 1

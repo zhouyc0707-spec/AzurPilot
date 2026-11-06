@@ -237,8 +237,6 @@ class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler, 
         for item_config in self.FISHERY_ITEMS:
             item_name = item_config['name']
             if ledger is not None and ledger.get(item_name) is None:
-                if self.fishery_threshold.get(item_name, 0) > 0 and not ledger.is_blocked(item_name):
-                    self.to_plant_list.append(item_name)
                 continue
             count = inventory.get(item_name, 0)
             from module.island.production_planner import planner_target
@@ -505,7 +503,7 @@ class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler, 
             bool: 养殖操作是否成功。
         """
         ledger = getattr(self, 'island_round', None)
-        if ledger is not None and ledger.is_blocked(product):
+        if ledger is not None and (ledger.is_blocked(product) or ledger.get(product) is None):
             logger.warning(f'[岛屿-统一生产] {self._item_cn(product)} 库存未确认，暂不养殖')
             return False
         self.post_close()
@@ -531,24 +529,6 @@ class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler, 
                 continue
             if self.appear(ISLAND_SELECT_PRODUCT_CHECK, offset=1):
                 if self.select_product(selection, selection_check):
-                    if ledger is not None and ledger.get(product) is None:
-                        from module.island.round_recipe import observe_selected_recipe
-                        if not observe_selected_recipe(self, product):
-                            ledger.block(product)
-                            self.back_to_postmanage_from_dispatch()
-                            return False
-                        stock = ledger.get(product)
-                        self.inventory_counts[product] = stock
-                        if product in self.to_plant_list:
-                            deficit = max(self.fishery_threshold.get(product, 0) - stock, 0)
-                            fry_needed = (deficit + item_config['yield'] - 1) // item_config['yield']
-                            self.to_plant_list = [name for name in self.to_plant_list if name != product]
-                            self.to_plant_list.extend([product] * fry_needed)
-                            required_quantity = min(item_config['buy_max'] + 1, fry_needed)
-                            if required_quantity <= 0:
-                                self.to_plant_list = [name for name in self.to_plant_list if name != product]
-                                self.back_to_postmanage_from_dispatch()
-                                return False
                     material = self.ensure_select_product_material(
                         item_button=item_config['shop'],
                         material_id=(next(iter(DIC_ISLAND_RECIPE[recipe_for_local_name(product)]['commission_cost']))
@@ -713,13 +693,6 @@ class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler, 
         """鱼苗继续走选品页补充；本轮统一读取养殖成品。"""
         return {item['name'] for item in self.FISHERY_ITEMS}
 
-    def _read_round_production_stocks(self):
-        """通过首个可派工空岗批读鱼获，不预先进入仓库。"""
-        from module.island.round_recipe import scan_post_product_stocks
-        if self._round_idle_posts:
-            scan_post_product_stocks(self, self._round_idle_posts[0]['button'],
-                                     [item['name'] for item in self.FISHERY_ITEMS], self.rancher_filter)
-
     def run(self, ranch_finish_times=None):
         """运行渔场自动化管理主流程。
 
@@ -740,8 +713,6 @@ class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler, 
 
         if not getattr(self, 'island_round', None):
             self.prepare_round(collect_all=False)
-        else:
-            self._read_round_production_stocks()
         idle_posts = self._round_idle_posts
 
         self.check_inventory_and_prepare_list()

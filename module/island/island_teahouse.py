@@ -320,6 +320,14 @@ class IslandTeahouse(IslandShopBase):
 
         return batch_size
 
+    def _select_round_product(self, product):
+        """共享轮仍按原季节优先饮品的固定位置选品。"""
+        seasonal = self.seasonal_high_priority_drink
+        if seasonal and product == seasonal['name']:
+            self.device.click(seasonal['selection'])
+            return True, True
+        return super()._select_round_product(product)
+
     def post_produce(self, post_id, product, number, time_var_name, product2=None):
         """安排茶馆岗位生产指定饮品。
 

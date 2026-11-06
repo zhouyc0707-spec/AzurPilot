@@ -23,7 +23,7 @@ def _normalize_changes(changes):
 class IslandRoundInventory:
     """本轮现货、在制产物与失败记录；结束后整体丢弃，不持久化。
 
-    库存未知用 None 表示。选品列表及材料栏实读得到现货，派遣的预计产物只能进入
+    库存未知用 None 表示。集中仓库盘点及补货确认得到现货，派遣的预计产物只能进入
     in_production；购买、兑换和派遣分别在确认成功后记账。
     """
 

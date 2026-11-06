@@ -50,11 +50,64 @@ class RoundConfirmationTests(unittest.TestCase):
         main = self.make_main()
         main._round_material_receipt = None
         main._read_round_dispatch_amounts.return_value = (1, None, None)
-        self.assertTrue(main.confirm_post_add_order('铜矿', preserve_quantity=True))
+        self.assertTrue(main.confirm_post_add_order('铜矿', preserve_quantity=True, max_batches=1))
         main.appear_then_click.assert_not_called()
         main.device.click.assert_called_once_with(POST_ADD_ORDER)
         self.assertEqual(main._round_dispatch_batches, 1)
         self.assertEqual(main._round_dispatch_materials, {})
+
+    def test_quantity_above_limit_never_submits_or_commits_material(self):
+        main = self.make_main()
+        main.island_round.observe(1000, 104)
+        main._read_round_dispatch_amounts.return_value = (5, 104, 20)
+        self.assertFalse(main.confirm_post_add_order('小缺口', preserve_quantity=True, max_batches=1))
+        main.device.click.assert_not_called()
+        self.assertEqual(main.island_round.get(1000), 104)
+        self.assertIsNone(main._round_dispatch_batches)
+        self.assertEqual(main._round_dispatch_materials, {})
+
+    def test_unknown_or_non_positive_quantity_never_submits_with_limit(self):
+        for candidate in (None, (0, None, None), (-1, None, None)):
+            with self.subTest(candidate=candidate):
+                main = self.make_main()
+                main._round_material_receipt = None
+                main._read_round_dispatch_amounts.return_value = candidate
+                self.assertFalse(main.confirm_post_add_order('铜矿', preserve_quantity=True, max_batches=1))
+                main.device.click.assert_not_called()
+                self.assertIsNone(main._round_dispatch_batches)
+
+    def test_limited_quantity_requires_two_consecutive_equal_positive_reads(self):
+        main = self.make_main()
+        main._round_material_receipt = None
+        main._read_round_dispatch_amounts.side_effect = [
+            (2, None, None), None, (1, None, None), (1, None, None),
+        ]
+        self.assertTrue(main.confirm_post_add_order('铜矿', preserve_quantity=True, max_batches=2))
+        self.assertEqual(main._read_round_dispatch_amounts.call_count, 4)
+        self.assertEqual(main._round_dispatch_batches, 1)
+        main.device.click.assert_called_once_with(POST_ADD_ORDER)
+
+    def test_limited_confirmation_does_not_reuse_read_before_page_interruption(self):
+        for missing in (ISLAND_SELECT_PRODUCT_CHECK, POST_ADD_ORDER):
+            with self.subTest(missing=missing):
+                main = self.make_main()
+                main._round_material_receipt = None
+                main._read_round_dispatch_amounts.return_value = (1, None, None)
+                current = {'frame': 0}
+                original_appear = main.appear.side_effect
+
+                def frames(**kwargs):
+                    for index in range(8):
+                        current['frame'] = index
+                        yield index
+
+                main.loop = frames
+                main.appear.side_effect = lambda button, **kwargs: (
+                    False if current['frame'] == 1 and button is missing
+                    else original_appear(button, **kwargs))
+                self.assertTrue(main.confirm_post_add_order('铜矿', preserve_quantity=True, max_batches=1))
+                self.assertEqual(main._read_round_dispatch_amounts.call_count, 3)
+                main.device.click.assert_called_once_with(POST_ADD_ORDER)
 
     def test_purchase_survives_dispatch_failure(self):
         main = self.make_main()

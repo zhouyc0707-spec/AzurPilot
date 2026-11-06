@@ -330,11 +330,6 @@ class IslandFarm(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
             # 缺口比例最大的作物排最前，轮转分配时优先补种
             self.to_plant_lists[category] = plan_crops_to_restock(
                 inventory, targets, config['threshold'], skip=skip)
-            if ledger is not None:
-                self.to_plant_lists[category].extend(
-                    name for name in names if name not in inventory and name not in skip
-                    and not ledger.is_blocked(name)
-                    and crop_target(name, self.crop_targets[category], config['threshold']) > 0)
 
     def _is_orchard_crop_in_season(self, crop_name):
         """检查果园作物是否在当季（按季节配置）。
@@ -582,7 +577,7 @@ class IslandFarm(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
             bool | None: 成功为 True，作物相关失败为 False，岗位未解锁为 None。
         """
         ledger = getattr(self, 'island_round', None)
-        if ledger is not None and ledger.is_blocked(product):
+        if ledger is not None and (ledger.is_blocked(product) or ledger.get(product) is None):
             logger.warning(f'[岛屿-统一生产] {self._item_cn(product)} 库存未确认，暂不派遣')
             return False
         self.post_close()
@@ -620,19 +615,6 @@ class IslandFarm(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
                 continue
             if self.appear(ISLAND_SELECT_PRODUCT_CHECK, offset=1):
                 if self.select_product(selection, selection_check):
-                    if ledger is not None and ledger.get(product) is None:
-                        from module.island.round_recipe import observe_selected_recipe
-                        if not observe_selected_recipe(self, product):
-                            ledger.block(product)
-                            self.back_to_postmanage_from_dispatch()
-                            return False
-                        target = crop_target(product, self.crop_targets[category],
-                                             self.INVENTORY_CONFIG[category]['threshold'])
-                        self.inventory_counts[category][product] = ledger.get(product)
-                        if product in self.to_plant_lists[category] and ledger.get(product) >= target:
-                            self.to_plant_lists[category].remove(product)
-                            self.back_to_postmanage_from_dispatch()
-                            return False
                     # seed_number 是补货目标而非单次需求；补货买不起时，
                     # 现有种子够页面显示的单次需求就直接种，不够才跳过
                     material = self.ensure_select_product_material(
@@ -785,15 +767,6 @@ class IslandFarm(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
         """声明本轮农作物库存，种子仍在选品页即时补充。"""
         return {item['name'] for group in self.INVENTORY_CONFIG.values() for item in group['items']}
 
-    def _read_round_production_stocks(self):
-        """各区域首次派工前，从空岗的生产列表批量读取成品现货。"""
-        from module.island.round_recipe import scan_post_product_stocks
-        for category, idle_posts in self._round_idle_posts.items():
-            if not idle_posts:
-                continue
-            products = [item['name'] for item in self.INVENTORY_CONFIG[category]['items']]
-            scan_post_product_stocks(self, idle_posts[0]['button'], products, self.worker_filters[category])
-
     def run(self):
         """运行岛屿农场、果园与苗圃自动化管理主流程。
 
@@ -810,8 +783,6 @@ class IslandFarm(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
         self._planner_dispatched = {}
         self._planner_in_production = {}
         self.ui_ensure(page_island)
-        if getattr(self, 'island_round', None) is not None:
-            self._read_round_production_stocks()
         self.check_inventory_and_prepare_lists()
 
         logger.info("[岛屿-农田] \n当前库存统计:")
@@ -822,7 +793,7 @@ class IslandFarm(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
         if not getattr(self, 'island_round', None):
             self.prepare_round(collect_all=False)
         else:
-            # 集中收获早于生产页读数，补回旧流程巡岗时对工作中作物的需求扣减。
+            # 集中收获早于仓库盘点，补回旧流程巡岗时对工作中作物的需求扣减。
             for category in ('farm', 'orchard', 'nursery'):
                 for post_id, info in self.posts.items():
                     product = info.get('crop')

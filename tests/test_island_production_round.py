@@ -64,12 +64,9 @@ class ProductionRoundTests(unittest.TestCase):
 
             def run(self):
                 events.append(('run', self.task))
-                events.append(('recipe_scan', self.task))
                 if self.task == 'IslandFarm':
-                    self.island_round.observe('coffee_bean', 10)
                     self.island_round.production_started('coffee_bean', 4)
                 else:
-                    self.island_round.observe('iced_coffee', 0)
                     self.island_round.consume({'coffee_bean': 2})
                 self.config.cross_set(f'{self.task}.Scheduler.NextRun', datetime(2026, 11, 6, 16))
 
@@ -81,16 +78,23 @@ class ProductionRoundTests(unittest.TestCase):
                                           side_effect=AssertionError('生产轮不得读取仓库详情')))
         self.probe = self.enterContext(patch('module.island.round_recipe.probe_round_missing_stocks',
                                            side_effect=AssertionError('不得在任务前跨场所盘点')))
+        def warehouse_scan(main, runners, items):
+            events.append(('warehouse', main.task))
+            self.assertEqual(items, {'wheat', 'coffee_bean', 'iced_coffee'})
+            self.assertEqual(len(runners), len(PRODUCTION_TASKS))
+            return {2000: 0, 2009: 10, 3005: 0}
+        self.warehouse_scan = self.enterContext(patch(
+            'module.island.round_warehouse.read_round_warehouse_stocks', side_effect=warehouse_scan))
         self.enterContext(patch('module.island.production_planner.planner_enabled', return_value=False))
         self.owner = SimpleNamespace(config=self.config, device=object())
 
-    def test_harvest_all_then_each_task_reads_its_own_production_page(self):
+    def test_harvest_all_then_warehouse_snapshot_once_before_any_dispatch(self):
         run_production_task(self.owner, 'IslandFarm', self.runner_cls)
         session = self.owner._island_production_round
-        self.assertEqual([e[0] for e in self.events], ['harvest'] * len(PRODUCTION_TASKS) + ['run', 'recipe_scan'])
+        self.assertEqual([e[0] for e in self.events], ['harvest'] * len(PRODUCTION_TASKS) + ['warehouse', 'run'])
         self.assertEqual(session.pending, {'IslandJuuCoffee'})
         self.assertEqual(session.inventory.get('coffee_bean'), 10)
-        self.assertIsNone(session.inventory.get('iced_coffee'))
+        self.assertEqual(session.inventory.get('iced_coffee'), 0)
         self.assertEqual(self.config.data['IslandJuuCoffee']['Scheduler']['NextRun'], self.now)
         self.assertFalse(self.config.data['IslandGrill']['Scheduler']['Enable'])
         self.assertEqual(self.config.data['IslandGrill']['Scheduler']['NextRun'], self.now + timedelta(hours=6))
@@ -99,6 +103,7 @@ class ProductionRoundTests(unittest.TestCase):
         self.assertEqual(session.inventory.in_production, {2009: 4})
         self.scan.assert_not_called()
         self.probe.assert_not_called()
+        self.warehouse_scan.assert_called_once()
         self.assertIsNone(self.owner._island_production_round)
 
     def test_failed_preparation_defers_all_enabled_producers_and_preserves_later_schedule(self):
@@ -130,15 +135,14 @@ class ProductionRoundTests(unittest.TestCase):
         with patch('module.island.production_round.current_time', return_value=deadline):
             self.assertIsNone(preparation_retry_deadline(self.owner, 'IslandMineForest'))
 
-    def test_ranch_references_pending_stock_sources_without_reading_them_during_harvest(self):
+    def test_ranch_uses_same_snapshot_without_borrowing_any_production_page(self):
         self.config.data['IslandRancher']['Scheduler']['Enable'] = True
         session = IslandProductionRound(self.config, object(), 'IslandFarm')
         ranch = session.runners['IslandRancher']
-        self.assertEqual({runner.task for runner in ranch._round_stock_runners},
-                         {'IslandFarm', 'IslandRancher', 'IslandJuuCoffee'})
-        self.assertTrue(all(runner.island_round is session.inventory for runner in ranch._round_stock_runners))
-        self.assertEqual(session.inventory.stocks, {})
-        self.assertEqual([event[0] for event in self.events], ['harvest'] * len(PRODUCTION_TASKS))
+        self.assertFalse(hasattr(ranch, '_round_stock_runners'))
+        self.assertTrue(all(runner.island_round is session.inventory for runner in session.runners.values()))
+        self.assertEqual(session.inventory.stocks, {2000: 0, 2009: 10, 3005: 0})
+        self.assertEqual([event[0] for event in self.events], ['harvest'] * len(PRODUCTION_TASKS) + ['warehouse'])
         self.scan.assert_not_called()
         self.probe.assert_not_called()
 
@@ -185,8 +189,7 @@ class ProductionRoundTests(unittest.TestCase):
         with patch('module.island.production_round.current_time', return_value=self.now + timedelta(hours=2)):
             run_production_task(self.owner, 'IslandJuuCoffee', self.runner_cls)
         self.scan.assert_not_called()
-        self.assertEqual(self.events.count(('recipe_scan', 'IslandFarm')), 1)
-        self.assertEqual(self.events.count(('recipe_scan', 'IslandJuuCoffee')), 1)
+        self.warehouse_scan.assert_called_once()
         self.assertEqual(self.events.count(('run', 'IslandFarm')), 1)
         self.assertEqual(session.inventory.get('coffee_bean'), 8)
 
@@ -243,6 +246,16 @@ class ProductionRoundTests(unittest.TestCase):
         self.scan.assert_not_called()
         self.assertIsNot(self.owner._island_production_round, previous)
         self.assertEqual(self.events.count(('harvest', 'IslandFarm')), 2)
+        self.assertEqual(self.warehouse_scan.call_count, 2)
+
+    def test_failed_warehouse_snapshot_cools_down_and_never_dispatches(self):
+        self.warehouse_scan.side_effect = GameStuckError('仓库列表不完整')
+        with patch('module.island.production_round.delay_failed_preparation') as delay:
+            with self.assertRaises(GameStuckError):
+                run_production_task(self.owner, 'IslandFarm', self.runner_cls)
+        delay.assert_called_once_with(self.owner, 'IslandFarm')
+        self.assertFalse(any(event[0] == 'run' for event in self.events))
+        self.assertIsNone(self.owner._island_production_round)
 
     def test_failed_dispatch_drops_session(self):
         session = IslandProductionRound(self.config, object(), 'IslandFarm')

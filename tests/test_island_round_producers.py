@@ -1,4 +1,4 @@
-"""统一收获后生产任务复用现货，零库存补读和实际加工量不互相串账。"""
+"""统一收获后复用仓库现货，确认零库存可补料，未知不派遣。"""
 
 import unittest
 from datetime import timedelta
@@ -21,7 +21,14 @@ class RoundProducerTests(unittest.TestCase):
         for name in ('island', 'island_farm', 'island_fishery', 'island_rancher', 'island_mine_forest'):
             self.enterContext(patch(f'module.island.{name}.logger'))
         self.enterContext(patch('module.island.production_planner.refresh_production_plan'))
-        self.scan = self.enterContext(patch('module.island.round_recipe.scan_post_product_stocks', return_value={}))
+        self.scan = self.enterContext(patch('module.island.round_recipe.scan_post_product_stocks',
+                                           side_effect=AssertionError('不能再从生产列表盘点')))
+        self.selected = self.enterContext(patch('module.island.round_recipe.observe_selected_recipe',
+                                               side_effect=AssertionError('不能再从选品页补读库存')))
+        self.borrow = self.enterContext(patch('module.island.round_recipe.probe_round_missing_stocks',
+                                             side_effect=AssertionError('不能借用其他岗位盘点')))
+        self.enterContext(patch('module.island.manufacture_selector.select_manufacture_recipe',
+                                side_effect=AssertionError('手工派遣不使用ALAS配方库存确认')))
 
     def test_farm_shared_stock_keeps_unknown_distinct_from_real_zero(self):
         farm = object.__new__(IslandFarm)
@@ -67,7 +74,6 @@ class RoundProducerTests(unittest.TestCase):
         farm.plant_config = {'farm': {'plant_default': 0}}
         farm._resolve_default_crop = Mock(return_value='wheat')
         farm.check_inventory_and_prepare_lists = Mock()
-        farm._read_round_production_stocks = Mock()
         farm.prepare_round = Mock(side_effect=AssertionError('不能再次巡检领取'))
         farm._inv_cn = str
         page = []
@@ -85,7 +91,7 @@ class RoundProducerTests(unittest.TestCase):
         farm._plant_idle_posts.assert_called_once()
         self.assertEqual(page, ['island', 'postmanage'])
 
-    def make_round_fishery(self, demand=6):
+    def make_round_fishery(self, demand=6, stocks=None):
         ui = FisheryUI({'bass': demand}, positions=1)
         fishery = ui.fishery
         fishery.decided_lists = Mock(side_effect=ui.scan_post)
@@ -96,7 +102,7 @@ class RoundProducerTests(unittest.TestCase):
         fishery.warehouse_inventory = Mock(side_effect=AssertionError('共享模式不得调用仓库读数'))
         fishery.warehouse_filter = Mock(side_effect=AssertionError('不能重复进仓库'))
         fishery.run_fish_meat_targets = Mock()
-        fishery.island_round = IslandRoundInventory()
+        fishery.island_round = IslandRoundInventory({'bass': 0} if stocks is None else stocks)
 
         def confirm(context):
             confirmed = ui.confirm(context)
@@ -109,15 +115,9 @@ class RoundProducerTests(unittest.TestCase):
         fishery.confirm_post_add_order = confirm
         return ui
 
-    def test_unknown_zero_fish_and_fry_are_read_then_original_shop_replenishes(self):
+    def test_warehouse_zero_fish_and_fry_allow_original_shop_replenishment(self):
         ui = self.make_round_fishery()
-
-        def observe(main, product):
-            main.island_round.observe(product, 0)
-            return True
-
-        with patch('module.island.round_recipe.observe_selected_recipe', side_effect=observe):
-            ui.run()
+        ui.run()
         self.assertEqual(ui.buys, [('bass', 5)])
         self.assertEqual(ui.orders, [('bass', 5)])
         self.assertEqual(ui.fishery.island_round.get('bass'), 0)
@@ -125,54 +125,50 @@ class RoundProducerTests(unittest.TestCase):
         self.assertEqual(ui.fishery.island_round.in_production[resolve_item_id('bass')],
                          5 * ui.fishery.name_to_config['bass']['yield'])
 
-    def test_fish_production_page_stock_precedes_target_decision(self):
+    def test_fish_warehouse_stock_precedes_target_decision(self):
         ui = self.make_round_fishery()
-
-        def scan(main, button, products, characters):
-            main.island_round.observe('bass', main.fishery_threshold['bass'])
-            return {resolve_item_id('bass'): main.fishery_threshold['bass']}
-
-        self.scan.side_effect = scan
-        with patch('module.island.round_recipe.observe_selected_recipe') as selected:
-            ui.run()
-        self.scan.assert_called_once()
-        selected.assert_not_called()
+        ui.fishery.island_round.observe('bass', ui.fishery.fishery_threshold['bass'])
+        ui.run()
+        self.scan.assert_not_called()
+        self.selected.assert_not_called()
         self.assertEqual(ui.buys, [])
         self.assertEqual(ui.orders, [])
         ui.fishery.warehouse_inventory.assert_not_called()
 
-    def test_farm_scans_each_available_category_before_reading_shared_targets(self):
+    def test_successful_fry_purchase_survives_failed_dispatch(self):
+        ui = self.make_round_fishery()
+        ui.failed_posts = {0}
+        ui.run()
+        self.assertEqual(ui.buys, [('bass', 5)])
+        self.assertEqual(ui.orders, [])
+        material = ui.fishery._round_material_receipt['item_id']
+        self.assertEqual(ui.fishery.island_round.get(material), 5)
+        self.assertEqual(ui.fishery.island_round.get('bass'), 0)
+        self.assertEqual(ui.fishery.posts['ISLAND_FISHERY_POST1']['state'], 'idle')
+        self.assertEqual(ui.fishery.island_round.in_production, {})
+
+    def test_farm_uses_confirmed_warehouse_stock_and_does_not_queue_unknown(self):
         farm = object.__new__(IslandFarm)
         farm.config = SimpleNamespace()
-        farm.island_round = IslandRoundInventory()
+        farm.island_round = IslandRoundInventory({'wheat': 20, 'corn': 0, 'carrot': 12})
         farm.INVENTORY_CONFIG = {
             'farm': {'threshold': 10, 'items': [{'name': name} for name in ('wheat', 'corn', 'pasture')]},
             'orchard': {'threshold': 10, 'items': [{'name': 'apple'}]},
             'nursery': {'threshold': 10, 'items': [{'name': 'carrot'}]},
         }
-        farm._round_idle_posts = {'farm': [{'button': 'farm_slot'}], 'orchard': [],
-                                  'nursery': [{'button': 'nursery_slot'}]}
-        farm.worker_filters = {'farm': 'farmer', 'nursery': 'gardener'}
         farm.inventory_counts, farm.to_plant_lists = {}, {}
         farm.crop_targets = {category: {} for category in farm.INVENTORY_CONFIG}
         farm.ignore_avocado = farm.ignore_pineapple = False
-        farm.warehouse_inventory = Mock(side_effect=AssertionError('不能前置查仓库'))
-
-        def scan(main, button, products, characters):
-            for product, quantity in {'wheat': 20, 'corn': 0, 'carrot': 12}.items():
-                if product in products:
-                    main.island_round.observe(product, quantity)
-
-        self.scan.side_effect = scan
-        farm._read_round_production_stocks()
+        farm.warehouse_inventory = Mock(side_effect=AssertionError('不能重复查仓库'))
         farm.check_inventory_and_prepare_lists()
-        self.assertEqual(self.scan.call_count, 2)
-        self.assertEqual(farm.to_plant_lists['farm'], ['corn', 'pasture'])
+        self.scan.assert_not_called()
+        self.assertEqual(farm.to_plant_lists['farm'], ['corn'])
+        self.assertEqual(farm.to_plant_lists['orchard'], [])
         self.assertEqual(farm.to_plant_lists['nursery'], [])
         self.assertIsNone(farm.island_round.get('pasture'))
         farm.warehouse_inventory.assert_not_called()
 
-    def test_farm_success_changes_current_post_state_before_later_stock_borrowing(self):
+    def test_farm_success_records_actual_batches_and_working_state(self):
         farm = IslandFarm.__new__(IslandFarm)
         farm.device = Mock()
         farm.island_round = IslandRoundInventory({'wheat': 0})
@@ -196,33 +192,40 @@ class RoundProducerTests(unittest.TestCase):
         self.assertIs(farm.posts['ISLAND_FARM_POST1'], post)
         self.assertEqual((post['state'], post['crop'], post['runs']), ('working', 'wheat', 2))
 
-    def test_selected_fish_already_at_target_does_not_buy_or_dispatch(self):
-        ui = self.make_round_fishery()
-
-        def observe(main, product):
-            main.island_round.observe(product, main.fishery_threshold[product])
-            return True
-
-        with patch('module.island.round_recipe.observe_selected_recipe', side_effect=observe):
-            ui.run()
+    def test_unknown_fish_stock_never_opens_recipe_or_assumes_zero(self):
+        ui = self.make_round_fishery(stocks={})
+        ui.fishery.post_open = Mock(side_effect=AssertionError('未知库存不能开岗补读'))
+        ui.run()
         self.assertEqual(ui.buys, [])
         self.assertEqual(ui.orders, [])
         self.assertEqual(ui.fishery.to_plant_list, [])
-
-    def test_failed_fish_observation_never_assumes_zero_or_buys(self):
-        ui = self.make_round_fishery()
-        with patch('module.island.round_recipe.observe_selected_recipe', return_value=False):
-            ui.run()
-        self.assertEqual(ui.buys, [])
-        self.assertEqual(ui.orders, [])
-        self.assertTrue(ui.fishery.island_round.is_blocked('bass'))
         self.assertIsNone(ui.fishery.island_round.get('bass'))
+        ui.fishery.post_open.assert_not_called()
+
+    def test_unknown_stock_rejects_direct_farm_fish_and_mine_dispatch_before_opening(self):
+        definitions = ((IslandFarm, 'wheat', ('farm', 'time_farm1')),
+                       (IslandFishery, 'bass', (0,)),
+                       (IslandMineForest, 'Copper', ('mine', 'time_mine1')))
+        for task_class, product, arguments in definitions:
+            with self.subTest(task=task_class.__name__):
+                task = task_class.__new__(task_class)
+                task.island_round = IslandRoundInventory()
+                task.post_close = Mock()
+                task.post_open = Mock(side_effect=AssertionError('未知库存不能进入选品页'))
+                self.assertFalse(task.post_plant('post', product, *arguments))
+                task.post_close.assert_not_called()
+                task.post_open.assert_not_called()
 
     def make_mill(self, stocks):
         task = object.__new__(IslandRancher)
         task.config = SimpleNamespace()
         task.island_round = IslandRoundInventory(stocks)
         task.inventory_counts = {'farm': {}, 'mill': {}, 'ranch': {}}
+        task.INVENTORY_CONFIG = {
+            'farm': {'items': [{'name': 'wheat'}]},
+            'mill': {'items': [{'name': 'chicken_feed'}, {'name': 'wheat_flour'}]},
+            'ranch': {'items': [{'name': 'chicken'}, {'name': 'pork'}]},
+        }
         task.name_to_config = {
             'chicken_feed': {'required_material': 'wheat'},
             'wheat_flour': {'required_material': 'wheat'},
@@ -282,7 +285,6 @@ class RoundProducerTests(unittest.TestCase):
             setattr(task, name, Mock())
         task.process_mill_supplements = Mock(return_value=[])
         task.check_ranch_needs = Mock(return_value=[])
-        task._read_round_production_stocks = Mock()
         task._inv_cn = str
         with patch('module.island.island_fishery.IslandFishery', side_effect=AssertionError('不能重建渔场')):
             task.run()
@@ -291,7 +293,7 @@ class RoundProducerTests(unittest.TestCase):
         self.assertIs(fishery.config, task.config)
         task.warehouse_mill_ranch.assert_not_called()
 
-    def test_ranch_reads_own_feed_then_borrows_only_needed_unknown_mill_items(self):
+    def test_ranch_loads_warehouse_feed_and_materials_without_borrowing_posts(self):
         config = SimpleNamespace(IslandRancher_MinChicken=20, IslandRancher_MinPork=0,
                                  IslandRancher_ChickenFilter='WorkerJuu')
 
@@ -300,40 +302,21 @@ class RoundProducerTests(unittest.TestCase):
 
         with patch.object(Island, '__init__', init):
             task = IslandRancher(config)
-        task.island_round = IslandRoundInventory()
-        task._round_ranch_states = {'ISLAND_RANCH_POST1': 'idle'}
+        task.island_round = IslandRoundInventory({'egg': 8, 'chicken_feed': 0, 'chicken': 0,
+                                                'wheat_flour': 200, 'wheat': 300})
         task.is_ranch_post_enabled = lambda post_id: post_id == 'ISLAND_RANCH_POST1'
-        task._round_stock_runners = providers = (object(), task, object())
-        task.warehouse_mill_ranch = Mock(side_effect=AssertionError('不能查仓库'))
-
-        def observe(main, product):
-            main.island_round.observe('egg', 8)
-            main.island_round.observe('chicken_feed', 0)
-            return True
-
-        def borrow(runners, ledger, requested):
-            self.assertIs(runners, providers)
-            for product in requested:
-                ledger.observe(product, {'chicken': 0, 'wheat_flour': 200, 'wheat': 300}[product])
-
-        with patch('module.island.round_recipe._open_probe_product_page', return_value=True) as opened, \
-                patch('module.island.round_recipe._close_probe_product_page') as closed, \
-                patch('module.island.round_recipe.scan_recipe_product_stocks') as scan, \
-                patch('module.island.manufacture_selector.select_manufacture_recipe', return_value=True), \
-                patch('module.island.round_recipe.observe_selected_recipe', side_effect=observe), \
-                patch('module.island.round_recipe.probe_round_missing_stocks', side_effect=borrow) as probe:
-            task._read_round_production_stocks()
-        opened.assert_called_once()
-        closed.assert_called_once_with(task)
-        scan.assert_called_once_with(task, ['egg'])
-        self.assertEqual([entry.args[2] for entry in probe.call_args_list],
-                         [{'wheat_flour', 'chicken'}, {'wheat'}])
+        task.warehouse_filter = Mock(side_effect=AssertionError('不能重复进仓库'))
+        task.warehouse_mill_ranch()
         self.assertEqual(task.inventory_counts['mill']['chicken_feed'], 0)
         self.assertEqual(task.inventory_counts['farm']['wheat'], 300)
         self.assertIsNone(task.island_round.get('corn'))
-        task.warehouse_mill_ranch.assert_not_called()
+        self.assertEqual(task.check_mill_supplement_needs(), [('chicken_feed', 11)])
+        self.assertEqual(task.check_ranch_needs(), ['ISLAND_RANCH_POST1'])
+        self.borrow.assert_not_called()
+        self.selected.assert_not_called()
+        task.warehouse_filter.assert_not_called()
 
-    def test_mine_collects_all_posts_but_unknown_stock_only_uses_enabled_slot(self):
+    def test_mine_collects_all_posts_and_only_dispatches_confirmed_zero_stock(self):
         config = SimpleNamespace(IslandMine_WorkerFilter='WorkerJuu', IslandForest_WorkerFilter='WorkerJuu',
                                  IslandMine_Positions=1, IslandForest_Positions=0, IslandMine_MinCopper=4,
                                  IslandMine_MineSilver=0, IslandForest_CutElegant=0, task_delay=Mock())
@@ -360,12 +343,15 @@ class RoundProducerTests(unittest.TestCase):
         task.warehouse_inventory = Mock(side_effect=AssertionError('共享模式不得调用仓库读数'))
         task.post_plant = Mock(return_value=True)
         task.run()
+        task.post_plant.assert_not_called()
+        task.island_round.observe('Copper', 0)
+        task.run()
         self.assertEqual(task.post_plant.call_count, 1)
         self.assertEqual(task.post_plant.call_args.args[1:3], ('Copper', 'mine'))
-        self.assertIsNone(task.post_plant.call_args.kwargs['need_count'])
+        self.assertEqual(task.post_plant.call_args.kwargs['need_count'], 4)
         task.ui_goto.assert_not_called()
         task.warehouse_inventory.assert_not_called()
-        self.scan.assert_called_once()
+        self.scan.assert_not_called()
 
     def test_mine_small_deficit_preserves_its_selected_single_batch(self):
         task = IslandMineForest.__new__(IslandMineForest)
@@ -387,7 +373,8 @@ class RoundProducerTests(unittest.TestCase):
         with patch('module.island.island_mine_forest.Duration') as duration:
             duration.return_value.ocr.return_value = timedelta(hours=1)
             self.assertTrue(task.post_plant(button, 'Copper', 'mine', 'time_mine1', need_count=4))
-        task.confirm_post_add_order.assert_called_once_with('Copper矿林派遣', preserve_quantity=True)
+        task.confirm_post_add_order.assert_called_once_with(
+            'Copper矿林派遣', preserve_quantity=True, max_batches=1)
         task.device.click.assert_not_called()
         self.assertEqual(task.island_round.in_production[resolve_item_id('Copper')], 4)
 

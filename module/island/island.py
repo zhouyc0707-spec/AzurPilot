@@ -1096,18 +1096,20 @@ class Island(SelectCharacter):
         logger.warning("[岛屿] 从派遣流程返回岗位管理页超时")
         return False
 
-    def confirm_post_add_order(self, context="岗位派遣", preserve_quantity=False):
+    def confirm_post_add_order(self, context="岗位派遣", preserve_quantity=False, max_batches=None):
         """材料确认足够后确认派遣，默认选最大数量。
 
         Args:
             context (str): 操作上下文描述（用于日志记录）。
             preserve_quantity (bool): 保留调用方已设置的次数，不再次点击最大数量。
+            max_batches (int | None): 共享轮下单次数上限，实际次数超限时不提交。
 
         Returns:
             bool: 确认派遣是否成功。
         """
         if getattr(self, 'island_round', None) is not None:
-            return self._confirm_round_post_add_order(context, preserve_quantity=preserve_quantity)
+            return self._confirm_round_post_add_order(
+                context, preserve_quantity=preserve_quantity, max_batches=max_batches)
         clicked = False
         max_clicked = preserve_quantity
         button_seen = False
@@ -1182,7 +1184,7 @@ class Island(SelectCharacter):
             return None
         return int(batches), stock, int(matched[2])
 
-    def _confirm_round_post_add_order(self, context, preserve_quantity=False):
+    def _confirm_round_post_add_order(self, context, preserve_quantity=False, max_batches=None):
         """本轮派遣只确认一次，正向确认工作/管理页后提交实际耗料。"""
         from module.exception import GameBugError
 
@@ -1212,14 +1214,22 @@ class Island(SelectCharacter):
                 # 确认结果不明时只观察；重复点击可能新增一笔生产。
                 continue
             if not self.appear(ISLAND_SELECT_PRODUCT_CHECK, offset=1):
+                if max_batches is not None:
+                    previous = None
                 continue
             if not maximum_selected:
                 if self.appear_then_click(POST_MAX, interval=2):
                     maximum_selected = True
                 continue
             if not self.appear(POST_ADD_ORDER):
+                if max_batches is not None:
+                    previous = None
                 continue
             candidate = self._read_round_dispatch_amounts()
+            if (max_batches is not None and candidate is not None
+                    and not 0 < candidate[0] <= max_batches):
+                logger.warning(f'[岛屿单轮] {context}实际次数 {candidate[0]} 不在允许范围 1~{max_batches}，不提交')
+                return False
             if candidate is None or candidate != previous:
                 previous = candidate
                 continue

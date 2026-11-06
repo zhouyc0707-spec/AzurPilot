@@ -151,6 +151,8 @@ class IslandProductionRound:
             raise TaskEnd('岛屿统一收获期间收到停止请求')
 
     def _prepare(self, config, device, task):
+        from module.island.round_warehouse import read_round_warehouse_stocks
+
         logger.hr('岛屿单轮：统一收获', level=1)
         for name, (module, class_name) in PRODUCTION_TASKS.items():
             self._check_stop(config)
@@ -163,12 +165,16 @@ class IslandProductionRound:
                 self.pending.add(name)
 
         self._check_stop(config)
+        items = set()
+        for name in self.pending:
+            items.update(self.runners[name].round_stock_items())
+        logger.hr('岛屿单轮：按产地集中盘点', level=1)
+        observed = read_round_warehouse_stocks(
+            self.runners[task], tuple(self.runners.values()), items)
+        for item, quantity in observed.items():
+            self.inventory.observe(item, quantity)
         for runner in self.runners.values():
             runner.island_round = self.inventory
-        if 'IslandRancher' in self.pending:
-            # 牧场在实际运行到磨坊/副产判断时，才借本轮可用配方页补读缺项。
-            self.runners['IslandRancher']._round_stock_runners = tuple(
-                self.runners[name] for name in PRODUCTION_TASKS if name in self.pending)
 
         # 已收获成为空岗的启用任务提前进入原优先级队列，不替它执行或写成功。
         with config.multi_set():
@@ -177,7 +183,7 @@ class IslandProductionRound:
                     config.cross_set(f'{name}.Scheduler.NextRun', self.started_at)
         self.ready = True
         logger.attr('岛屿本轮任务', sorted(self.pending))
-        logger.info('[岛屿单轮] 收获完成，成品库存将在各场所选品页读取，材料按配方实时确认')
+        logger.attr('岛屿本轮明确库存', len(observed))
 
     def valid(self, config):
         return self.ready and bool(self.pending) and self.signature == round_config_signature(config)
