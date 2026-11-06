@@ -3,7 +3,9 @@
 import cv2
 import numpy as np
 
-from module.island.assets import TEMPLATE_POST_EMPTY
+from module.island.assets import (
+    TEMPLATE_POST_EMPTY, TEMPLATE_POST_EMPTY_COMPAT, TEMPLATE_POST_ORCHARD_TITLE_COMPAT,
+)
 
 
 def is_post_title_confirmed(image, post):
@@ -21,7 +23,12 @@ def is_post_title_confirmed(image, post):
         return False
     # 同列“木料加工”“电子加工”在放宽到 0.75 时可串行定位，不能据此跳过巡检。
     score = float(cv2.matchTemplate(title, post.image, cv2.TM_CCOEFF_NORMED).max())
-    return score > 0.90
+    if score > 0.90:
+        return True
+    # 非原生分辨率按运行时缩放后，果园字形与旧截图不同；只补充该类别完整标题。
+    return (post.name.startswith('ISLAND_ORCHARD_POST')
+            and title.shape == TEMPLATE_POST_ORCHARD_TITLE_COMPAT.image.shape
+            and TEMPLATE_POST_ORCHARD_TITLE_COMPAT.match(title, similarity=0.90, direct_match=True))
 
 
 def is_empty_post_slot(image, button):
@@ -51,4 +58,7 @@ def is_empty_post_slot(image, button):
     gray = np.median(interior.reshape(-1, 3), axis=0)
     if np.max(np.abs(gray - 224)) > 25 or np.ptp(gray) > 8:
         return False
-    return TEMPLATE_POST_EMPTY.match(image[top:bottom, left:right], similarity=0.95, direct_match=True)
+    card = image[top:bottom, left:right]
+    # 两份真实空卡覆盖缩放后的像素差异，保持原阈值及上方明暗、完整可见性保护。
+    return (TEMPLATE_POST_EMPTY.match(card, similarity=0.95, direct_match=True)
+            or TEMPLATE_POST_EMPTY_COMPAT.match(card, similarity=0.95, direct_match=True))

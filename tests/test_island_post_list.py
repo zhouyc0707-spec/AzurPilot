@@ -12,8 +12,16 @@ from module.base.button import Button
 from module.base.utils import load_image
 from module.island.assets import ISLAND_POST_CHECK, TEMPLATE_POST_EMPTY
 from module.island.island import Island
+from module.island.island_farm import IslandFarm
+from module.island.island_mine_forest import IslandMineForest
 from module.island.post_list import is_empty_post_slot, is_post_title_confirmed
-from module.island_farm.assets import ISLAND_FARM_POST2
+from module.island_farm.assets import (
+    ISLAND_FARM_POST2, ISLAND_ORCHARD_POST1, ISLAND_ORCHARD_POST2,
+    ISLAND_ORCHARD_POST3, ISLAND_ORCHARD_POST4,
+)
+from module.island_mine_forest.assets import (
+    ISLAND_FOREST_POST1, ISLAND_FOREST_POST2, ISLAND_FOREST_POST3, ISLAND_FOREST_POST4,
+)
 from module.island_manufacture.assets import (
     ISLAND_ELECTRONIC_PROCESSING_POST1, ISLAND_WOOD_PROCESSING_POST1,
 )
@@ -359,6 +367,128 @@ class EmptyPostListRealLocationTests(unittest.TestCase):
         self.assertFalse(task.post_list_is_empty(post))
         self.assertEqual(task.device.screenshot_count, 0)
         task.device.click.assert_not_called()
+
+
+class EmptyPostCurrentListReplayTests(unittest.TestCase):
+    """当前实屏经运行时缩放后的双列表回放，不替换任何识别函数。"""
+
+    ORCHARD_POSTS = (ISLAND_ORCHARD_POST1, ISLAND_ORCHARD_POST2,
+                    ISLAND_ORCHARD_POST3, ISLAND_ORCHARD_POST4)
+    FOREST_POSTS = (ISLAND_FOREST_POST1, ISLAND_FOREST_POST2,
+                   ISLAND_FOREST_POST3, ISLAND_FOREST_POST4)
+
+    def setUp(self):
+        self.enterContext(patch('module.island.island.logger'))
+        self.enterContext(patch('module.base.utils.TEMPLATE_MATCH_NON_NATIVE_720P', True))
+        self.enterContext(patch('module.base.utils.TEMPLATE_MATCH_NON_NATIVE_720P_THRESHOLD', 0.75))
+
+    @staticmethod
+    def make_frame():
+        return load_image(str(FIXTURES / 'current_orchard_forest_list.png'))
+
+    def make_task(self, source, image=None):
+        if image is None:
+            image = self.make_frame()
+        task, post = EmptyPostListRealLocationTests.make_task(image, source)
+        self.assertTrue(task.ui_page_appear(page_island_postmanage))
+        self.assertFalse(task.is_post_detail_visible())
+        return task, post
+
+    def test_all_four_current_orchard_slots_skip_real_farm_inspection(self):
+        for source in self.ORCHARD_POSTS:
+            with self.subTest(post=source.name):
+                task, post = self.make_task(source)
+                task.posts = {source.name: {'state': 'working', 'crop': 'apple', 'runs': 5}}
+                task.time_vars = {'orchard': [1, 1, 1, 1]}
+                task.time_old = 1
+                task.post_close = Mock()
+                task.post_open = Mock(side_effect=AssertionError('实拍空岗不应打开详情'))
+                task.post_get_and_close = Mock()
+                self.assertTrue(IslandFarm.decided_lists(task, post, source.name,
+                                                        'orchard', 'time_old'))
+                self.assertEqual(task.posts[source.name], {'state': 'idle', 'crop': None, 'runs': 0})
+                self.assertIsNone(task.time_old)
+                self.assertIsNone(task.time_vars['orchard'][int(source.name[-1]) - 1])
+                self.assertEqual(task.device.screenshot_count, 1)
+                task.post_open.assert_not_called()
+                task.post_get_and_close.assert_not_called()
+                task.device.click.assert_not_called()
+
+    def test_current_forest_empty_and_working_slots_remain_distinct(self):
+        for index, source in enumerate(self.FOREST_POSTS, 1):
+            with self.subTest(post=source.name):
+                task, post = self.make_task(source)
+                self.assertEqual(task.post_list_is_empty(post), index in (1, 3))
+                self.assertEqual(task.device.screenshot_count, 1 if index in (1, 3) else 0)
+                task.device.click.assert_not_called()
+
+    def test_current_forest_empty_slots_skip_real_collection(self):
+        for source in (ISLAND_FOREST_POST1, ISLAND_FOREST_POST3):
+            with self.subTest(post=source.name):
+                task, post = self.make_task(source)
+                task.posts = {source.name: {'state': 'working', 'crop': 'wood', 'runs': 5}}
+                task.time_old = 1
+                task.post_close = Mock()
+                task.post_open = Mock(side_effect=AssertionError('实拍空岗不应打开详情'))
+                task.post_get_stay = Mock()
+                self.assertFalse(IslandMineForest.collect_and_detect_post(
+                    task, post, source.name, 'forest', 'time_old'))
+                self.assertEqual(task.posts[source.name], {'state': 'idle', 'crop': None, 'runs': 0})
+                self.assertIsNone(task.time_old)
+                task.post_open.assert_not_called()
+                task.post_get_stay.assert_not_called()
+                task.device.click.assert_not_called()
+
+    def test_other_real_title_cannot_confirm_current_orchard_slots(self):
+        image = self.make_frame()
+        image[438:476, 729:830] = 255
+        # 林场完整标题替代果园标题，空卡保持实拍像素，不能靠空卡猜场所。
+        title = load_image(ISLAND_FOREST_POST1.file, ISLAND_FOREST_POST1.area)
+        image[444:444 + title.shape[0], 736:736 + title.shape[1]] = title
+        for source in self.ORCHARD_POSTS:
+            with self.subTest(post=source.name):
+                task, post = self.make_task(source, image)
+                self.assertFalse(task.post_list_is_empty(post))
+                task.device.click.assert_not_called()
+
+    def test_current_orchard_compatibility_follows_scrolled_title(self):
+        original = self.make_frame()
+        image = np.full_like(original, 255)
+        image[16:49, 118:224] = original[16:49, 118:224]
+        image[278:423, 729:1167] = original[438:583, 729:1167]
+        task, post = self.make_task(ISLAND_ORCHARD_POST2, image)
+        self.assertTrue(task.post_list_is_empty(post))
+        self.assertEqual(tuple(post.button), (894, 339, 967, 413))
+        self.assertEqual(task.device.screenshot_count, 1)
+        task.device.click.assert_not_called()
+
+    def test_different_language_title_shape_cannot_use_chinese_compatibility(self):
+        source = ISLAND_ORCHARD_POST1
+        post = Button(area=source.raw_area['en'], color=source.raw_color['en'],
+                      button=source.raw_button['en'], file=source.raw_file['en'],
+                      name='ISLAND_ORCHARD_POST1_EN_SHAPE_TEST')
+        post.ensure_template()
+        self.assertEqual(post.image.shape, (26, 212, 3))
+        self.assertFalse(is_post_title_confirmed(self.make_frame(), post))
+
+    def test_current_compatibility_cards_still_reject_dim_tint_cover_and_lock(self):
+        # 第二岗是旧模板漏判的真实空卡，负例必须同时约束新增兼容模板。
+        for change in ('dim', 'tint', 'cover', 'locked'):
+            with self.subTest(change=change):
+                image = self.make_frame()
+                x1, y1, x2, y2 = 885, 491, 975, 581
+                if change == 'dim':
+                    image[y1:y2, x1:x2] = (image[y1:y2, x1:x2] * 0.6).astype(np.uint8)
+                elif change == 'tint':
+                    image[y1:y2, x1:x2] = np.clip(
+                        image[y1:y2, x1:x2].astype(np.int16) + (20, 0, 0), 0, 255).astype(np.uint8)
+                elif change == 'cover':
+                    image[515:565, 929:975] = (60, 100, 140)
+                else:
+                    image[y1:y2, x1:x2] = load_image(str(FIXTURES / 'locked_reconstructed.png'))
+                task, post = self.make_task(ISLAND_ORCHARD_POST2, image)
+                self.assertFalse(task.post_list_is_empty(post))
+                task.device.click.assert_not_called()
 
 
 if __name__ == '__main__':
