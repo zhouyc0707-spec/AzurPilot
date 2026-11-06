@@ -428,6 +428,8 @@ class IslandOrder(IslandDailyOrder):
         empty_quota_update = None
         page_recovery = Timer(self.PAGE_RECOVERY_TIMEOUT)
         scan_count = 0
+        urgent_seen = False
+        deferred_urgent = []
         while True:
             self.device.screenshot()
             popup_handled = self._handle_popups()
@@ -451,13 +453,26 @@ class IslandOrder(IslandDailyOrder):
                 empty_quota_update = None
             handled = False
             refresh = self._get_urgent_refresh_time()
+            if orders['urgent'] and not urgent_seen:
+                urgent_seen = True
+                # 现场已有紧急单时旧周额度/缺料缓存失效，不能继续屏蔽可见订单。
+                self.config.IslandDailyOrder_UrgentDetectRefreshTime = self.DEFAULT_URGENT_REFRESH_TIME
+                if refresh:
+                    if refresh in self.next_runtime:
+                        self.next_runtime.remove(refresh)
+                    logger.info('[岛屿-订单] 发现可见紧急订单，撤销旧检查时间并重新核验')
+                refresh = None
             for kind in ('urgent', 'regular', 'season'):
-                if kind == 'urgent' and refresh and current_time() < refresh:
-                    continue
                 for position in orders[kind]:
+                    # 圆心允许小幅抖动；未完成订单只延后本轮，不影响下轮或其他紧急单。
+                    if kind == 'urgent' and any(
+                            np.linalg.norm(np.subtract(position, previous)) <= 12 for previous in deferred_urgent):
+                        continue
                     if self._process_order(position, kind):
                         handled = True
                         break
+                    if kind == 'urgent':
+                        deferred_urgent.append(position)
                 if handled:
                     break
             if handled:

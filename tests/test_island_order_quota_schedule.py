@@ -4,7 +4,7 @@ import unittest
 from contextlib import nullcontext
 from datetime import datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 from module.island.order import ALAS_ORDER_BACKGROUND, IslandOrder
 from module.island_daily_order.assets import DAILY_ORDER_CHECK
@@ -12,6 +12,12 @@ from module.island_daily_order.assets import DAILY_ORDER_CHECK
 
 def empty_orders():
     return {'urgent': [], 'regular': [], 'season': [], 'cooldown': []}
+
+
+def orders_with(**groups):
+    orders = empty_orders()
+    orders.update(groups)
+    return orders
 
 
 class DailyOrderQuotaScheduleTests(unittest.TestCase):
@@ -253,6 +259,132 @@ class DailyOrderQuotaScheduleTests(unittest.TestCase):
         self.order.run()
         self.assert_short_recheck()
         self.assertEqual(self.order._ocr_daily_remaining.call_count, 3)
+
+    def test_visible_urgent_overrides_future_weekly_cache_and_precedes_regular(self):
+        urgent, regular = (200, 200), (400, 200)
+        self.order.detect_all_orders.side_effect = [
+            orders_with(urgent=[urgent], regular=[regular]),
+            orders_with(regular=[regular]), empty_orders(), empty_orders(),
+        ]
+        self.order._process_order.return_value = True
+        self.order.run()
+        self.assertEqual(self.order._process_order.call_args_list,
+                         [call(urgent, 'urgent'), call(regular, 'regular')])
+        self.order._ocr_daily_remaining.assert_not_called()
+        self.assertNotIn(self.urgent_reset, self.order.next_runtime)
+        self.assertNotIn(self.daily_reset, self.order.next_runtime)
+        self.assert_short_recheck()
+
+    def test_first_visible_urgent_invalidates_old_schedule_before_processing(self):
+        urgent = (200, 200)
+        for submitted in (False, True):
+            with self.subTest(submitted=submitted):
+                self.config.IslandDailyOrder_UrgentDetectRefreshTime = self.urgent_reset
+                self.config.task_delay.reset_mock()
+                self.order._process_order.reset_mock()
+                self.order._ocr_daily_remaining.reset_mock()
+                self.order.detect_all_orders.side_effect = [orders_with(urgent=[urgent]), empty_orders()]
+
+                def process(position, kind):
+                    self.assertIsNone(self.order._get_urgent_refresh_time())
+                    self.assertNotIn(self.urgent_reset, self.order.next_runtime)
+                    if not submitted:
+                        self.order._record_deadline(timedelta(minutes=5))
+                    return submitted
+
+                self.order._process_order.side_effect = process
+                self.order.run()
+                self.order._process_order.assert_called_once_with(urgent, 'urgent')
+                self.order._ocr_daily_remaining.assert_not_called()
+                self.assertIsNone(self.order._get_urgent_refresh_time())
+                self.assertEqual(self.order.next_runtime, [self.now + timedelta(minutes=5)])
+                self.assert_short_recheck()
+
+    def test_material_shortage_urgent_is_not_retried_after_regular_success_but_other_slot_is(self):
+        urgent_a, urgent_b = (200, 200), (400, 200)
+        regular_a, regular_b = (600, 200), (800, 200)
+        self.order.detect_all_orders.side_effect = [
+            orders_with(urgent=[urgent_a], regular=[regular_a]),
+            orders_with(urgent=[(208, 207), urgent_b], regular=[regular_b]),
+            orders_with(urgent=[(212, 200), (406, 206)]),
+        ]
+
+        def process(position, kind):
+            if kind == 'regular':
+                return True
+            remaining = timedelta(minutes=20 if position == urgent_a else 40)
+            self.config.IslandDailyOrder_UrgentDetectRefreshTime = self.now + remaining
+            self.order._record_deadline(remaining)
+            return False
+
+        self.order._process_order.side_effect = process
+        self.order.run()
+        self.assertEqual(self.order._process_order.call_args_list, [
+            call(urgent_a, 'urgent'), call(regular_a, 'regular'),
+            call(urgent_b, 'urgent'), call(regular_b, 'regular'),
+        ])
+        self.assertEqual(self.order.detect_all_orders.call_count, 3)
+        self.assertEqual(self.order.next_runtime,
+                         [self.now + timedelta(minutes=20), self.now + timedelta(minutes=40)])
+        self.config.task_delay.assert_called_once_with(
+            target=self.now + timedelta(minutes=20), server_update=True)
+
+    def test_successful_urgent_does_not_hide_new_order_at_same_position(self):
+        urgent = (200, 200)
+        self.order.detect_all_orders.side_effect = [
+            orders_with(urgent=[urgent]), orders_with(urgent=[urgent]), empty_orders()]
+        self.order._process_order.return_value = True
+        self.order.run()
+        self.assertEqual(self.order._process_order.call_args_list,
+                         [call(urgent, 'urgent'), call(urgent, 'urgent')])
+        self.assert_short_recheck()
+
+    def test_same_instance_next_run_rechecks_previously_material_shortage_urgent(self):
+        urgent = (200, 200)
+        self.order.detect_all_orders.side_effect = lambda: orders_with(urgent=[urgent])
+
+        def process(position, kind):
+            deadline = self.now + timedelta(minutes=30)
+            self.config.IslandDailyOrder_UrgentDetectRefreshTime = deadline
+            self.order._record_deadline(timedelta(minutes=30))
+            return False
+
+        self.order._process_order.side_effect = process
+        self.order.run()
+        self.order.run()
+        self.assertEqual(self.order._process_order.call_args_list,
+                         [call(urgent, 'urgent'), call(urgent, 'urgent')])
+        self.assertEqual(self.config.task_delay.call_args_list, [
+            call(target=self.now + timedelta(minutes=30), server_update=True),
+            call(target=self.now + timedelta(minutes=30), server_update=True),
+        ])
+        self.assertEqual(self.order.next_runtime, [self.now + timedelta(minutes=30)])
+
+    def test_real_unconfirmed_urgent_preserves_five_minute_deadline_after_cache_invalidation(self):
+        self.order.detect_all_orders.side_effect = lambda: orders_with(urgent=[(200, 200)])
+        self.order._process_order = IslandOrder._process_order.__get__(self.order, IslandOrder)
+        self.order._click_order = Mock(return_value='unconfirmed')
+        self.order.run()
+        self.order._click_order.assert_called_once()
+        self.assertIsNone(self.order._get_urgent_refresh_time())
+        self.assertEqual(self.order.next_runtime, [self.now + timedelta(minutes=5)])
+        self.assert_short_recheck()
+
+    def test_real_material_shortage_urgent_keeps_its_new_deadline(self):
+        self.order.detect_all_orders.side_effect = lambda: orders_with(urgent=[(200, 200)])
+        self.order._process_order = IslandOrder._process_order.__get__(self.order, IslandOrder)
+        self.order._click_order = Mock(return_value='detail')
+        self.order.scan_current_order_requirements = Mock(return_value={2001: (0, 5, -5)})
+        self.order._read_time.return_value = timedelta(minutes=30)
+        self.order._submit_order = Mock(side_effect=AssertionError('缺料不得提交'))
+        with patch('module.island.order.record_planner_stocks'):
+            self.order.run()
+        deadline = self.now + timedelta(minutes=30)
+        self.order._click_order.assert_called_once()
+        self.order._submit_order.assert_not_called()
+        self.assertEqual(self.config.IslandDailyOrder_UrgentDetectRefreshTime, deadline)
+        self.assertEqual(self.order.next_runtime, [deadline])
+        self.config.task_delay.assert_called_once_with(target=deadline, server_update=True)
 
 
 if __name__ == '__main__':
