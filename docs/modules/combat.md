@@ -221,7 +221,7 @@ flowchart TD
 
 1. **准备**：入口为战斗准备页，出口为暂停按钮可见。自动化开关（`AUTOMATION_ON/OFF`）按配置切换，带 1 秒防抖计时器；确认弹窗、低情绪、船坞满、紧急维修都在此消化。
 2. **执行**：出口为结算画面。自动模式只确认摇杆消失（切自动）；手动模式执行一次预设走位（居中/左下/左上），非纯自动模式下还会定时释放空袭/鱼雷（`handle_combat_weapon_release`）。
-3. **结算**：按「战斗评价 → 经验 → 掉落 → 新船」推进，`battle_status`/`exp_info` 两个标记处理游戏白屏 bug（评价页可能闪现两次）；直到 `expected_end`（`in_stage`/`with_searching`/`no_searching`/`in_ui`/回调）满足。`combat_execute()` 可能已点击第一张评价或奖励，`combat_status()` 入口因此先获取新截图，再判断结束状态或处理下一张结算页，避免复用点击前画面重复点击、重复记录掉落；后续多页奖励仍逐页记录与处理。
+3. **结算**：按「战斗评价 → 经验 → 掉落 → 新船」推进，`battle_status`/`exp_info` 两个标记处理游戏白屏 bug（评价页可能闪现两次）；直到 `expected_end`（`in_stage`/`with_searching`/`no_searching`/`in_ui`/回调）满足。`combat_execute()` 可能已点击第一张评价或奖励，`combat_status()` 入口因此先获取新截图，再判断结束状态或处理下一张结算页，避免复用点击前画面重复点击、重复记录掉落；后续多页奖励仍逐页记录与处理。`handle_exp_info()` 识别到经验页即返回已处理，点击本身仍受2秒间隔控制，冷却期间等待新截图，避免落入后续结算分支。搜索处理器判断已回到选关页时，等待提示栏后再次正向确认，转场闪现不能提前抛出 `CampaignEnd`。
 
 ### 自律寻敌战斗（AutoSearchCombat）
 

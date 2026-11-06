@@ -27,7 +27,7 @@ from module.island_daily_order.assets import (
     ALAS_ORDER_REQUIREMENTS_CHECK, ALAS_ORDER_URGENT_ACCEPT, DAILY_ORDER_CHECK,
     POPUP_ORDER_CANNOT_REPLACE,
 )
-from module.island.assets import ISLAND_BACK, ISLAND_CLICK_SAFE_AREA, ISLAND_GET
+from module.island.assets import ISLAND_BACK, ISLAND_CLICK_SAFE_AREA, ISLAND_GET, ISLAND_LEVEL_UP
 from module.logger import logger
 from module.ocr.ocr import Duration, Ocr
 from module.ui.page import page_island, page_island_phone
@@ -126,13 +126,16 @@ class IslandOrder(IslandDailyOrder):
         """只在实际点击时返回 True，自动消失的提示由新截图继续观察。"""
         if self.appear_then_click(ALAS_ORDER_LEVEL_UP, offset=20, interval=2):
             return True
+        if self.appear_then_click(ISLAND_LEVEL_UP, offset=(20, 20), interval=2):
+            return True
         if self.appear(ISLAND_GET, offset=30):
             return self.appear_then_click(ISLAND_GET, offset=30, interval=2)
         return False
 
     def _order_popup_visible(self):
         """独立确认弹窗仍可见，不将点击冷却当作弹窗已经关闭。"""
-        return self.appear(ALAS_ORDER_LEVEL_UP, offset=20) or self.appear(ISLAND_GET, offset=30)
+        return (self.appear(ALAS_ORDER_LEVEL_UP, offset=20) or self.appear(ISLAND_GET, offset=30)
+                or self.appear(ISLAND_LEVEL_UP, offset=(20, 20)))
 
     def _submit_order(self, button, must_appear=False):
         """保留严格交付确认，兼容 ALAS 的空白/冷却页与升级模板。"""
@@ -151,7 +154,7 @@ class IslandOrder(IslandDailyOrder):
                 shortage = True
                 stable.clear()
                 continue
-            if self.appear(ALAS_ORDER_LEVEL_UP, offset=20) or self.appear(ISLAND_GET, offset=30):
+            if self._order_popup_visible():
                 reward = True
                 stable.clear()
                 if click.reached():

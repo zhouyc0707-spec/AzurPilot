@@ -17,6 +17,7 @@ class FishEntryTest(unittest.TestCase):
                                            IslandFishery_MinSaltwaterFishMeat=20)
         self.main.run_fish_meat_exchange = Mock()
         self.main.ui_ensure = Mock()
+        self.main.fishery_threshold = {'koi_carp': 30, 'yellowfin_tuna': 5}
 
     def test_local_plan_takes_precedence_without_second_exchange(self):
         with patch.object(fishery, 'planner_active', return_value=True), \
@@ -33,7 +34,9 @@ class FishEntryTest(unittest.TestCase):
                     patch.object(local, 'FishExchangeSession') as session:
                 self.main.run_fish_meat_targets()
                 protection.assert_called_once_with(self.main.config)
-                session.return_value.run.assert_called_once_with({2521: 30, 2522: 20}, {5003: 20})
+                expected = {fish_id: 0 for fish_id in fishery.FISH_MEAT_FISH_IDS.values()}
+                expected.update({5003: 30, 5107: 5})
+                session.return_value.run.assert_called_once_with({2521: 30, 2522: 20}, expected)
                 self.main.run_fish_meat_exchange.assert_not_called()
 
     def test_en_jp_manual_targets_forward_all_protected_stock(self):
@@ -43,8 +46,9 @@ class FishEntryTest(unittest.TestCase):
                     patch.object(fishery, 'planner_active', return_value=False), \
                     patch.object(local, 'get_fish_protection', return_value={5003: 20, 5107: 8}):
                 self.main.run_fish_meat_targets()
-            self.main.run_fish_meat_exchange.assert_called_once_with(
-                {2521: 30, 2522: 20}, keep={5003: 20, 5107: 8})
+            expected = {fish_id: 0 for fish_id in fishery.FISH_MEAT_FISH_IDS.values()}
+            expected.update({5003: 30, 5107: 8})
+            self.main.run_fish_meat_exchange.assert_called_once_with({2521: 30, 2522: 20}, keep=expected)
 
     def test_default_zero_targets_never_open_exchange(self):
         self.main.config.IslandFishery_MinFreshwaterFishMeat = 0

@@ -130,6 +130,12 @@ LOCAL_TO_ITEM_ID = {
 }
 
 LOCAL_TO_ITEM_ID.update({
+    'sugar_tangerine_seed': 1023, 'green_jujube_seed': 1024,
+    'sugar_tangerine': 2023, 'green_jujube': 2024,
+    'shiitake': 4043, 'water_chestnut': 4044, 'plum_blossom': 4045, 'winter_flower': 4046,
+    'plum_blossom_sachet': 4047, 'winter_bouquet': 4048,
+    'shiitake_chicken_soup': 4049, 'green_jujube_porridge': 4050,
+    'water_chestnut_cake': 4051, 'sugar_tangerine_daifuku': 4052,
     'autumn_chrysanthemum': 4001, 'reed_flower': 4002, 'peanut': 4003, 'matsutake': 4004,
     'pear_seed': 4006, 'persimmon_seed': 4008,
     'coal': 2700, 'raw_timber': 2800,

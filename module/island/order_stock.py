@@ -25,11 +25,13 @@ SHOP_NAMES = {1: '有鱼餐馆', 2: '白熊饮品', 3: '啾啾简餐', 4: '乌�
 # 此集合必须与 IslandBusiness.shop_products 的真实点击模板保持一致。
 BUSINESS_MENU_ITEMS = {
     601: ('double_bamboo_shoots', 'tofu_meat', 'tofu_combo', 'hearty_meal', 'fo_tiao',
-          'amaranth_rice_ball', 'matsutake_chicken_soup', 'persimmon_cake'),
+          'amaranth_rice_ball', 'matsutake_chicken_soup', 'persimmon_cake',
+          'shiitake_chicken_soup', 'green_jujube_porridge'),
     602: ('spring_flower_tea', 'strawberry_lemon', 'strawberry_honey', 'floral_fruity',
           'fruit_paradise', 'lavender_tea', 'sunny_honey', 'watermelon_juice',
           'chrysanthemum_tea', 'carrot_pear_juice'),
-    603: ('orchard_duo', 'succulently_sweet', 'berry_orange', 'strawberry_charlotte', 'seafood_rice'),
+    603: ('orchard_duo', 'succulently_sweet', 'berry_orange', 'strawberry_charlotte', 'seafood_rice',
+          'water_chestnut_cake', 'sugar_tangerine_daifuku'),
     604: ('roasted_skewer', 'stir_fried_chicken', 'steak_bowl', 'crayfish_stir_fry',
           'carnival', 'double_energy', 'lemon_shrimp'),
     901: ('citrus_coffee', 'strawberry_milkshake', 'morning_light', 'wake_up_call',
@@ -63,7 +65,7 @@ def get_business_menu_items(restaurant_id, season=None):
     items = BUSINESS_MENU_ITEMS[restaurant_id]
     if season is None:
         return items
-    module_key = {601: 'restaurant', 602: 'teahouse'}.get(restaurant_id)
+    module_key = {601: 'restaurant', 602: 'teahouse', 603: 'juu_eatery'}.get(restaurant_id)
     excluded = {
         item for key, data in SEASONAL_ITEMS.items() if key != season
         for item in data.get(module_key, ())

@@ -18,7 +18,7 @@ GROUP_TO_PLACE = {
 }
 SEASONAL_MODULE_TO_GROUP = {
     'restaurant': 'koi', 'teahouse': 'bear', 'orchard': 'orchard',
-    'nursery': 'nursery', 'handmade': 'manufacturing_crafts',
+    'nursery': 'nursery', 'handmade': 'manufacturing_crafts', 'juu_eatery': 'eatery',
 }
 
 

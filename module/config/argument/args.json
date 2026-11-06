@@ -371,6 +371,14 @@
           false
         ]
       },
+      "DisableChannelFloat": {
+        "type": "checkbox",
+        "value": false,
+        "option": [
+          true,
+          false
+        ]
+      },
       "ScreenshotDedithering": {
         "type": "checkbox",
         "value": false
@@ -3141,13 +3149,11 @@
           "not_in_dormitory",
           "dormitory_floor_1",
           "dormitory_floor_2"
-        ],
-        "display": "hide"
+        ]
       },
       "Fleet1Oath": {
         "type": "checkbox",
-        "value": false,
-        "display": "hide"
+        "value": false
       },
       "Fleet1Onsen": {
         "type": "checkbox",
@@ -3190,13 +3196,11 @@
           "not_in_dormitory",
           "dormitory_floor_1",
           "dormitory_floor_2"
-        ],
-        "display": "hide"
+        ]
       },
       "Fleet2Oath": {
         "type": "checkbox",
-        "value": false,
-        "display": "hide"
+        "value": false
       },
       "Fleet2Onsen": {
         "type": "checkbox",
@@ -3721,13 +3725,11 @@
           "not_in_dormitory",
           "dormitory_floor_1",
           "dormitory_floor_2"
-        ],
-        "display": "hide"
+        ]
       },
       "Fleet1Oath": {
         "type": "checkbox",
-        "value": false,
-        "display": "hide"
+        "value": false
       },
       "Fleet1Onsen": {
         "type": "checkbox",
@@ -3770,13 +3772,11 @@
           "not_in_dormitory",
           "dormitory_floor_1",
           "dormitory_floor_2"
-        ],
-        "display": "hide"
+        ]
       },
       "Fleet2Oath": {
         "type": "checkbox",
-        "value": false,
-        "display": "hide"
+        "value": false
       },
       "Fleet2Onsen": {
         "type": "checkbox",
@@ -16075,6 +16075,10 @@
         "type": "input",
         "value": 0
       },
+      "StrongholdCheckDelayDays": {
+        "type": "input",
+        "value": 0
+      },
       "MonthEndActionPointCleanupEnable": {
         "type": "checkbox",
         "value": false,
@@ -16887,7 +16891,12 @@
           "Mogador",
           "RoyalFortune",
           "DaVinci",
-          "Taihou"
+          "Taihou",
+          "Nagato",
+          "Agir",
+          "HwahJah",
+          "Argus",
+          "Ognevoy"
         ]
       },
       "Char2": {
@@ -16929,7 +16938,12 @@
           "Mogador",
           "RoyalFortune",
           "DaVinci",
-          "Taihou"
+          "Taihou",
+          "Nagato",
+          "Agir",
+          "HwahJah",
+          "Argus",
+          "Ognevoy"
         ]
       },
       "Product1": {
@@ -16944,7 +16958,9 @@
           "fo_tiao",
           "amaranth_rice_ball",
           "matsutake_chicken_soup",
-          "persimmon_cake"
+          "persimmon_cake",
+          "shiitake_chicken_soup",
+          "green_jujube_porridge"
         ]
       },
       "Product2": {
@@ -16959,7 +16975,9 @@
           "fo_tiao",
           "amaranth_rice_ball",
           "matsutake_chicken_soup",
-          "persimmon_cake"
+          "persimmon_cake",
+          "shiitake_chicken_soup",
+          "green_jujube_porridge"
         ]
       },
       "Product3": {
@@ -16974,7 +16992,9 @@
           "fo_tiao",
           "amaranth_rice_ball",
           "matsutake_chicken_soup",
-          "persimmon_cake"
+          "persimmon_cake",
+          "shiitake_chicken_soup",
+          "green_jujube_porridge"
         ]
       },
       "Product4": {
@@ -16989,7 +17009,9 @@
           "fo_tiao",
           "amaranth_rice_ball",
           "matsutake_chicken_soup",
-          "persimmon_cake"
+          "persimmon_cake",
+          "shiitake_chicken_soup",
+          "green_jujube_porridge"
         ]
       },
       "Product5": {
@@ -17004,7 +17026,9 @@
           "fo_tiao",
           "amaranth_rice_ball",
           "matsutake_chicken_soup",
-          "persimmon_cake"
+          "persimmon_cake",
+          "shiitake_chicken_soup",
+          "green_jujube_porridge"
         ]
       },
       "SeasonalFallback": {
@@ -17019,7 +17043,9 @@
           "fo_tiao",
           "amaranth_rice_ball",
           "matsutake_chicken_soup",
-          "persimmon_cake"
+          "persimmon_cake",
+          "shiitake_chicken_soup",
+          "green_jujube_porridge"
         ]
       },
       "BoostReplaceFilter": {
@@ -17083,7 +17109,12 @@
           "Mogador",
           "RoyalFortune",
           "DaVinci",
-          "Taihou"
+          "Taihou",
+          "Nagato",
+          "Agir",
+          "HwahJah",
+          "Argus",
+          "Ognevoy"
         ]
       },
       "Char2": {
@@ -17125,7 +17156,12 @@
           "Mogador",
           "RoyalFortune",
           "DaVinci",
-          "Taihou"
+          "Taihou",
+          "Nagato",
+          "Agir",
+          "HwahJah",
+          "Argus",
+          "Ognevoy"
         ]
       },
       "Product1": {
@@ -17291,7 +17327,12 @@
           "Mogador",
           "RoyalFortune",
           "DaVinci",
-          "Taihou"
+          "Taihou",
+          "Nagato",
+          "Agir",
+          "HwahJah",
+          "Argus",
+          "Ognevoy"
         ]
       },
       "Char2": {
@@ -17333,7 +17374,12 @@
           "Mogador",
           "RoyalFortune",
           "DaVinci",
-          "Taihou"
+          "Taihou",
+          "Nagato",
+          "Agir",
+          "HwahJah",
+          "Argus",
+          "Ognevoy"
         ]
       },
       "Product1": {
@@ -17345,7 +17391,9 @@
           "succulently_sweet",
           "berry_orange",
           "strawberry_charlotte",
-          "seafood_rice"
+          "seafood_rice",
+          "water_chestnut_cake",
+          "sugar_tangerine_daifuku"
         ]
       },
       "Product2": {
@@ -17357,7 +17405,9 @@
           "succulently_sweet",
           "berry_orange",
           "strawberry_charlotte",
-          "seafood_rice"
+          "seafood_rice",
+          "water_chestnut_cake",
+          "sugar_tangerine_daifuku"
         ]
       },
       "Product3": {
@@ -17369,7 +17419,9 @@
           "succulently_sweet",
           "berry_orange",
           "strawberry_charlotte",
-          "seafood_rice"
+          "seafood_rice",
+          "water_chestnut_cake",
+          "sugar_tangerine_daifuku"
         ]
       },
       "Product4": {
@@ -17381,7 +17433,9 @@
           "succulently_sweet",
           "berry_orange",
           "strawberry_charlotte",
-          "seafood_rice"
+          "seafood_rice",
+          "water_chestnut_cake",
+          "sugar_tangerine_daifuku"
         ]
       },
       "Product5": {
@@ -17393,7 +17447,9 @@
           "succulently_sweet",
           "berry_orange",
           "strawberry_charlotte",
-          "seafood_rice"
+          "seafood_rice",
+          "water_chestnut_cake",
+          "sugar_tangerine_daifuku"
         ]
       },
       "BoostReplaceFilter": {
@@ -17457,7 +17513,12 @@
           "Mogador",
           "RoyalFortune",
           "DaVinci",
-          "Taihou"
+          "Taihou",
+          "Nagato",
+          "Agir",
+          "HwahJah",
+          "Argus",
+          "Ognevoy"
         ]
       },
       "Char2": {
@@ -17499,7 +17560,12 @@
           "Mogador",
           "RoyalFortune",
           "DaVinci",
-          "Taihou"
+          "Taihou",
+          "Nagato",
+          "Agir",
+          "HwahJah",
+          "Argus",
+          "Ognevoy"
         ]
       },
       "Product1": {
@@ -17628,7 +17694,12 @@
           "Mogador",
           "RoyalFortune",
           "DaVinci",
-          "Taihou"
+          "Taihou",
+          "Nagato",
+          "Agir",
+          "HwahJah",
+          "Argus",
+          "Ognevoy"
         ]
       },
       "Char2": {
@@ -17670,7 +17741,12 @@
           "Mogador",
           "RoyalFortune",
           "DaVinci",
-          "Taihou"
+          "Taihou",
+          "Nagato",
+          "Agir",
+          "HwahJah",
+          "Argus",
+          "Ognevoy"
         ]
       },
       "Product1": {
@@ -17827,6 +17903,20 @@
         "type": "textarea",
         "value": ""
       },
+      "DefaultCrop": {
+        "type": "select",
+        "value": "wheat",
+        "option": [
+          "wheat",
+          "corn",
+          "rice",
+          "chinese_cabbage",
+          "potato",
+          "soybean",
+          "pasture",
+          "coffee_bean"
+        ]
+      },
       "PlantPotatoes": {
         "type": "select",
         "value": 4,
@@ -17865,6 +17955,23 @@
       "IgnoreAvocado": {
         "type": "checkbox",
         "value": true
+      },
+      "DefaultCrop": {
+        "type": "select",
+        "value": "rubber",
+        "option": [
+          "apple",
+          "citrus",
+          "banana",
+          "mango",
+          "lemon",
+          "avocado",
+          "rubber",
+          "pear",
+          "persimmon",
+          "sugar_tangerine",
+          "green_jujube"
+        ]
       },
       "PlantRubber": {
         "type": "select",
@@ -17906,6 +18013,21 @@
       "IgnorePineapple": {
         "type": "checkbox",
         "value": true
+      },
+      "DefaultCrop": {
+        "type": "select",
+        "value": "lavender",
+        "option": [
+          "carrot",
+          "onion",
+          "flax",
+          "strawberry",
+          "cotton",
+          "tea",
+          "lavender",
+          "pineapple",
+          "asparagus"
+        ]
       },
       "PlantLavender": {
         "type": "select",
@@ -18022,17 +18144,21 @@
           3
         ]
       },
-      "MinBass": {
-        "type": "input",
-        "value": 50
-      },
-      "MinYellowfinTuna": {
-        "type": "input",
-        "value": 50
-      },
       "MinShell": {
         "type": "input",
         "value": 50
+      },
+      "MinCatfish": {
+        "type": "input",
+        "value": 0
+      },
+      "MinCommonCarp": {
+        "type": "input",
+        "value": 0
+      },
+      "MinKoiCarp": {
+        "type": "input",
+        "value": 0
       },
       "MinShrimp": {
         "type": "input",
@@ -18042,11 +18168,35 @@
         "type": "input",
         "value": 50
       },
+      "MinBass": {
+        "type": "input",
+        "value": 50
+      },
       "MinCrab": {
         "type": "input",
         "value": 50
       },
       "MinSquid": {
+        "type": "input",
+        "value": 50
+      },
+      "MinMackerel": {
+        "type": "input",
+        "value": 0
+      },
+      "MinTuna": {
+        "type": "input",
+        "value": 0
+      },
+      "MinSalmon": {
+        "type": "input",
+        "value": 0
+      },
+      "MinRedSeaBream": {
+        "type": "input",
+        "value": 0
+      },
+      "MinYellowfinTuna": {
         "type": "input",
         "value": 50
       },
@@ -18320,7 +18470,9 @@
           "fo_tiao",
           "onion_fish",
           "matsutake_chicken_soup",
-          "persimmon_cake"
+          "persimmon_cake",
+          "shiitake_chicken_soup",
+          "green_jujube_porridge"
         ]
       },
       "MealNumber1": {
@@ -18345,7 +18497,9 @@
           "fo_tiao",
           "onion_fish",
           "matsutake_chicken_soup",
-          "persimmon_cake"
+          "persimmon_cake",
+          "shiitake_chicken_soup",
+          "green_jujube_porridge"
         ]
       },
       "MealNumber2": {
@@ -18370,7 +18524,9 @@
           "fo_tiao",
           "onion_fish",
           "matsutake_chicken_soup",
-          "persimmon_cake"
+          "persimmon_cake",
+          "shiitake_chicken_soup",
+          "green_jujube_porridge"
         ]
       },
       "MealNumber3": {
@@ -18395,7 +18551,9 @@
           "fo_tiao",
           "onion_fish",
           "matsutake_chicken_soup",
-          "persimmon_cake"
+          "persimmon_cake",
+          "shiitake_chicken_soup",
+          "green_jujube_porridge"
         ]
       },
       "MealNumber4": {
@@ -18420,7 +18578,9 @@
           "fo_tiao",
           "onion_fish",
           "matsutake_chicken_soup",
-          "persimmon_cake"
+          "persimmon_cake",
+          "shiitake_chicken_soup",
+          "green_jujube_porridge"
         ]
       },
       "MealNumber5": {
@@ -18445,7 +18605,9 @@
           "fo_tiao",
           "onion_fish",
           "matsutake_chicken_soup",
-          "persimmon_cake"
+          "persimmon_cake",
+          "shiitake_chicken_soup",
+          "green_jujube_porridge"
         ]
       },
       "MealNumber6": {
@@ -18470,7 +18632,9 @@
           "fo_tiao",
           "onion_fish",
           "matsutake_chicken_soup",
-          "persimmon_cake"
+          "persimmon_cake",
+          "shiitake_chicken_soup",
+          "green_jujube_porridge"
         ]
       },
       "MealNumber7": {
@@ -18495,7 +18659,9 @@
           "fo_tiao",
           "onion_fish",
           "matsutake_chicken_soup",
-          "persimmon_cake"
+          "persimmon_cake",
+          "shiitake_chicken_soup",
+          "green_jujube_porridge"
         ]
       },
       "MealNumber8": {
@@ -18522,7 +18688,9 @@
           "fo_tiao",
           "onion_fish",
           "matsutake_chicken_soup",
-          "persimmon_cake"
+          "persimmon_cake",
+          "shiitake_chicken_soup",
+          "green_jujube_porridge"
         ]
       }
     },
@@ -19142,7 +19310,9 @@
           "succulently_sweet",
           "berry_orange",
           "strawberry_charlotte",
-          "seafood_rice"
+          "seafood_rice",
+          "water_chestnut_cake",
+          "sugar_tangerine_daifuku"
         ]
       },
       "MealNumber1": {
@@ -19163,7 +19333,9 @@
           "succulently_sweet",
           "berry_orange",
           "strawberry_charlotte",
-          "seafood_rice"
+          "seafood_rice",
+          "water_chestnut_cake",
+          "sugar_tangerine_daifuku"
         ]
       },
       "MealNumber2": {
@@ -19184,7 +19356,9 @@
           "succulently_sweet",
           "berry_orange",
           "strawberry_charlotte",
-          "seafood_rice"
+          "seafood_rice",
+          "water_chestnut_cake",
+          "sugar_tangerine_daifuku"
         ]
       },
       "MealNumber3": {
@@ -19205,7 +19379,9 @@
           "succulently_sweet",
           "berry_orange",
           "strawberry_charlotte",
-          "seafood_rice"
+          "seafood_rice",
+          "water_chestnut_cake",
+          "sugar_tangerine_daifuku"
         ]
       },
       "MealNumber4": {
@@ -19226,7 +19402,9 @@
           "succulently_sweet",
           "berry_orange",
           "strawberry_charlotte",
-          "seafood_rice"
+          "seafood_rice",
+          "water_chestnut_cake",
+          "sugar_tangerine_daifuku"
         ]
       },
       "MealNumber5": {
@@ -19247,7 +19425,9 @@
           "succulently_sweet",
           "berry_orange",
           "strawberry_charlotte",
-          "seafood_rice"
+          "seafood_rice",
+          "water_chestnut_cake",
+          "sugar_tangerine_daifuku"
         ]
       },
       "MealNumber6": {
@@ -19268,7 +19448,9 @@
           "succulently_sweet",
           "berry_orange",
           "strawberry_charlotte",
-          "seafood_rice"
+          "seafood_rice",
+          "water_chestnut_cake",
+          "sugar_tangerine_daifuku"
         ]
       },
       "MealNumber7": {
@@ -19289,7 +19471,9 @@
           "succulently_sweet",
           "berry_orange",
           "strawberry_charlotte",
-          "seafood_rice"
+          "seafood_rice",
+          "water_chestnut_cake",
+          "sugar_tangerine_daifuku"
         ]
       },
       "MealNumber8": {
@@ -19312,7 +19496,9 @@
           "succulently_sweet",
           "berry_orange",
           "strawberry_charlotte",
-          "seafood_rice"
+          "seafood_rice",
+          "water_chestnut_cake",
+          "sugar_tangerine_daifuku"
         ]
       }
     },
@@ -21026,6 +21212,22 @@
       "SeasonTaskTargets": {
         "type": "textarea",
         "value": ""
+      },
+      "ScanCargoOrders": {
+        "type": "checkbox",
+        "value": true,
+        "option": [
+          true,
+          false
+        ]
+      },
+      "CargoTargets": {
+        "type": "textarea",
+        "value": ""
+      },
+      "CargoTargetDays": {
+        "type": "input",
+        "value": 1
       },
       "ExtraTargets": {
         "type": "textarea",

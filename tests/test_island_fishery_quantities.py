@@ -19,7 +19,8 @@ class FisheryUI:
             IslandFishery_RancherFilter='WorkerJuu', task_delay=Mock(),
             IslandFishery_MinFreshwaterFishMeat=0, IslandFishery_MinSaltwaterFishMeat=0,
         )
-        for name in ('Bass', 'YellowfinTuna', 'Shell', 'Shrimp', 'Crab', 'Crayfish', 'Squid', 'SeaCucumber'):
+        for name in ('Bass', 'YellowfinTuna', 'Shell', 'Shrimp', 'Crab', 'Crayfish', 'Squid', 'SeaCucumber',
+                     'KoiCarp', 'Mackerel', 'Catfish', 'CommonCarp', 'Tuna', 'Salmon', 'RedSeaBream'):
             setattr(config, 'IslandFishery_Min' + name, 0)
 
         def init_island(fishery, config):
@@ -140,8 +141,8 @@ class IslandFisheryQuantityTests(unittest.TestCase):
     def test_round_robin_product_priority_is_preserved(self):
         ui = FisheryUI({'bass': 6, 'shrimp': 9})
         ui.run()
-        self.assertEqual(ui.orders, [('bass', 5), ('shrimp', 8), ('bass', 1)])
-        self.assertEqual(ui.fishery.to_plant_list, ['shrimp'])
+        self.assertEqual(ui.orders, [('shrimp', 8), ('bass', 5), ('shrimp', 1)])
+        self.assertEqual(ui.fishery.to_plant_list, ['bass'])
 
     def test_default_posts_remain_full_after_small_supply_order(self):
         ui = FisheryUI({'yellowfin_tuna': 1}, default_posts=2)

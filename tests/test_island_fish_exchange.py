@@ -109,7 +109,7 @@ class TestFishExchange(unittest.TestCase):
     def test_protection_contains_hard_floor_and_direct_task_not_manual_min(self):
         config = ReadConfig({
             'IslandPlan.IslandProductionPlanner.HardFloorItems': 'catfish: 10',
-            'IslandPlan.IslandProductionPlanner.TaskTarget': 'catfish: 7',
+            'IslandPlan.IslandProductionPlanner.TaskTarget': 'catfish: {count: 7, period: 1}',
             'IslandRancher.IslandFishery.MinBass': 999,
         })
         protection = get_fish_protection(config)

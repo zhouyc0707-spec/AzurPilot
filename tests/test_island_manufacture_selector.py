@@ -39,7 +39,7 @@ class ManufactureCatalogTest(unittest.TestCase):
         self.assertTrue(official <= actual)
         self.assertEqual({entry['name'] for entry in recipes if entry['season'] is not None},
                          {'shepherd_purse', 'spring_bouquet', 'jasmine_oil', 'summer_bouquet',
-                          'peanut_oil', 'autumn_bouquet'})
+                          'peanut_oil', 'autumn_bouquet', 'plum_blossom_sachet', 'winter_bouquet'})
         self.assertTrue(all(entry['yield'] > 0 and entry['ingredients'] for entry in recipes))
 
     def test_filter_inventory_does_not_use_the_filing_cabinet_icon(self):

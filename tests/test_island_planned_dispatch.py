@@ -143,11 +143,10 @@ class PlannedDispatchTests(unittest.TestCase):
         calculator = ProductionPlanCalculator(technology_status={key: True for key in DIC_ISLAND_TECHNOLOGY})
         products = {item for recipe in calculator.recipe_group for item in DIC_ISLAND_RECIPE[recipe]['commission_product']}
         self.assertFalse(products - set(ITEM_ID_TO_LOCAL))
-        self.assertEqual(sum(len(items) for items in get_catalog().values()), 29)
+        self.assertEqual(sum(len(items) for items in get_catalog().values()), 31)
 
     def test_unknown_secondary_with_busy_downstream_does_not_restart_the_task(self):
-        from module.island.island_rancher import IslandRancher
-        from module.island.assets import ISLAND_POST_SELECT
+        from module.island.island_rancher import IslandRancher, ISLAND_POST_SELECT
         ui = IslandRancher.__new__(IslandRancher)
         ui.config = MemoryConfig(**{f'{CONFIG_PREFIX}.PlanFingerprint': 'valid',
                                    f'{CONFIG_PREFIX}.PlannerTargets': '{"2604":5}'})

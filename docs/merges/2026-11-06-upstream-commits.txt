@@ -1,0 +1,86 @@
+d6716033c88b0c5ed26844001b95c6a67cfcf663 fix(island): 使用经营界面截图重新生成冬季选品模板 (#1455)
+812bfc0075a5950866a5ae41aaca4f2376706de7 fix(os): 移植 ALAS 日服计划作战换行与滚动识别修复 (#1141)
+911f11ba586f8340699e104a446d1302d4bcd099 fix(opsi): 修复智能开荒断点计数导致的反复重启 (#1449)
+844f788b53bcb117a23a006e03dfca99d7727faf fix(opsi): 侵蚀一完成搜索和事件后再维修 (#1450)
+f3dddcfdfd5dcc86d921628a1868f74e6d5de415 feat(campaign): 开放低耗任务的后宅与誓约心情设置 (#1451)
+f5970648229e54d8eff66eacc432ca677dc40fb7 feat(opsi): 增加塞壬要塞延迟检查天数 (#1452)
+c186137d22d15dc8f5df329373d70b907695c1bc fix(opsi): 修复自动配队后因旧截图误判回图而卡住 (#1453)
+4c12b7440566955ed49817b993efcd36060a39ee fix(opsi): 自动配队返回地图前刷新截图
+4186e2cc6ef78aff4693fa051284f16d73b16948 feat(opsi): 增加塞壬要塞延迟检查天数
+2f7de5ae85fb0aca7cc9d11fe423bcb0b5f1c638 feat(campaign): 开放低耗任务的后宅与誓约心情设置
+b70167bc962854c54150694dc6b3eaec73ea6b8e fix(opsi): 修复智能开荒断点计数导致的反复重启
+4a78bce2ce0e32d5ea3024fffd17d63cac7a64d7 fix(opsi): 侵蚀一完成搜索和事件后再维修
+9a79ec96b511b495b1c780b8f0a2175ce6ca5695 fix(updater): respect check interval when force update is enabled
+04477b16902f621c1d34f134bd7c6499e13d3cfa feat(game_setting): 启动前关闭并锁定应用宝渠道服 YSDK 悬浮球 (#1390)
+5b18a457758225871f4c6be9b3fb7a40204aef3f feat(island): 渔场支持鲶鱼、鲫鱼、金枪鱼、三文鱼、红鲷鱼并按游戏顺序排列，修复商店同形不同色商品误认 (#1443)
+1acc2a1d01878d12cc62f598975d70834b4708dc fix(island): 国际服每日采集识别「GATHERING COMPLETE」完成页面 (#1445)
+daec767acafef7692a2fbc7d96a2019ed7b48994 chore(assets): 清理无引用资源文件与死常量
+d0f2ec19d80305321ce25529930877bc16d0c461 chore(merge): record master squash ancestry after PR #1448
+518247b1beb0e28aecc24859471076704ecd1941 合并一些东西 (#1448)
+b063949f98d2286dbf7e24261c14f0f02831259c fix(island): 修复跨季餐品映射并补齐冬季选品模板 (#1447)
+7ceee11e48b8e0d4a8be1fe12d48f261ee7e844b feat(island): 支持冬季餐品、果园作物与角色识别 (#1446)
+fbd84525436636ee1cc8b3215b4b219bc67f42d8 fix(opsi): 修复自律无效点击导致卡死检测失效 (#1444)
+b8a7118819069f2f977f9f38f9e61f808afb7650 feat(island): 完成冬季资源与角色适配
+dde4acd3d46e8c2c93f4d9636a53e0ae8cce0f5e fix(opsi): 修复自律寻敌无效点击绕过卡死检测
+1f7a67da46b74f8563146827ba41553f358cd856 fix(island): 跳过农田未解锁岗位 (#1441)
+f2960a693a7d1a64a831032b83c81e5842cf2d0c feat(island): 渔场支持鲤鱼与马鲛鱼，修复选品失败卡死，鱼肉兑换保留养殖底线 (#1433)
+0c7e83dbf2328eff8ceb46f2702e53ec1f280291 Dev (#1440)
+75c637c34837783e381d2c5db12ab174ce6e83d5 Merge remote-tracking branch 'lme/master' into dev
+180552e1a5dc94bf75d6e0a545d3c69bf496a297 Fix: throttle EXP retries and confirm campaign exits
+4456c45daeb7ad8ee8e159e22600f0c14a01875d fix(opsi): 修复侵蚀一沉船回港及献祭模式自动维修 (#1438)
+dca21160e1b9ec6d55e13a9c427218b1da579def fix(opsi): 修复侵蚀一献祭模式与沉船回港
+62db57def483a4e629e6934d70e87c8491b8d093 合并上游 (#1429)
+3818959adf709422d5de2db92364d7e3b67bb547 Merge branch 'wess09:dev' into dev
+fecdc2f8d0adc2c6ffc6d03c85a6bf89fd5e0f64 Fix: handle shifted OpSi fog buttons
+8482362b55bc6a6b7eae2c014f90ce7ab085e3aa Fix: treat any 2xx reply as a successful push notify (#6093)
+a7caa35f3501b371bc2b7023e704b785a111e8c4 Add: deadline testing
+42a98e20d8f871eba2779fd3241959af77a6f070 Fix: EventShop EN
+c0f06153d63e3389df9fbe6adf839581c7d47f5d chore(merge): record master squash ancestry after PR #1437
+2a87923934b8d2a1bd1a35812f391894c3f11386 chore(release): merge dev into master (#1437)
+31a3840d4d47b1c3e80080471ac6d2c24d04f6f2 chore(config): normalize generated zh-TW.json newline
+2dd34efd391c5416386ae00f521130bc8fd217ad chore(config): normalize generated zh-CN.json newline
+ada408b6eb593964298daab126f7444efa8f3b17 chore(config): normalize generated ja-JP.json newline
+0856e893fea6d9b7ab5f366e9c9f1c24a3ffcf2e chore(config): normalize generated en-US.json newline
+fce2720d2a93ce4145d82f265e9dfa605c6c0609 test(frontend): expect favourite flag in fleet rotation rules
+05e37885eebb33228e2d88f6a7a0b859e7aa91e6 fix(island): 每日订单处理岛屿升级弹窗 (#1434)
+61cee6e98d748c7801c05f1bbc6f4653a4307013 feat(assets): 补充国际服每日采集出发按钮与生活等级排序按钮 (#1432)
+9717e4282d9469b6d500d5bb6be5f787dd703ad2 feat(island_planner): 规划按目标→季节PT→岛币排序，加入货运缺口与空余岗位默认产品 / Planner priorities (targets → season PT → coins), cargo shortfall and spare-post defaults (#1422)
+1c2bf6348e672e9cd1eac588253bbe933cdd0435 fix(os): 修复国际服大世界三处卡死（搜索奖励弹窗、离开海域时的战斗结算、商店跳过物品） (#1431)
+d59d77202921136de99fa472a1251a59f52454c1 fix(island): 每日订单处理岛屿升级弹窗
+76bcaf2f2eeb87d32324693e96fd768105968997 fix(island): 货运连续两次读数一致才采用，补种的默认作物计入默认岗位
+cabf970fd01329714d47d20fc92ef3113f19a1dc fix(island): 货运数字未显示时重读，补种后剩余岗位种默认作物
+e3c50c6e74eaea6a0841373e35fc43b38c5ce71c feat(assets): 补充国际服每日采集出发按钮与生活等级排序按钮
+1ef04d0c03dbef1917f153385247d4861ad8f8f6 fix(island_planner): 货运扫描不完整时保留目标，规划按岗位配置限制产能
+163b9c5d69db3e1360d0d8a93aff7a659e33068c Merge remote-tracking branch 'upstream/dev' into island-planner-priorities
+d75701b0558af4bd57b51704ca2bafb7d3f04d8d Merge pull request #6116 from LmeSzinc/bug_fix
+97ace5a083d5606f257798947f2ebd25eb7a5e08 Fix: detect short island recipe titles
+9e900aaa6409d0f08d6bd72b4f3cab7c6b8b6819 Fix: [JP] storage logger use
+60c6ce7cb31010b06d2876e471450bbfe80c92b5 Fix: handle shifted OpSi fog buttons
+3472a64d121662de9df08746ce44d771031fb763 Fix: throttle EXP retries and confirm campaign exits
+56acc238983e303513a4ae32a338f38034073622 Fix: check island production slots without ingredient sources
+b92c525e912e5810fabae54aca5b45114991aa47 Fix: island exchange select-all detection
+25c636ff9a4147db95014a81dc256241b7ec2dac refactor(island_planner): 优先级求解只建模一次
+ba8502df6612f8f0a439a8de22f6784bc5adaa25 feat(island_planner): 规划按目标→季节PT→岛币排序，并加入货运缺口与空余岗位默认产品
+acbeec33868201e8b042391ba9a1bbaf070b2b67 Merge pull request #6112 from LmeSzinc/bug_fix
+881ea864d42ef1a8c6533cfa444b5573a55683de Fix: [JP] storage logger use
+6565f3b25277cfaad0f1d996248ee58039b79240 Fix: Remove month-end Abyssal cooldown after clears
+e5a08da7836cbac0f7317c7f77899506e05c4475 Opt: using anchor to exclude island dock empty card
+bc4fa3fd5c8af9038a08eae3d633f11b0bda9f87 Merge pull request #6109 from LmeSzinc/bug_fix
+fe69be21e652825589bb261ff238bf0fb3e9d1ef Fix: [TW] island transport assets mismatch
+3c31c086f44354ed5d16a3a9ddb5df016383cbd2 Fix: island dock detection for green card anchors
+7de865e0ebefcaa95492280f7ca470d74c22a0d5 Upd: island recipe grid anchor template similarity
+cdd4a737670fdfdfd81eb676b75c488a9714defc Fix: detect island recipe short list
+36d639840e3e920d9b8ef17c6d2b87465fe5e17d Merge pull request #6104 from LmeSzinc/bug_fix
+4d1b218652340176a36160d97fb8e558cd7ac0c3 Fix: treat any 2xx reply as a successful push notify (#6093)
+5ca4fa3f9a3c78a1cfaaf02113133bb33fcf03e4 Merge pull request #6084 from dragonheart107/eventshopEN
+60d308513e27b02be23c60d5f7780d104998c588 Fix: is_in_island_recipe should check the max button
+24abbec4b5ba386bf541b66fd181738ae558ec83 Fix: island recipe grid detector
+122ebb5c46f561bb0386e14840fd87aa63b479a5 Opt: use templates for island exchange
+3eba4226c25fd6baf8f41bfeb9b18bb4fd805e37 Opt: skip island recipe amount setting when count is 1
+cb96d55b81cec1697a6229d307d1b18f627159c7 Opt: island recipe scan mechanism
+6c1726e09c4a7b04427c3a1b521e425844d337a9 Opt: island dock search mechanism
+b3818b1765d87536f0d409c7e79e9a690ac3a014 Upd: Remove server support check for island transport
+4068f3ad017af656c74b6aab04133aaf7ea40cfd Upd: Delete unsupport tags for island transport
+5d631a8a4ace927a010877ef65104d6c96c05e01 Add: [TW] Island transport
+0eeb238dcdddd1c205c92437c3c5dff5ca4416c7 Add: deadline testing
+bb3ab1d427ec10f84daa3b3335501861b1ecd762 Fix: EventShop EN

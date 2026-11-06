@@ -209,9 +209,9 @@ flowchart TD
 
 | 子模块 | 玩法 | 入口类 | 特殊机制 |
 | --- | --- | --- | --- |
-| `island_farm.py` | 农田、果园、苗圃播种 | `IslandFarm` | 三区域独立阈值/默认作物，可按作物单独设目标（`farm_targets.py`，按库存/目标比例排序）；未达标作物每类最多占一岗；果园秋季限定（秋月梨/柿子）按 4x1 计种子；牛油果/菠萝可忽略；小天城（Amagi_chan）橡胶优先开关 |
+| `island_farm.py` | 农田、果园、苗圃播种 | `IslandFarm` | 三区域独立阈值/可配置默认作物，可按作物单独设目标（`farm_targets.py`，按库存/目标比例排序）；未达标作物每类最多占一岗，补种安排后剩余的空闲岗位按 `PlantPotatoes` 等配置种默认作物；果园秋季限定（秋月梨/柿子）按 4x1 计种子；牛油果/菠萝可忽略；小天城（Amagi_chan）橡胶优先开关 |
 | `island_rancher.py` | 磨坊 + 牧场 | `IslandRancher` | 按岗位固定饲料种类补磨坊加工（小麦→鸡饲料等）；`run()` 末尾内联 `IslandFishery(...).run(ranch_finish_times=...)` 合并计时器 |
-| `island_fishery.py` | 渔场养殖 | `IslandFishery` | 鱼苗商店分淡水/海水/其他页签；按每苗产量反推购买数；体力门槛 98；养殖后统一进入鱼肉目标入口；有效本地自动规划优先，未启用时读取 `MinFreshwaterFishMeat`/`MinSaltwaterFishMeat` 手工目标；两条路径均保留原鱼硬底线和订单／菜单需求 |
+| `island_fishery.py` | 渔场养殖 | `IslandFishery` | 鱼苗商店分淡水/海水/其他页签；按每苗产量反推购买数；体力门槛 98；养殖后统一进入鱼肉目标入口；有效本地自动规划优先，未启用时读取 `MinFreshwaterFishMeat`/`MinSaltwaterFishMeat` 手工目标；两条路径均保留原鱼硬底线和订单／菜单需求；仅手工目标再保留养殖最低库存 |
 | `island_fish_meat.py` | 鱼肉加工（移植自 ALAS） | `IslandFishMeatExchange`（混入渔场） | 岛屿主页「商店」→ 侧栏第 7 项「鱼肉加工」→ 淡水/海水子页签；EN／JP 手工目标按产量从高到低补到目标，传入本地原鱼保护；仅接受完整鱼名和有效数字，库存两帧一致、逐卡数量与总预览两帧一致、确认后精确到账才继续；CN／TW 手工目标复用 `fish_exchange.py` 的小批严格执行器，点过「商店」后才点侧栏 |
 | `island_mine_forest.py` | 矿山/林场 | `IslandMineForest` | 仓库顺序不固定，自实现「OCR 品名 → 读数字」库存扫描（`ITEM_CN_NAMES` 同时收录中文名与国际服英文名首词）；每岗产 4 个、各产物有最大连续次数；体力门槛 80 |
 | `island_grill.py` | 乌鱼烤肉店 | `IslandGrill` | 最薄的店铺：仅声明 8 菜品、2 套餐、2 岗位，全部逻辑走基类 |
@@ -221,7 +221,7 @@ flowchart TD
 | `island_juu_eatery.py` | 啾啾简餐 | `IslandJuuEatery` | 芝士/牛奶特殊材料约束；海鲜饭等无套餐产品 |
 | `island_manufacture.py` | 制造工坊 | `IslandManufacture` | 四产线（木工/电子/工业/手工）各按配置启用岗位；完全覆盖 `run()` 与排产规则（数量由材料检查决定）；滑动 2 次；产品连续 3 次找不到（多为科技未解锁）记入本批 `unavailable_products`，工业线铁钉足够时先试刀叉餐具、不可用则继续生产铁钉 |
 | `island_business.py` | 商区经营 | `IslandBusiness` | 5 商店 × 蓝/黄/深蓝/灰按钮状态机；分批经营（默认批 1=简餐/餐馆/咖啡，批 2=饮品/烤肉）；季节商品库存 <7 时替换 fallback；加成（30/20/10%）档位替换；开始经营后 `task_delay` 触发对应餐馆生产任务补货 |
-| `island_daily_gather.py` | 每日采集 | `IslandDailyGather` | 每日 03:10 / 18:00 两次；三槽位派角色，体力阈值 100，忽略 WorkerJuu；未能出发时不等待采集完成页 |
+| `island_daily_gather.py` | 每日采集 | `IslandDailyGather` | 每日 03:10 / 18:00 两次；三槽位派角色，体力阈值 100，忽略 WorkerJuu；未能出发时不等待采集完成页，国际服兼容 GATHERING COMPLETE 完成页 |
 | `island_daily_interact.py` | 摸猫、JUU 速运、商区外送、每周照相 | `IslandDailyInteract` | 开发计划标题、页签及图标状态稳定后区分有任务、无任务与未知；地点交互共用 `delivery_location_flow`；每周照相先等照相按钮，拍照后处理预览，返回支持国际服 Back 入口；检查或执行失败 60 分钟重试 |
 | `order.py`（旧 `island_daily_order.py` 兼容转发） | 每日订单 | `IslandOrder` | 普通／紧急／季节订单；普通保留 `RejectFilter` 并扣除库存与菜单保留，季节缺货触发规划；紧急周配额保留，汇总冷却与每日刷新调度 |
 | `island_air_drop.py` | 每日空投 + 好友岛偷补给 | `IslandAirDrop` | 以服务器 0 点为每日边界；5 小时偷取冷却（`LastSteal` 落配置）；拜访次数 OCR 复检；EN吸收上游最多两次气泡点击及分享邀请关闭，仍需奖励／分享状态才确认领取 |
@@ -358,21 +358,33 @@ MAX就绪检测允许3像素水平位移，保持原相似度阈值；目标已�
 
 离线回归入口：[食品预读、降级及真实局部截图 OCR](../../../tests/test_island_food_dispatch.py)。
 
+### 冬季与本轮上游融合边界
+
+冬季新增砂糖橘、青枣、冬菇炖鸡、青枣粥、马蹄糕、砂糖橘大福、梅花香包和冬季花束，采用上游图像及物品/配方增量。`module/island/__init__.py` 与独立工具复用同一 `winter_extension`，本地物品编号、配方场所、经营菜单与预留链路同步识别冬季条目；保留原自动规划算法、科技和活动可用性校验，不凭季节名称虚构解锁或采集来源。跨季手工餐品映射到当前季节同槽，当前无槽位时本轮跳过，不改原保存配置。
+
+渔场新增鲶鱼、鲫鱼、鲤鱼、马鲛鱼、金枪鱼、三文鱼和红鲷鱼，列表顺序跟随游戏；暂无工作中模板的鱼获仍按未知处理。商店在图标形状匹配后增加逐像素颜色复核，防止同形异色鱼苗误买；选品失败逐层退回岗位管理。农田已确认空岗继续跳过领取检查并参与派遣，锁定岗位不加入空闲调度，扫描后变锁时保留作物给下一个可用岗位。
+
+鱼肉采用用户2026-11-06决定：**仅手工鱼肉目标**同时遵守上游养殖最低库存与本地原鱼保护，按两者较大值保留，避免把同一库存重复相加；**自动规划**继续使用原订单、菜单与显式硬底线，不额外套用养殖阈值。两条路径仍只有一个入口，保留严格名称、数量、逐卡预览、确认与到账保护；EN/JP第二种鱼肉可从加工页直接切换，不再对未知商店页面调用通用导航。
+
+订单岛屿升级 `ISLAND_LEVEL_UP` 同时加入实际运行的 `IslandOrder` 交付循环、弹窗处理和可见状态检查：冷却时仍视为弹窗可见，关闭后继续新截图确认返回，保留普通/紧急/季节范围与严格交付。
+
 ### 独立岛屿生产规划工具（IslandProductionPlanner）
 
 工具页任务，参数位于 `IslandProductionPlanner.IslandPlannerTool`，与本地自动规划的 `IslandPlan.IslandProductionPlanner` 分开保存；已有本地参数、科技缓存和目标不迁移。思路、数据表与线性规划移植自 ALAS（LmeSzinc/AzurLaneAutoScript，GPL-3.0）的 Island Production Planner，仅作为「计算器」把方案写入 AzurPilot 已有配置，生产仍由上表各任务执行。
 
 1. **科技状态**：读取 `IslandProductionPlanner.Storage.Storage.IslandTechnologyStatus`；没有保存或勾选 `RescanTechnology` 时进入 `page_island_technology`（岛屿主页右上 `ISLAND_GOTO_ISLAND_TECHNOLOGY`，`BACK_ARROW_WHITE` 返回）扫描，扫描后自动取消勾选。扫描与语言无关：用 `assets/island/technology/technology_chart_{2..6}.png` 连线轮廓模板匹配当前视野，按 `data.py` 节点坐标读亮度（>160 即解锁）；左侧 2~6 号标签按颜色识别，1 号标签无生产科技不扫描。点击带 2 秒间隔，每个标签最多滑动 15 次。
 2. **季节任务与额外目标**：`ScanSeasonTasks` 开启时进入 `page_island_season`（岛屿主页右上 `ISLAND_GOTO_ISLAND_SEASON`）底部第 3 个「任务」标签，先 `ISLAND_SEASON_TASK_RECEIVE_ALL` 一键领取已完成任务的奖励（否则已完成任务会被当成目标），再按 `TEMPLATE_ISLAND_SEASON_REWARD` 定位任务卡、OCR 任务名（EN 用 cnocr 并按任务表还原空格，编辑距离纠正到当前季节任务），遇到 `TEMPLATE_ISLAND_SEASON_TASK_OBTAINED` 或滚到底停止（最多翻 20 页），把以物品为目标的未完成任务汇总写入 `SeasonTaskTargets`（预览模式也写）。第一页未识别到任务卡片时保留原目标；翻页内容不变即停止；编辑距离超过 max(3, 任务名长度/2) 时不采纳识别。`ExtraTargets` 为手动追加目标（YAML，值为数量或 `{count, period}`）。两者合并为需求：期限默认本季剩余天数，按 ALAS 方式换算成每日速率并作为约束；当前科技无法生产的物品记录警告后忽略。同名物品（两个 Corn）优先取可生产的。本工具不读取本地自动规划的卡住季节订单，独立备货需求由 `ExtraTargets` 手动表达；本地订单任务及其自动依赖链规划继续运行。
-3. **求解**：`ProductionPlanCalculator` 以「每日净增物品的季节 PT」为目标，约束包括物品平衡、各生产分组工时（解锁岗位数 × 24 小时 × 效率）、餐厅货架（等级决定货架数 2/2/3/4、容量 5/6 + 服务员加成）、每日岛币净收入 ≥ `DailyProfitLowerLimit`。SciPy 自带 `scipy.optimize.milp`，不需要 ALAS 的兼容层。效率加成来自岛屿角色收集奖励，配置以整数百分比保存（0/4/12，由 `efficiency_rate` 换算）：WebUI 用「.」分隔翻译键，ALAS 的 0.04/0.12 小数选项在 AzurPilot 中无法选择。求解前 `restrict_calculator` 排除 AzurPilot 后厨选项里没有的配方、商区选项里没有的出售菜品，以及农田配置里没有的作物；季节活动按服务器时间从 `data.py` 读取。
+3. **求解**：先满足目标与岛币下限并最大化季节 PT，再保持 PT 最优值最大化岛币；两阶段共用一次构建的模型。`ProductionPlanCalculator` 的约束包括物品平衡、各生产分组工时（解锁岗位数 × 24 小时 × 效率）、餐厅货架（等级决定货架数 2/2/3/4、容量 5/6 + 服务员加成）、每日岛币净收入 ≥ `DailyProfitLowerLimit`。SciPy 自带 `scipy.optimize.milp`，不需要 ALAS 的兼容层。效率加成来自岛屿角色收集奖励，配置以整数百分比保存（0/4/12，由 `efficiency_rate` 换算）：WebUI 用「.」分隔翻译键，ALAS 的 0.04/0.12 小数选项在 AzurPilot 中无法选择。求解前 `restrict_calculator` 排除 AzurPilot 后厨选项里没有的配方、商区选项里没有的出售菜品，以及农田配置里没有的作物；季节活动按服务器时间从 `data.py` 读取。
+新增 `ScanCargoOrders` 读取货运中已部分提交委托的真实缺口，连续两帧完整一致才保存 `CargoTargets`；失败保留旧目标。缺口按 `CargoTargetDays`（默认1天）尽快补齐，三个字段均位于 `IslandProductionPlanner.IslandPlannerTool`，不写本地自动规划参数。农田、果园、苗圃、矿山、林场、渔场求解产能受各自实际 `Positions` 限制；显式写入时还会更新默认作物及闲时岗位数，仍不自动开关任务。
+
 4. **餐厅营业与服务员**：分批经营开启时只有 `Batch1Shops`/`Batch2Shops` 中的店参与出售；`IslandBusinessShopN.Char1/2` 中对本店有加成的角色（肇和、柴郡、海伦娜、欧根亲王、奥古斯特、贝尔法斯特、长风）计入加成，其余角色及 None（工作啾代班）只占位。店铺等级由本任务的 `*Grade` 手动填写。
 5. **写回**（`settings_map.py`，`ApplySettings` 关闭时只在日志预览，标 `*` 的为会改变的项）：
    - 下列「一天用量/消耗」均含目标物品的每日速率（`daily_need`），目标物品在计划中是累积而非消耗，不计入会导致不为其开工。
    - 后厨 `Meal1~8/MealNumber1~8`：先列出售菜品（按日销量降序，目标 = 货架容量 + 一天用量），再列原料/中间品（按日消耗降序，目标 = 一天用量）；超过 8 个时丢弃末尾并告警。
    - `*NextTask.AwayCook`：该后厨闲时累积量最大的产品，没有则 None。
    - 商区 `Product1~5`：计划出售的菜品，按日销量降序。
-   - `CropTargets`：三个区域所有作物都写明目标（一天计划消耗，未使用为 0），因此规划后 `MinFarm` 等区域阈值不再生效。只为攒 PT 的闲时作物不计入目标（补种按库存/目标比例排序，计入会挤占真正需要的作物），只在日志中提示，由默认作物岗位数（`PlantPotatoes` 等）安排。
-   - 矿山/林场/渔场 `IslandMine/IslandForest/IslandFishery.Min*`：一天计划消耗量，不用的为 0；求解前排除 AzurPilot 不生产的煤炭、自然之木和未配置的鱼种。闲时累积同作物只作提示（由 `MineSilver`/`CutElegant`/`PlantYellowfinTuna` 安排）。
+   - `CropTargets`：三个区域所有作物都写明目标（一天计划消耗，未使用为 0），因此规划后 `MinFarm` 等区域阈值不再生效。只为攒 PT 的闲时作物不计入目标（补种按库存/目标比例排序，计入会挤占真正需要的作物），写入区域 `DefaultCrop` 与默认作物岗位数（`PlantPotatoes` 等），补种后剩余空闲岗位才安排默认作物。
+   - 矿山/林场/渔场 `IslandMine/IslandForest/IslandFishery.Min*`：一天计划消耗量，不用的为 0；求解前排除 AzurPilot 不生产的煤炭、自然之木和未配置的鱼种。闲时累积写入 `MineSilver`/`CutElegant`/`PlantYellowfinTuna`；默认产品不同时置0并提示。
    - 牧场 `IslandRancher.MinChicken`（禽肉）/`MinPork`（鲜肉）取计划日产量（按牧场科技等级放大，禽肉为副产物，每 3 批摊一次；用到时至少为 1），`Milk`/`Wool` 按计划是否养牛/羊开关。
    - 制造业 `WoodProcessing/ElectronicProcessing/Industrial/Handmade.Positions`：计划工作量需要的岗位数（不超过已解锁岗位与 2）。独立工具只规划手工执行分支原有的产线产品（文件柜、净水滤芯、铁钉/刀叉餐具、皮革/鞋靴/季节手工品），求解前排除其余制造配方；本地自动规划的完整工坊目录和季节订单依赖不受此工具范围限制。
 6. 无可行方案时不改生产配置，日志给出瓶颈（通常是岛币下限过高）；科技及季节任务扫描结果仍可能保存。
@@ -447,6 +459,7 @@ stateDiagram-v2
 | `IslandPlan.IslandProductionPlanner.FieldsEfficiency` / `OrchardEfficiency` / `NurseryEfficiency` | select | 0 | 额外效率比例：0.04 表示 4%，0.12 表示 12% |
 | `IslandFarm.Positions` / `MinFarm` / `PlantPotatoes` / `WorkerFilter` | 数值/文本 | 3 / 660 / 4 / WorkerJuu | 农田岗位数、补种阈值、默认作物岗位数、工人优先级 |
 | `IslandFarm.CropTargets` / `IslandOrchard.CropTargets` / `IslandNursery.CropTargets` | 多行文本 | 空 | 按作物的补种目标，每行 `作物: 目标库存`（作物名为 `INVENTORY_CONFIG` 英文名）；未列出的作物用区域阈值，0 表示不补种；岛屿生产规划器会改写 |
+| `IslandFarm.DefaultCrop` / `IslandOrchard.DefaultCrop` / `IslandNursery.DefaultCrop` | select | wheat / rubber / lavender | 所有作物达标后空余岗位种植的作物（岗位数为 `PlantPotatoes` 等）；岛屿生产规划器会改写 |
 | `IslandProductionPlanner.ApplySettings` / `RescanTechnology` / `DailyProfitLowerLimit` / `DailyBufferSafetyMargin` / `*Efficiency` / `*Grade` | checkbox/数值/select | false / true / 50000 / 0 / 0 / bronze | 规划器写入开关、重新扫描科技、每日岛币下限、日缓冲余量、农田/果园/苗圃效率加成、五家店铺等级 |
 | `IslandOrchard.AmagiChanRubber` | checkbox | false | 小天城优先种橡胶 |
 | `IslandRancher.MinChicken` / `MinPork` | 数值 | — | 畜牧产品阈值 |

@@ -75,6 +75,7 @@
       "ScreenshotMethod": "auto",
       "ControlMethod": "MaaTouch",
       "GameSettings": false,
+      "DisableChannelFloat": false,
       "ScreenshotDedithering": false,
       "AdbRestart": false
     },
@@ -3137,6 +3138,7 @@
       "EnableStronghold": false,
       "TaskPriority": "OpsiStronghold > OpsiObscure > OpsiAbyssal > OpsiMeowfficerFarming",
       "ObscureAbyssalCheckDelayDays": 0,
+      "StrongholdCheckDelayDays": 0,
       "MonthEndActionPointCleanupEnable": false,
       "MonthEndActionPointCleanupDays": 0,
       "MonthEndActionPointPreserve": 0,
@@ -3397,6 +3399,7 @@
       "WorkerFilter": "WorkerJuu",
       "MinFarm": 660,
       "CropTargets": null,
+      "DefaultCrop": "wheat",
       "PlantPotatoes": 4
     },
     "IslandOrchard": {
@@ -3405,6 +3408,7 @@
       "MinOrchard": 300,
       "CropTargets": null,
       "IgnoreAvocado": true,
+      "DefaultCrop": "rubber",
       "PlantRubber": 0,
       "AmagiChanRubber": false
     },
@@ -3414,6 +3418,7 @@
       "MinNursery": 0,
       "CropTargets": null,
       "IgnorePineapple": true,
+      "DefaultCrop": "lavender",
       "PlantLavender": 2
     },
     "Storage": {
@@ -3443,13 +3448,20 @@
     },
     "IslandFishery": {
       "Positions": 3,
-      "MinBass": 50,
-      "MinYellowfinTuna": 50,
       "MinShell": 50,
+      "MinCatfish": 0,
+      "MinCommonCarp": 0,
+      "MinKoiCarp": 0,
       "MinShrimp": 50,
       "MinCrayfish": 50,
+      "MinBass": 50,
       "MinCrab": 50,
       "MinSquid": 50,
+      "MinMackerel": 0,
+      "MinTuna": 0,
+      "MinSalmon": 0,
+      "MinRedSeaBream": 0,
+      "MinYellowfinTuna": 50,
       "MinSeaCucumber": 50,
       "MinFreshwaterFishMeat": 0,
       "MinSaltwaterFishMeat": 0,
@@ -4059,6 +4071,9 @@
       "RescanTechnology": true,
       "ScanSeasonTasks": true,
       "SeasonTaskTargets": null,
+      "ScanCargoOrders": true,
+      "CargoTargets": null,
+      "CargoTargetDays": 1,
       "ExtraTargets": null,
       "DailyProfitLowerLimit": 50000,
       "DailyBufferSafetyMargin": 0,

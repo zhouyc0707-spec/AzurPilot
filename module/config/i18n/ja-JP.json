@@ -670,6 +670,12 @@
       "True": "有効",
       "False": "無効"
     },
+    "DisableChannelFloat": {
+      "name": "応用宝チャネル版のフローティングボールを無効化（root 必須）",
+      "help": "テンセント応用宝チャネル版（com.tencent.tmgp.bilibili.blhx）にのみ適用されます。ゲーム起動前に YSDK 設定のフローティングボールのスイッチをオフにし、chattr +i でファイルをロックして、ログイン後にサーバーが元に戻せないようにします。端末上の設定ファイルのみを変更し、APK は変更しません。root または su が必要で、ゲームプロセスが完全に停止している場合にのみ実行します。安全に実行できない場合はスキップし、起動には影響しません。この項目をオフにしてもフローティングボールは自動では戻りません。戻す場合は root で chattr -i /data/data/com.tencent.tmgp.bilibili.blhx/shared_prefs/YSDK_CONFIG.xml を実行し、そのファイルを削除してください。",
+      "True": "有効",
+      "False": "無効"
+    },
     "ScreenshotDedithering": {
       "name": "画像色ディザリング除去",
       "help": "実機で実行する場合に有効にしてください"
@@ -2356,7 +2362,7 @@
     },
     "ChangeVanguard": {
       "name": "前衛を交換する",
-      "help": "前衛が赤顔になったら前衛を交換します。交換しないを選択すると赤顔出撃が強制されます。\n前衛交換はコンディション10以上のレベル100のユニオンまたは鉄血の白レア駆逐艦を探して行われるため、十分な数の駆逐艦を確保してください。中国サーバー以外ではレベル70のユニオン白レア駆逐艦になります。",
+      "help": "前衛が赤顔になったら前衛を交換します。交換しないを選択すると赤顔出撃が強制されます。\n前衛交換はコンディション10以上のレベル100のユニオンまたは鉄血の白レア駆逐艦を探して行われるため、十分な数の駆逐艦を確保してください。中国サーバー以外ではレベル70のユニオン白レア駆逐艦になります。\n\n前衛交換を有効にすると、このタスクのコンディション設定にある寮舎の回復条件と全員ケッコン済みの設定を使用します。交換後の艦船を含む艦隊全体に合わせ、混成時は回復が最も遅い艦船の寮舎条件を選び、全員がケッコン済みの場合のみケッコン補正を有効にしてください。これらの設定は寮舎メンバーの変更やケッコンを自動実行しません。",
       "disabled": "交換しない",
       "ship": "艦船を交換する",
       "ship_equip": "艦船+装備を交換する"
@@ -4460,6 +4466,10 @@
       "name": "隠秘・深淵再チェック日数",
       "help": "隠秘海域と深淵座標を使い切った後、スマートスケジュールは指定した日数の間チェックをスキップし、補給コイン獲得の流れを速めます。0 で毎回チェック。大世界リセットで更新されるため、リセット後は通常どおりチェックします。"
     },
+    "StrongholdCheckDelayDays": {
+      "name": "セイレーン要塞の再チェック日数",
+      "help": "セイレーン要塞が見つからなくなった後、スマートスケジュールは指定した日数の間チェックをスキップします。0 は従来どおり、毎週の更新または大世界の月次リセットを待ち、既存の猶予時間後に再チェックします。正の値では更新を挟んでも指定日数が経過するまで待ちます。通常のコイン補充時のチェックだけに適用され、単独の要塞任務と月末クリーンアップには影響しません。"
+    },
     "MonthEndActionPointCleanupEnable": {
       "name": "月末の行動力クリーンアップを有効にする",
       "help": "月末の行動力クリーンアップ機能を有効にするかどうか。有効にすると、大世界リセットまでの残り日数が「月末クリーンアップ日数」以下になった時点で、月末クリーンアップモードを開始して行動力を消費します。",
@@ -4535,7 +4545,7 @@
     },
     "Season": {
       "name": "現在の季節",
-      "help": "アイランド計画の現在の季節を設定します。異なる季節により対応する季節限定アイテムが有効になります。\n春限定：凉拌双筍、筍と海老の炒め物、春花茶、フレッシュパイナップルジュース、筍、パイナップル、干しなずな、春の花束\n夏限定：アマランスおにぎり、トマト炒め卵、スイカジュース、キュウリジュース、トマト、キュウリ、ジャスミン精油、夏の花束\n秋限定：柿のケーキ、松茸チキンスープ、ニンジン秋梨ジュース、菊花茶、秋月梨、柿、ピーナッツオイル、秋の花束",
+      "help": "アイランド計画の現在の季節を設定します。異なる季節により対応する季節限定アイテムが有効になります。\n春限定：凉拌双筍、筍と海老の炒め物、春花茶、フレッシュパイナップルジュース、筍、パイナップル、干しなずな、春の花束\n夏限定：アマランスおにぎり、トマト炒め卵、スイカジュース、キュウリジュース、トマト、キュウリ、ジャスミン精油、夏の花束\n秋限定：柿のケーキ、松茸チキンスープ、ニンジン秋梨ジュース、菊花茶、秋月梨、柿、ピーナッツオイル、秋の花束\n冬限定：椎茸チキンスープ、青棗粥、馬蹄糕、砂糖橘大福、砂糖橘、青棗、梅の花のサシェ、冬の花束",
       "spring": "春",
       "summer": "夏",
       "autumn": "秋",
@@ -4663,7 +4673,7 @@
     },
     "WorkerFilter": {
       "name": "農場作業員フィルター",
-      "help": ">で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合は WorkerJuu にフォールバックします。"
+      "help": ">で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou > Nagato > Agir > HwahJah > Argus > Ognevoy\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合は WorkerJuu にフォールバックします。"
     },
     "MinFarm": {
       "name": "作物在庫閾値",
@@ -4672,6 +4682,18 @@
     "CropTargets": {
       "name": "作物ごとの補充目標",
       "help": "1行に「作物: 目標在庫」を1つ記入します。例：\ncorn: 200\nwheat: 80\n記入した作物は在庫が自分の目標を下回ると植え直し、記入していない作物は「作物在庫閾値」を使います。目標を 0 にするとその作物は植えません。空欄なら全作物が「作物在庫閾値」を使います。不足率が最も大きい作物から植えます。\n使用できる作物：wheat, corn, rice, chinese_cabbage, potato, soybean, pasture, coffee_bean\n島生産プランナーを実行すると自動で書き換えられます。"
+    },
+    "DefaultCrop": {
+      "name": "デフォルト作物",
+      "help": "すべての作物が目標に達した後、空いた持ち場で植える作物（持ち場数は次の項目）。島生産プランナーが空き時間の生産量（シーズン PT 用）に合わせて書き換えます。",
+      "wheat": "小麦",
+      "corn": "とうもろこし",
+      "rice": "米",
+      "chinese_cabbage": "白菜",
+      "potato": "じゃがいも",
+      "soybean": "大豆",
+      "pasture": "牧草",
+      "coffee_bean": "コーヒー豆"
     },
     "PlantPotatoes": {
       "name": "小麦を植える",
@@ -4698,7 +4720,7 @@
     },
     "WorkerFilter": {
       "name": "果樹園作業員フィルター",
-      "help": ">で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合は WorkerJuu にフォールバックします。"
+      "help": ">で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou > Nagato > Agir > HwahJah > Argus > Ognevoy\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合は WorkerJuu にフォールバックします。"
     },
     "MinOrchard": {
       "name": "果物在庫閾値",
@@ -4706,11 +4728,26 @@
     },
     "CropTargets": {
       "name": "作物ごとの補充目標",
-      "help": "1行に「作物: 目標在庫」を1つ記入します。例：\napple: 150\nrubber: 0\n記入した作物は在庫が自分の目標を下回ると植え直し、記入していない作物は「果物在庫閾値」を使います。目標を 0 にするとその作物は植えません。空欄なら全作物が「果物在庫閾値」を使います。不足率が最も大きい作物から植えます。\n使用できる作物：apple, citrus, banana, mango, lemon, avocado, rubber, pear, persimmon\n島生産プランナーを実行すると自動で書き換えられます。"
+      "help": "1行に「作物: 目標在庫」を1つ記入します。例：\napple: 150\nrubber: 0\n記入した作物は在庫が自分の目標を下回ると植え直し、記入していない作物は「果物在庫閾値」を使います。目標を 0 にするとその作物は植えません。空欄なら全作物が「果物在庫閾値」を使います。不足率が最も大きい作物から植えます。\n使用できる作物：apple, citrus, banana, mango, lemon, avocado, rubber, pear, persimmon, sugar_tangerine, green_jujube\n秋月梨と柿は4x1栽培で1回4個、砂糖橘と青棗は通常の4x4栽培で1回最低16個の種を消費します。\n島生産プランナーを実行すると自動で書き換えられます。"
     },
     "IgnoreAvocado": {
       "name": "アボカドを無視",
       "help": ""
+    },
+    "DefaultCrop": {
+      "name": "デフォルト作物",
+      "help": "すべての作物が目標に達した後、空いた持ち場で植える作物（持ち場数は次の項目）。島生産プランナーが空き時間の生産量（シーズン PT 用）に合わせて書き換えます。",
+      "apple": "りんご",
+      "citrus": "柑橘フルーツ",
+      "banana": "バナナ",
+      "mango": "マンゴー",
+      "lemon": "レモン",
+      "avocado": "アボカド",
+      "rubber": "ゴム",
+      "pear": "宵月梨",
+      "persimmon": "柿",
+      "sugar_tangerine": "砂糖橘",
+      "green_jujube": "青棗"
     },
     "PlantRubber": {
       "name": "ゴムを植える",
@@ -4739,7 +4776,7 @@
     },
     "WorkerFilter": {
       "name": "苗床作業員フィルター",
-      "help": ">で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合は WorkerJuu にフォールバックします。"
+      "help": ">で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou > Nagato > Agir > HwahJah > Argus > Ognevoy\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合は WorkerJuu にフォールバックします。"
     },
     "MinNursery": {
       "name": "苗床作物在庫閾値",
@@ -4752,6 +4789,19 @@
     "IgnorePineapple": {
       "name": "パイナップルを無視",
       "help": ""
+    },
+    "DefaultCrop": {
+      "name": "デフォルト作物",
+      "help": "すべての作物が目標に達した後、空いた持ち場で植える作物（持ち場数は次の項目）。島生産プランナーが空き時間の生産量（シーズン PT 用）に合わせて書き換えます。",
+      "carrot": "ニンジン",
+      "onion": "玉ねぎ",
+      "flax": "亜麻",
+      "strawberry": "いちご",
+      "cotton": "綿",
+      "tea": "茶葉",
+      "lavender": "ラベンダー",
+      "pineapple": "パイナップル",
+      "asparagus": "アスパラガス"
     },
     "PlantLavender": {
       "name": "ラベンダーを植える",
@@ -4772,7 +4822,7 @@
     },
     "ChickenFilter": {
       "name": "鶏作業員フィルター",
-      "help": ">で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合は WorkerJuu にフォールバックします。"
+      "help": ">で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou > Nagato > Agir > HwahJah > Argus > Ognevoy\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合は WorkerJuu にフォールバックします。"
     },
     "MinPork": {
       "name": "豚肉在庫閾値",
@@ -4780,7 +4830,7 @@
     },
     "PigFilter": {
       "name": "豚作業員フィルター",
-      "help": ">で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合は WorkerJuu にフォールバックします。"
+      "help": ">で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou > Nagato > Agir > HwahJah > Argus > Ognevoy\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合は WorkerJuu にフォールバックします。"
     },
     "Milk": {
       "name": "牛を飼育",
@@ -4788,7 +4838,7 @@
     },
     "RancherFilter": {
       "name": "キャラクターフィルター",
-      "help": ">で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合は WorkerJuu にフォールバックします。"
+      "help": ">で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou > Nagato > Agir > HwahJah > Argus > Ognevoy\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合は WorkerJuu にフォールバックします。"
     },
     "Wool": {
       "name": "羊を飼育",
@@ -4796,7 +4846,7 @@
     },
     "WoolWorkerFilter": {
       "name": "羊作業員フィルター",
-      "help": ">で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合は WorkerJuu にフォールバックします。"
+      "help": ">で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou > Nagato > Agir > HwahJah > Argus > Ognevoy\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合は WorkerJuu にフォールバックします。"
     }
   },
   "IslandFishery": {
@@ -4811,16 +4861,20 @@
       "2": "2",
       "3": "3"
     },
-    "MinBass": {
-      "name": "スズキ在庫閾値",
-      "help": ""
-    },
-    "MinYellowfinTuna": {
-      "name": "キハダマグロ在庫閾値",
-      "help": ""
-    },
     "MinShell": {
       "name": "貝殻在庫閾値",
+      "help": ""
+    },
+    "MinCatfish": {
+      "name": "ナマズ在庫閾値",
+      "help": ""
+    },
+    "MinCommonCarp": {
+      "name": "フナ在庫閾値",
+      "help": ""
+    },
+    "MinKoiCarp": {
+      "name": "コイ在庫閾値",
       "help": ""
     },
     "MinShrimp": {
@@ -4831,6 +4885,10 @@
       "name": "ザリガニ在庫閾値",
       "help": ""
     },
+    "MinBass": {
+      "name": "スズキ在庫閾値",
+      "help": ""
+    },
     "MinCrab": {
       "name": "カニ在庫閾値",
       "help": ""
@@ -4839,17 +4897,37 @@
       "name": "イカ在庫閾値",
       "help": ""
     },
+    "MinMackerel": {
+      "name": "サワラ在庫閾値",
+      "help": ""
+    },
+    "MinTuna": {
+      "name": "マグロ在庫閾値",
+      "help": ""
+    },
+    "MinSalmon": {
+      "name": "サーモン在庫閾値",
+      "help": ""
+    },
+    "MinRedSeaBream": {
+      "name": "マダイ在庫閾値",
+      "help": ""
+    },
+    "MinYellowfinTuna": {
+      "name": "キハダマグロ在庫閾値",
+      "help": ""
+    },
     "MinSeaCucumber": {
       "name": "ナマコ在庫閾値",
       "help": ""
     },
     "MinFreshwaterFishMeat": {
       "name": "淡水魚肉の下限",
-      "help": "養殖完了後、魚を淡水魚肉に交換してこの目標数まで補充します。0は交換しません。ローカル自動生産計画が有効な場合は、その目標と素材の確保量を優先し、それ以外はこの値を使います。独立した計画ツールは貨物と料理の需要に応じて値を設定できます。注文、メニュー、明示された最低在庫に必要な魚は残します。識別や交換後の在庫を確認できなければ停止します。"
+      "help": "養殖完了後、魚を淡水魚肉に交換してこの目標数まで補充します。0は交換しません。ローカル自動生産計画が有効な場合は、その目標と素材の確保量を優先し、それ以外はこの値を使います。独立した計画ツールは貨物と料理の需要に応じて値を設定できます。注文、メニュー、明示された最低在庫に必要な魚は残します。識別や交換後の在庫を確認できなければ停止します。 手動の魚肉目標では各魚種の養殖最低在庫も確保します。有効な自動計画は従来の注文・メニュー・明示的な最低在庫を保護し、養殖しきい値を追加しません。"
     },
     "MinSaltwaterFishMeat": {
       "name": "海水魚肉の下限",
-      "help": "海水魚肉にも同じ規則を適用します。"
+      "help": "海水魚肉にも同じ規則を適用します。 手動の魚肉目標では各魚種の養殖最低在庫も確保します。有効な自動計画は従来の注文・メニュー・明示的な最低在庫を保護し、養殖しきい値を追加しません。"
     },
     "PlantYellowfinTuna": {
       "name": "キハダマグロを養殖",
@@ -4861,7 +4939,7 @@
     },
     "RancherFilter": {
       "name": "キャラクターフィルター",
-      "help": ">で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合は WorkerJuu にフォールバックします。"
+      "help": ">で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou > Nagato > Agir > HwahJah > Argus > Ognevoy\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合は WorkerJuu にフォールバックします。"
     }
   },
   "IslandMine": {
@@ -4888,7 +4966,7 @@
     },
     "WorkerFilter": {
       "name": "鉱山作業員フィルター",
-      "help": ">で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合は WorkerJuu にフォールバックします。"
+      "help": ">で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou > Nagato > Agir > HwahJah > Argus > Ognevoy\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合は WorkerJuu にフォールバックします。"
     },
     "MinCopper": {
       "name": "銅鉱石最低在庫",
@@ -4935,7 +5013,7 @@
     },
     "WorkerFilter": {
       "name": "林場作業員フィルター",
-      "help": ">で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合は WorkerJuu にフォールバックします。"
+      "help": ">で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou > Nagato > Agir > HwahJah > Argus > Ognevoy\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合は WorkerJuu にフォールバックします。"
     },
     "MinElegant": {
       "name": "エレガント木材最低在庫",
@@ -4957,13 +5035,13 @@
     },
     "WorkerFilter": {
       "name": "採集キャラクターフィルター",
-      "help": ">で接続。最大3人まで指定でき、採集スロット1～3に対応します。\n>で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou\nデイリー採集では WorkerJuu を選択できません。入力されている場合は自動で無視します。\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合、そのスロットは既存の採集ロジックにフォールバックします。"
+      "help": ">で接続。最大3人まで指定でき、採集スロット1～3に対応します。\n>で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou > Nagato > Agir > HwahJah > Argus > Ognevoy\nデイリー採集では WorkerJuu を選択できません。入力されている場合は自動で無視します。\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合、そのスロットは既存の採集ロジックにフォールバックします。"
     }
   },
   "IslandRestaurant": {
     "_info": {
       "name": "有魚レストラン",
-      "help": "メニューは1～8の順に生産されます。生産目標はメニューX数量オプションで、前の項目が完全に満たされてから次の項目が実行されます。後続の項目は実行時にそれ以前の項目の達成に影響しません。\nメニュー1-8の涼拌双筍と筍と海老の炒め物は現在の季節に応じて対応する季節メニューに自動切替されます。"
+      "help": "メニューは1～8の順に生産されます。生産目標はメニューX数量オプションで、前の項目が完全に満たされてから次の項目が実行されます。後続の項目は実行時にそれ以前の項目の達成に影響しません。\nメニュー1-8の季節メニューはスロットごとに自動切替されます。春：涼拌双筍／筍と海老の炒め物、夏：アマランスおにぎり／トマト炒め卵、秋：柿のケーキ／松茸チキンスープ、冬：椎茸チキンスープ／青棗粥。"
     },
     "PostNumber": {
       "name": "シェフをX人配置",
@@ -4973,11 +5051,11 @@
     },
     "ChefFilter": {
       "name": "シェフフィルター",
-      "help": ">で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合は WorkerJuu にフォールバックします。"
+      "help": ">で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou > Nagato > Agir > HwahJah > Argus > Ognevoy\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合は WorkerJuu にフォールバックします。"
     },
     "DoubleBambooShoots": {
       "name": "季節料理を優先生産",
-      "help": "有効にすると、現在の季節のレストラン季節料理を基本メニューより先に生産します。春は涼拌双筍、夏はアマランサスおにぎり、秋は松茸チキンスープです。冬は追加の季節料理を生産しません。"
+      "help": "有効にすると、現在の季節のレストラン優先季節料理を固定スロットで選択して生産します。春の涼拌双筍、夏のアマランスおにぎり、冬の椎茸チキンスープはスロット1、秋の松茸チキンスープはスロット2です。"
     },
     "Meal1": {
       "name": "メニュー1",
@@ -4996,7 +5074,9 @@
       "fo_tiao": "仏跳牆",
       "onion_fish": "玉ねぎ蒸し魚",
       "matsutake_chicken_soup": "松茸チキンスープ",
-      "persimmon_cake": "柿のケーキ"
+      "persimmon_cake": "柿のケーキ",
+      "shiitake_chicken_soup": "椎茸チキンスープ",
+      "green_jujube_porridge": "青棗粥"
     },
     "MealNumber1": {
       "name": "メニュー1をX人前生産",
@@ -5019,7 +5099,9 @@
       "fo_tiao": "仏跳牆",
       "onion_fish": "玉ねぎ蒸し魚",
       "matsutake_chicken_soup": "松茸チキンスープ",
-      "persimmon_cake": "柿のケーキ"
+      "persimmon_cake": "柿のケーキ",
+      "shiitake_chicken_soup": "椎茸チキンスープ",
+      "green_jujube_porridge": "青棗粥"
     },
     "MealNumber2": {
       "name": "メニュー2をX人前生産",
@@ -5042,7 +5124,9 @@
       "fo_tiao": "仏跳牆",
       "onion_fish": "玉ねぎ蒸し魚",
       "matsutake_chicken_soup": "松茸チキンスープ",
-      "persimmon_cake": "柿のケーキ"
+      "persimmon_cake": "柿のケーキ",
+      "shiitake_chicken_soup": "椎茸チキンスープ",
+      "green_jujube_porridge": "青棗粥"
     },
     "MealNumber3": {
       "name": "メニュー3をX人前生産",
@@ -5065,7 +5149,9 @@
       "fo_tiao": "仏跳牆",
       "onion_fish": "玉ねぎ蒸し魚",
       "matsutake_chicken_soup": "松茸チキンスープ",
-      "persimmon_cake": "柿のケーキ"
+      "persimmon_cake": "柿のケーキ",
+      "shiitake_chicken_soup": "椎茸チキンスープ",
+      "green_jujube_porridge": "青棗粥"
     },
     "MealNumber4": {
       "name": "メニュー4をX人前生産",
@@ -5088,7 +5174,9 @@
       "fo_tiao": "仏跳牆",
       "onion_fish": "玉ねぎ蒸し魚",
       "matsutake_chicken_soup": "松茸チキンスープ",
-      "persimmon_cake": "柿のケーキ"
+      "persimmon_cake": "柿のケーキ",
+      "shiitake_chicken_soup": "椎茸チキンスープ",
+      "green_jujube_porridge": "青棗粥"
     },
     "MealNumber5": {
       "name": "メニュー5をX人前生産",
@@ -5111,7 +5199,9 @@
       "fo_tiao": "仏跳牆",
       "onion_fish": "玉ねぎ蒸し魚",
       "matsutake_chicken_soup": "松茸チキンスープ",
-      "persimmon_cake": "柿のケーキ"
+      "persimmon_cake": "柿のケーキ",
+      "shiitake_chicken_soup": "椎茸チキンスープ",
+      "green_jujube_porridge": "青棗粥"
     },
     "MealNumber6": {
       "name": "メニュー6をX人前生産",
@@ -5134,7 +5224,9 @@
       "fo_tiao": "仏跳牆",
       "onion_fish": "玉ねぎ蒸し魚",
       "matsutake_chicken_soup": "松茸チキンスープ",
-      "persimmon_cake": "柿のケーキ"
+      "persimmon_cake": "柿のケーキ",
+      "shiitake_chicken_soup": "椎茸チキンスープ",
+      "green_jujube_porridge": "青棗粥"
     },
     "MealNumber7": {
       "name": "メニュー7をX人前生産",
@@ -5157,7 +5249,9 @@
       "fo_tiao": "仏跳牆",
       "onion_fish": "玉ねぎ蒸し魚",
       "matsutake_chicken_soup": "松茸チキンスープ",
-      "persimmon_cake": "柿のケーキ"
+      "persimmon_cake": "柿のケーキ",
+      "shiitake_chicken_soup": "椎茸チキンスープ",
+      "green_jujube_porridge": "青棗粥"
     },
     "MealNumber8": {
       "name": "メニュー8をX人前生産",
@@ -5186,7 +5280,9 @@
       "fo_tiao": "仏跳牆",
       "onion_fish": "玉ねぎ蒸し魚",
       "matsutake_chicken_soup": "松茸チキンスープ",
-      "persimmon_cake": "柿のケーキ"
+      "persimmon_cake": "柿のケーキ",
+      "shiitake_chicken_soup": "椎茸チキンスープ",
+      "green_jujube_porridge": "青棗粥"
     }
   },
   "IslandTeahouse": {
@@ -5202,7 +5298,7 @@
     },
     "ChefFilter": {
       "name": "シェフフィルター",
-      "help": ">で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合は WorkerJuu にフォールバックします。"
+      "help": ">で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou > Nagato > Agir > HwahJah > Argus > Ognevoy\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合は WorkerJuu にフォールバックします。"
     },
     "Seasonal": {
       "name": "季節ドリンクを優先生産",
@@ -5413,7 +5509,7 @@
     },
     "ChefFilter": {
       "name": "シェフフィルター",
-      "help": ">で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合は WorkerJuu にフォールバックします。"
+      "help": ">で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou > Nagato > Agir > HwahJah > Argus > Ognevoy\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合は WorkerJuu にフォールバックします。"
     },
     "Meal1": {
       "name": "メニュー1",
@@ -5574,7 +5670,7 @@
   "IslandJuuEatery": {
     "_info": {
       "name": "ジュウ簡餐",
-      "help": "メニューは1～8の順に生産されます。生産目標はメニューX数量オプションで、前の項目が完全に満たされてから次の項目が実行されます。後続の項目は実行時にそれ以前の項目の達成に影響しません。"
+      "help": "メニューは1～8の順に生産されます。生産目標はメニューX数量オプションで、前の項目が完全に満たされてから次の項目が実行されます。後続の項目は実行時にそれ以前の項目の達成に影響しません。冬はスロット1に馬蹄糕、スロット2に砂糖橘大福が有効になります。"
     },
     "PostNumber": {
       "name": "クックをX人配置",
@@ -5584,7 +5680,7 @@
     },
     "ChefFilter": {
       "name": "シェフフィルター",
-      "help": ">で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合は WorkerJuu にフォールバックします。"
+      "help": ">で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou > Nagato > Agir > HwahJah > Argus > Ognevoy\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合は WorkerJuu にフォールバックします。"
     },
     "Meal1": {
       "name": "メニュー1",
@@ -5599,7 +5695,9 @@
       "succulently_sweet": "スイートコンボ",
       "berry_orange": "ベリーオレンジデザートセット",
       "strawberry_charlotte": "シャーロット",
-      "seafood_rice": "シーフードライス"
+      "seafood_rice": "シーフードライス",
+      "water_chestnut_cake": "馬蹄糕",
+      "sugar_tangerine_daifuku": "砂糖橘大福"
     },
     "MealNumber1": {
       "name": "メニュー1をX人前生産",
@@ -5618,7 +5716,9 @@
       "succulently_sweet": "スイートコンボ",
       "berry_orange": "ベリーオレンジデザートセット",
       "strawberry_charlotte": "シャーロット",
-      "seafood_rice": "シーフードライス"
+      "seafood_rice": "シーフードライス",
+      "water_chestnut_cake": "馬蹄糕",
+      "sugar_tangerine_daifuku": "砂糖橘大福"
     },
     "MealNumber2": {
       "name": "メニュー2をX人前生産",
@@ -5637,7 +5737,9 @@
       "succulently_sweet": "スイートコンボ",
       "berry_orange": "ベリーオレンジデザートセット",
       "strawberry_charlotte": "シャーロット",
-      "seafood_rice": "シーフードライス"
+      "seafood_rice": "シーフードライス",
+      "water_chestnut_cake": "馬蹄糕",
+      "sugar_tangerine_daifuku": "砂糖橘大福"
     },
     "MealNumber3": {
       "name": "メニュー3をX人前生産",
@@ -5656,7 +5758,9 @@
       "succulently_sweet": "スイートコンボ",
       "berry_orange": "ベリーオレンジデザートセット",
       "strawberry_charlotte": "シャーロット",
-      "seafood_rice": "シーフードライス"
+      "seafood_rice": "シーフードライス",
+      "water_chestnut_cake": "馬蹄糕",
+      "sugar_tangerine_daifuku": "砂糖橘大福"
     },
     "MealNumber4": {
       "name": "メニュー4をX人前生産",
@@ -5675,7 +5779,9 @@
       "succulently_sweet": "スイートコンボ",
       "berry_orange": "ベリーオレンジデザートセット",
       "strawberry_charlotte": "シャーロット",
-      "seafood_rice": "シーフードライス"
+      "seafood_rice": "シーフードライス",
+      "water_chestnut_cake": "馬蹄糕",
+      "sugar_tangerine_daifuku": "砂糖橘大福"
     },
     "MealNumber5": {
       "name": "メニュー5をX人前生産",
@@ -5694,7 +5800,9 @@
       "succulently_sweet": "スイートコンボ",
       "berry_orange": "ベリーオレンジデザートセット",
       "strawberry_charlotte": "シャーロット",
-      "seafood_rice": "シーフードライス"
+      "seafood_rice": "シーフードライス",
+      "water_chestnut_cake": "馬蹄糕",
+      "sugar_tangerine_daifuku": "砂糖橘大福"
     },
     "MealNumber6": {
       "name": "メニュー6をX人前生産",
@@ -5713,7 +5821,9 @@
       "succulently_sweet": "スイートコンボ",
       "berry_orange": "ベリーオレンジデザートセット",
       "strawberry_charlotte": "シャーロット",
-      "seafood_rice": "シーフードライス"
+      "seafood_rice": "シーフードライス",
+      "water_chestnut_cake": "馬蹄糕",
+      "sugar_tangerine_daifuku": "砂糖橘大福"
     },
     "MealNumber7": {
       "name": "メニュー7をX人前生産",
@@ -5732,7 +5842,9 @@
       "succulently_sweet": "スイートコンボ",
       "berry_orange": "ベリーオレンジデザートセット",
       "strawberry_charlotte": "シャーロット",
-      "seafood_rice": "シーフードライス"
+      "seafood_rice": "シーフードライス",
+      "water_chestnut_cake": "馬蹄糕",
+      "sugar_tangerine_daifuku": "砂糖橘大福"
     },
     "MealNumber8": {
       "name": "メニュー8をX人前生産",
@@ -5757,7 +5869,9 @@
       "succulently_sweet": "スイートコンボ",
       "berry_orange": "ベリーオレンジデザートセット",
       "strawberry_charlotte": "シャーロット",
-      "seafood_rice": "シーフードライス"
+      "seafood_rice": "シーフードライス",
+      "water_chestnut_cake": "馬蹄糕",
+      "sugar_tangerine_daifuku": "砂糖橘大福"
     }
   },
   "IslandJuuCoffee": {
@@ -5773,7 +5887,7 @@
     },
     "ChefFilter": {
       "name": "シェフフィルター",
-      "help": ">で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合は WorkerJuu にフォールバックします。"
+      "help": ">で接続。例：ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou > Nagato > Agir > HwahJah > Argus > Ognevoy\nデフォルト順の先頭2行のみ認識します。指定キャラクターが使用できない場合は WorkerJuu にフォールバックします。"
     },
     "Friedrich": {
       "name": "フリードリヒ",
@@ -6175,7 +6289,12 @@
       "Mogador": "モガドール",
       "RoyalFortune": "ロイヤル・フォーチュン",
       "DaVinci": "レオナルド・ダ・ヴィンチ",
-      "Taihou": "大鳳"
+      "Taihou": "大鳳",
+      "Nagato": "長門",
+      "Agir": "エーギル",
+      "HwahJah": "華甲",
+      "Argus": "アーガス",
+      "Ognevoy": "オグネヴォイ"
     },
     "Char2": {
       "name": "キャラクター2",
@@ -6215,7 +6334,12 @@
       "Mogador": "モガドール",
       "RoyalFortune": "ロイヤル・フォーチュン",
       "DaVinci": "レオナルド・ダ・ヴィンチ",
-      "Taihou": "大鳳"
+      "Taihou": "大鳳",
+      "Nagato": "長門",
+      "Agir": "エーギル",
+      "HwahJah": "華甲",
+      "Argus": "アーガス",
+      "Ognevoy": "オグネヴォイ"
     },
     "Product1": {
       "name": "メニュー1",
@@ -6228,7 +6352,9 @@
       "fo_tiao": "仏跳牆",
       "amaranth_rice_ball": "アマランスおにぎり",
       "matsutake_chicken_soup": "松茸チキンスープ",
-      "persimmon_cake": "柿のケーキ"
+      "persimmon_cake": "柿のケーキ",
+      "shiitake_chicken_soup": "椎茸チキンスープ",
+      "green_jujube_porridge": "青棗粥"
     },
     "Product2": {
       "name": "メニュー2",
@@ -6241,7 +6367,9 @@
       "fo_tiao": "仏跳牆",
       "amaranth_rice_ball": "アマランスおにぎり",
       "matsutake_chicken_soup": "松茸チキンスープ",
-      "persimmon_cake": "柿のケーキ"
+      "persimmon_cake": "柿のケーキ",
+      "shiitake_chicken_soup": "椎茸チキンスープ",
+      "green_jujube_porridge": "青棗粥"
     },
     "Product3": {
       "name": "メニュー3",
@@ -6254,7 +6382,9 @@
       "fo_tiao": "仏跳牆",
       "amaranth_rice_ball": "アマランスおにぎり",
       "matsutake_chicken_soup": "松茸チキンスープ",
-      "persimmon_cake": "柿のケーキ"
+      "persimmon_cake": "柿のケーキ",
+      "shiitake_chicken_soup": "椎茸チキンスープ",
+      "green_jujube_porridge": "青棗粥"
     },
     "Product4": {
       "name": "メニュー4",
@@ -6267,7 +6397,9 @@
       "fo_tiao": "仏跳牆",
       "amaranth_rice_ball": "アマランスおにぎり",
       "matsutake_chicken_soup": "松茸チキンスープ",
-      "persimmon_cake": "柿のケーキ"
+      "persimmon_cake": "柿のケーキ",
+      "shiitake_chicken_soup": "椎茸チキンスープ",
+      "green_jujube_porridge": "青棗粥"
     },
     "Product5": {
       "name": "メニュー5",
@@ -6280,7 +6412,9 @@
       "fo_tiao": "仏跳牆",
       "amaranth_rice_ball": "アマランスおにぎり",
       "matsutake_chicken_soup": "松茸チキンスープ",
-      "persimmon_cake": "柿のケーキ"
+      "persimmon_cake": "柿のケーキ",
+      "shiitake_chicken_soup": "椎茸チキンスープ",
+      "green_jujube_porridge": "青棗粥"
     },
     "SeasonalFallback": {
       "name": "季節代替メニュー",
@@ -6293,11 +6427,13 @@
       "fo_tiao": "仏跳牆",
       "amaranth_rice_ball": "アマランスおにぎり",
       "matsutake_chicken_soup": "松茸チキンスープ",
-      "persimmon_cake": "柿のケーキ"
+      "persimmon_cake": "柿のケーキ",
+      "shiitake_chicken_soup": "椎茸チキンスープ",
+      "green_jujube_porridge": "青棗粥"
     },
     "BoostReplaceFilter": {
       "name": "ブースト置き換えフィルター",
-      "help": "複数のブースト商品が検出された場合、フィルター順で最初のものを優先して置き換えます；置き換えスロットは商品5→1から最後の空でないスロットを探します"
+      "help": "複数のブースト商品が検出された場合、フィルター順で最初のものを優先して置き換えます；置き換えスロットは商品5→1から最後の空でないスロットを探します\n使用可能な商品キー：double_bamboo_shoots:涼拌双筍, tofu_meat:豆腐の肉炒め, tofu_combo:定番豆腐セット, hearty_meal:綿玉定食, fo_tiao:佛跳牆, amaranth_rice_ball:アマランスおにぎり, persimmon_cake:柿のケーキ, matsutake_chicken_soup:松茸チキンスープ, shiitake_chicken_soup:椎茸チキンスープ, green_jujube_porridge:青棗粥"
     }
   },
   "IslandBusinessShop2": {
@@ -6355,7 +6491,12 @@
       "Mogador": "モガドール",
       "RoyalFortune": "ロイヤル・フォーチュン",
       "DaVinci": "レオナルド・ダ・ヴィンチ",
-      "Taihou": "大鳳"
+      "Taihou": "大鳳",
+      "Nagato": "長門",
+      "Agir": "エーギル",
+      "HwahJah": "華甲",
+      "Argus": "アーガス",
+      "Ognevoy": "オグネヴォイ"
     },
     "Char2": {
       "name": "キャラクター2",
@@ -6395,7 +6536,12 @@
       "Mogador": "モガドール",
       "RoyalFortune": "ロイヤル・フォーチュン",
       "DaVinci": "レオナルド・ダ・ヴィンチ",
-      "Taihou": "大鳳"
+      "Taihou": "大鳳",
+      "Nagato": "長門",
+      "Agir": "エーギル",
+      "HwahJah": "華甲",
+      "Argus": "アーガス",
+      "Ognevoy": "オグネヴォイ"
     },
     "Product1": {
       "name": "メニュー1",
@@ -6547,7 +6693,12 @@
       "Mogador": "モガドール",
       "RoyalFortune": "ロイヤル・フォーチュン",
       "DaVinci": "レオナルド・ダ・ヴィンチ",
-      "Taihou": "大鳳"
+      "Taihou": "大鳳",
+      "Nagato": "長門",
+      "Agir": "エーギル",
+      "HwahJah": "華甲",
+      "Argus": "アーガス",
+      "Ognevoy": "オグネヴォイ"
     },
     "Char2": {
       "name": "キャラクター2",
@@ -6587,7 +6738,12 @@
       "Mogador": "モガドール",
       "RoyalFortune": "ロイヤル・フォーチュン",
       "DaVinci": "レオナルド・ダ・ヴィンチ",
-      "Taihou": "大鳳"
+      "Taihou": "大鳳",
+      "Nagato": "長門",
+      "Agir": "エーギル",
+      "HwahJah": "華甲",
+      "Argus": "アーガス",
+      "Ognevoy": "オグネヴォイ"
     },
     "Product1": {
       "name": "メニュー1",
@@ -6597,7 +6753,9 @@
       "succulently_sweet": "スイートコンボ",
       "berry_orange": "ベリーオレンジデザートセット",
       "strawberry_charlotte": "シャーロット",
-      "seafood_rice": "シーフードライス"
+      "seafood_rice": "シーフードライス",
+      "water_chestnut_cake": "馬蹄糕",
+      "sugar_tangerine_daifuku": "砂糖橘大福"
     },
     "Product2": {
       "name": "メニュー2",
@@ -6607,7 +6765,9 @@
       "succulently_sweet": "スイートコンボ",
       "berry_orange": "ベリーオレンジデザートセット",
       "strawberry_charlotte": "シャーロット",
-      "seafood_rice": "シーフードライス"
+      "seafood_rice": "シーフードライス",
+      "water_chestnut_cake": "馬蹄糕",
+      "sugar_tangerine_daifuku": "砂糖橘大福"
     },
     "Product3": {
       "name": "メニュー3",
@@ -6617,7 +6777,9 @@
       "succulently_sweet": "スイートコンボ",
       "berry_orange": "ベリーオレンジデザートセット",
       "strawberry_charlotte": "シャーロット",
-      "seafood_rice": "シーフードライス"
+      "seafood_rice": "シーフードライス",
+      "water_chestnut_cake": "馬蹄糕",
+      "sugar_tangerine_daifuku": "砂糖橘大福"
     },
     "Product4": {
       "name": "メニュー4",
@@ -6627,7 +6789,9 @@
       "succulently_sweet": "スイートコンボ",
       "berry_orange": "ベリーオレンジデザートセット",
       "strawberry_charlotte": "シャーロット",
-      "seafood_rice": "シーフードライス"
+      "seafood_rice": "シーフードライス",
+      "water_chestnut_cake": "馬蹄糕",
+      "sugar_tangerine_daifuku": "砂糖橘大福"
     },
     "Product5": {
       "name": "メニュー5",
@@ -6637,11 +6801,13 @@
       "succulently_sweet": "スイートコンボ",
       "berry_orange": "ベリーオレンジデザートセット",
       "strawberry_charlotte": "シャーロット",
-      "seafood_rice": "シーフードライス"
+      "seafood_rice": "シーフードライス",
+      "water_chestnut_cake": "馬蹄糕",
+      "sugar_tangerine_daifuku": "砂糖橘大福"
     },
     "BoostReplaceFilter": {
       "name": "ブースト置き換えフィルター",
-      "help": "複数のブースト商品が検出された場合、フィルター順で最初のものを優先して置き換えます；置き換えスロットは商品5→1から最後の空でないスロットを探します"
+      "help": "複数のブースト商品が検出された場合、フィルター順で最初のものを優先して置き換えます；置き換えスロットは商品5→1から最後の空でないスロットを探します\n使用可能な商品キー：orchard_duo:果樹園デュオ, succulently_sweet:甘香セット, berry_orange:ベリーオレンジデザート, strawberry_charlotte:ストロベリーチャルロット, seafood_rice:シーフードライス, water_chestnut_cake:馬蹄糕, sugar_tangerine_daifuku:砂糖橘大福"
     }
   },
   "IslandBusinessShop4": {
@@ -6699,7 +6865,12 @@
       "Mogador": "モガドール",
       "RoyalFortune": "ロイヤル・フォーチュン",
       "DaVinci": "レオナルド・ダ・ヴィンチ",
-      "Taihou": "大鳳"
+      "Taihou": "大鳳",
+      "Nagato": "長門",
+      "Agir": "エーギル",
+      "HwahJah": "華甲",
+      "Argus": "アーガス",
+      "Ognevoy": "オグネヴォイ"
     },
     "Char2": {
       "name": "キャラクター2",
@@ -6739,7 +6910,12 @@
       "Mogador": "モガドール",
       "RoyalFortune": "ロイヤル・フォーチュン",
       "DaVinci": "レオナルド・ダ・ヴィンチ",
-      "Taihou": "大鳳"
+      "Taihou": "大鳳",
+      "Nagato": "長門",
+      "Agir": "エーギル",
+      "HwahJah": "華甲",
+      "Argus": "アーガス",
+      "Ognevoy": "オグネヴォイ"
     },
     "Product1": {
       "name": "商品1",
@@ -6856,7 +7032,12 @@
       "Mogador": "モガドール",
       "RoyalFortune": "ロイヤル・フォーチュン",
       "DaVinci": "レオナルド・ダ・ヴィンチ",
-      "Taihou": "大鳳"
+      "Taihou": "大鳳",
+      "Nagato": "長門",
+      "Agir": "エーギル",
+      "HwahJah": "華甲",
+      "Argus": "アーガス",
+      "Ognevoy": "オグネヴォイ"
     },
     "Char2": {
       "name": "キャラクター2",
@@ -6896,7 +7077,12 @@
       "Mogador": "モガドール",
       "RoyalFortune": "ロイヤル・フォーチュン",
       "DaVinci": "レオナルド・ダ・ヴィンチ",
-      "Taihou": "大鳳"
+      "Taihou": "大鳳",
+      "Nagato": "長門",
+      "Agir": "エーギル",
+      "HwahJah": "華甲",
+      "Argus": "アーガス",
+      "Ognevoy": "オグネヴォイ"
     },
     "Product1": {
       "name": "商品1",
@@ -7173,7 +7359,7 @@
     },
     "ApplySettings": {
       "name": "設定に書き込む",
-      "help": "オフでは生産設定を書き込みません。ただし技術・シーズン任務のスキャンはゲーム操作、報酬受取、入力の保存を行う場合があります。オンでは店舗の Meal/MealNumber、AwayCook、販売商品、作物別目標、鉱山・林場・漁場の最低在庫、牧場の下限とスイッチ、製造業の配置数を上書きします。有効な自動計画の目標とメニューを優先しますが、共有の配置数は次回の自動計画に影響します。",
+      "help": "オフでは生産設定を書き込みません。ただし技術・シーズン任務・貨物のスキャンはゲーム操作、報酬受取、入力の保存を行う場合があります。オンでは店舗の Meal/MealNumber、AwayCook、販売商品、作物別目標、鉱山・林場・漁場の最低在庫、牧場の下限とスイッチ、製造業の配置数、空き枠の既定作物・製品と配置数を上書きします。有効な自動計画の目標とメニューを優先しますが、共有の配置数は次回の自動計画に影響します。",
       "True": "有効",
       "False": "無効"
     },
@@ -7192,6 +7378,20 @@
     "SeasonTaskTargets": {
       "name": "シーズン任務の目標",
       "help": "1行に「アイテムの英語名: 数量」。シーズン残り日数で生産量を均等に割り振ります。「シーズン任務をスキャン」が有効なら実行ごとに自動で書き換え、無効なら手動で編集できます。"
+    },
+    "ScanCargoOrders": {
+      "name": "輸送依頼をスキャン",
+      "help": "実行時に輸送ページを開き、一部の品物を納品済みの依頼に足りない品物を読み取り、「輸送の不足分」に書き込みます。こうした依頼は交換すると納品済みの品物が戻らないため、補うしかありません。",
+      "True": "有効",
+      "False": "無効"
+    },
+    "CargoTargets": {
+      "name": "輸送の不足分",
+      "help": "1行に「アイテムの英語名: 数量」。「輸送依頼をスキャン」が有効なら実行ごとに自動で書き換え、無効なら手動で編集できます。"
+    },
+    "CargoTargetDays": {
+      "name": "輸送の不足分の期限（日）",
+      "help": "輸送の不足分を何日で補うか。計画はこれに合わせて生産量を割り振ります。既定は 1 日。"
     },
     "ExtraTargets": {
       "name": "追加の目標",
