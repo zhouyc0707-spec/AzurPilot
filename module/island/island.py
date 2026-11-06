@@ -1098,6 +1098,8 @@ class Island(SelectCharacter):
         Returns:
             bool: 确认派遣是否成功。
         """
+        if getattr(self, 'island_round', None) is not None:
+            return self._confirm_round_post_add_order(context)
         clicked = False
         max_clicked = False
         button_seen = False
@@ -1153,6 +1155,76 @@ class Island(SelectCharacter):
             logger.warning(f"[岛屿] {context}材料不足，确认按钮不可用: {current}/{required}")
         else:
             logger.warning(f"[岛屿] {context}材料已确认足够，但确认按钮不可用，可能角色体力不足")
+        return False
+
+    def _read_round_dispatch_amounts(self):
+        """读取当前选品页实际次数及总耗料，补货目标不参与扣账。"""
+        from module.island.island_shop_base import DISPATCH_PRODUCT_NUMBER
+        number_ocr = Digit(DISPATCH_PRODUCT_NUMBER, lang='cnocr', letter=(80, 80, 80),
+                           threshold=160, alphabet='0123456789')
+        batches = number_ocr.ocr(self.device.image)
+        if not number_ocr.last_valid or batches <= 0:
+            return None
+        receipt = getattr(self, '_round_material_receipt', None)
+        if receipt is None:
+            return int(batches), None, None
+        stock, counter = self.ocr_select_product_material_detail()
+        matched = re.fullmatch(r'\s*(\d+)\s*/\s*(\d+)\s*', str(counter))
+        if not matched or stock != int(matched[1]) or int(matched[2]) <= 0:
+            return None
+        return int(batches), stock, int(matched[2])
+
+    def _confirm_round_post_add_order(self, context):
+        """本轮派遣只确认一次，正向确认工作/管理页后提交实际耗料。"""
+        from module.exception import GameBugError
+
+        self._round_dispatch_batches = None
+        self._round_dispatch_materials = {}
+        clicked = False
+        maximum_selected = False
+        previous = None
+        amounts = None
+        receipt = getattr(self, '_round_material_receipt', None)
+        for _ in self.loop(timeout=15, skip_first=False):
+            if self.appear(ERROR1, offset=30):
+                raise GameBugError(f'{context}出现岛屿错误')
+            if clicked and not self.appear(ISLAND_SELECT_PRODUCT_CHECK, offset=1) and (
+                            (self.appear(ISLAND_POSTMANAGE_CHECK, offset=1)
+                             and not self.is_post_detail_visible()) or self.appear(ISLAND_WORKING)):
+                batches, stock, required = amounts
+                if receipt is not None:
+                    item = receipt['item_id']
+                    self.island_round.observe(item, stock)
+                    self.island_round.consume({item: required})
+                    self._round_dispatch_materials = {item: required}
+                self._round_dispatch_batches = batches
+                self._round_material_receipt = None
+                return True
+            if clicked:
+                # 确认结果不明时只观察；重复点击可能新增一笔生产。
+                continue
+            if not self.appear(ISLAND_SELECT_PRODUCT_CHECK, offset=1):
+                continue
+            if not maximum_selected:
+                if self.appear_then_click(POST_MAX, interval=2):
+                    maximum_selected = True
+                continue
+            if not self.appear(POST_ADD_ORDER):
+                continue
+            candidate = self._read_round_dispatch_amounts()
+            if candidate is None or candidate != previous:
+                previous = candidate
+                continue
+            batches, stock, required = candidate
+            if receipt is not None and stock < required:
+                logger.warning(f'[岛屿单轮] {context}材料不足：{stock}/{required}')
+                return False
+            amounts = candidate
+            self.device.click(POST_ADD_ORDER)
+            clicked = True
+        if clicked:
+            raise GameStuckError(f'{context}派遣结果未确认，丢弃本轮库存后恢复')
+        logger.warning(f'[岛屿单轮] {context}次数或耗料未确认，保留材料并跳过')
         return False
 
     def is_character_page_visible(self):
@@ -2247,7 +2319,7 @@ class Island(SelectCharacter):
         return False
 
     def ensure_select_product_material(self, item_button, required_quantity, shop_check,
-                                       item_name=None, tab_check=None, tab_button=None):
+                                       item_name=None, tab_check=None, tab_button=None, material_id=None):
         """在岗位产品选择页读取当前材料数量，不足时进入对应商店补买。
 
         Args:
@@ -2265,6 +2337,17 @@ class Island(SelectCharacter):
         required_quantity = max(1, int(required_quantity))
         current_quantity, counter_text = self.ocr_select_product_material_detail(expected_quantity=required_quantity)
         page_required = self.parse_select_product_material_required(counter_text)
+        ledger = getattr(self, 'island_round', None)
+        if ledger is not None:
+            if material_id is None:
+                raise ValueError('本轮种苗补充必须指定材料编号')
+            matched = re.fullmatch(r'\s*(\d+)\s*/\s*(\d+)\s*', str(counter_text))
+            if not matched or current_quantity != int(matched[1]):
+                ledger.observe(material_id, None)
+                logger.warning('[岛屿单轮] 种苗数量未明确识别，跳过补货和派遣')
+                return MATERIAL_INSUFFICIENT
+            ledger.observe(material_id, current_quantity)
+            self._round_material_receipt = {'item_id': material_id}
         display_name = item_name or getattr(item_button, 'name', '材料')
         cn_name = self._item_cn(display_name)
         logger.info(f"[岛屿] {cn_name}页面材料: {counter_text}，当前库存: {current_quantity}，目标库存: {required_quantity}")
@@ -2286,6 +2369,9 @@ class Island(SelectCharacter):
             return MATERIAL_INSUFFICIENT
 
         logger.info(f"[岛屿] {cn_name}数量不足，进入商店补买 {buy_quantity} 个")
+        if ledger is not None:
+            # 商店按实际余额处理购买；未取得付款后的精确岛币余额时保留未知。
+            ledger.observe(1, None)
         if self.goto_shop_from_select_product(
             shop_check=shop_check,
             tab_check=tab_check,

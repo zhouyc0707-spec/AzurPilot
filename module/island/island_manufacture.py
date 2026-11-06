@@ -219,6 +219,8 @@ class IslandManufacture(IslandShopBase):
 
     def get_warehouse_counts(self):
         """真实旧模板先读；缺图产品保持未知，选品时按物品编号读取现货。"""
+        if getattr(self, 'island_round', None) is not None:
+            return self._load_round_stock()
         self.warehouse_filter(self.filter_asset)
         image = self.device.screenshot()
         templates = {item['name']: item['template'] for item in self.shop_items if item.get('template') is not None}
@@ -374,6 +376,36 @@ class IslandManufacture(IslandShopBase):
 
         return post_buttons
 
+    def prepare_round(self):
+        """收取四类全部岗位；停用岗位保留在制时间，但不重新派遣。"""
+        self.post_check_meal.clear()
+        self._unknown_working_categories.clear()
+        self._manufacture_scheduled.clear()
+        self._post_time_vars = {}
+        enabled = set(self.post_buttons)
+        all_buttons = {
+            'ISLAND_WOOD_PROCESSING_POST1': ISLAND_WOOD_PROCESSING_POST1,
+            'ISLAND_WOOD_PROCESSING_POST2': ISLAND_WOOD_PROCESSING_POST2,
+            'ISLAND_ELECTRONIC_PROCESSING_POST1': ISLAND_ELECTRONIC_PROCESSING_POST1,
+            'ISLAND_ELECTRONIC_PROCESSING_POST2': ISLAND_ELECTRONIC_PROCESSING_POST2,
+            'ISLAND_INDUSTRIAL_POST1': ISLAND_INDUSTRIAL_POST1,
+            'ISLAND_INDUSTRIAL_POST2': ISLAND_INDUSTRIAL_POST2,
+            'ISLAND_HANDMADE_POST1': ISLAND_HANDMADE_POST1,
+            'ISLAND_HANDMADE_POST2': ISLAND_HANDMADE_POST2,
+        }
+        self.goto_postmanage()
+        self.post_manage_mode(POST_MANAGE_PRODUCTION)
+        self.post_close()
+        self.post_manage_swipe(self.post_manage_swipe_count)
+        for index, (post_id, button) in enumerate(all_buttons.items(), 1):
+            self.posts.setdefault(post_id, {'status': 'none', 'button': button})
+            time_var = f'{self.time_prefix}{index}'
+            self._post_time_vars[post_id] = time_var
+            setattr(self, time_var, None)
+            self.post_check(post_id, time_var)
+            self.posts[post_id]['round_enabled'] = post_id in enabled
+        self._round_prepared = True
+
     def get_idle_posts_by_category(self, category):
         """获取指定制造类别的空闲岗位 ID 列表。
 
@@ -395,7 +427,8 @@ class IslandManufacture(IslandShopBase):
 
         # 只返回实际存在的空闲岗位
         return [post_id for post_id in category_posts
-                if post_id in self.posts and self.posts[post_id]['status'] == 'idle']
+                if post_id in self.posts and self.posts[post_id]['status'] == 'idle'
+                and self.posts[post_id].get('round_enabled', True)]
 
     def select_product(self, product_selection, product_selection_check):
         """选择制造产品。
@@ -430,6 +463,8 @@ class IslandManufacture(IslandShopBase):
         Returns:
             dict | None: 成功安排生产的产品配置，全部失败则返回 None。
         """
+        if getattr(self, 'island_round', None) is not None:
+            return self._select_round_manufacture(post_id, product_list)
         post_button = self.posts[post_id]['button']
 
         for product_info in product_list:
@@ -589,7 +624,8 @@ class IslandManufacture(IslandShopBase):
         # 检查库存iron_nail
         iron_nail_stock = self.warehouse_counts.get('iron_nail', 0)
         # 根据规则选择产品：铁钉足够时优先餐具；餐具未解锁或材料不足时继续生产铁钉，岗位不空闲
-        if iron_nail_stock >= 20:
+        ledger = getattr(self, 'island_round', None)
+        if iron_nail_stock >= 20 or (ledger is not None and ledger.get('iron_nail') is None):
             items = {item['name']: item for item in self.manufacture['industrial_production']['items']}
             product_list = [items['cutlery'], items['iron_nail']]
         else:
@@ -617,7 +653,8 @@ class IslandManufacture(IslandShopBase):
                 product_list.append(item)
 
         # 如果leather库存>=10，则生产boot
-        if leather_stock >= 10:
+        ledger = getattr(self, 'island_round', None)
+        if leather_stock >= 10 or (ledger is not None and ledger.get('leather') is None):
             boot_item = [item for item in self.manufacture['handmade']['items']
                          if item['name'] == 'boot'][0]
             product_list.append(boot_item)
@@ -629,6 +666,40 @@ class IslandManufacture(IslandShopBase):
 
         for post_id in idle_posts:
             self.select_product_with_material_check(post_id, product_list)
+
+    def _select_round_manufacture(self, post_id, product_list):
+        """按原手工候选顺序，以共享现货确定批次并确认扣料。"""
+        from module.island.planned_dispatch import recipe_for_local_name
+        from module.island.manufacture_selector import select_manufacture_recipe
+        if self._post_category(post_id) in self._unknown_working_categories:
+            return None
+        for item in product_list:
+            name = item['name']
+            batches = self._round_max_producible(
+                name, self.get_product_production_limit(name), allow_unknown=True)
+            if batches <= 0:
+                self.island_round.block(name)
+                continue
+            if not self._prepare_planned_recipe_page(post_id):
+                return None
+            if not select_manufacture_recipe(self, recipe_for_local_name(name)):
+                self.island_round.block(name)
+                self.back_to_postmanage_from_dispatch()
+                continue
+            batches = self._limit_round_food_batch(name, batches, respect_deficit=False)
+            # 未知原料补读后重走手工阈值，不能把“未知”当成已达到转产条件。
+            threshold = {'cutlery': ('iron_nail', 20), 'boot': ('leather', 10)}.get(name)
+            if threshold and (self.island_round.get(threshold[0]) or 0) < threshold[1]:
+                batches = 0
+            if batches <= 0 or self.produce_check():
+                self.island_round.block(name)
+                self.back_to_postmanage_from_dispatch()
+                continue
+            preview, confirmed_at = self.confirm_food_dispatch(batches, f'{self._item_cn(name)}制造派遣')
+            self.finish_food_dispatch(
+                post_id, name, self._post_time_vars[post_id], batches, preview, confirmed_at)
+            return item
+        return None
 
     def run(self):
         """运行制造业工坊自动化主流程。
@@ -644,10 +715,14 @@ class IslandManufacture(IslandShopBase):
         planned = refresh_production_plan(self.config, self.device)
         self._use_planned_catalog(planned)
         self._planner_protection = load_production_protection(self.config)
-        self._unknown_working_categories.clear()
+        prepared = (getattr(self, 'island_round', None) is not None
+                    and getattr(self, '_round_prepared', False))
+        if not prepared:
+            self._unknown_working_categories.clear()
         self._manufacture_scheduled.clear()
-        self.post_check_meal.clear()
-        self._post_time_vars = {}
+        if not prepared:
+            self.post_check_meal.clear()
+            self._post_time_vars = {}
         # 每批生产开始时清空“材料不足”记忆，避免跨批沿用旧库存状态
         self.unavailable_products = set()
 
@@ -661,11 +736,11 @@ class IslandManufacture(IslandShopBase):
             self.post_manage_up_swipe(450)
 
         # 检查岗位状态
-        time_vars = []
+        time_vars = list(self._post_time_vars.values()) if prepared else []
         post_index = 1
 
         # 按顺序检查所有岗位
-        for post_id in self.post_buttons.keys():
+        for post_id in (() if prepared else self.post_buttons.keys()):
             time_var_name = f'{self.time_prefix}{post_index}'
             time_vars.append(time_var_name)
             setattr(self, time_var_name, None)

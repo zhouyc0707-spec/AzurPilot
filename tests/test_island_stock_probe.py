@@ -57,7 +57,8 @@ class ProbeMain:
 
     def swipe(self, **kwargs):
         self.swipes += 1
-        self.page = min(self.page + 1, len(self.pages) - 1)
+        step = -1 if kwargs.get('vector', (0, -1))[1] > 0 else 1
+        self.page = max(0, min(self.page + step, len(self.pages) - 1))
 
     def loop(self, **kwargs):
         for _ in range(40):
@@ -149,6 +150,36 @@ class StockProbeTests(unittest.TestCase):
         main = ProbeMain({2604: 3, 2605: 8}, pages=[[2605], [2604]])
         self.assertEqual(self.session(main).run((2604, 2605)), {2604: 3, 2605: 8})
         self.assertEqual(main.swipes, 1)
+
+    def test_full_round_rewinds_retained_scroll_before_scanning(self):
+        main = ProbeMain({2604: 3, 2605: 8}, pages=[[2605], [2604]])
+        original_filter = main.warehouse_filter
+
+        def retained_filter(*args):
+            original_filter(*args)
+            main.page = 1
+
+        main.warehouse_filter = retained_filter
+        self.assertEqual(self.session(main).run((2604, 2605), reset_to_top=True), {2604: 3, 2605: 8})
+        self.assertEqual(main.swipes, 3)
+
+    def test_full_round_can_scan_beyond_original_eight_swipes(self):
+        page_ids = list(DIC_ISLAND_ITEM)[:11]
+        main = ProbeMain({item: index for index, item in enumerate(page_ids)}, pages=[[item] for item in page_ids])
+        result = self.session(main).run((page_ids[-1],), max_swipes=16, reset_to_top=True)
+        self.assertEqual(result, {page_ids[-1]: 10})
+        self.assertEqual(main.swipes, 11)
+
+    def test_duplicate_stack_on_later_page_does_not_add_detail_total_twice(self):
+        main = ProbeMain({2604: 17, 2605: 8}, pages=[[2604], [2604, 2605]])
+        self.assertEqual(self.session(main).run((2604, 2605)), {2604: 17, 2605: 8})
+        self.assertEqual(main.clicks.count('STOCK_PROBE_ITEM_2604'), 1)
+
+    def test_round_scan_bound_does_not_convert_unseen_item_to_zero(self):
+        main = ProbeMain({2604: 3, 2605: 8}, pages=[[2605], [2604]])
+        result = self.session(main).run((2604,), max_swipes=0)
+        self.assertEqual(result, {})
+        self.assertEqual(main.swipes, 0)
 
     def test_wrong_detail_name_does_not_confirm_quantity(self):
         main = ProbeMain({2604: 17}, wrong_detail=True)

@@ -21,6 +21,7 @@ DETAIL_TITLE = {'cn': '详情', 'en': 'Details', 'jp': '詳細', 'tw': '詳情'}
 OWN_LABEL = {'cn': '已拥有:', 'en': 'Owned:', 'jp': '所持中:', 'tw': '已擁有:'}
 WAREHOUSE_TEXT_AREA = (280, 130, 1230, 550)
 MAX_WAREHOUSE_SWIPES = 8
+ROUND_WAREHOUSE_SWIPES = 64
 RANCH_ITEM_IDS = frozenset((2600, 2601, 2602, 2603, 2604, 2605))
 
 
@@ -128,6 +129,25 @@ class StockProbeSession:
             last = signature
         self._unknown('仓库未返回查看模式或列表仍在滚动')
 
+    @staticmethod
+    def _signature(detections):
+        return tuple(sorted((text, tuple(round(value) for value in rect))
+                            for text, rect in _texts(detections)
+                            if WAREHOUSE_TEXT_AREA[0] <= rect[0] <= WAREHOUSE_TEXT_AREA[2]
+                            and WAREHOUSE_TEXT_AREA[1] <= rect[1] <= WAREHOUSE_TEXT_AREA[3]))
+
+    def _rewind(self, max_swipes):
+        """筛选不会保证滚动条归顶；以稳定视窗确认上边界，保持有界。"""
+        previous = self._signature(self._wait_warehouse())
+        for _ in range(max_swipes):
+            self.main.device.swipe_vector(vector=(0, 260), box=(310, 154, 1150, 485),
+                                          duration=(0.3, 0.5), name='STOCK_PROBE_WAREHOUSE_TOP')
+            current = self._signature(self._wait_warehouse())
+            if current == previous:
+                return
+            previous = current
+        logger.warning('[岛屿-库存观察] 仓库归顶达到滑动上限，未观察到的物品仍保留未知')
+
     def _close_detail(self):
         clicked = False
         for _ in self.main.loop(skip_first=False, timeout=Timer(10)):
@@ -164,18 +184,18 @@ class StockProbeSession:
             self._close_detail()
         return result
 
-    def run(self, item_ids):
+    def run(self, item_ids, max_swipes=MAX_WAREHOUSE_SWIPES, reset_to_top=False):
         """有限遍历当前仓库；遗漏的物品保留未知，绝不声称库存为零。"""
         filter_from = 'ranch' if set(item_ids) <= RANCH_ITEM_IDS else 'all_from'
         self.main.warehouse_filter('all_kind', filter_from)
+        if reset_to_top:
+            self._rewind(max_swipes)
         observed = {}
         previous_signature = None
-        for page in range(MAX_WAREHOUSE_SWIPES + 1):
+        for page in range(max_swipes + 1):
             detections = self._wait_warehouse()
             # 同一视窗的未知详情不反复打开。重复只停止搜索，不把缺项当成零。
-            signature = tuple(sorted((text, tuple(round(value) for value in rect)) for text, rect in _texts(detections)
-                                     if WAREHOUSE_TEXT_AREA[0] <= rect[0] <= WAREHOUSE_TEXT_AREA[2]
-                                     and WAREHOUSE_TEXT_AREA[1] <= rect[1] <= WAREHOUSE_TEXT_AREA[3]))
+            signature = self._signature(detections)
             if signature == previous_signature:
                 break
             cards = find_warehouse_item_cards(detections, set(item_ids) - set(observed), self.language)
@@ -185,7 +205,7 @@ class StockProbeSession:
                     observed[item] = quantity
             if len(observed) == len(item_ids):
                 return observed
-            if page == MAX_WAREHOUSE_SWIPES:
+            if page == max_swipes:
                 break
             previous_signature = signature
             self.main.device.swipe_vector(vector=(0, -260), box=(310, 154, 1150, 485),
@@ -197,7 +217,7 @@ class StockProbeSession:
         return observed
 
 
-def read_item_stocks(main, item_ids):
+def read_item_stocks(main, item_ids, *, max_swipes=MAX_WAREHOUSE_SWIPES, reset_to_top=False):
     """取得当前任务最新、明确的物品总库存；未观测物品不出现在返回字典。
 
     缺项的 result.get(item_id) 为 None，只有详情明确显示已拥有 0 才返回 0。
@@ -210,6 +230,6 @@ def read_item_stocks(main, item_ids):
     normalized = tuple(dict.fromkeys(resolve_item_id(item) for item in item_ids))
     if not normalized:
         return {}
-    observed = StockProbeSession(main).run(normalized)
+    observed = StockProbeSession(main).run(normalized, max_swipes=max_swipes, reset_to_top=reset_to_top)
     record_planner_stocks(getattr(main, 'config', None), observed, '仓库详情页')
     return observed

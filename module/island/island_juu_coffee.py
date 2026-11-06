@@ -120,6 +120,8 @@ class IslandJuuCoffee(IslandShopBase):
         """
         # 先调用父类方法获取基础库存
         super().get_warehouse_counts()
+        if getattr(self, 'island_round', None) is not None:
+            return self.warehouse_counts
 
         # 额外获取milk数量（从牧场）
         self.warehouse_filter('ranch')
@@ -245,6 +247,8 @@ class IslandJuuCoffee(IslandShopBase):
             dict[str, int]: 调整后受牛奶库存约束的需求数量映射。
         """
         result = requirements.copy()
+        if getattr(self, 'island_round', None) is not None:
+            return result
 
         # 计算所有需要牛奶的产品总需求
         milk_demand = 0

@@ -1117,6 +1117,12 @@ class AzurLaneAutoScript:
         """任务调用边界同时隔离资源归因，恢复和清油调用各自拥有独立记录。"""
         from module.statistics.resource_flow import task_session
         from module.campaign.recovery import campaign_recovery_scope
+        from module.island.production_round import invalidates_round
+        if invalidates_round(inflection.camelize(inflection.underscore(command))):
+            # 委托、科研插队保留本轮；订单、经营、重启等须重新确认岛屿库存。
+            self._island_production_round = None
+        elif self.__dict__.get('_island_production_round') is not None and not command.lower().startswith('island'):
+            logger.info(f'[岛屿单轮] 保留库存和剩余任务，先执行 {command}')
         recovery = self.__dict__.get('_campaign_recovery')
         if recovery is not None and inflection.underscore(command) not in (
                 'restart', inflection.underscore(recovery.runner.config.task.command)):
@@ -1124,7 +1130,10 @@ class AzurLaneAutoScript:
             self._campaign_recovery = None
         with task_session(self.config_name, inflection.camelize(inflection.underscore(command))), \
                 campaign_recovery_scope(self):
-            return self._run(command, skip_first_screenshot)
+            result = self._run(command, skip_first_screenshot)
+            if result is not True:
+                self._island_production_round = None
+            return result
 
     def _run(self, command, skip_first_screenshot=False):
         """
@@ -1757,15 +1766,15 @@ class AzurLaneAutoScript:
 
     def island_mine_forest(self):
         from module.island.island_mine_forest import IslandMineForest
-        IslandMineForest(config=self.config, device=self.device).run()
+        self._run_island_production('IslandMineForest', IslandMineForest)
 
     def island_farm(self):
         from module.island.island_farm import IslandFarm
-        IslandFarm(config=self.config, device=self.device).run()
+        self._run_island_production('IslandFarm', IslandFarm)
 
     def island_rancher(self):
         from module.island.island_rancher import IslandRancher
-        IslandRancher(config=self.config, device=self.device).run()
+        self._run_island_production('IslandRancher', IslandRancher)
 
     def island_fishery(self):
         from module.island.island_fishery import IslandFishery
@@ -1773,23 +1782,23 @@ class AzurLaneAutoScript:
 
     def island_grill(self):
         from module.island.island_grill import IslandGrill
-        IslandGrill(config=self.config, device=self.device).run()
+        self._run_island_production('IslandGrill', IslandGrill)
 
     def island_teahouse(self):
         from module.island.island_teahouse import IslandTeahouse
-        IslandTeahouse(config=self.config, device=self.device).run()
+        self._run_island_production('IslandTeahouse', IslandTeahouse)
 
     def island_restaurant(self):
         from module.island.island_restaurant import IslandRestaurant
-        IslandRestaurant(config=self.config, device=self.device).run()
+        self._run_island_production('IslandRestaurant', IslandRestaurant)
 
     def island_juu_coffee(self):
         from module.island.island_juu_coffee import IslandJuuCoffee
-        IslandJuuCoffee(config=self.config, device=self.device).run()
+        self._run_island_production('IslandJuuCoffee', IslandJuuCoffee)
 
     def island_juu_eatery(self):
         from module.island.island_juu_eatery import IslandJuuEatery
-        IslandJuuEatery(config=self.config, device=self.device).run()
+        self._run_island_production('IslandJuuEatery', IslandJuuEatery)
 
     def island_daily_gather(self):
         from module.island.island_daily_gather import IslandDailyGather
@@ -1797,7 +1806,11 @@ class AzurLaneAutoScript:
 
     def island_manufacture(self):
         from module.island.island_manufacture import IslandManufacture
-        IslandManufacture(config=self.config, device=self.device).run()
+        self._run_island_production('IslandManufacture', IslandManufacture)
+
+    def _run_island_production(self, task, cls):
+        from module.island.production_round import run_production_task
+        run_production_task(self, task, cls)
 
     def island_air_drop(self):
         from module.island.island_air_drop import IslandAirDrop
@@ -2342,6 +2355,14 @@ class AzurLaneAutoScript:
         while True:
             task = self._get_next_task()
             runtime = self.__dict__['_program_runtime']
+            if runtime.mode == 'native':
+                from module.island.production_round import select_unfinished_task
+                resumed = select_unfinished_task(self.config, task,
+                                                  self.__dict__.get('_island_production_round'))
+                if resumed != task:
+                    task = resumed
+                    self.config.task = name_to_function(task)
+                    self.config.bind(self.config.task)
             if runtime.mode == 'native' and runtime.oil_control.running_task is None:
                 selected = runtime.oil_control.select(task)
                 if selected is None:

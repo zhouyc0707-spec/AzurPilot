@@ -24,6 +24,7 @@ from module.handler.login import LoginHandler
 from module.island.farm_targets import crop_target, parse_crop_targets, plan_crops_to_restock
 from module.island.warehouse import *
 from module.logger import logger
+from module.island.data import DIC_ISLAND_RECIPE
 
 
 from module.island.planned_dispatch import PlannedProductionMixin, recipe_for_local_name
@@ -299,7 +300,9 @@ class IslandFarm(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
             config = self.INVENTORY_CONFIG[category]
             self.inventory_counts[category] = inventory
             skip = set()
-            for item_name in inventory:
+            ledger = getattr(self, 'island_round', None)
+            names = [item['name'] for item in config['items']] if ledger is not None else list(inventory)
+            for item_name in names:
                 if category == 'orchard' and item_name == 'avocado' and self.ignore_avocado:
                     skip.add(item_name)
                 elif category == 'nursery' and item_name == 'pineapple' and self.ignore_pineapple:
@@ -325,6 +328,11 @@ class IslandFarm(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
             # 缺口比例最大的作物排最前，轮转分配时优先补种
             self.to_plant_lists[category] = plan_crops_to_restock(
                 inventory, targets, config['threshold'], skip=skip)
+            if ledger is not None:
+                self.to_plant_lists[category].extend(
+                    name for name in names if name not in inventory and name not in skip
+                    and not ledger.is_blocked(name)
+                    and crop_target(name, self.crop_targets[category], config['threshold']) > 0)
 
     def _is_orchard_crop_in_season(self, crop_name):
         """检查果园作物是否在当季（按季节配置）。
@@ -429,6 +437,16 @@ class IslandFarm(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
             dict: 作物名称到数量的映射，如 {'wheat': 50, 'corn': 30}。
         """
         config = self.INVENTORY_CONFIG[category]
+        ledger = getattr(self, 'island_round', None)
+        if ledger is not None:
+            results = {}
+            for item in config['items']:
+                count = ledger.get(item['name'])
+                if count is None:
+                    continue
+                results[item['name']] = count
+                setattr(self, item['var_name'], count)
+            return results
         self.warehouse_filter(config['filter'])
         image = self.device.screenshot()
         results = {}
@@ -517,7 +535,9 @@ class IslandFarm(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
             self.posts[post_id]['crop'] = None
             self.posts[post_id]['state'] = 'idle'
             setattr(self, time_var_name, None)
-        self.post_get_and_close()
+        collected = self.post_get_and_close()
+        if not collected and getattr(self, '_round_collect_all', False):
+            raise GameStuckError(f'{post_id} 收获结果未确认，未建立共享库存')
         return True
 
     def get_orchard_character_filter(self, product):
@@ -559,6 +579,10 @@ class IslandFarm(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
         Returns:
             bool | None: 成功为 True，作物相关失败为 False，岗位未解锁为 None。
         """
+        ledger = getattr(self, 'island_round', None)
+        if ledger is not None and ledger.is_blocked(product):
+            logger.warning(f'[岛屿-统一生产] {self._item_cn(product)} 库存未确认，暂不派遣')
+            return False
         self.post_close()
         if not self.post_open(post_button):
             logger.info(f"[岛屿-农田] 岗位{post_button}未解锁，跳过{product}播种")
@@ -594,10 +618,25 @@ class IslandFarm(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
                 continue
             if self.appear(ISLAND_SELECT_PRODUCT_CHECK, offset=1):
                 if self.select_product(selection, selection_check):
+                    if ledger is not None and ledger.get(product) is None:
+                        from module.island.round_recipe import observe_selected_recipe
+                        if not observe_selected_recipe(self, product):
+                            ledger.block(product)
+                            self.back_to_postmanage_from_dispatch()
+                            return False
+                        target = crop_target(product, self.crop_targets[category],
+                                             self.INVENTORY_CONFIG[category]['threshold'])
+                        self.inventory_counts[category][product] = ledger.get(product)
+                        if product in self.to_plant_lists[category] and ledger.get(product) >= target:
+                            self.to_plant_lists[category].remove(product)
+                            self.back_to_postmanage_from_dispatch()
+                            return False
                     # seed_number 是补货目标而非单次需求；补货买不起时，
                     # 现有种子够页面显示的单次需求就直接种，不够才跳过
                     material = self.ensure_select_product_material(
                         item_button=seed_config['shop'],
+                        material_id=(next(iter(DIC_ISLAND_RECIPE[recipe_for_local_name(product)]['commission_cost']))
+                                     if ledger is not None else None),
                         required_quantity=seed_config['seed_number'],
                         shop_check=ISLAND_SHOP_SEED_TAB_CHECK,
                         item_name=f"{self._item_cn(product)}种子",
@@ -627,6 +666,14 @@ class IslandFarm(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
         finish_time = current_time() + time_value
         setattr(self, time_var_name, finish_time)
 
+        if ledger is not None:
+            from module.island.item_ids import LOCAL_TO_ITEM_ID
+            batches = getattr(self, '_round_dispatch_batches', None)
+            if not isinstance(batches, int) or batches <= 0:
+                raise GameStuckError('农田派遣已确认，但实际次数未确认，结束本轮')
+            outputs = DIC_ISLAND_RECIPE[recipe_for_local_name(product)]['commission_product']
+            ledger.production_started(product, batches * outputs[LOCAL_TO_ITEM_ID[product]])
+
         # 更新岗位作物信息
         for post_id, post_info in self.posts.items():
             if post_info['button'] == post_button:
@@ -636,6 +683,102 @@ class IslandFarm(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
         # 关闭详情弹窗，防止后续操作被弹窗遮挡
         self.post_close()
         return True
+
+    def prepare_round(self, collect_all=True):
+        """本轮盘点前收获并记录岗位，派工阶段复用同一结果。"""
+        self.island_error = False
+        self._round_collect_all = collect_all
+        self.goto_postmanage()
+        self.post_manage_mode(POST_MANAGE_PRODUCTION)
+        self.post_close()
+        self.post_manage_swipe(0)
+
+        self.time_vars = {
+            'farm': [None] * (4 if collect_all else self.farm_positions),
+            'orchard': [None] * (4 if collect_all else self.orchard_positions),
+            'nursery': [None] * (2 if collect_all else self.nursery_positions)
+        }
+
+        post_button_mapping = {
+            'farm': [self.posts['ISLAND_FARM_POST1']['button'],
+                     self.posts['ISLAND_FARM_POST2']['button'],
+                     self.posts['ISLAND_FARM_POST3']['button'],
+                     self.posts['ISLAND_FARM_POST4']['button']],
+            'orchard': [self.posts['ISLAND_ORCHARD_POST1']['button'],
+                        self.posts['ISLAND_ORCHARD_POST2']['button'],
+                        self.posts['ISLAND_ORCHARD_POST3']['button'],
+                        self.posts['ISLAND_ORCHARD_POST4']['button']],
+            'nursery': [self.posts['ISLAND_NURSERY_POST1']['button'],
+                        self.posts['ISLAND_NURSERY_POST2']['button']]
+        }
+
+        post_buttons = {
+            category: buttons[:len(self.time_vars[category])]
+            for category, buttons in post_button_mapping.items()
+        }
+
+        post_id_to_button = {}
+        for category in ['farm', 'orchard', 'nursery']:
+            positions_count = getattr(self, f'{category}_positions')
+            for i, button in enumerate(post_buttons[category]):
+                post_id = f'ISLAND_{category.upper()}_POST{i + 1}'
+                post_id_to_button[post_id] = button
+                self.posts[post_id]['round_enabled'] = i < positions_count
+
+        idle_posts = {'farm': [], 'orchard': [], 'nursery': []}
+
+        # 先遍历农田和果园
+        for category in ['farm', 'orchard']:
+            positions = len(self.time_vars[category])
+            for i in range(positions):
+                post_id = f'ISLAND_{category.upper()}_POST{i + 1}'
+                time_var_name = f'{category}_time_{i}'
+
+                button = post_id_to_button[post_id]
+                if not self.decided_lists(button, post_id, category, time_var_name):
+                    continue
+
+                if self.posts[post_id].get('state') == 'idle' and self.posts[post_id]['round_enabled']:
+                    idle_posts[category].append({
+                        'post_id': post_id,
+                        'button': button,
+                        'index': i,
+                        'time_var_name': time_var_name
+                    })
+
+        # 滑动到苗圃位置（滑动距离不够时自动补滑，直到苗圃岗位出现）
+        self.device.sleep(1)
+        self.post_manage_swipe_until_appear(ISLAND_NURSERY_POST1, min_swipes=1)
+        self.device.sleep(0.5)  # 等待滑动动画完成
+
+        # 然后遍历苗圃
+        category = 'nursery'
+        positions = len(self.time_vars[category])
+        for i in range(positions):
+            post_id = f'ISLAND_{category.upper()}_POST{i + 1}'
+            time_var_name = f'{category}_time_{i}'
+
+            button = post_id_to_button[post_id]
+            if not self.decided_lists(button, post_id, category, time_var_name):
+                continue
+
+            if self.posts[post_id].get('state') == 'idle' and self.posts[post_id]['round_enabled']:
+                idle_posts[category].append({
+                    'post_id': post_id,
+                    'button': button,
+                    'index': i,
+                    'time_var_name': time_var_name
+                })
+
+        logger.info(f"[岛屿-农田] \n空闲岗位统计:")
+        for category in ['farm', 'orchard', 'nursery']:
+            logger.info(f"[岛屿-农田] {category}: {len(idle_posts[category])}个空闲岗位")
+
+        self._round_idle_posts = idle_posts
+
+    def round_stock_items(self):
+        """声明本轮农作物库存，种子仍在选品页即时补充。"""
+        return {item['name'] for group in self.INVENTORY_CONFIG.values() for item in group['items']}
 
     def run(self):
         """运行岛屿农场、果园与苗圃自动化管理主流程。
@@ -660,94 +803,22 @@ class IslandFarm(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
         logger.info(f"[岛屿-农田] 果园库存: {self._inv_cn(self.inventory_counts['orchard'])}")
         logger.info(f"[岛屿-农田] 苗圃库存: {self._inv_cn(self.inventory_counts['nursery'])}")
 
-        self.goto_postmanage()
-        self.post_manage_mode(POST_MANAGE_PRODUCTION)
-        self.post_close()
-        self.post_manage_swipe(0)
-
-        self.time_vars = {
-            'farm': [None] * self.farm_positions,
-            'orchard': [None] * self.orchard_positions,
-            'nursery': [None] * self.nursery_positions
-        }
-
-        post_button_mapping = {
-            'farm': [self.posts['ISLAND_FARM_POST1']['button'],
-                     self.posts['ISLAND_FARM_POST2']['button'],
-                     self.posts['ISLAND_FARM_POST3']['button'],
-                     self.posts['ISLAND_FARM_POST4']['button']],
-            'orchard': [self.posts['ISLAND_ORCHARD_POST1']['button'],
-                        self.posts['ISLAND_ORCHARD_POST2']['button'],
-                        self.posts['ISLAND_ORCHARD_POST3']['button'],
-                        self.posts['ISLAND_ORCHARD_POST4']['button']],
-            'nursery': [self.posts['ISLAND_NURSERY_POST1']['button'],
-                        self.posts['ISLAND_NURSERY_POST2']['button']]
-        }
-
-        post_buttons = {
-            'farm': post_button_mapping['farm'][:self.farm_positions],
-            'orchard': post_button_mapping['orchard'][:self.orchard_positions],
-            'nursery': post_button_mapping['nursery'][:self.nursery_positions]
-        }
-
-        post_id_to_button = {}
-        for category in ['farm', 'orchard', 'nursery']:
-            positions_count = getattr(self, f'{category}_positions')
-            for i, button in enumerate(post_buttons[category]):
-                post_id = f'ISLAND_{category.upper()}_POST{i + 1}'
-                post_id_to_button[post_id] = button
-
-        idle_posts = {'farm': [], 'orchard': [], 'nursery': []}
-
-        # 先遍历农田和果园
-        for category in ['farm', 'orchard']:
-            positions = len(self.time_vars[category])
-            for i in range(positions):
-                post_id = f'ISLAND_{category.upper()}_POST{i + 1}'
-                time_var_name = f'{category}_time_{i}'
-
-                button = post_id_to_button[post_id]
-                if not self.decided_lists(button, post_id, category, time_var_name):
-                    continue
-
-                if self.posts[post_id].get('state') == 'idle':
-                    idle_posts[category].append({
-                        'post_id': post_id,
-                        'button': button,
-                        'index': i,
-                        'time_var_name': time_var_name
-                    })
-
-        # 滑动到苗圃位置（滑动距离不够时自动补滑，直到苗圃岗位出现）
-        self.device.sleep(1)
-        self.post_manage_swipe_until_appear(ISLAND_NURSERY_POST1, min_swipes=1)
-        self.device.sleep(0.5)  # 等待滑动动画完成
-
-        # 然后遍历苗圃
-        category = 'nursery'
-        positions = len(self.time_vars[category])
-        for i in range(positions):
-            post_id = f'ISLAND_{category.upper()}_POST{i + 1}'
-            time_var_name = f'{category}_time_{i}'
-
-            button = post_id_to_button[post_id]
-            if not self.decided_lists(button, post_id, category, time_var_name):
-                continue
-
-            if self.posts[post_id].get('state') == 'idle':
-                idle_posts[category].append({
-                    'post_id': post_id,
-                    'button': button,
-                    'index': i,
-                    'time_var_name': time_var_name
-                })
-
-        logger.info(f"[岛屿-农田] \n空闲岗位统计:")
-        for category in ['farm', 'orchard', 'nursery']:
-            logger.info(f"[岛屿-农田] {category}: {len(idle_posts[category])}个空闲岗位")
+        if not getattr(self, 'island_round', None):
+            self.prepare_round(collect_all=False)
+        else:
+            # 集中收获早于盘点，补回旧流程巡岗时对工作中作物的需求扣减。
+            for category in ('farm', 'orchard', 'nursery'):
+                for post_id, info in self.posts.items():
+                    product = info.get('crop')
+                    if (post_id.startswith(f'ISLAND_{category.upper()}_POST')
+                            and info.get('state') == 'working' and product in self.to_plant_lists[category]):
+                        self.to_plant_lists[category].remove(product)
+            self.goto_postmanage()
+            self.post_manage_mode(POST_MANAGE_PRODUCTION)
+            self.post_close()
+        idle_posts = self._round_idle_posts
 
         if planner_active(self.config):
-            from module.island.data import DIC_ISLAND_RECIPE
             from module.island.item_ids import LOCAL_TO_ITEM_ID
             from module.island.production_planner import get_planned_recipe_items
             for category in ('farm', 'orchard', 'nursery'):

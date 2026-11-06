@@ -46,6 +46,7 @@ from datetime import timedelta
 from module.config.time_source import now as current_time
 from module.handler.login import LoginHandler
 from module.logger import logger
+from module.island.data import DIC_ISLAND_RECIPE
 
 
 # 渔场岗位生产派遣的最低角色体力（低于该值不派遣，避免高体力消耗养殖确认失败）
@@ -232,6 +233,11 @@ class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler, 
 
         for item_config in self.FISHERY_ITEMS:
             item_name = item_config['name']
+            ledger = getattr(self, 'island_round', None)
+            if ledger is not None and ledger.get(item_name) is None:
+                if self.fishery_threshold.get(item_name, 0) > 0 and not ledger.is_blocked(item_name):
+                    self.to_plant_list.append(item_name)
+                continue
             count = inventory.get(item_name, 0)
             from module.island.production_planner import planner_target
             threshold = planner_target(self.config, item_name, self.fishery_threshold.get(item_name, 50))
@@ -366,6 +372,16 @@ class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler, 
         Returns:
             dict[str, int]: 各渔场产品名称到库存数量的映射。
         """
+        ledger = getattr(self, 'island_round', None)
+        if ledger is not None:
+            results = {}
+            for item in self.FISHERY_ITEMS:
+                count = ledger.get(item['name'])
+                if count is None:
+                    continue
+                results[item['name']] = count
+                setattr(self, item['var_name'], count)
+            return results
         self.warehouse_filter('fishery')
         image = self.device.screenshot()
         results = {}
@@ -424,12 +440,16 @@ class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler, 
             if post_index < len(self.fishery_times):
                 self.fishery_times[post_index] = None
             return False
-        self.post_open(post_button)
+        if not self.post_open(post_button):
+            self.posts[post_id].update(state='locked', crop=None, runs=0)
+            return False
         self.device.screenshot()
         was_complete = self.appear(ISLAND_WORK_COMPLETE, offset=1)
         if was_complete or self.appear(POST_GET, offset=(50, 0)):
             collected = True
-            self.post_get_stay()
+            confirmed = self.post_get_stay()
+            if not confirmed and getattr(self, '_round_collect_all', False):
+                raise GameStuckError(f'{post_id} 收获结果未确认，未建立共享库存')
             self.device.screenshot()
 
         if self.appear(ISLAND_WORKING):
@@ -453,6 +473,8 @@ class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler, 
             if post_index < len(self.fishery_times):
                 self.fishery_times[post_index] = None
         else:
+            if collected and getattr(self, '_round_collect_all', False):
+                raise GameStuckError(f'{post_id} 收获后岗位状态未确认')
             if was_complete:
                 self.posts[post_id]['crop'] = None
                 self.posts[post_id]['runs'] = 0
@@ -480,6 +502,10 @@ class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler, 
         Returns:
             bool: 养殖操作是否成功。
         """
+        ledger = getattr(self, 'island_round', None)
+        if ledger is not None and ledger.is_blocked(product):
+            logger.warning(f'[岛屿-统一生产] {self._item_cn(product)} 库存未确认，暂不养殖')
+            return False
         self.post_close()
         self.post_open(post_button)
         self.device.screenshot()
@@ -503,8 +529,28 @@ class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler, 
                 continue
             if self.appear(ISLAND_SELECT_PRODUCT_CHECK, offset=1):
                 if self.select_product(selection, selection_check):
+                    if ledger is not None and ledger.get(product) is None:
+                        from module.island.round_recipe import observe_selected_recipe
+                        if not observe_selected_recipe(self, product):
+                            ledger.block(product)
+                            self.back_to_postmanage_from_dispatch()
+                            return False
+                        stock = ledger.get(product)
+                        self.inventory_counts[product] = stock
+                        if product in self.to_plant_list:
+                            deficit = max(self.fishery_threshold.get(product, 0) - stock, 0)
+                            fry_needed = (deficit + item_config['yield'] - 1) // item_config['yield']
+                            self.to_plant_list = [name for name in self.to_plant_list if name != product]
+                            self.to_plant_list.extend([product] * fry_needed)
+                            required_quantity = min(item_config['buy_max'] + 1, fry_needed)
+                            if required_quantity <= 0:
+                                self.to_plant_list = [name for name in self.to_plant_list if name != product]
+                                self.back_to_postmanage_from_dispatch()
+                                return False
                     material = self.ensure_select_product_material(
                         item_button=item_config['shop'],
+                        material_id=(next(iter(DIC_ISLAND_RECIPE[recipe_for_local_name(product)]['commission_cost']))
+                                     if ledger is not None else None),
                         required_quantity=required_quantity,
                         shop_check=ISLAND_FRY_SHOP_CHECK,
                         item_name=f"{self._item_cn(product)}鱼苗",
@@ -541,6 +587,13 @@ class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler, 
         post_number = ocr_post_number.ocr(self.device.image) or 1
         if post_index < len(self.fishery_times):
             self.fishery_times[post_index] = finish_time
+
+        if ledger is not None:
+            actual = getattr(self, '_round_dispatch_batches', None)
+            if not isinstance(actual, int) or actual <= 0:
+                raise GameStuckError('渔场派遣已确认，但实际次数未确认，结束本轮')
+            post_number = actual
+            ledger.production_started(product, post_number * item_config['yield'])
 
         # 更新岗位作物信息
         for post_id, post_info in self.posts.items():
@@ -601,6 +654,63 @@ class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler, 
             quantity_queue.append(product_quantities[product][used_index])
         return quantity_queue
 
+    def prepare_round(self, collect_all=True):
+        """本轮盘点前收取鱼获并记录岗位，派工阶段不重复领取。"""
+        self.island_error = False
+        self._round_collect_all = collect_all
+        # 重置渔场时间追踪列表
+        positions = 3 if collect_all else self.fishery_positions
+        self.fishery_times = [None] * positions
+
+        # 首轮先检查岗位并收取已完成鱼获，确保随后读取的仓库库存包含本轮收获。
+        self.goto_postmanage()
+        self.post_manage_mode(POST_MANAGE_PRODUCTION)
+        self.post_close()
+
+        post_buttons = [
+            self.posts['ISLAND_FISHERY_POST1']['button'],
+            self.posts['ISLAND_FISHERY_POST2']['button'],
+            self.posts['ISLAND_FISHERY_POST3']['button'],
+        ]
+
+        post_button_mapping = post_buttons[:positions]
+
+        post_id_to_button = {}
+        for i, button in enumerate(post_button_mapping):
+            post_id = f'ISLAND_FISHERY_POST{i + 1}'
+            post_id_to_button[post_id] = button
+            self.posts[post_id]['round_enabled'] = i < self.fishery_positions
+
+        idle_posts = []
+        collected_posts = []
+
+        logger.info("[岛屿-渔场] 首轮检查渔场岗位，收取已完成鱼获并记录工作中岗位")
+        for i in range(positions):
+            post_id = f'ISLAND_FISHERY_POST{i + 1}'
+            button = post_id_to_button[post_id]
+
+            if self.decided_lists(button, post_id, i):
+                collected_posts.append(post_id)
+
+            if self._post_available_for_dispatch(self.posts[post_id]) and self.posts[post_id]['round_enabled']:
+                idle_posts.append({
+                    'post_id': post_id,
+                    'button': button,
+                    'index': i,
+                    'time_var_name': f'time_fishery_{i}',
+                })
+
+        if collected_posts:
+            logger.info(f"[岛屿-渔场] 首轮渔场岗位检查已收取完成鱼获: {collected_posts}")
+        else:
+            logger.info("[岛屿-渔场] 首轮渔场岗位检查没有发现可收取鱼获")
+
+        self._round_idle_posts = idle_posts
+
+    def round_stock_items(self):
+        """鱼苗继续走选品页补充；本轮统一读取养殖成品。"""
+        return {item['name'] for item in self.FISHERY_ITEMS}
+
     def run(self, ranch_finish_times=None):
         """运行渔场自动化管理主流程。
 
@@ -619,50 +729,9 @@ class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler, 
         self._planner_dispatched = {}
         self._planner_in_production = {}
 
-        # 重置渔场时间追踪列表
-        self.fishery_times = [None] * self.fishery_positions
-
-        # 首轮先检查岗位并收取已完成鱼获，确保随后读取的仓库库存包含本轮收获。
-        self.goto_postmanage()
-        self.post_manage_mode(POST_MANAGE_PRODUCTION)
-        self.post_close()
-
-        post_buttons = [
-            self.posts['ISLAND_FISHERY_POST1']['button'],
-            self.posts['ISLAND_FISHERY_POST2']['button'],
-            self.posts['ISLAND_FISHERY_POST3']['button'],
-        ]
-
-        post_button_mapping = post_buttons[:self.fishery_positions]
-
-        post_id_to_button = {}
-        for i, button in enumerate(post_button_mapping):
-            post_id = f'ISLAND_FISHERY_POST{i + 1}'
-            post_id_to_button[post_id] = button
-
-        idle_posts = []
-        collected_posts = []
-
-        logger.info("[岛屿-渔场] 首轮检查渔场岗位，收取已完成鱼获并记录工作中岗位")
-        for i in range(self.fishery_positions):
-            post_id = f'ISLAND_FISHERY_POST{i + 1}'
-            button = post_id_to_button[post_id]
-
-            if self.decided_lists(button, post_id, i):
-                collected_posts.append(post_id)
-
-            if self._post_available_for_dispatch(self.posts[post_id]):
-                idle_posts.append({
-                    'post_id': post_id,
-                    'button': button,
-                    'index': i,
-                    'time_var_name': f'time_fishery_{i}',
-                })
-
-        if collected_posts:
-            logger.info(f"[岛屿-渔场] 首轮渔场岗位检查已收取完成鱼获: {collected_posts}")
-        else:
-            logger.info("[岛屿-渔场] 首轮渔场岗位检查没有发现可收取鱼获")
+        if not getattr(self, 'island_round', None):
+            self.prepare_round(collect_all=False)
+        idle_posts = self._round_idle_posts
 
         self.check_inventory_and_prepare_list()
         self._remove_working_fishery_demand()

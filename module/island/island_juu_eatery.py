@@ -152,6 +152,8 @@ class IslandJuuEatery(IslandShopBase):
         """
         # 先调用父类方法获取基础库存
         super().get_warehouse_counts()
+        if getattr(self, 'island_round', None) is not None:
+            return self.warehouse_counts
 
         # 获取cheese数量
 
@@ -246,6 +248,8 @@ class IslandJuuEatery(IslandShopBase):
             dict[str, int]: 调整后受原料库存约束的需求数量映射。
         """
         result = requirements.copy()
+        if getattr(self, 'island_round', None) is not None:
+            return result
 
         # 处理strawberry_charlotte的芝士限制
         if 'strawberry_charlotte' in result and result['strawberry_charlotte'] > 0:

@@ -278,6 +278,8 @@ class IslandTeahouse(IslandShopBase):
         """
         # 先调用父类方法获取基础库存
         super().get_warehouse_counts()
+        if getattr(self, 'island_round', None) is not None:
+            return self.warehouse_counts
 
         # 额外获取蜂蜜数量（用于库存限制）
         self.warehouse_filter('basic','other_from')
@@ -336,6 +338,8 @@ class IslandTeahouse(IslandShopBase):
         Raises:
             GameStuckError: 派遣流程超时或界面卡死时抛出。
         """
+        if getattr(self, 'island_round', None) is not None:
+            return super().post_produce(post_id, product, number, time_var_name, product2)
         seasonal_drink_name = self.seasonal_high_priority_drink['name'] if self.seasonal_high_priority_drink else ''
         if product == seasonal_drink_name:
             number = min(number, self.get_product_production_limit(product))
@@ -435,6 +439,8 @@ class IslandTeahouse(IslandShopBase):
             dict[str, int]: 调整后的饮品需求映射。
         """
         result = requirements.copy()
+        if getattr(self, 'island_round', None) is not None:
+            return result
         remaining_honey = self.fresh_honey
 
         # 处理蜂蜜柠檬水的需求（每 1 个蜂蜜）

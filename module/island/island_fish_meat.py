@@ -357,6 +357,9 @@ class IslandFishMeatExchange:
         before = self._clear_fish_selection()
         if before is None:
             return None
+        ledger = getattr(self, 'island_round', None)
+        if ledger is not None:
+            ledger.observe(meat_id, before)
         logger.attr('FishMeatOwned', f'{name} {before}/{target}')
         if before >= target:
             return before
@@ -364,6 +367,9 @@ class IslandFishMeatExchange:
         if cards is None:
             return None
         stock = {fish_id: amount for _, fish_id, amount in cards}
+        if ledger is not None:
+            for fish_id, amount in stock.items():
+                ledger.observe(fish_id, amount)
         amounts = plan_fish_exchange(stock, target - before, keep)
         expected = fish_meat_gain(amounts)
         logger.info(f'[岛屿-鱼肉加工] {name} 持有 {before}，目标 {target}；鱼库存 {stock}，兑换 {amounts}，'
@@ -391,7 +397,14 @@ class IslandFishMeatExchange:
             logger.warning(f'[岛屿-鱼肉加工] 已选可获得 {gain} 与计划 {expected} 不符，取消')
             self._clear_fish_selection()
             return None
-        return self._confirm_exchange(before, expected)
+        after = self._confirm_exchange(before, expected)
+        if ledger is not None:
+            if after is None:
+                from module.exception import GameStuckError
+                raise GameStuckError('鱼肉兑换到账不明，结束本轮并重新确认库存')
+            ledger.consume(amounts)
+            ledger.observe(meat_id, after)
+        return after
 
     def run_fish_meat_exchange(self, targets, keep=None):
         """按目标补鱼肉，完成后回到岛屿主页。

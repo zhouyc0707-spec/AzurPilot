@@ -302,6 +302,9 @@ class FishExchangeSession:
                 continue
             for _ in range(MAX_EXCHANGE_BATCHES):
                 current = self._goto_group(meat_id)
+                ledger = getattr(self.main, 'island_round', None)
+                if ledger is not None:
+                    ledger.observe(meat_id, current)
                 if current >= target:
                     break
                 cards = self._cards(meat_id)
@@ -316,6 +319,9 @@ class FishExchangeSession:
                 } != {fish: info['stock'] for fish, info in confirmed.items()}:
                     self._unknown('相邻截图中的鱼库存或加工页状态不一致')
                 cards = confirmed
+                if ledger is not None:
+                    for fish, info in cards.items():
+                        ledger.observe(fish, info['stock'])
                 selection, produced = plan_fish_exchange(meat_id, target - current,
                                                         {fish: info['stock'] for fish, info in cards.items()}, protected)
                 if not selection:
@@ -324,6 +330,9 @@ class FishExchangeSession:
                 logger.attr('FishExchange', {'item': meat_id, 'stock': current, 'target': target,
                                             'fish': selection, 'output': produced})
                 after = self._exchange_batch(meat_id, current, cards, selection, produced)
+                if ledger is not None:
+                    ledger.consume(selection)
+                    ledger.observe(meat_id, after)
                 config = getattr(self.main, 'config', None)
                 invalidate_planner_stocks(config, [meat_id, *selection], '鱼肉兑换后')
                 record_planner_stocks(config, {meat_id: after}, '鱼肉兑换到账页')

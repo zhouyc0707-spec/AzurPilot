@@ -251,6 +251,165 @@ class IslandShopBase(Island, WarehouseOCR):
             self.posts[post_id] = {'status': 'none', 'button': button}
 
     # ============ 通用方法 ============
+    def round_stock_items(self):
+        """集中盘点包含候选成品、套餐前置品和完整配方用料。"""
+        from module.island.data import DIC_ISLAND_RECIPE
+        from module.island.planned_dispatch import recipe_for_local_name
+        from module.island.item_ids import LOCAL_TO_ITEM_ID
+        result = set()
+        for product in self.name_to_config:
+            if product in LOCAL_TO_ITEM_ID:
+                result.add(LOCAL_TO_ITEM_ID[product])
+            try:
+                recipe = DIC_ISLAND_RECIPE[recipe_for_local_name(product)]
+            except ValueError:
+                continue
+            result.update(recipe['commission_cost'])
+            result.update(recipe['commission_product'])
+        return result
+
+    def prepare_round(self):
+        """只巡检收获全部岗位，保留状态供本轮实际派遣使用。"""
+        self.post_check_meal.clear()
+        self.goto_postmanage()
+        self.post_manage_mode(POST_MANAGE_PRODUCTION)
+        self.post_close()
+        self.post_manage_swipe(self.post_manage_swipe_count)
+        self._round_time_vars = []
+        enabled = getattr(self.config, self.config_post_number, 2)
+        for index, post_id in enumerate(self.post_buttons, 1):
+            time_var = f'{self.time_prefix}{index}'
+            self._round_time_vars.append(time_var)
+            setattr(self, time_var, None)
+            self.post_check(post_id, time_var)
+            self.posts[post_id]['round_enabled'] = index <= enabled
+        self._round_prepared = True
+
+    def _load_round_stock(self):
+        """同步本轮已确认现货；未知项不填零，特殊材料旧字段仅供旧算法使用。"""
+        from module.island.item_ids import ITEM_ID_TO_LOCAL
+        ledger = self.island_round
+        self.warehouse_counts = {
+            ITEM_ID_TO_LOCAL[item]: ledger.get(item)
+            for item in self.round_stock_items()
+            if item in ITEM_ID_TO_LOCAL and ledger.get(item) is not None
+        }
+        for material, field in (('milk', 'milk_stock'), ('cheese', 'cheese_stock'),
+                                ('fresh_honey', 'fresh_honey')):
+            if hasattr(self, field):
+                stock = ledger.get(material)
+                # 共享模式的最终检查直接读 ledger，旧特殊材料字段不参与未知判定。
+                setattr(self, field, stock if stock is not None else 0)
+                self.special_materials[material] = stock if stock is not None else 0
+        return self.warehouse_counts
+
+    def _round_max_producible(self, product, requested, *, allow_unknown=False, decompose=False):
+        """预检完整配方；未知仅允许进入选品页复核，不能直接派遣。"""
+        from module.island.data import DIC_ISLAND_RECIPE
+        from module.island.item_ids import ITEM_ID_TO_LOCAL
+        from module.island.planned_dispatch import recipe_for_local_name
+        ledger = self.island_round
+        if ledger.is_blocked(product) or product in self.chef_unavailable_products:
+            return 0
+        try:
+            recipe = DIC_ISLAND_RECIPE[recipe_for_local_name(product)]
+        except ValueError:
+            ledger.block(product)
+            return 0
+        batches = min(requested, recipe['production_limit'])
+        for item, cost in recipe['commission_cost'].items():
+            stock = ledger.get(item)
+            if decompose and ITEM_ID_TO_LOCAL.get(item) in self.name_to_config:
+                continue
+            if stock is None:
+                if allow_unknown:
+                    continue
+                return 0
+            usable = self._get_usable_stock(ITEM_ID_TO_LOCAL.get(item), stock)
+            batches = min(batches, usable // cost)
+        return batches
+
+    def _limit_round_food_batch(self, product, number, *, respect_deficit=True):
+        """未知库存只在所选配方页复核一次，再按现货裁剪本次实际下单。"""
+        from module.island.data import DIC_ISLAND_RECIPE
+        from module.island.planned_dispatch import recipe_for_local_name
+        from module.island.manufacture_selector import set_manufacture_quantity
+        from module.island.round_recipe import observe_selected_recipe
+        recipe_id = recipe_for_local_name(product)
+        recipe = DIC_ISLAND_RECIPE[recipe_id]
+        ledger = self.island_round
+        self._round_deficit_satisfied = False
+        unknown_product = ledger.get(product) is None
+        items = set(recipe['commission_cost']) | set(recipe['commission_product'])
+        if any(ledger.get(item) is None for item in items):
+            if not observe_selected_recipe(self, product):
+                ledger.block(product)
+                return 0
+            self._load_round_stock()
+            if unknown_product and respect_deficit:
+                required = self.to_post_products.get(product, number)
+                if required < 9999:
+                    number = min(number, max(required - ledger.get(product), 0))
+                    if number <= 0:
+                        self._round_deficit_satisfied = True
+                        return 0
+        number = self._round_max_producible(product, number)
+        if number <= 0:
+            ledger.block(product)
+            return 0
+        if not set_manufacture_quantity(self, number):
+            raise GameStuckError(f'{self._item_cn(product)}下单前实际生产次数无法确认')
+        return number
+
+    def _post_produce_round_food(self, post_id, product, number, time_var_name, product2=None):
+        """共享轮沿用手工选品和角色规则，完整配方确认后才派遣。"""
+        from module.island.planned_dispatch import PlannedProductionMixin, recipe_for_local_name
+        from module.island.manufacture_selector import select_manufacture_recipe
+        self._round_deficit_satisfied = False
+        for candidate in dict.fromkeys([product] + ([product2] if product2 else [])):
+            batches = self._round_max_producible(candidate, number, allow_unknown=True)
+            if batches <= 0:
+                self.island_round.block(candidate)
+                continue
+            if not PlannedProductionMixin._planned_open_product_page(
+                    self, post_id, self.chef_config, candidate):
+                self.island_round.block(candidate)
+                continue
+            if not select_manufacture_recipe(self, recipe_for_local_name(candidate)):
+                self.island_round.block(candidate)
+                self.back_to_postmanage_from_dispatch()
+                continue
+            batches = self._limit_round_food_batch(
+                candidate, batches, respect_deficit=not getattr(self, '_round_filler', False))
+            if batches <= 0 or self.produce_check():
+                if not self._round_deficit_satisfied:
+                    self.island_round.block(candidate)
+                self.back_to_postmanage_from_dispatch()
+                continue
+            preview, confirmed_at = self.confirm_food_dispatch(batches, f'{self._item_cn(candidate)}生产派遣')
+            return self.finish_food_dispatch(
+                post_id, candidate, time_var_name, batches, preview, confirmed_at)
+        return 0
+
+    def _observe_round_targets(self, post_id):
+        """套餐分解前核实未知目标现货，避免为已经达标的套餐补做原料。"""
+        from module.island.planned_dispatch import PlannedProductionMixin, recipe_for_local_name
+        from module.island.manufacture_selector import select_manufacture_recipe
+        from module.island.round_recipe import observe_selected_recipe
+        for product in dict.fromkeys(name for name, target in self.post_products if target > 0):
+            if self.island_round.get(product) is not None or self.island_round.is_blocked(product):
+                continue
+            if self._round_max_producible(product, 1, allow_unknown=True, decompose=True) <= 0:
+                continue
+            if not PlannedProductionMixin._planned_open_product_page(self, post_id, self.chef_config, product):
+                self.island_round.block(product)
+                continue
+            if (not select_manufacture_recipe(self, recipe_for_local_name(product))
+                    or not observe_selected_recipe(self, product)):
+                self.island_round.block(product)
+            self.back_to_postmanage_from_dispatch()
+        self._load_round_stock()
+
     def get_product_production_limit(self, product):
         """按实际商品查询配方单次上限，供规划、手工和余岗生产共用。"""
         from module.island.data import DIC_ISLAND_RECIPE
@@ -325,6 +484,8 @@ class IslandShopBase(Island, WarehouseOCR):
         Returns:
             dict[str, int]: 各商品的仓库库存映射字典。
         """
+        if getattr(self, 'island_round', None) is not None:
+            return self._load_round_stock()
         self.warehouse_filter(self.filter_asset)
         image = self.device.screenshot()
         counts = self.ocr_item_quantities(
@@ -540,8 +701,18 @@ class IslandShopBase(Island, WarehouseOCR):
         setattr(self, time_var_name, finish_time)
         self.posts[post_id]['status'] = 'working'
         self.posts[post_id]['crop'] = product
-        self.deduct_materials(product, actual_number)
-        self._sync_planned_food_materials(product, actual_number)
+        if isinstance(self, IslandShopBase) and getattr(self, 'island_round', None) is not None:
+            from module.island.data import DIC_ISLAND_RECIPE
+            from module.island.planned_dispatch import recipe_for_local_name
+            recipe = DIC_ISLAND_RECIPE[recipe_for_local_name(product)]
+            self.island_round.consume({item: cost * actual_number
+                                       for item, cost in recipe['commission_cost'].items()})
+            for item, quantity in recipe['commission_product'].items():
+                self.island_round.production_started(item, quantity * actual_number)
+            self._load_round_stock()
+        else:
+            self.deduct_materials(product, actual_number)
+            self._sync_planned_food_materials(product, actual_number)
         logger.info(f'[岛屿] 已安排生产：{self._item_cn(product)} x{actual_number}')
         return actual_number
 
@@ -563,6 +734,8 @@ class IslandShopBase(Island, WarehouseOCR):
         Raises:
             GameStuckError: 派遣流程超时或界面卡死时抛出。
         """
+        if getattr(self, 'island_round', None) is not None:
+            return self._post_produce_round_food(post_id, product, number, time_var_name, product2)
         if self.name_to_config[product].get('generic_recipe'):
             return self._post_produce_generic_food(post_id, product, number, time_var_name)
         requested_number = number
@@ -688,6 +861,8 @@ class IslandShopBase(Island, WarehouseOCR):
         """统一限制配方批次；规划开启时再实读耗材，保留库存和定制套餐原料线。"""
         from module.island.production_planner import load_planner_targets, planner_active
         number = min(number, self.get_product_production_limit(product))
+        if getattr(self, 'island_round', None) is not None:
+            return self._limit_round_food_batch(product, number)
         if not planner_active(self.config):
             return number
         from module.island.planned_dispatch import recipe_for_local_name
@@ -804,7 +979,7 @@ class IslandShopBase(Island, WarehouseOCR):
             list[str]: 空闲岗位 ID 列表。
         """
         return [post_id for post_id, post_info in self.posts.items()
-                if post_info['status'] == 'idle']
+                if post_info['status'] == 'idle' and post_info.get('round_enabled', True)]
 
     # ============ 核心逻辑 ============
 
@@ -936,10 +1111,14 @@ class IslandShopBase(Island, WarehouseOCR):
         self._planned_food_materials = {}
         self._planned_food_outputs = {}
         self._planned_food_filler = False
+        self._round_filler = False
         self.chef_unavailable_products.clear()
         self.unavailable_characters.clear()
         # 在制品和保留线每轮重新建立，不能累加同一实例上轮的识别结果。
-        self.post_check_meal.clear()
+        prepared = (getattr(self, 'island_round', None) is not None
+                    and getattr(self, '_round_prepared', False))
+        if not prepared:
+            self.post_check_meal.clear()
         self._reserved_targets.clear()
         self.goto_postmanage()
         self.post_manage_mode(POST_MANAGE_PRODUCTION)
@@ -948,8 +1127,8 @@ class IslandShopBase(Island, WarehouseOCR):
 
         # 检查岗位状态
         post_count = getattr(self.config, self.config_post_number, 2)
-        time_vars = []
-        for i in range(post_count):
+        time_vars = list(self._round_time_vars) if prepared else []
+        for i in range(0 if prepared else post_count):
             time_var_name = f'{self.time_prefix}{i + 1}'
             time_vars.append(time_var_name)
             setattr(self, time_var_name, None)
@@ -965,6 +1144,8 @@ class IslandShopBase(Island, WarehouseOCR):
 
         if idle_posts:
             self.get_warehouse_counts()
+            if getattr(self, 'island_round', None) is not None:
+                self._observe_round_targets(idle_posts[0])
             self.goto_postmanage()
             self.post_manage_mode(POST_MANAGE_PRODUCTION)
             self.post_close()
@@ -998,9 +1179,11 @@ class IslandShopBase(Island, WarehouseOCR):
             # 季节优先排产也记入本轮在制品；基础需求必须按扣料后的库存重算。
             priority_products = {} if planner_active(self.config) else self.get_priority_production()
             if priority_products:
+                self._round_filler = True
                 self.to_post_products = priority_products
                 logger.info(f"[岛屿] 季节优先生产计划: {self._inv_cn(priority_products)}")
                 self._schedule_and_track(_produced_pass)
+                self._round_filler = False
                 self.current_totals = self._rebuild_current_totals(_produced_pass)
                 self._compute_base_demands()
                 if self.to_post_products:
@@ -1073,6 +1256,7 @@ class IslandShopBase(Island, WarehouseOCR):
                 idle_posts_after_basic = []
 
             # 获取特殊餐品和常驻餐品配置
+            self._round_filler = True
             special_food = self.special_food if self.FILL_SPECIAL_FOOD else None
             away_cook = getattr(self.config, self.config_away_cook, None)
 
@@ -1327,6 +1511,14 @@ class IslandShopBase(Island, WarehouseOCR):
             int: 允许生产的最大批次数量。
         """
         max_producible = requested_quantity
+        if getattr(self, 'island_round', None) is not None:
+            if self.island_round.is_blocked(product):
+                return 0
+            # 套餐需求保留拆解入口；实际派遣和普通食品均检查全部配方原料。
+            if product in self.meal_compositions and skip_zero_materials:
+                return min(requested_quantity, self.get_product_production_limit(product))
+            return self._round_max_producible(product, requested_quantity, allow_unknown=True,
+                                             decompose=skip_zero_materials)
         logger.info(f"[岛屿] 检查 {self._item_cn(product)} 的最大可生产数量，需求: {requested_quantity}")
 
         # 1. 如果是套餐，检查原材料库存
@@ -1482,6 +1674,10 @@ class IslandShopBase(Island, WarehouseOCR):
         for product, required_quantity in products_to_process:
             if required_quantity <= 0:
                 continue
+            # 套餐拆解和特殊材料补产也会重新加入已失败的商品；最终派遣必须统一拦截。
+            if product in self.chef_unavailable_products:
+                logger.info(f"[岛屿] {self._item_cn(product)} 本轮已确认不可生产，跳过补料派遣")
+                continue
 
             # 获取当前还有需求的量
             remaining_need = self.to_post_products.get(product, 0)
@@ -1516,6 +1712,9 @@ class IslandShopBase(Island, WarehouseOCR):
 
                 # 如果实际生产数量为0，说明原料不足
                 if actual_number == 0:
+                    if getattr(self, '_round_deficit_satisfied', False):
+                        # 本轮首次补读发现已有足量现货，重算后续需求；不是派遣失败。
+                        break
                     logger.info(f"[岛屿] 生产 {self._item_cn(product)} 时检测到原料不足，保留在计划中等待下一轮")
                     # 游戏 UI 层实际拒绝了生产（常见于基础餐品 get_max_producible 未建模
                     # 的底层食材，如海鲜饭的米/海鲜料）。标记为本轮不可用，后续所有
