@@ -60,7 +60,7 @@ class PostLocateTests(unittest.TestCase):
         task.post_manage_up_swipe = Mock(side_effect=lambda distance: move(distance))
         task.post_manage_down_swipe = Mock(side_effect=lambda distance: move(-distance))
 
-        def match(image, button):
+        def match(image, button, *, strict=True):
             if state.missing:
                 return False
             target_row = row if button is post else 0

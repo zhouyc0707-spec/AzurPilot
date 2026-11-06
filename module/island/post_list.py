@@ -3,6 +3,7 @@
 import cv2
 import numpy as np
 
+from module.base.utils import area_offset
 from module.island.assets import (
     TEMPLATE_POST_EMPTY, TEMPLATE_POST_EMPTY_COMPAT, TEMPLATE_POST_ORCHARD_TITLE_COMPAT,
 )
@@ -31,17 +32,32 @@ def is_post_title_confirmed(image, post):
             and TEMPLATE_POST_ORCHARD_TITLE_COMPAT.match(title, similarity=0.90, direct_match=True))
 
 
-def match_post_title(image, post):
-    """在目标所在列的完整列表高度定位标题，成功后才保留本帧坐标。"""
+def match_post_title(image, post, *, strict=True):
+    """整列定位标题；导航固定 0.85，跳过空岗保持 0.90 严格证明。"""
     post.clear_offset()
     if not isinstance(image, np.ndarray) or image.shape != (720, 1280, 3):
         return False
-    offset = (-3, 69 - post.area[1], 3, 655 - post.area[3])
-    if post.match(image, offset=offset) and is_post_title_confirmed(image, post):
-        return True
-    # Button.match 即使失败也会写偏移，不能让失败坐标被下一次点击复用。
-    post.clear_offset()
-    return False
+    post.ensure_template()
+    if post.image is None or isinstance(post.image, list):
+        return False
+    x1, y1, x2, _ = post.area
+    region = image[69:655, x1 - 3:x2 + 3]
+    templates = [(post.image, 0.90 if strict else 0.85)]
+    if (post.name.startswith('ISLAND_ORCHARD_POST')
+            and post.image.shape == TEMPLATE_POST_ORCHARD_TITLE_COMPAT.image.shape):
+        # 兼容标题独立找位置，不能依赖旧模板先找到同一个峰值。
+        templates.append((TEMPLATE_POST_ORCHARD_TITLE_COMPAT.image, 0.90))
+    candidates = []
+    for template, threshold in templates:
+        result = cv2.matchTemplate(region, template, cv2.TM_CCOEFF_NORMED)
+        _, score, _, point = cv2.minMaxLoc(result)
+        if score > threshold:
+            candidates.append((score, point))
+    if not candidates:
+        return False
+    _, (dx, dy) = max(candidates)
+    post._button_offset = area_offset(post._button, (dx - 3, 69 + dy - y1))
+    return True
 
 
 def post_scroll_direction(image, post, server='cn'):

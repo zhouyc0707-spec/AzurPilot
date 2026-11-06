@@ -1519,7 +1519,8 @@ class Island(SelectCharacter):
             # 滑动停止后仍可能回弹；短暂观察窗口中持续截图，不拿旧位置操作。
             if not move_timer.reached():
                 continue
-            if match_post_title(image, post):
+            # 导航候选只负责打开详情；能否直接跳过空岗仍由预检严格确认。
+            if match_post_title(image, post, strict=False):
                 position = tuple(post.button)
                 cx = (position[0] + position[2]) / 2
                 cy = (position[1] + position[3]) / 2
@@ -1568,7 +1569,7 @@ class Island(SelectCharacter):
                 logger.info(f'[岛屿] {post} 当前区域未定位，回顶部有界搜索')
                 phase, steps = 'top', 0
             if phase == 'top':
-                if match_post_title(image, ISLAND_FARM_POST1):
+                if match_post_title(image, ISLAND_FARM_POST1, strict=False):
                     phase, steps = 'search', 0
                     continue
                 if steps < ISLAND_POST_SWIPE_TO_TOP_MAX:

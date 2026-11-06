@@ -40,7 +40,7 @@ def make_island(clock, bottoms, *, hidden_frames=(), left_offset=0):
     post = Button(area=POST_AREA, color=(0, 0, 0), button=POST_AREA, name='POST')
     matched = []
 
-    def match(image, button):
+    def match(image, button, *, strict=True):
         if button is not post:
             return False
         index = max(0, island.device.frame)
