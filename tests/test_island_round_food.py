@@ -96,8 +96,8 @@ class WarehouseRoundTestCase(unittest.TestCase):
 
 
 class RoundFoodTests(WarehouseRoundTestCase):
-    def ui(self, kind=IslandJuuCoffee, stocks=None, products=(), seasonal=False):
-        ui = ShopUI(kind, products=products, seasonal=seasonal)
+    def ui(self, kind=IslandJuuCoffee, stocks=None, products=(), seasonal=False, season='spring'):
+        ui = ShopUI(kind, products=products, seasonal=seasonal, season=season)
         shop = ui.shop
         shop.island_round = IslandRoundInventory(stocks)
         shop.device = Mock()
@@ -165,36 +165,76 @@ class RoundFoodTests(WarehouseRoundTestCase):
         shop.confirm_food_dispatch.assert_not_called()
         self.assertEqual(shop.island_round.get('coffee_bean'), 324)
 
-    def test_unknown_spring_bamboo_uses_old_button_and_deducts_known_asparagus(self):
-        shop = self.ui(IslandRestaurant, {'double_bamboo_shoots': 0, 4019: 3}).shop
-        shop.confirm_food_dispatch.return_value = ((2, timedelta(hours=1)), NOW)
-        shop.confirm_food_dispatch.side_effect = None
-        post = next(iter(shop.posts))
-        self.assertEqual(shop.post_produce(post, 'double_bamboo_shoots', 5, 'time1'), 2)
-        shop.produce_check.assert_called_once()
-        shop.post_add_one.assert_called_once_with(2)
-        self.assertEqual(shop.island_round.get(4019), 1)
-        self.assertNotIn(4015, shop.island_round.stocks)
-        self.assertEqual(shop.island_round.get('double_bamboo_shoots'), 0)
-        self.assertEqual(shop.island_round.in_production[4025], 2)
-        self.assertNotIn(4015, shop.round_stock_items())
-        self.assertTrue({4019, 4025}.issubset(shop.round_stock_items()))
+    def test_unknown_seasonal_food_material_uses_button_and_deducts_known_stock(self):
+        cases = (
+            (IslandRestaurant, 'double_bamboo_shoots', 'spring', 4015, {4019: 3}, 3),
+            (IslandRestaurant, 'shiitake_chicken_soup', 'winter', 4043, {2602: 3}, 3),
+            (IslandJuuEatery, 'water_chestnut_cake', 'winter', 4044, {}, 5),
+        )
+        for kind, product, season, raw, known, planned in cases:
+            with self.subTest(product=product):
+                shop = self.ui(kind, {product: 0, **known}, season=season).shop
+                shop.confirm_food_dispatch.return_value = ((2, timedelta(hours=1)), NOW)
+                shop.confirm_food_dispatch.side_effect = None
+                post = next(iter(shop.posts))
+                self.assertEqual(shop.post_produce(post, product, 5, 'time1'), 2)
+                shop.produce_check.assert_called_once()
+                shop.confirm_food_dispatch.assert_called_once()
+                self.assertEqual(shop.confirm_food_dispatch.call_args.args[0], planned)
+                shop.post_add_one.assert_called_once_with(planned - 1)
+                for item in known:
+                    self.assertEqual(shop.island_round.get(item), 1)
+                self.assertIsNone(shop.island_round.get(raw))
+                self.assertEqual(shop.island_round.get(product), 0)
+                self.assertEqual(shop.island_round.in_production[LOCAL_TO_ITEM_ID[product]], 2)
+                self.assertNotIn(raw, shop.round_stock_items())
+                self.assertTrue({*known, LOCAL_TO_ITEM_ID[product]}.issubset(shop.round_stock_items()))
 
-    def test_unknown_other_ingredient_still_stops_spring_bamboo_recipe(self):
-        shop = self.ui(IslandRestaurant, {'double_bamboo_shoots': 0}).shop
-        self.assertEqual(shop.post_produce(next(iter(shop.posts)), 'double_bamboo_shoots', 5, 'time1'), 0)
-        shop.produce_check.assert_not_called()
+    def test_unknown_other_ingredient_still_stops_seasonal_recipe(self):
+        for product, season in (('double_bamboo_shoots', 'spring'), ('shiitake_chicken_soup', 'winter')):
+            with self.subTest(product=product):
+                shop = self.ui(IslandRestaurant, {product: 0}, season=season).shop
+                self.assertEqual(shop.post_produce(next(iter(shop.posts)), product, 5, 'time1'), 0)
+                shop.produce_check.assert_not_called()
+                shop.confirm_food_dispatch.assert_not_called()
         self.opening.assert_not_called()
 
-    def test_gray_button_stops_unknown_spring_bamboo_without_consuming(self):
-        shop = self.ui(IslandRestaurant, {'double_bamboo_shoots': 0, 4019: 3}).shop
-        shop.produce_check.return_value = True
-        self.assertEqual(shop.post_produce(next(iter(shop.posts)), 'double_bamboo_shoots', 5, 'time1'), 0)
-        shop.confirm_food_dispatch.assert_not_called()
-        shop.post_add_one.assert_not_called()
-        self.assertEqual(shop.island_round.get(4019), 3)
-        self.assertNotIn(4015, shop.island_round.stocks)
-        self.assertTrue(shop.island_round.is_blocked('double_bamboo_shoots'))
+    def test_gray_button_blocks_unknown_seasonal_food_without_consuming(self):
+        cases = (
+            (IslandRestaurant, 'double_bamboo_shoots', 'spring', 4015, {4019: 3}),
+            (IslandRestaurant, 'shiitake_chicken_soup', 'winter', 4043, {2602: 3}),
+            (IslandJuuEatery, 'water_chestnut_cake', 'winter', 4044, {}),
+        )
+        for kind, product, season, raw, known in cases:
+            with self.subTest(product=product):
+                shop = self.ui(kind, {product: 0, **known}, season=season).shop
+                shop.produce_check.return_value = True
+                before = dict(shop.island_round.stocks)
+                for _ in range(2):
+                    self.assertEqual(shop.post_produce(next(iter(shop.posts)), product, 5, 'time1'), 0)
+                shop.produce_check.assert_called_once()
+                shop.confirm_food_dispatch.assert_not_called()
+                shop.post_add_one.assert_not_called()
+                self.assertEqual(shop.island_round.stocks, before)
+                self.assertEqual(shop.island_round.in_production, {})
+                self.assertIsNone(shop.island_round.get(raw))
+                self.assertTrue(shop.island_round.is_blocked(product))
+
+    def test_known_winter_food_material_still_limits_or_stops_production(self):
+        for kind, product, raw, other in (
+                (IslandRestaurant, 'shiitake_chicken_soup', 4043, {2602: 10}),
+                (IslandJuuEatery, 'water_chestnut_cake', 4044, {})):
+            for stock, expected in ((0, 0), (5, 2)):
+                with self.subTest(product=product, stock=stock):
+                    shop = self.ui(kind, {product: 0, raw: stock, **other}, season='winter').shop
+                    self.assertEqual(shop.post_produce(next(iter(shop.posts)), product, 5, 'time1'), expected)
+                    self.assertEqual(shop.island_round.get(raw), stock - 2 * expected)
+                    if expected:
+                        shop.post_add_one.assert_called_once_with(1)
+                        shop.confirm_food_dispatch.assert_called_once()
+                    else:
+                        shop.produce_check.assert_not_called()
+                        shop.confirm_food_dispatch.assert_not_called()
 
     def test_generic_fallback_selects_and_sets_quantity_without_reading_stock(self):
         shop = self.ui(stocks=recipe_stocks('iced_coffee')).shop
@@ -351,6 +391,25 @@ class RoundDispatchQuantityTests(WarehouseRoundTestCase):
         self.assertEqual(shop.island_round.get('coffee_bean'), 300)
         self.assertEqual(shop.island_round.in_production[LOCAL_TO_ITEM_ID['iced_coffee']], 12)
 
+    def test_unknown_shiitake_partial_dispatch_rechecks_post_and_deducts_actual_chicken(self):
+        shop, device = self.shop(amount=2)
+        product = 'shiitake_chicken_soup'
+        shop.name_to_config = {product: {'selection': POST_ADD_ORDER, 'selection_check': POST_ADD_ORDER}}
+        shop.island_round = IslandRoundInventory({product: 0, 2602: 3})
+        shop.to_post_products = {product: 5}
+        device.post_amount = 2
+        self.assertEqual(shop.post_produce('POST1', product, 5, 'finish_time'), 2)
+        # 已知鸡肉先将五份需求限制为三份；少产后的最终数量以岗位复检为准。
+        shop.post_add_one.assert_called_once_with(2)
+        self.assertEqual(sum(name == 'POST_ADD_ORDER' for name, _ in device.clicks), 1)
+        shop.post_open.assert_called_once()
+        shop.post_close.assert_called_once()
+        self.assertEqual(shop.posts['POST1']['status'], 'working')
+        self.assertEqual(shop.island_round.get(2602), 1)
+        self.assertIsNone(shop.island_round.get(4043))
+        self.assertEqual(shop.island_round.get(product), 0)
+        self.assertEqual(shop.island_round.in_production[LOCAL_TO_ITEM_ID[product]], 2)
+
     def test_unknown_or_excess_count_never_submits_an_order(self):
         for amount in (None, 0, 13):
             with self.subTest(amount=amount):
@@ -474,22 +533,26 @@ class RoundManufactureTests(WarehouseRoundTestCase):
         factory.to_post_products = {}
         return factory
 
-    def test_unknown_peanut_and_shepherd_purse_use_old_button_without_inventing_stock(self):
-        for product, raw in (('peanut_oil', 4003), ('shepherd_purse', 4016)):
+    def test_unknown_legacy_manufacture_materials_use_button_without_inventing_stock(self):
+        for product, materials in (
+                ('peanut_oil', (4003,)), ('shepherd_purse', (4016,)),
+                ('plum_blossom_sachet', (4045,)), ('winter_bouquet', (4045, 4046))):
             with self.subTest(product=product):
                 factory = self.factory(product, {product: 0})
                 item = factory.name_to_config[product]
                 self.assertEqual(factory.select_product_with_material_check('ISLAND_WOOD_PROCESSING_POST1', [item]), item)
                 factory.produce_check.assert_called_once()
+                factory.confirm_food_dispatch.assert_called_once()
                 factory.post_add_one.assert_called_once_with(4)
-                self.assertNotIn(raw, factory.island_round.stocks)
-                self.assertNotIn(raw, factory.round_stock_items())
+                for raw in materials:
+                    self.assertIsNone(factory.island_round.get(raw))
+                    self.assertNotIn(raw, factory.round_stock_items())
                 self.assertIn(LOCAL_TO_ITEM_ID[product], factory.round_stock_items())
                 self.assertEqual(factory.island_round.get(product), 0)
                 self.assertEqual(factory.island_round.in_production[LOCAL_TO_ITEM_ID[product]], 2)
 
     def test_gray_button_blocks_unknown_legacy_manufacture_material_once(self):
-        for product in ('peanut_oil', 'shepherd_purse'):
+        for product in ('peanut_oil', 'shepherd_purse', 'plum_blossom_sachet', 'winter_bouquet'):
             with self.subTest(product=product):
                 factory = self.factory(product, {product: 0})
                 factory.produce_check.return_value = True
@@ -499,17 +562,24 @@ class RoundManufactureTests(WarehouseRoundTestCase):
                 factory._prepare_recipe_page.assert_called_once()
                 factory.confirm_food_dispatch.assert_not_called()
                 factory.post_add_one.assert_not_called()
+                self.assertEqual(factory.island_round.stocks, {LOCAL_TO_ITEM_ID[product]: 0})
                 self.assertEqual(factory.island_round.in_production, {})
                 self.assertTrue(factory.island_round.is_blocked(product))
 
     def test_known_legacy_material_still_limits_and_deducts_actual_manufacture_cost(self):
-        for product, raw, cost in (('peanut_oil', 4003, 8), ('shepherd_purse', 4016, 2)):
-            with self.subTest(product=product):
+        for product, raw, cost in (('peanut_oil', 4003, 8), ('shepherd_purse', 4016, 2),
+                                   ('plum_blossom_sachet', 4045, 3),
+                                   ('winter_bouquet', 4045, 1), ('winter_bouquet', 4046, 4)):
+            with self.subTest(product=product, raw=raw):
                 factory = self.factory(product, {product: 0, raw: cost * 3})
                 item = factory.name_to_config[product]
                 self.assertEqual(factory.select_product_with_material_check('ISLAND_WOOD_PROCESSING_POST1', [item]), item)
                 factory.post_add_one.assert_called_once_with(2)
                 self.assertEqual(factory.island_round.get(raw), cost)
+                # 花束另一种原料仍未知；仅这一项确认有量也必须严格限量和扣减。
+                for material in DIC_ISLAND_RECIPE[recipe_for_local_name(product)]['commission_cost']:
+                    if material != raw:
+                        self.assertIsNone(factory.island_round.get(material))
                 factory = self.factory(product, {product: 0, raw: 0})
                 self.assertIsNone(factory.select_product_with_material_check('ISLAND_WOOD_PROCESSING_POST1', [item]))
                 factory._prepare_recipe_page.assert_not_called()

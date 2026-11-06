@@ -28,8 +28,11 @@ DISPATCH_PRODUCT_DURATION = Button(
     name='DISPATCH_PRODUCT_DURATION',
 )
 
-# 这三项原料按用户选定的旧手工方式检查生产按钮，不猜测未盘点的现货数量。
-LEGACY_BUTTON_MATERIALS = frozenset((4003, 4015, 4016))  # 花生、春笋、荠菜原料
+# 使用手工执行数据的编号；这些原料未确认仓库产地，数量未知时交给生产按钮判断。
+LEGACY_BUTTON_MATERIALS = frozenset((
+    4003, 4015, 4016,  # 花生、春笋、荠菜原料
+    4043, 4044, 4045, 4046,  # 冬菇、马蹄、梅花、水仙花
+))
 
 
 class IslandShopBase(Island, WarehouseOCR):
@@ -310,7 +313,7 @@ class IslandShopBase(Island, WarehouseOCR):
         return self.warehouse_counts
 
     def _round_max_producible(self, product, requested, *, decompose=False):
-        """按已确认现货预检配方；仅三项指定原料未知时留给旧按钮判断。"""
+        """按已确认现货预检配方；仅指定原料未知时留给旧按钮判断。"""
         from module.island.data import DIC_ISLAND_RECIPE
         from module.island.item_ids import ITEM_ID_TO_LOCAL
         from module.island.production_recipe import recipe_for_local_name
