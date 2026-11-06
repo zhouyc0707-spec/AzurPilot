@@ -19,6 +19,15 @@ from module.island.round_inventory import IslandRoundInventory
 from tests.test_island_shop_production import NOW, ShopUI
 
 
+def recipe_inventory(product, stock=0, material_stock=100):
+    """构造配方页完整实读结果，保留真实零值。"""
+    recipe = DIC_ISLAND_RECIPE[recipe_for_local_name(product)]
+    inventory = {item: {'stock': material_stock, 'cost': cost}
+                 for item, cost in recipe['commission_cost'].items()}
+    inventory[LOCAL_TO_ITEM_ID[product]] = {'stock': stock, 'cost': 0}
+    return inventory
+
+
 class RoundCollectionConfirmationTests(unittest.TestCase):
     def task(self, kind):
         task = kind.__new__(kind)
@@ -143,6 +152,7 @@ class RoundFoodTests(unittest.TestCase):
         inventory[LOCAL_TO_ITEM_ID['hearty_meal']] = {'stock': 10, 'cost': 0}
         shop.back_to_postmanage_from_dispatch = Mock()
         with patch('module.island.planned_dispatch.PlannedProductionMixin._planned_open_product_page', return_value=True), \
+                patch('module.island.round_recipe.scan_recipe_product_stocks', return_value={}), \
                 patch('module.island.manufacture_selector.select_manufacture_recipe', return_value=True), \
                 patch('module.island.manufacture_selector.read_selected_recipe_inventory', return_value=inventory):
             shop._observe_round_targets(next(iter(shop.posts)))
@@ -150,6 +160,204 @@ class RoundFoodTests(unittest.TestCase):
         shop._compute_base_demands()
         self.assertEqual(shop.to_post_products, {})
         self.assertEqual(shop.island_round.get('hearty_meal'), 10)
+
+    def test_store_stock_scan_is_once_and_first_dispatch_reuses_selected_worker(self):
+        shop = self.shop(IslandJuuEatery)
+        post = next(iter(shop.posts))
+        shop.post_products = [('corn_cup', 10)]
+        shop.to_post_products = {'corn_cup': 10}
+        shop.produce_check = Mock(return_value=False)
+        shop.confirm_food_dispatch = Mock(return_value=((10, timedelta(hours=1)), NOW))
+        shop.back_to_postmanage_from_dispatch = Mock(return_value=True)
+
+        def scan(main, products):
+            self.assertEqual(set(products), set(shop.name_to_config))
+            main.island_round.observe('corn_cup', 0)
+            return {LOCAL_TO_ITEM_ID['corn_cup']: 0}
+
+        with patch('module.island.round_recipe.scan_recipe_product_stocks', side_effect=scan) as scanner, \
+                patch('module.island.planned_dispatch.PlannedProductionMixin._planned_open_product_page',
+                      return_value=True) as opening, \
+                patch('module.island.manufacture_selector.select_manufacture_recipe', return_value=True), \
+                patch('module.island.manufacture_selector.read_selected_recipe_inventory',
+                      return_value=recipe_inventory('corn_cup')), \
+                patch('module.island.manufacture_selector.set_manufacture_quantity', return_value=True):
+            shop._observe_round_targets(post)
+            self.assertEqual(shop._post_produce_round_food(post, 'corn_cup', 10, 'time1'), 10)
+            shop._observe_round_targets(list(shop.posts)[1])
+        scanner.assert_called_once()
+        opening.assert_called_once()
+        shop.back_to_postmanage_from_dispatch.assert_not_called()
+        self.assertEqual(shop.island_round.get('corn_cup'), 0)
+        self.assertEqual(shop.island_round.in_production[LOCAL_TO_ITEM_ID['corn_cup']], 10)
+
+    def test_known_stock_still_reads_materials_and_does_not_subtract_product_twice(self):
+        shop = self.shop(IslandJuuEatery, {'corn_cup': 7, 'corn': 100})
+        shop.to_post_products = {'corn_cup': 3}
+        with patch('module.island.manufacture_selector.read_selected_recipe_inventory',
+                   return_value=recipe_inventory('corn_cup', stock=7)) as read, \
+                patch('module.island.manufacture_selector.set_manufacture_quantity', return_value=True):
+            self.assertEqual(shop._limit_round_food_batch('corn_cup', 3), 3)
+        read.assert_called_once()
+
+    def test_manual_run_uses_product_page_stock_and_never_enters_warehouse(self):
+        ui = ShopUI(IslandJuuEatery, [('corn_cup', 10)])
+        shop = ui.shop
+        shop.island_round = IslandRoundInventory()
+        shop.get_warehouse_counts = Mock(side_effect=AssertionError('共享生产不进入仓库'))
+        shop.post_produce = shop._post_produce_round_food
+        shop.produce_check = Mock(return_value=False)
+        shop.confirm_food_dispatch = Mock(return_value=((3, timedelta(hours=1)), NOW))
+        shop.back_to_postmanage_from_dispatch = Mock(return_value=True)
+
+        def scan(main, products):
+            main.island_round.observe('corn_cup', 7)
+            return {LOCAL_TO_ITEM_ID['corn_cup']: 7}
+
+        with patch('module.island.round_recipe.scan_recipe_product_stocks', side_effect=scan) as scanner, \
+                patch('module.island.planned_dispatch.PlannedProductionMixin._planned_open_product_page',
+                      return_value=True) as opening, \
+                patch('module.island.manufacture_selector.select_manufacture_recipe', return_value=True), \
+                patch('module.island.manufacture_selector.read_selected_recipe_inventory',
+                      return_value=recipe_inventory('corn_cup', stock=7)), \
+                patch('module.island.manufacture_selector.set_manufacture_quantity', return_value=True) as quantity:
+            ui.run()
+        scanner.assert_called_once()
+        opening.assert_called_once()
+        quantity.assert_called_once_with(shop, 3)
+        shop.get_warehouse_counts.assert_not_called()
+        self.assertEqual(shop.island_round.get('corn_cup'), 7)
+        self.assertEqual(shop.island_round.in_production[LOCAL_TO_ITEM_ID['corn_cup']], 3)
+
+    def test_current_material_zero_overrides_previous_stock_without_dispatch(self):
+        shop = self.shop(IslandJuuEatery, {'corn_cup': 0, 'corn': 100})
+        shop.to_post_products = {'corn_cup': 10}
+        with patch('module.island.manufacture_selector.read_selected_recipe_inventory',
+                   return_value=recipe_inventory('corn_cup', material_stock=0)), \
+                patch('module.island.manufacture_selector.set_manufacture_quantity') as quantity:
+            self.assertEqual(shop._limit_round_food_batch('corn_cup', 10), 0)
+        quantity.assert_not_called()
+        self.assertTrue(shop.island_round.is_blocked('corn_cup'))
+
+    def test_corrected_finished_stock_recalculates_before_second_post(self):
+        ui = ShopUI(IslandJuuEatery, [('corn_cup', 10)])
+        shop = ui.shop
+        shop.island_round = IslandRoundInventory()
+        shop.post_produce = shop._post_produce_round_food
+        shop.produce_check = Mock(return_value=False)
+        shop.confirm_food_dispatch = Mock(side_effect=lambda amount, label: ((amount, timedelta(hours=1)), NOW))
+        shop.back_to_postmanage_from_dispatch = Mock(return_value=True)
+
+        def scan(main, products):
+            main.island_round.observe('corn_cup', 0)
+            return {LOCAL_TO_ITEM_ID['corn_cup']: 0}
+
+        with patch('module.island.round_recipe.scan_recipe_product_stocks', side_effect=scan), \
+                patch('module.island.planned_dispatch.PlannedProductionMixin._planned_open_product_page',
+                      return_value=True), \
+                patch('module.island.manufacture_selector.select_manufacture_recipe', return_value=True), \
+                patch('module.island.manufacture_selector.read_selected_recipe_inventory',
+                      return_value=recipe_inventory('corn_cup', stock=7)), \
+                patch('module.island.manufacture_selector.set_manufacture_quantity', return_value=True) as quantity:
+            ui.run()
+        quantity.assert_called_once_with(shop, 3)
+        self.assertEqual(shop.island_round.get('corn_cup'), 7)
+        self.assertEqual(shop.island_round.in_production[LOCAL_TO_ITEM_ID['corn_cup']], 3)
+        self.assertEqual(len(shop.get_idle_posts()), 1)
+
+    def test_unreadable_target_is_blocked_before_meal_prerequisites(self):
+        shop = self.shop(IslandRestaurant)
+        shop.post_products = [('hearty_meal', 7)]
+        with patch('module.island.round_recipe.scan_recipe_product_stocks', return_value={}), \
+                patch('module.island.planned_dispatch.PlannedProductionMixin._planned_open_product_page',
+                      return_value=True), \
+                patch('module.island.manufacture_selector.select_manufacture_recipe', return_value=True), \
+                patch('module.island.manufacture_selector.read_selected_recipe_inventory', return_value=None):
+            shop._observe_round_targets(next(iter(shop.posts)))
+        shop.current_totals = shop._rebuild_current_totals({})
+        shop._compute_base_demands()
+        self.assertEqual(shop.to_post_products, {})
+        self.assertIsNone(shop.island_round.get('hearty_meal'))
+        self.assertTrue(shop.island_round.is_blocked('hearty_meal'))
+
+    def test_meal_consumption_replenishes_manual_target_once(self):
+        ui = ShopUI(IslandRestaurant, [('hearty_meal', 7), ('tofu', 10)])
+        shop = ui.shop
+        shop.island_round = IslandRoundInventory()
+        shop.post_produce = shop._post_produce_round_food
+        shop.produce_check = Mock(return_value=False)
+        shop.confirm_food_dispatch = Mock(side_effect=lambda amount, label: ((amount, timedelta(hours=1)), NOW))
+        shop.back_to_postmanage_from_dispatch = Mock(return_value=True)
+
+        def scan(main, products):
+            for product, stock in {'hearty_meal': 0, 'tofu': 10, 'omurice': 10}.items():
+                main.island_round.observe(product, stock)
+            return dict(main.island_round.stocks)
+
+        def read(main, recipe_id):
+            recipe = DIC_ISLAND_RECIPE[recipe_id]
+            inventory = {}
+            for item, cost in recipe['commission_cost'].items():
+                stock = main.island_round.get(item)
+                inventory[item] = {'stock': stock if stock is not None else 1000, 'cost': cost}
+            for item in recipe['commission_product']:
+                inventory[item] = {'stock': main.island_round.get(item), 'cost': 0}
+            return inventory
+
+        with patch('module.island.round_recipe.scan_recipe_product_stocks', side_effect=scan), \
+                patch('module.island.planned_dispatch.PlannedProductionMixin._planned_open_product_page',
+                      return_value=True), \
+                patch('module.island.manufacture_selector.select_manufacture_recipe', return_value=True), \
+                patch('module.island.manufacture_selector.read_selected_recipe_inventory', side_effect=read), \
+                patch('module.island.manufacture_selector.set_manufacture_quantity', return_value=True) as quantity:
+            ui.run()
+        self.assertEqual([call.args[1] for call in quantity.call_args_list], [7, 7])
+        self.assertEqual(shop.island_round.get('tofu'), 3)
+        self.assertEqual(shop.island_round.get('omurice'), 3)
+        self.assertEqual(shop.island_round.in_production[LOCAL_TO_ITEM_ID['hearty_meal']], 7)
+        self.assertEqual(shop.island_round.in_production[LOCAL_TO_ITEM_ID['tofu']], 7)
+        self.assertIsNone(shop._round_recipe_post)
+
+    def test_satisfied_target_closes_retained_scan_page_without_dispatch(self):
+        ui = ShopUI(IslandJuuEatery, [('corn_cup', 10)])
+        shop = ui.shop
+        shop.island_round = IslandRoundInventory()
+        shop.post_produce = Mock(side_effect=AssertionError('目标达标不得派遣'))
+        shop.back_to_postmanage_from_dispatch = Mock(return_value=True)
+
+        def scan(main, products):
+            main.island_round.observe('corn_cup', 10)
+            return {LOCAL_TO_ITEM_ID['corn_cup']: 10}
+
+        with patch('module.island.round_recipe.scan_recipe_product_stocks', side_effect=scan), \
+                patch('module.island.planned_dispatch.PlannedProductionMixin._planned_open_product_page',
+                      return_value=True):
+            ui.run()
+        shop.back_to_postmanage_from_dispatch.assert_called_once()
+        self.assertIsNone(shop._round_recipe_post)
+
+    def test_unreadable_recipe_blocks_without_reusing_old_material_balance(self):
+        shop = self.shop(IslandJuuEatery, {'corn_cup': 0, 'corn': 100})
+        with patch('module.island.manufacture_selector.read_selected_recipe_inventory', return_value=None), \
+                patch('module.island.manufacture_selector.set_manufacture_quantity') as quantity:
+            self.assertEqual(shop._limit_round_food_batch('corn_cup', 10), 0)
+        quantity.assert_not_called()
+        self.assertTrue(shop.island_round.is_blocked('corn_cup'))
+        self.assertEqual(shop.island_round.get('corn'), 100)
+
+    def test_special_chef_is_reselected_after_generic_stock_scan(self):
+        shop = self.shop()
+        shop.special_character = True
+        shop.back_to_postmanage_from_dispatch = Mock(return_value=True)
+        post = next(iter(shop.posts))
+        with patch('module.island.planned_dispatch.PlannedProductionMixin._planned_open_product_page',
+                   return_value=True) as opening:
+            self.assertTrue(shop._open_round_recipe_page(post))
+            self.assertTrue(shop._open_round_recipe_page(post, 'wake_up_call'))
+            self.assertTrue(shop._open_round_recipe_page(post, 'wake_up_call'))
+        self.assertEqual(opening.call_count, 2)
+        self.assertEqual(opening.call_args.args[-1], 'wake_up_call')
+        shop.back_to_postmanage_from_dispatch.assert_called_once()
 
     def test_confirmed_actual_batch_consumes_once_and_output_stays_in_production(self):
         shop = self.shop(stock={'cheese': 0, 'milk': 40})
@@ -185,6 +393,7 @@ class RoundFoodTests(unittest.TestCase):
         self.assertEqual(shop.post_check.call_count, 2)
         self.assertEqual(len(shop.get_idle_posts()), 1)
         shop.island_round = IslandRoundInventory({'iced_coffee': 100})
+        shop._observe_round_targets = Mock()
         ui.run()
         self.assertEqual(shop.post_check.call_count, 2)
 
@@ -213,7 +422,11 @@ class RoundManufactureTests(unittest.TestCase):
         recipe = DIC_ISLAND_RECIPE[recipe_for_local_name('file_cabinet')]
         for material, cost in recipe['commission_cost'].items():
             factory.island_round.observe(material, cost * 4)
+        inventory = {item: {'stock': factory.island_round.get(item), 'cost': cost}
+                     for item, cost in recipe['commission_cost'].items()}
+        inventory[LOCAL_TO_ITEM_ID['file_cabinet']] = {'stock': 0, 'cost': 0}
         with patch('module.island.manufacture_selector.select_manufacture_recipe', return_value=True), \
+                patch('module.island.manufacture_selector.read_selected_recipe_inventory', return_value=inventory), \
                 patch('module.island.manufacture_selector.set_manufacture_quantity', return_value=True):
             result = factory.select_product_with_material_check(
                 'ISLAND_WOOD_PROCESSING_POST1', [{'name': 'file_cabinet'}])
@@ -232,6 +445,43 @@ class RoundManufactureTests(unittest.TestCase):
         self.assertIsNone(factory.select_product_with_material_check(
             'ISLAND_WOOD_PROCESSING_POST1', [{'name': 'file_cabinet'}]))
         factory._prepare_planned_recipe_page.assert_not_called()
+
+    def test_industrial_stock_is_scanned_before_manual_threshold_and_only_once(self):
+        factory = self.factory()
+        factory.manufacture = {'industrial_production': {'items': [
+            {'name': 'iron_nail'}, {'name': 'cutlery'}]}}
+        factory.name_to_config = {item['name']: item for item in factory.manufacture['industrial_production']['items']}
+        factory.get_idle_posts_by_category = Mock(return_value=['ISLAND_INDUSTRIAL_POST1', 'ISLAND_INDUSTRIAL_POST2'])
+        factory.select_product_with_material_check = Mock()
+
+        def scan(main, products):
+            self.assertEqual(products, ['iron_nail', 'cutlery'])
+            main.island_round.observe('iron_nail', 20)
+            main.island_round.observe('cutlery', 0)
+            return {LOCAL_TO_ITEM_ID['iron_nail']: 20, LOCAL_TO_ITEM_ID['cutlery']: 0}
+
+        with patch('module.island.round_recipe.scan_recipe_product_stocks', side_effect=scan) as scanner:
+            factory.schedule_industrial_production()
+            factory.schedule_industrial_production()
+        scanner.assert_called_once()
+        factory._prepare_planned_recipe_page.assert_called_once_with('ISLAND_INDUSTRIAL_POST1')
+        self.assertEqual(factory.select_product_with_material_check.call_count, 4)
+        self.assertEqual(factory.select_product_with_material_check.call_args.args[1],
+                         [{'name': 'cutlery'}, {'name': 'iron_nail'}])
+
+    def test_first_manufacture_dispatch_reuses_scan_page(self):
+        factory = self.factory()
+        factory.manufacture = {'wood_processing': {'items': [{'name': 'file_cabinet'}]}}
+        with patch('module.island.round_recipe.scan_recipe_product_stocks', return_value={}) as scanner, \
+                patch('module.island.manufacture_selector.select_manufacture_recipe', return_value=True), \
+                patch('module.island.manufacture_selector.read_selected_recipe_inventory',
+                      return_value=recipe_inventory('file_cabinet')), \
+                patch('module.island.manufacture_selector.set_manufacture_quantity', return_value=True):
+            factory._observe_round_category('wood_processing', 'ISLAND_WOOD_PROCESSING_POST1')
+            factory._select_round_manufacture('ISLAND_WOOD_PROCESSING_POST1', [{'name': 'file_cabinet'}])
+        scanner.assert_called_once()
+        factory._prepare_planned_recipe_page.assert_called_once()
+        factory.back_to_postmanage_from_dispatch.assert_not_called()
 
 
 if __name__ == '__main__':

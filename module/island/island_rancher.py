@@ -599,6 +599,7 @@ class IslandRancher(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
                         raise GameStuckError('牧场实际派遣次数未确认，结束本轮')
                     for item, output in recipe['commission_product'].items():
                         ledger.production_started(item, batches * output)
+                    self._round_ranch_states[post_id] = 'working'
                     self.inventory_counts['mill'][feed_item] = ledger.get(feed_item)
                 continue
             if (
@@ -759,15 +760,18 @@ class IslandRancher(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
         self.post_close()
         return True
 
+    def _load_round_inventory(self):
+        """同步生产页已确认现货，缺项保持未知。"""
+        for category, group in self.INVENTORY_CONFIG.items():
+            self.inventory_counts[category] = {
+                item['name']: self.island_round.get(item['name']) for item in group['items']
+                if self.island_round.get(item['name']) is not None
+            }
+
     def warehouse_mill_ranch(self):
         """通过仓库 OCR 识别农场、磨坊和牧场的所有相关物品库存。"""
-        ledger = getattr(self, 'island_round', None)
-        if ledger is not None:
-            for category, group in self.INVENTORY_CONFIG.items():
-                self.inventory_counts[category] = {
-                    item['name']: ledger.get(item['name']) for item in group['items']
-                    if ledger.get(item['name']) is not None
-                }
+        if getattr(self, 'island_round', None) is not None:
+            self._load_round_inventory()
             return
         self.warehouse_filter('processed')
         image = self.device.screenshot()
@@ -979,7 +983,7 @@ class IslandRancher(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
         return True
 
     def prepare_round(self):
-        """集中盘点前收取全部牧场及渔场岗位，关闭岗位只领取不派工。"""
+        """本轮先收取全部牧场及渔场岗位，关闭岗位只领取不派工。"""
         self.island_error = False
         self._round_ranch_states = {}
         self.goto_postmanage()
@@ -1018,6 +1022,52 @@ class IslandRancher(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
         names.update(('egg', 'milk', 'wool'))
         return names | self._round_fishery.round_stock_items()
 
+    def _read_round_production_stocks(self):
+        """牧场执行时读取主产物和饲料，磨坊缺项只按当前需要借生产页复核。"""
+        from module.island.manufacture_selector import select_manufacture_recipe
+        from module.island.round_recipe import (
+            _close_probe_product_page, _open_probe_product_page, observe_selected_recipe,
+            probe_round_missing_stocks, recipe_for_product, scan_recipe_product_stocks,
+        )
+        ledger = self.island_round
+        definitions = (('egg', 'ChickenFilter'), ('pork', 'PigFilter'),
+                       ('milk', 'RancherFilter'), ('wool', 'WoolWorkerFilter'))
+        for index, (product, worker) in enumerate(definitions, 1):
+            post_id = f'ISLAND_RANCH_POST{index}'
+            if self._round_ranch_states.get(post_id) != 'idle' or not self.is_ranch_post_enabled(post_id):
+                continue
+            if not _open_probe_product_page(self, self.posts_ranch[post_id], product,
+                                            getattr(self.config, f'IslandRancher_{worker}')):
+                continue
+            scan_recipe_product_stocks(self, [product])
+            if select_manufacture_recipe(self, recipe_for_product(product)):
+                observe_selected_recipe(self, product)
+            _close_probe_product_page(self)
+
+        # 鸡肉是副产物，面粉不在牧场主产目录；仅在牧场本次实际决策时借可用空岗读缺项。
+        requested = {'wheat_flour'}
+        if self.ranch_chicken_threshold > 0:
+            requested.add('chicken')
+        if self.ranch_pork_threshold > 0:
+            requested.add('pork')
+        missing = {name for name in requested if ledger.get(name) is None}
+        runners = getattr(self, '_round_stock_runners', (self,))
+        if missing:
+            probe_round_missing_stocks(runners, ledger, missing)
+
+        materials = set()
+        flour = ledger.get('wheat_flour')
+        if flour is not None and flour < 150:
+            materials.add('wheat')
+        for post_id, feed in self.ranch_feed_map.items():
+            stock = ledger.get(feed)
+            if self.is_ranch_post_enabled(post_id) and stock is not None and stock < 50:
+                materials.add(self.name_to_config[feed]['required_material'])
+        missing = {name for name in materials if ledger.get(name) is None}
+        if missing:
+            probe_round_missing_stocks(runners, ledger, missing)
+        self._load_round_inventory()
+
     def run(self):
         """运行牧场与磨坊自动化管理主流程。
 
@@ -1040,7 +1090,9 @@ class IslandRancher(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
         if getattr(self, 'island_round', None) is None:
             for var in time_vars:
                 setattr(self, var, None)
-        self.warehouse_mill_ranch()
+            self.warehouse_mill_ranch()
+        else:
+            self._read_round_production_stocks()
         logger.info("[岛屿-牧场] \n当前库存统计:")
         logger.info(f"[岛屿-牧场] 农场库存: {self._inv_cn(self.inventory_counts['farm'])}")
         logger.info(f"[岛屿-牧场] 磨坊库存: {self._inv_cn(self.inventory_counts['mill'])}")

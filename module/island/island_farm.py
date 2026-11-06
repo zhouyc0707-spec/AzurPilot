@@ -296,11 +296,13 @@ class IslandFarm(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
         按「库存/目标」升序排序，优先补种缺口比例最大的作物。
         """
         for category in ['farm', 'orchard', 'nursery']:
-            inventory = self.warehouse_inventory(category)
             config = self.INVENTORY_CONFIG[category]
+            ledger = getattr(self, 'island_round', None)
+            inventory = ({item['name']: ledger.get(item['name']) for item in config['items']
+                          if ledger.get(item['name']) is not None} if ledger is not None
+                         else self.warehouse_inventory(category))
             self.inventory_counts[category] = inventory
             skip = set()
-            ledger = getattr(self, 'island_round', None)
             names = [item['name'] for item in config['items']] if ledger is not None else list(inventory)
             for item_name in names:
                 if category == 'orchard' and item_name == 'avocado' and self.ignore_avocado:
@@ -678,6 +680,9 @@ class IslandFarm(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
         for post_id, post_info in self.posts.items():
             if post_info['button'] == post_button:
                 post_info['crop'] = product
+                post_info['state'] = 'working'
+                if ledger is not None:
+                    post_info['runs'] = batches
                 break
 
         # 关闭详情弹窗，防止后续操作被弹窗遮挡
@@ -780,6 +785,15 @@ class IslandFarm(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
         """声明本轮农作物库存，种子仍在选品页即时补充。"""
         return {item['name'] for group in self.INVENTORY_CONFIG.values() for item in group['items']}
 
+    def _read_round_production_stocks(self):
+        """各区域首次派工前，从空岗的生产列表批量读取成品现货。"""
+        from module.island.round_recipe import scan_post_product_stocks
+        for category, idle_posts in self._round_idle_posts.items():
+            if not idle_posts:
+                continue
+            products = [item['name'] for item in self.INVENTORY_CONFIG[category]['items']]
+            scan_post_product_stocks(self, idle_posts[0]['button'], products, self.worker_filters[category])
+
     def run(self):
         """运行岛屿农场、果园与苗圃自动化管理主流程。
 
@@ -796,6 +810,8 @@ class IslandFarm(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
         self._planner_dispatched = {}
         self._planner_in_production = {}
         self.ui_ensure(page_island)
+        if getattr(self, 'island_round', None) is not None:
+            self._read_round_production_stocks()
         self.check_inventory_and_prepare_lists()
 
         logger.info("[岛屿-农田] \n当前库存统计:")
@@ -806,7 +822,7 @@ class IslandFarm(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler):
         if not getattr(self, 'island_round', None):
             self.prepare_round(collect_all=False)
         else:
-            # 集中收获早于盘点，补回旧流程巡岗时对工作中作物的需求扣减。
+            # 集中收获早于生产页读数，补回旧流程巡岗时对工作中作物的需求扣减。
             for category in ('farm', 'orchard', 'nursery'):
                 for post_id, info in self.posts.items():
                     product = info.get('crop')

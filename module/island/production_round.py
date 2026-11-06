@@ -151,8 +151,6 @@ class IslandProductionRound:
             raise TaskEnd('岛屿统一收获期间收到停止请求')
 
     def _prepare(self, config, device, task):
-        from module.island.stock_probe import read_item_stocks, ROUND_WAREHOUSE_SWIPES
-
         logger.hr('岛屿单轮：统一收获', level=1)
         for name, (module, class_name) in PRODUCTION_TASKS.items():
             self._check_stop(config)
@@ -165,21 +163,12 @@ class IslandProductionRound:
                 self.pending.add(name)
 
         self._check_stop(config)
-        items = set()
-        for name in self.pending:
-            items.update(self.runners[name].round_stock_items())
-        logger.hr('岛屿单轮：集中盘点', level=1)
-        observed = read_item_stocks(self.runners[task], items,
-                                   max_swipes=ROUND_WAREHOUSE_SWIPES, reset_to_top=True)
-        for item, quantity in observed.items():
-            self.inventory.observe(item, quantity)
         for runner in self.runners.values():
             runner.island_round = self.inventory
         if 'IslandRancher' in self.pending:
-            from module.island.round_recipe import probe_round_missing_stocks
-            probe_round_missing_stocks(
-                [self.runners[name] for name in PRODUCTION_TASKS if name in self.pending],
-                self.inventory, {2000, 2001, 2008, 2600, 2602, 3000, 3001, 3002, 3003, 3004})
+            # 牧场在实际运行到磨坊/副产判断时，才借本轮可用配方页补读缺项。
+            self.runners['IslandRancher']._round_stock_runners = tuple(
+                self.runners[name] for name in PRODUCTION_TASKS if name in self.pending)
 
         # 已收获成为空岗的启用任务提前进入原优先级队列，不替它执行或写成功。
         with config.multi_set():
@@ -188,7 +177,7 @@ class IslandProductionRound:
                     config.cross_set(f'{name}.Scheduler.NextRun', self.started_at)
         self.ready = True
         logger.attr('岛屿本轮任务', sorted(self.pending))
-        logger.attr('岛屿本轮明确库存', len(observed))
+        logger.info('[岛屿单轮] 收获完成，成品库存将在各场所选品页读取，材料按配方实时确认')
 
     def valid(self, config):
         return self.ready and bool(self.pending) and self.signature == round_config_signature(config)

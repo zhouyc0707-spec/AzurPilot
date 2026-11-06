@@ -44,6 +44,17 @@ class RoundConfirmationTests(unittest.TestCase):
         self.assertEqual(main._round_dispatch_batches, 4)
         self.assertEqual(main._round_dispatch_materials, {1000: 16})
         main.device.click.assert_called_once_with(POST_ADD_ORDER)
+        main.appear_then_click.assert_called_once_with(POST_MAX, interval=2)
+
+    def test_requested_small_mining_quantity_is_not_replaced_with_maximum(self):
+        main = self.make_main()
+        main._round_material_receipt = None
+        main._read_round_dispatch_amounts.return_value = (1, None, None)
+        self.assertTrue(main.confirm_post_add_order('铜矿', preserve_quantity=True))
+        main.appear_then_click.assert_not_called()
+        main.device.click.assert_called_once_with(POST_ADD_ORDER)
+        self.assertEqual(main._round_dispatch_batches, 1)
+        self.assertEqual(main._round_dispatch_materials, {})
 
     def test_purchase_survives_dispatch_failure(self):
         main = self.make_main()

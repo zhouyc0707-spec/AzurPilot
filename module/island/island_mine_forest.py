@@ -203,11 +203,13 @@ class IslandMineForest(PlannedProductionMixin, Island,LoginHandler):
         self.inventory_counts = {}
 
         for category in ['mine', 'forest']:
-            inventory = self.warehouse_inventory(category)
+            ledger = getattr(self, 'island_round', None)
+            inventory = ({item['name']: ledger.get(item['name']) for item in self.inventory_config[category]['items']
+                          if ledger.get(item['name']) is not None} if ledger is not None
+                         else self.warehouse_inventory(category))
             self.inventory_counts[category] = inventory
             for item in self.inventory_config[category]['items']:
                 name = item['name']
-                ledger = getattr(self, 'island_round', None)
                 if ledger is not None and ledger.is_blocked(name):
                     continue
                 if ledger is not None and ledger.get(name) is None:
@@ -477,7 +479,7 @@ class IslandMineForest(PlannedProductionMixin, Island,LoginHandler):
                 # runs == 1 时默认就是1次，不用操作
                 if ledger is not None:
                     self._round_material_receipt = None
-                    if not self.confirm_post_add_order(f'{product}矿林派遣'):
+                    if not self.confirm_post_add_order(f'{product}矿林派遣', preserve_quantity=True):
                         raise GameStuckError('矿林派遣未确认，结束本轮')
                 else:
                     self.device.click(POST_ADD_ORDER)
@@ -508,6 +510,8 @@ class IslandMineForest(PlannedProductionMixin, Island,LoginHandler):
             if pinfo['button'] == post_button:
                 pinfo['crop'] = product
                 pinfo['state'] = 'working'
+                if ledger is not None:
+                    pinfo['runs'] = actual
                 break
 
         # 关闭详情弹窗，防止后续滑动/操作被弹窗遮挡
@@ -582,6 +586,17 @@ class IslandMineForest(PlannedProductionMixin, Island,LoginHandler):
         """声明本轮矿石与木材库存。"""
         return {item['name'] for group in self.inventory_config.values() for item in group['items']}
 
+    def _read_round_production_stocks(self):
+        """矿山和林场分别在首个可派工空岗读取生产列表库存。"""
+        from module.island.round_recipe import scan_post_product_stocks
+        for category, post_ids in (('mine', self.mine_post_ids), ('forest', self.forest_post_ids)):
+            post = next((self.posts[pid] for pid in post_ids if self._post_available_for_dispatch(self.posts[pid])
+                         and self.posts[pid].get('round_enabled', True)), None)
+            if post is not None:
+                scan_post_product_stocks(self, post['button'],
+                                         [item['name'] for item in self.inventory_config[category]['items']],
+                                         self.worker_filters[category])
+
     def run(self):
         """
         流程：
@@ -600,6 +615,8 @@ class IslandMineForest(PlannedProductionMixin, Island,LoginHandler):
 
         if not getattr(self, 'island_round', None):
             self.prepare_round(collect_all=False)
+        else:
+            self._read_round_production_stocks()
 
         # ===== 步骤2：退出管理 → 去仓库检查库存 =====
         if getattr(self, 'island_round', None) is None:

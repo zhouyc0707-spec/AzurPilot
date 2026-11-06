@@ -53,7 +53,11 @@ class RoundRecipeTests(unittest.TestCase):
 
 
 def probe_runner(ledger, **attributes):
+    attributes.setdefault('is_ranch_post_enabled', Mock(return_value=True))
     return SimpleNamespace(island_round=ledger, goto_postmanage=Mock(), post_manage_mode=Mock(),
+                           device=SimpleNamespace(screenshot=Mock()), appear=Mock(return_value=True),
+                           post_manage_swipe_to_top=Mock(return_value=True),
+                           post_manage_swipe_until_appear=Mock(return_value=True),
                            post_close=Mock(), post_open=Mock(return_value=True),
                            select_character=Mock(return_value=True), confirm_selected_character=Mock(return_value=True),
                            back_to_postmanage_from_dispatch=Mock(return_value=True), confirm_post_add_order=Mock(),
@@ -63,7 +67,8 @@ def probe_runner(ledger, **attributes):
 class MillUnknownRecoveryTests(unittest.TestCase):
     def test_empty_season_reads_mill_inputs_and_products_without_dispatch(self):
         ledger = IslandRoundInventory()
-        farm = probe_runner(ledger, _round_idle_posts={'farm': [{'button': 'farm1'}]},
+        farm = probe_runner(ledger, _round_idle_posts={'farm': [{'button': 'farm1', 'post_id': 'farm1'}]},
+                            posts={'farm1': {'button': 'farm1', 'state': 'idle'}},
                             worker_filters={'farm': ['WorkerJuu']})
         ranch = probe_runner(
             ledger, _round_ranch_states={f'ISLAND_RANCH_POST{i}': 'idle' for i in range(1, 5)},
@@ -102,6 +107,30 @@ class MillUnknownRecoveryTests(unittest.TestCase):
         self.assertEqual(probe_round_missing_stocks([runner], ledger, (3004,)), set())
         runner.post_open.assert_not_called()
 
+    def test_farm_probe_skips_posts_dispatched_after_round_preparation(self):
+        ledger = IslandRoundInventory()
+        farm = probe_runner(
+            ledger, _round_idle_posts={'farm': [{'button': 'farm1', 'post_id': 'farm1'},
+                                               {'button': 'farm2', 'post_id': 'farm2'}]},
+            posts={'farm1': {'state': 'working', 'crop': 'wheat'},
+                   'farm2': {'state': 'idle', 'round_enabled': True}},
+            worker_filters={'farm': ['WorkerJuu']})
+        with patch('module.island.planned_dispatch.PlannedProductionMixin._planned_dispatch_stage',
+                   return_value='products'), \
+                patch('module.island.manufacture_selector.select_manufacture_recipe', return_value=True), \
+                patch('module.island.manufacture_selector.read_selected_recipe_inventory',
+                      return_value={2000: {'stock': 0, 'cost': 0}}):
+            self.assertEqual(probe_round_missing_stocks([farm], ledger, ['wheat']), set())
+        farm.post_open.assert_called_once_with('farm2')
+
+    def test_no_farm_page_is_opened_when_all_prepared_idle_posts_became_busy(self):
+        ledger = IslandRoundInventory()
+        farm = probe_runner(
+            ledger, _round_idle_posts={'farm': [{'button': 'farm1', 'post_id': 'farm1'}]},
+            posts={'farm1': {'state': 'working'}}, worker_filters={'farm': ['WorkerJuu']})
+        self.assertEqual(probe_round_missing_stocks([farm], ledger, ['wheat']), {2000})
+        farm.post_open.assert_not_called()
+
     def test_ranch_secondary_chicken_is_observed_from_food_ingredient(self):
         ledger = IslandRoundInventory()
         runner = probe_runner(ledger, posts={'grill1': {'status': 'idle', 'button': 'grill1'}},
@@ -129,6 +158,17 @@ class MillUnknownRecoveryTests(unittest.TestCase):
             self.assertEqual(probe_round_missing_stocks([runner], ledger, (2600,)), set())
         self.assertEqual(ledger.get('pork'), 0)
         self.assertEqual(ledger.get('pig_feed'), 50)
+
+    def test_disabled_ranch_post_is_not_borrowed_for_missing_feed(self):
+        ledger = IslandRoundInventory()
+        runner = probe_runner(ledger, _round_ranch_states={'ISLAND_RANCH_POST1': 'idle'},
+                              posts_ranch={'ISLAND_RANCH_POST1': 'ranch1'},
+                              is_ranch_post_enabled=Mock(return_value=False),
+                              config=SimpleNamespace(IslandRancher_ChickenFilter=['WorkerJuu']))
+        self.assertEqual(probe_round_missing_stocks([runner], ledger, ['chicken_feed']), {3000})
+        runner.is_ranch_post_enabled.assert_called_once_with('ISLAND_RANCH_POST1')
+        runner.post_open.assert_not_called()
+        self.assertIsNone(ledger.get('chicken_feed'))
 
     def test_busy_and_disabled_posts_are_not_borrowed_for_probe(self):
         ledger = IslandRoundInventory()

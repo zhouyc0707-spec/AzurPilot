@@ -322,6 +322,11 @@ def _read_product_stock(main, button):
     area = area_offset(RECIPE_PRODUCT_STOCK_AREA, button.area[:2])
     text = Ocr(area, lang='cnocr', letter=(80, 80, 80), threshold=160,
                name='RECIPE_PRODUCT_STOCK').ocr(main.device.image)
+    return _parse_product_stock(text)
+
+
+def _parse_product_stock(text):
+    """解析卡片库存的完整读数，空文本及残缺数字保持未知。"""
     # 数字区域可能保留「有:」的尾部；先核对完整读数，避免字符过滤吞掉数位。
     text = unicodedata.normalize('NFKC', str(text)).strip()
     match = re.fullmatch(r'(?:([^\d:]*):\s*)?([0-9]+|O)', text)

@@ -1096,19 +1096,20 @@ class Island(SelectCharacter):
         logger.warning("[岛屿] 从派遣流程返回岗位管理页超时")
         return False
 
-    def confirm_post_add_order(self, context="岗位派遣"):
-        """材料确认足够后，点击最大数量并确认派遣。
+    def confirm_post_add_order(self, context="岗位派遣", preserve_quantity=False):
+        """材料确认足够后确认派遣，默认选最大数量。
 
         Args:
             context (str): 操作上下文描述（用于日志记录）。
+            preserve_quantity (bool): 保留调用方已设置的次数，不再次点击最大数量。
 
         Returns:
             bool: 确认派遣是否成功。
         """
         if getattr(self, 'island_round', None) is not None:
-            return self._confirm_round_post_add_order(context)
+            return self._confirm_round_post_add_order(context, preserve_quantity=preserve_quantity)
         clicked = False
-        max_clicked = False
+        max_clicked = preserve_quantity
         button_seen = False
         left_product_timer = Timer(0.8, count=2).start()
         retry_confirm_timer = Timer(2, count=4).start()
@@ -1181,14 +1182,14 @@ class Island(SelectCharacter):
             return None
         return int(batches), stock, int(matched[2])
 
-    def _confirm_round_post_add_order(self, context):
+    def _confirm_round_post_add_order(self, context, preserve_quantity=False):
         """本轮派遣只确认一次，正向确认工作/管理页后提交实际耗料。"""
         from module.exception import GameBugError
 
         self._round_dispatch_batches = None
         self._round_dispatch_materials = {}
         clicked = False
-        maximum_selected = False
+        maximum_selected = preserve_quantity
         previous = None
         amounts = None
         receipt = getattr(self, '_round_material_receipt', None)

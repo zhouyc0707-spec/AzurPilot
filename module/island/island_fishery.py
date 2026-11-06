@@ -227,13 +227,15 @@ class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler, 
 
         根据各产品单次产量向上取整计算所需鱼苗数，并加入待养殖队列。
         """
-        inventory = self.warehouse_inventory()
+        ledger = getattr(self, 'island_round', None)
+        inventory = ({item['name']: ledger.get(item['name']) for item in self.FISHERY_ITEMS
+                      if ledger.get(item['name']) is not None} if ledger is not None
+                     else self.warehouse_inventory())
         self.inventory_counts = inventory
         self.to_plant_list = []
 
         for item_config in self.FISHERY_ITEMS:
             item_name = item_config['name']
-            ledger = getattr(self, 'island_round', None)
             if ledger is not None and ledger.get(item_name) is None:
                 if self.fishery_threshold.get(item_name, 0) > 0 and not ledger.is_blocked(item_name):
                     self.to_plant_list.append(item_name)
@@ -711,6 +713,13 @@ class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler, 
         """鱼苗继续走选品页补充；本轮统一读取养殖成品。"""
         return {item['name'] for item in self.FISHERY_ITEMS}
 
+    def _read_round_production_stocks(self):
+        """通过首个可派工空岗批读鱼获，不预先进入仓库。"""
+        from module.island.round_recipe import scan_post_product_stocks
+        if self._round_idle_posts:
+            scan_post_product_stocks(self, self._round_idle_posts[0]['button'],
+                                     [item['name'] for item in self.FISHERY_ITEMS], self.rancher_filter)
+
     def run(self, ranch_finish_times=None):
         """运行渔场自动化管理主流程。
 
@@ -731,6 +740,8 @@ class IslandFishery(PlannedProductionMixin, Island, WarehouseOCR, LoginHandler, 
 
         if not getattr(self, 'island_round', None):
             self.prepare_round(collect_all=False)
+        else:
+            self._read_round_production_stocks()
         idle_posts = self._round_idle_posts
 
         self.check_inventory_and_prepare_list()
