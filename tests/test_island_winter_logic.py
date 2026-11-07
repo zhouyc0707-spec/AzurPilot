@@ -385,6 +385,7 @@ class WinterPlannerDataTests(unittest.TestCase):
             DIC_ISLAND_RESTAURANT_MENU_TO_RECIPE,
         )
 
+        # 物品与配方 ID 取自游戏数据（ALAS 9485310，已与国际服 sharecfg 原表核对）
         winter_dishes = {
             'shiitake_chicken_soup': 4051,
             'green_jujube_porridge': 4052,
@@ -400,8 +401,10 @@ class WinterPlannerDataTests(unittest.TestCase):
         for recipe_id in range(9900025, 9900033):
             self.assertIn(recipe_id, DIC_ISLAND_RECIPE)
 
+        self.assertEqual(DIC_ISLAND_RECIPE[9900025]['commission_cost'], {4048: 4})
         self.assertEqual(DIC_ISLAND_RECIPE[9900025]['commission_product'], {4047: 8})
         self.assertEqual(DIC_ISLAND_RECIPE[9900026]['commission_product'], {4049: 12})
+        self.assertEqual(DIC_ISLAND_RECIPE[9900027]['commission_cost'], {4045: 2, 2602: 1})
         self.assertEqual(DIC_ISLAND_RECIPE[9900028]['commission_cost'], {4049: 2, 2002: 5})
         self.assertEqual(DIC_ISLAND_RECIPE[9900029]['commission_cost'], {4046: 2})
         self.assertEqual(DIC_ISLAND_RECIPE[9900030]['commission_cost'], {4047: 2, 3004: 3})
@@ -411,6 +414,21 @@ class WinterPlannerDataTests(unittest.TestCase):
         self.assertEqual(DIC_ISLAND_RESTAURANT_MENU_TO_RECIPE[601][4051], 9900027)
         self.assertEqual(DIC_ISLAND_RESTAURANT_MENU_TO_RECIPE[603][4054], 9900030)
         self.assertTrue({4055, 4056} <= sm.MANUFACTURE_LINES['manufacturing_crafts'][1])
+
+    def test_winter_recipes_follow_the_season(self):
+        """冬季配方只在第 5 季可用，秋季（第 4 季）不可用。"""
+        from module.island_planner.calculator import ProductionPlanCalculator
+        from module.island_planner.data import DIC_ISLAND_SEASON
+
+        orchard = {330101: True}  # 果园第一个岗位
+        winter = ProductionPlanCalculator(orchard, activity_list=DIC_ISLAND_SEASON[5]['activity'])
+        autumn = ProductionPlanCalculator(orchard, activity_list=DIC_ISLAND_SEASON[4]['activity'])
+        no_season = ProductionPlanCalculator(orchard, activity_list=None)
+        for recipe_id in (9900025, 9900026):
+            self.assertTrue(winter.recipe_available[recipe_id])
+            self.assertFalse(autumn.recipe_available[recipe_id])
+            self.assertFalse(no_season.recipe_available[recipe_id])
+            self.assertEqual(winter.recipe_group[recipe_id], 'orchard')
 
 
 if __name__ == '__main__':

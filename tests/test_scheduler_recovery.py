@@ -1,5 +1,6 @@
 """使用真实调度循环验证恢复边界，所有设备、通知和后台服务均隔离。"""
 
+import threading
 import unittest
 from datetime import datetime, timedelta
 from unittest.mock import Mock, call, patch
@@ -147,6 +148,398 @@ class TestSchedulerRecovery(unittest.TestCase):
         script._stop_daily_summary_scheduler.assert_called_once_with()
         script._try_restart_emulator.assert_not_called()
         script.config.task_call.assert_not_called()
+
+    def test_task_errors_stop_before_recovery_when_disabled(self):
+        errors = (
+            GameNotRunningError, GameStuckError, GameTooManyClickError,
+            GameBugError, GamePageUnknownError, ScriptError,
+            EmulatorNotRunningError, RequestHumanTakeover, AutoSearchSetError,
+            RuntimeError,
+        )
+        for error_type in errors:
+            with self.subTest(error=error_type.__name__):
+                script = self.make_script()
+                script.config.Error_HandleError = False
+                script.config.Error_GameStuckThreshold = 1
+                script.commission.side_effect = error_type('测试异常')
+
+                with self.assertRaises(SystemExit) as caught:
+                    self.run_tasks(script, ['Commission'])
+
+                self.assertEqual(caught.exception.code, 1)
+                script.save_error_log.assert_called_once_with()
+                script._try_restart_emulator.assert_not_called()
+                script.config.task_call.assert_not_called()
+                script.config.task_delay.assert_not_called()
+                script.device.sleep.assert_not_called()
+                script.checker.check_now.assert_not_called()
+                self.assertEqual(script.task_restart_record, {})
+
+    def test_global_errors_stop_without_recovery_when_disabled(self):
+        for stage in ('selection', 'initialization', 'finalization'):
+            with self.subTest(stage=stage):
+                script = self.make_script()
+                script.config.Error_HandleError = False
+                tasks = ['Commission']
+                error = RuntimeError('调度器异常')
+                if stage == 'selection':
+                    tasks = [error]
+                elif stage == 'initialization':
+                    script.device.stuck_record_clear.side_effect = error
+                else:
+                    script._record_daily_summary_task_finish.side_effect = error
+
+                with self.assertRaises(SystemExit) as caught:
+                    self.run_tasks(script, tasks)
+
+                self.assertEqual(caught.exception.code, 1)
+                script.save_error_log.assert_called_once_with()
+                script._try_restart_emulator.assert_not_called()
+                script.config.task_call.assert_not_called()
+                script.config.task_delay.assert_not_called()
+                self.sleep.assert_not_called()
+
+    def test_disabled_recovery_still_stops_if_error_log_cannot_be_saved(self):
+        script = self.make_script()
+        script.config.Error_HandleError = False
+        script.commission.side_effect = EmulatorNotRunningError('设备离线')
+        script.save_error_log.side_effect = OSError('无法保存错误现场')
+
+        with self.assertRaises(SystemExit) as caught:
+            self.run_tasks(script, ['Commission'])
+
+        self.assertEqual(caught.exception.code, 1)
+        script._try_restart_emulator.assert_not_called()
+        script.config.task_call.assert_not_called()
+
+    def test_disabled_recovery_prevents_failed_result_escalation(self):
+        for result in (False, 'recoverable'):
+            with self.subTest(result=result):
+                script = self.make_script()
+                script.config.Error_HandleError = False
+                script.failure_record['Commission'] = 2
+                script.run = Mock(return_value=result)
+
+                self.assertIs(self.run_tasks(script, ['Commission']), False)
+
+                script._try_restart_emulator.assert_not_called()
+                script.config.task_call.assert_not_called()
+                script._stop_daily_summary_scheduler.assert_called_once_with()
+
+    def test_watchdog_timeout_respects_recovery_switch(self):
+        for enabled in (False, True):
+            with self.subTest(enabled=enabled):
+                script = self.make_script()
+                script.config.Error_HandleError = enabled
+                script._emulator_op_with_timeout = Mock()
+                with (
+                    patch('alas.os._exit') as stop_worker,
+                    patch('module.device.platform.Platform') as platform,
+                ):
+                    script._watchdog_recover(120, task_name='Commission')
+
+                if enabled:
+                    stop_worker.assert_not_called()
+                    platform.assert_called_once_with(script.config, connect=False)
+                    script._emulator_op_with_timeout.assert_called_once()
+                else:
+                    stop_worker.assert_called_once_with(1)
+                    platform.assert_not_called()
+                    script._emulator_op_with_timeout.assert_not_called()
+
+    def test_scheduled_restart_is_independent_of_error_recovery_switch(self):
+        script = self.make_script()
+        script.config.Error_HandleError = False
+        script.config.EmulatorManagement_ScheduledEmulatorRestart = True
+        script.config.EmulatorManagement_RestartIntervalHours = 1
+        # 本地定时重启依据 Android 实际运行时间，与调度器自身运行时长无关。
+        script._get_emulator_uptime = Mock(return_value=7200)
+        self.run_tasks(script, ['Commission'])
+
+        script._get_emulator_uptime.assert_called_once_with()
+        script._try_restart_emulator.assert_called_once_with()
+        script.config.task_call.assert_called_once_with('Restart')
+        script.get_next_task.assert_not_called()
+
+    def arm_forced_stop(self, script, stop_result=True):
+        script.config.Error_HandleError = False
+        script.config.EmulatorManagement_ScheduledEmulatorRestart = True
+        script.config.EmulatorManagement_ForceScheduledRestart = True
+        if not script._watchdog_active:
+            script._watchdog_active = True
+            script._watchdog_task_name = 'Commission'
+            script._watchdog_task_start = 100.0
+        script._emulator_op_with_timeout = Mock(return_value=stop_result)
+        script._start_emulator_after_long_wait = Mock(return_value=True)
+        with patch('module.device.platform.Platform'):
+            script._watchdog_recover(7200, reason='force_scheduled_restart', task_name='Commission')
+        return script._watchdog_scheduled_restart_receipt
+
+    def test_forced_restart_completes_loop_without_spending_or_resetting_business_counts(self):
+        script = self.make_script()
+        script.failure_record = {'Commission': 2}
+        script.task_restart_record = {'Commission': 2}
+        script._get_emulator_uptime = Mock(return_value=0)
+        script.config.EmulatorManagement_RestartIntervalHours = 8
+        script.config.Error_TaskRestartLimit = 3
+        script._program_runtime = Mock()
+
+        def stop_during_task():
+            self.arm_forced_stop(script)
+            raise EmulatorNotRunningError('本轮强制停机后设备离线')
+
+        script.commission.side_effect = stop_during_task
+        # 计划启动前后都会检查停止信号，使用真实事件而不是按调用次数翻转的夹具。
+        script.stop_event = threading.Event()
+        script.get_next_task = Mock(side_effect=['Commission', 'Restart'])
+        script.restart.side_effect = script.stop_event.set
+        script.loop()
+
+        script._start_emulator_after_long_wait.assert_called_once_with(reason='强制定时重启后')
+        script.config.task_call.assert_called_once_with('Restart')
+        script.restart.assert_called_once_with()
+        script._try_restart_emulator.assert_not_called()
+        self.assertEqual(script.failure_record['Commission'], 2)
+        self.assertEqual(script.task_restart_record['Commission'], 2)
+        script._program_runtime.task_finished.assert_has_calls([
+            call('Commission', 'recoverable'), call('Restart', True),
+        ])
+        self.assertIsNone(script._watchdog_scheduled_restart_receipt)
+
+    def test_forced_restart_receipt_is_consumed_once(self):
+        script = self.make_script()
+        self.arm_forced_stop(script)
+        error = EmulatorNotRunningError('设备离线')
+        self.assertTrue(script._complete_force_scheduled_restart('commission', error))
+        self.assertFalse(script._complete_force_scheduled_restart('commission', error))
+        script._start_emulator_after_long_wait.assert_called_once()
+        script.config.task_call.assert_called_once_with('Restart')
+
+    def test_old_watchdog_request_cannot_stop_a_new_task(self):
+        script = self.make_script()
+        script._watchdog_active = True
+        script._watchdog_task_name = 'Commission'
+        script._watchdog_task_start = 101.0
+        with patch('module.device.platform.Platform') as platform:
+            script._watchdog_recover(
+                7200, reason='force_scheduled_restart', task_name='Commission',
+                task_token=('Commission', 100.0),
+            )
+        platform.assert_not_called()
+        self.assertIsNone(script._watchdog_scheduled_restart_receipt)
+
+    def test_transport_error_waits_until_the_concurrent_stop_confirms_success(self):
+        script = self.make_script()
+        script.config.Error_HandleError = False
+        script.config.EmulatorManagement_ScheduledEmulatorRestart = True
+        script.config.EmulatorManagement_ForceScheduledRestart = True
+        script._watchdog_active = True
+        script._watchdog_task_name = 'Commission'
+        script._watchdog_task_start = 100.0
+        script._start_emulator_after_long_wait = Mock(return_value=True)
+        stopping, release_stop, waiting = (threading.Event() for _ in range(3))
+
+        def stop_operation(*args, **kwargs):
+            stopping.set()
+            if not release_stop.wait(3):
+                raise TimeoutError('测试停机等待超时')
+            return True
+
+        script._emulator_op_with_timeout = Mock(side_effect=stop_operation)
+        results = []
+        with patch('module.device.platform.Platform'):
+            stopper = threading.Thread(target=script._watchdog_recover, kwargs={
+                'elapsed': 7200, 'reason': 'force_scheduled_restart',
+                'task_name': 'Commission', 'task_token': ('Commission', 100.0),
+            })
+            stopper.start()
+            self.assertTrue(stopping.wait(3))
+            receipt = script._watchdog_scheduled_restart_receipt
+            original_wait = receipt.finished.wait
+
+            def wait_for_stop(timeout):
+                waiting.set()
+                return original_wait(min(timeout, 3))
+
+            receipt.finished.wait = wait_for_stop
+            consumer = threading.Thread(target=lambda: results.append(
+                script._complete_force_scheduled_restart('commission', EmulatorNotRunningError('设备离线'))))
+            try:
+                consumer.start()
+                self.assertTrue(waiting.wait(3))
+                script._start_emulator_after_long_wait.assert_not_called()
+            finally:
+                release_stop.set()
+                stopper.join(3)
+                consumer.join(3)
+            self.assertFalse(stopper.is_alive())
+            self.assertFalse(consumer.is_alive())
+        self.assertEqual(results, [True])
+        script._start_emulator_after_long_wait.assert_called_once()
+        script.config.task_call.assert_called_once_with('Restart')
+
+    def test_forced_restart_rejects_stale_task_disabled_plan_sensitive_task_and_stop(self):
+        for change in ('task', 'start', 'inactive', 'scheduled', 'force', 'sensitive', 'stop'):
+            with self.subTest(change=change):
+                script = self.make_script()
+                self.arm_forced_stop(script)
+                if change == 'task':
+                    script._watchdog_task_name = 'Research'
+                elif change == 'start':
+                    script._watchdog_task_start = 101.0
+                elif change == 'inactive':
+                    script._watchdog_active = False
+                elif change == 'scheduled':
+                    script.config.EmulatorManagement_ScheduledEmulatorRestart = False
+                elif change == 'force':
+                    script.config.EmulatorManagement_ForceScheduledRestart = False
+                elif change == 'sensitive':
+                    script.config.cross_get.return_value = True
+                else:
+                    script.stop_event = Mock(is_set=Mock(return_value=True))
+                self.assertFalse(script._complete_force_scheduled_restart(
+                    'commission', EmulatorNotRunningError('设备离线')))
+                script._start_emulator_after_long_wait.assert_not_called()
+                self.assertIsNone(script._watchdog_scheduled_restart_receipt)
+
+    def test_failed_or_unconfirmed_forced_stop_cannot_resume(self):
+        for result in (False, None):
+            with self.subTest(result=result):
+                script = self.make_script()
+                self.arm_forced_stop(script, stop_result=result)
+                script.commission.side_effect = EmulatorNotRunningError('设备离线')
+                with self.assertRaises(SystemExit):
+                    script.run('commission')
+                script._start_emulator_after_long_wait.assert_not_called()
+                script._try_restart_emulator.assert_not_called()
+                script.config.task_call.assert_not_called()
+
+    def test_forced_stop_does_not_authorize_script_or_unclassified_errors(self):
+        for error in (ScriptError('代码错误'), RequestHumanTakeover('未知原因'), ValueError('业务错误')):
+            with self.subTest(error=type(error).__name__):
+                script = self.make_script()
+                self.arm_forced_stop(script)
+                script.commission.side_effect = error
+                with self.assertRaises(SystemExit):
+                    script.run('commission')
+                script._start_emulator_after_long_wait.assert_not_called()
+                script.config.task_call.assert_not_called()
+                self.assertIsNone(script._watchdog_scheduled_restart_receipt)
+
+    def test_forced_stop_keeps_fleet_manual_boundary(self):
+        script = self.make_script()
+        self.arm_forced_stop(script)
+        script.commission.side_effect = FleetManagementError('需要人工核对')
+        self.assertFalse(script.run('commission'))
+        self.assertTrue(script._fleet_management_failed)
+        script._start_emulator_after_long_wait.assert_not_called()
+        script.config.task_call.assert_not_called()
+
+    def test_forced_stop_accepts_only_classified_transport_cause(self):
+        from adbutils.errors import AdbError
+        for cause, accepted in ((ConnectionResetError('连接中断'), True),
+                                (AdbError('device offline'), True),
+                                (AdbError('device unauthorized'), False),
+                                (ScriptError('代码错误'), False)):
+            with self.subTest(cause=str(cause)):
+                script = self.make_script()
+                self.arm_forced_stop(script)
+                error = RequestHumanTakeover('设备后端重试耗尽')
+                error.__cause__ = cause
+                script.commission.side_effect = error
+                if accepted:
+                    self.assertEqual(script.run('commission'), 'scheduled_restart')
+                    script._start_emulator_after_long_wait.assert_called_once()
+                else:
+                    with self.assertRaises(SystemExit):
+                        script.run('commission')
+                    script._start_emulator_after_long_wait.assert_not_called()
+
+    def test_forced_restart_waits_for_confirmation_and_timeout_cannot_resume_later(self):
+        for confirmed in (True, False):
+            with self.subTest(confirmed=confirmed):
+                script = self.make_script()
+                receipt = self.arm_forced_stop(script)
+                receipt.stopped = False
+                receipt.deadline = 20.0
+
+                def wait(timeout):
+                    self.assertEqual(timeout, 5.0)
+                    script._start_emulator_after_long_wait.assert_not_called()
+                    receipt.stopped = confirmed
+                    return confirmed
+
+                receipt.finished = Mock(wait=Mock(side_effect=wait))
+                with patch('alas.time.monotonic', return_value=15.0):
+                    self.assertEqual(script._complete_force_scheduled_restart(
+                        'commission', EmulatorNotRunningError('设备离线')), confirmed)
+                receipt.finished.wait.assert_called_once_with(5.0)
+                receipt.stopped = True
+                self.assertFalse(script._complete_force_scheduled_restart(
+                    'commission', EmulatorNotRunningError('迟到异常')))
+                self.assertEqual(script._start_emulator_after_long_wait.call_count, int(confirmed))
+
+    def test_forced_restart_start_failure_stops_without_another_recovery(self):
+        script = self.make_script()
+        self.arm_forced_stop(script)
+        script._start_emulator_after_long_wait.return_value = False
+        script.commission.side_effect = EmulatorNotRunningError('设备离线')
+        with self.assertRaises(SystemExit):
+            script.run('commission')
+        script._start_emulator_after_long_wait.assert_called_once()
+        script._try_restart_emulator.assert_not_called()
+        script.config.task_call.assert_not_called()
+        self.assertIsNone(script._watchdog_scheduled_restart_receipt)
+
+    def test_forced_restart_daily_summary_is_recoverable_not_failed_or_completed(self):
+        script = self.make_script()
+        service = Mock()
+        script._get_daily_summary_service = Mock(return_value=service)
+        AzurLaneAutoScript._record_daily_summary_task_finish(
+            script, 'test-run', 'scheduled_restart', datetime.now(),
+        )
+        self.assertEqual(service.store.record_task_finish.call_args.args[3], 'recoverable')
+
+    def test_sensitive_failure_notifications_are_preserved_when_recovery_is_disabled(self):
+        script = self.make_script(strict=True, sensitive=True)
+        script.config.Error_HandleError = False
+        script.commission.side_effect = EmulatorNotRunningError('设备离线')
+
+        with self.assertRaises(SystemExit) as caught:
+            self.run_tasks(script, ['Commission'])
+
+        self.assertEqual(caught.exception.code, 1)
+        script.save_error_log.assert_called_once_with()
+        self.notify.assert_called_once()
+        self.webui.assert_called_once()
+        script._try_restart_emulator.assert_not_called()
+        script.config.task_call.assert_not_called()
+
+    def test_normal_completion_is_preserved_when_recovery_is_disabled(self):
+        for outcome in (None, TaskEnd()):
+            with self.subTest(outcome=outcome):
+                script = self.make_script()
+                script.config.Error_HandleError = False
+                script.commission.side_effect = [outcome]
+
+                self.assertTrue(script.run('Commission'))
+
+                script.save_error_log.assert_not_called()
+                script._try_restart_emulator.assert_not_called()
+                script.config.task_call.assert_not_called()
+
+    def test_scan_failure_results_are_preserved_when_recovery_is_disabled(self):
+        for error_type in (MindCalculatorScanError, FleetManagementError):
+            with self.subTest(error=error_type.__name__):
+                script = self.make_script()
+                script.config.Error_HandleError = False
+                script.commission.side_effect = error_type('无法确认识别结果')
+
+                self.assertFalse(script.run('Commission'))
+
+                script.save_error_log.assert_called_once_with()
+                script._try_restart_emulator.assert_not_called()
+                script.config.task_call.assert_not_called()
 
     def test_repeated_storage_recognition_failures_do_not_restart_or_stop_scheduler(self):
         script = self.make_script()

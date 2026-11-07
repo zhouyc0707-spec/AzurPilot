@@ -4159,6 +4159,18 @@
     "ForceRun": {
       "name": "无视运行间隔强制运行",
       "help": "带来额外行动力消耗，一般不开喵。"
+    },
+    "FullScan": {
+      "name": "全图扫描（实验性）",
+      "help": "默认关闭，有概率卡死。自律寻敌、近距离问号和当前视野扫描后，若仍未处理到事件，只扫描一次全图；发现事件则按现有流程处理。"
+    },
+    "RadarScan": {
+      "name": "雷达扫描",
+      "help": "默认关闭。全图扫描后仍未处理到事件时，依次切换舰队检查雷达问号；未开启全图扫描时，在自律寻敌及原有当前视野检查后执行。只换队补查和处理发现的事件，不做固定坐标巡逻，也不额外全图扫描，结束后切回出击舰队。"
+    },
+    "ResumeState": {
+      "name": "隐秘海域续接记录",
+      "help": "自动保存本海域是否已续接一次；再次重启回来正常退出，成功退出后清除。"
     }
   },
   "OpsiAbyssal": {
@@ -4169,6 +4181,10 @@
     "ForceRun": {
       "name": "无视运行间隔强制运行",
       "help": "额外行动力消耗，一般不开喵。"
+    },
+    "ContinueAfterRestart": {
+      "name": "深渊海域续接战斗",
+      "help": "默认关闭。开启后，重启先完成当前深渊，探路沿用首次舰队，Boss 保持原出战顺序。每阶段仅续接一次；进入下一阶段机会重置为1，不累计，同阶段再次重启则按原流程退出。士气不足时关闭提示、脱离并换下一队；深渊消失后清空所有标记并继续后续任务。"
     }
   },
   "OpsiStronghold": {
@@ -4770,12 +4786,12 @@
       "name": "鲶鱼底线",
       "help": ""
     },
-    "MinCommonCarp": {
-      "name": "鲫鱼底线",
-      "help": ""
-    },
     "MinKoiCarp": {
       "name": "鲤鱼底线",
+      "help": ""
+    },
+    "MinCommonCarp": {
+      "name": "鲫鱼底线",
       "help": ""
     },
     "MinShrimp": {
@@ -4831,16 +4847,12 @@
       "help": "同上，针对海水鱼肉。"
     },
     "PlantYellowfinTuna": {
-      "name": "养黄鳍金枪鱼喵",
-      "help": "",
+      "name": "默认产品岗位数",
+      "help": "所有底线达标后，几个空余渔场岗位养殖默认产品。",
       "0": "0",
       "1": "1",
       "2": "2",
       "3": "3"
-    },
-    "RancherFilter": {
-      "name": "使用角色喵",
-      "help": "以>连接，例如肇和 新泽西 小天城：ChaoHo > NewJersey > Amagi_chan\n小加加：Saratoga > 明石：Akashi > 塔什干：Tashkent > 应瑞：YingSwei\n恶毒：LeMalin > 独角兽：Unicorn > 岛风：Shimakaze > 柴郡：Cheshire\n镇海：ChenHai > 威廉D波特：WilliamDPorter\n海伦娜：Helena > 大帝：Friedrich > 愛宕：Atago\n逸仙：Yixian > 奥古斯特：August > 欧根亲王：Eugen > 胡德：Hood > 标枪：Javelin > 拉菲：Laffey > 探索者：Explorer > 领航员：Navigator > 领洋者：OceanCrosser > 飞云：FeiYun > 高雄：Takao > 安克雷奇：Anchorage > 贝尔法斯特：Belfast > 长风：ChangFeng > 莫加多尔：Mogador > 皇家财富号：RoyalFortune > 达芬奇：DaVinci > 大凤：Taihou > 长门：Nagato > 埃吉尔：Agir > 华甲：HwahJah > 百眼巨人：Argus > 火力：Ognevoy\n仅识别默认排序前两排；指定舰娘不可用时回退 WorkerJuu。"
     },
     "DefaultFish": {
       "name": "默认养殖产品",
@@ -4860,6 +4872,10 @@
       "red_sea_bream": "红鲷鱼",
       "yellowfin_tuna": "黄鳍金枪鱼",
       "sea_cucumber": "海参"
+    },
+    "RancherFilter": {
+      "name": "使用角色喵",
+      "help": "以>连接，例如肇和 新泽西 小天城：ChaoHo > NewJersey > Amagi_chan\n小加加：Saratoga > 明石：Akashi > 塔什干：Tashkent > 应瑞：YingSwei\n恶毒：LeMalin > 独角兽：Unicorn > 岛风：Shimakaze > 柴郡：Cheshire\n镇海：ChenHai > 威廉D波特：WilliamDPorter\n海伦娜：Helena > 大帝：Friedrich > 愛宕：Atago\n逸仙：Yixian > 奥古斯特：August > 欧根亲王：Eugen > 胡德：Hood > 标枪：Javelin > 拉菲：Laffey > 探索者：Explorer > 领航员：Navigator > 领洋者：OceanCrosser > 飞云：FeiYun > 高雄：Takao > 安克雷奇：Anchorage > 贝尔法斯特：Belfast > 长风：ChangFeng > 莫加多尔：Mogador > 皇家财富号：RoyalFortune > 达芬奇：DaVinci > 大凤：Taihou > 长门：Nagato > 埃吉尔：Agir > 华甲：HwahJah > 百眼巨人：Argus > 火力：Ognevoy\n仅识别默认排序前两排；指定舰娘不可用时回退 WorkerJuu。"
     }
   },
   "IslandMine": {
@@ -4876,13 +4892,22 @@
       "4": "4"
     },
     "MineSilver": {
-      "name": "银矿打工位喵",
-      "help": "几个空闲矿山岗位用于生产银矿，其余空着不动 (´・ω・`)",
+      "name": "默认矿石岗位数",
+      "help": "几个空闲矿山岗位用于生产默认矿石，其余空着不动",
       "0": "0",
       "1": "1",
       "2": "2",
       "3": "3",
       "4": "4"
+    },
+    "DefaultOre": {
+      "name": "默认矿石",
+      "help": "所有矿石达到底线后，空余矿山岗位生产的矿石（岗位数见上一项）。",
+      "Copper": "铜矿",
+      "Aluminium": "铝矿",
+      "Iron": "铁矿",
+      "Sulphur": "硫矿",
+      "Silver": "银矿"
     },
     "WorkerFilter": {
       "name": "矿山使用角色喵",
@@ -4907,15 +4932,6 @@
     "MinSilver": {
       "name": "银矿底线喵",
       "help": "仓库中银矿数量低于此值时，矿山岗位才会生产 (´・ω・`)"
-    },
-    "DefaultOre": {
-      "name": "默认矿石",
-      "help": "所有矿石达到底线后，空余矿山岗位生产的矿石（岗位数见上一项）。",
-      "Copper": "铜矿",
-      "Aluminium": "铝矿",
-      "Iron": "铁矿",
-      "Sulphur": "硫矿",
-      "Silver": "银矿"
     }
   },
   "IslandForest": {
@@ -4932,13 +4948,20 @@
       "4": "4"
     },
     "CutElegant": {
-      "name": "伐木打工位喵",
-      "help": "几个空闲林场岗位用于生产典雅之木，其余空着不动 (´・ω・`)",
+      "name": "默认木材岗位数",
+      "help": "几个空闲林场岗位用于生产默认木材，其余空着不动",
       "0": "0",
       "1": "1",
       "2": "2",
       "3": "3",
       "4": "4"
+    },
+    "DefaultWood": {
+      "name": "默认木材",
+      "help": "所有木材达到底线后，空余林场岗位生产的木材（岗位数见上一项）。",
+      "Practical": "实用之木",
+      "Selected": "精选之木",
+      "Elegant": "典雅之木"
     },
     "WorkerFilter": {
       "name": "林场使用角色喵",
@@ -4955,13 +4978,6 @@
     "MinSelected": {
       "name": "精选木材底线喵",
       "help": "仓库中精选木材数量低于此值时，林场岗位才会生产 (´・ω・`)"
-    },
-    "DefaultWood": {
-      "name": "默认木材",
-      "help": "所有木材达到底线后，空余林场岗位生产的木材（岗位数见上一项）。",
-      "Practical": "实用之木",
-      "Selected": "精选之木",
-      "Elegant": "典雅之木"
     }
   },
   "IslandDailyGather": {

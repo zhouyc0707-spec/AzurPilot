@@ -133,6 +133,32 @@ class BusinessConfirmationTests(unittest.TestCase):
         self.assertEqual(len(device.clicks_for(ISLAND_BACK)), 1)
         self.assertGreaterEqual(device.elapsed - device.clicks_for(ISLAND_BACK)[0]['time'], 4)
 
+    def test_no_food_return_waits_for_confirmed_postmanage(self):
+        def timeline(device):
+            if backs := device.clicks_for(ISLAND_BACK):
+                return POSTMANAGE if device.elapsed - backs[0]['time'] >= 4 else UNKNOWN
+            return STARTED_SHOP
+
+        device = FakeDevice(self.clock, timeline)
+        business = BusinessUI(device)
+        business.post_manage_mode = Mock()
+        business._leave_shop_without_start()
+        self.assertEqual(len(device.clicks_for(ISLAND_BACK)), 1)
+        self.assertEqual(device.clicks_for(BUSINESS_START_IN_SHOP), [])
+        self.assertGreaterEqual(device.elapsed - device.clicks_for(ISLAND_BACK)[0]['time'], 4)
+        business.post_manage_mode.assert_called_once_with(POST_MANAGE_BUSINESS)
+        business.goto_postmanage.assert_not_called()
+
+    def test_no_food_unknown_page_uses_existing_recovery(self):
+        device = FakeDevice(self.clock, lambda device: UNKNOWN)
+        business = BusinessUI(device)
+        business.post_manage_mode = Mock()
+        with self.assertRaisesRegex(GameStuckError, '取消经营后返回岗位管理超时'):
+            business._leave_shop_without_start()
+        self.assertEqual(device.clicks, [])
+        business.goto_postmanage.assert_not_called()
+        business.post_manage_mode.assert_not_called()
+
     def test_delayed_popups_take_priority_over_background_page(self):
         for popup_buttons in [(GET_MISSION,), (POPUP_SINGLE_WHITE,), (POPUP_CANCEL, POPUP_CONFIRM)]:
             with self.subTest(popup=[button.name for button in popup_buttons]):
@@ -229,6 +255,7 @@ class BusinessConfirmationTests(unittest.TestCase):
         script._channel_float_done = True
         script.__dict__['device'] = device
         script.__dict__['config'] = SimpleNamespace(
+            Error_HandleError=True,
             Error_GameStuckRestart=False,
             Error_SaveError=True,
             Error_LlmAnalysis=False,

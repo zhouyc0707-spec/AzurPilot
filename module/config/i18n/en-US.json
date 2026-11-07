@@ -4159,6 +4159,18 @@
     "ForceRun": {
       "name": "Force run ignoring interval",
       "help": "When enabled, it will consume additional Action Points. Generally not needed, just run it slowly."
+    },
+    "FullScan": {
+      "name": "Full map scan (experimental)",
+      "help": "Off by default. May get stuck. After auto search, nearby radar questions and the current view scan, scan the full map once if no event has been handled. Handle any event found using the existing flow."
+    },
+    "RadarScan": {
+      "name": "Radar scan",
+      "help": "Off by default. If no event has been handled after the full map scan, switch fleets to check radar questions. If full map scanning is off, check after auto search and the existing current view checks. Only switch fleets and handle detected events; do not run fixed-position patrols or extra full map scans. Restore the sortie fleet afterward."
+    },
+    "ResumeState": {
+      "name": "Obscure zone resume record",
+      "help": "Automatically records the single resume attempt for this zone. Exit normally after another restart; clear the record after a successful exit."
     }
   },
   "OpsiAbyssal": {
@@ -4169,6 +4181,10 @@
     "ForceRun": {
       "name": "Force run ignoring interval",
       "help": "When enabled, it will consume additional Action Points. Generally not needed, just run it slowly."
+    },
+    "ContinueAfterRestart": {
+      "name": "Resume Abyssal battles after restart",
+      "help": "Disabled by default. Resume the current Abyssal Zone with the original exploration fleet and configured Boss fleet order. Each stage has one restart continuation; the next stage resets it to one without accumulation. Another restart in the same stage exits normally. Low morale closes the prompt, withdraws the fleet and proceeds to the next. Clear all markers when the Abyssal Zone is gone."
     }
   },
   "OpsiStronghold": {
@@ -4770,12 +4786,12 @@
       "name": "Catfish stock threshold",
       "help": ""
     },
-    "MinCommonCarp": {
-      "name": "Common carp stock threshold",
-      "help": ""
-    },
     "MinKoiCarp": {
       "name": "Koi carp stock threshold",
+      "help": ""
+    },
+    "MinCommonCarp": {
+      "name": "Common carp stock threshold",
       "help": ""
     },
     "MinShrimp": {
@@ -4831,16 +4847,12 @@
       "help": "The same rules apply to saltwater fish meat."
     },
     "PlantYellowfinTuna": {
-      "name": "Raise yellowfin tuna",
-      "help": "",
+      "name": "Default fish posts",
+      "help": "Number of spare fishery posts that raise the default fish once every minimum is met.",
       "0": "0",
       "1": "1",
       "2": "2",
       "3": "3"
-    },
-    "RancherFilter": {
-      "name": "Character filter",
-      "help": "Connect with >, e.g. ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou > Nagato > Agir > HwahJah > Argus > Ognevoy\nOnly recognizes the first two rows in default order. If the specified character is unavailable, falls back to WorkerJuu."
     },
     "DefaultFish": {
       "name": "Default fish",
@@ -4860,6 +4872,10 @@
       "red_sea_bream": "Red Sea Bream",
       "yellowfin_tuna": "Yellowfin Tuna",
       "sea_cucumber": "Sea Cucumber"
+    },
+    "RancherFilter": {
+      "name": "Character filter",
+      "help": "Connect with >, e.g. ChaoHo > NewJersey > Amagi_chan\nSaratoga > Akashi > Tashkent > YingSwei\nLeMalin > Unicorn > Shimakaze > Cheshire\nChenHai > WilliamDPorter\nHelena > Friedrich > Atago\nYixian > August > Eugen > Hood > Javelin > Laffey > Explorer > Navigator > OceanCrosser > FeiYun > Takao > Anchorage > Belfast > ChangFeng > Mogador > RoyalFortune > DaVinci > Taihou > Nagato > Agir > HwahJah > Argus > Ognevoy\nOnly recognizes the first two rows in default order. If the specified character is unavailable, falls back to WorkerJuu."
     }
   },
   "IslandMine": {
@@ -4876,13 +4892,22 @@
       "4": "4"
     },
     "MineSilver": {
-      "name": "Silver mining slots",
-      "help": "Number of idle mine posts to produce Silver; remaining stay idle",
+      "name": "Default ore posts",
+      "help": "Number of spare mine posts that produce the default ore; the rest stay idle.",
       "0": "0",
       "1": "1",
       "2": "2",
       "3": "3",
       "4": "4"
+    },
+    "DefaultOre": {
+      "name": "Default ore",
+      "help": "What spare mine posts produce once every ore has reached its minimum (number of posts is the previous setting).",
+      "Copper": "Copper Ore",
+      "Aluminium": "Bauxite Ore",
+      "Iron": "Iron Ore",
+      "Sulphur": "Sulfur",
+      "Silver": "Silver Ore"
     },
     "WorkerFilter": {
       "name": "Mine worker filter",
@@ -4907,15 +4932,6 @@
     "MinSilver": {
       "name": "Silver ore min stock",
       "help": "Mine positions only produce when silver ore in warehouse falls below this value."
-    },
-    "DefaultOre": {
-      "name": "Default ore",
-      "help": "What spare mine posts produce once every ore has reached its minimum (number of posts is the previous setting).",
-      "Copper": "Copper Ore",
-      "Aluminium": "Bauxite Ore",
-      "Iron": "Iron Ore",
-      "Sulphur": "Sulfur",
-      "Silver": "Silver Ore"
     }
   },
   "IslandForest": {
@@ -4932,13 +4948,20 @@
       "4": "4"
     },
     "CutElegant": {
-      "name": "Elegant wood slots",
-      "help": "Number of idle forest posts to produce Elegant wood; remaining stay idle",
+      "name": "Default wood posts",
+      "help": "Number of spare forest posts that produce the default wood; the rest stay idle.",
       "0": "0",
       "1": "1",
       "2": "2",
       "3": "3",
       "4": "4"
+    },
+    "DefaultWood": {
+      "name": "Default wood",
+      "help": "What spare forest posts produce once every wood has reached its minimum (number of posts is the previous setting).",
+      "Practical": "Workable Wood",
+      "Selected": "Premium Wood",
+      "Elegant": "Elegant Wood"
     },
     "WorkerFilter": {
       "name": "Forest worker filter",
@@ -4955,13 +4978,6 @@
     "MinSelected": {
       "name": "Selected wood min stock",
       "help": "Forest positions only produce when selected wood in warehouse falls below this value."
-    },
-    "DefaultWood": {
-      "name": "Default wood",
-      "help": "What spare forest posts produce once every wood has reached its minimum (number of posts is the previous setting).",
-      "Practical": "Workable Wood",
-      "Selected": "Premium Wood",
-      "Elegant": "Elegant Wood"
     }
   },
   "IslandDailyGather": {

@@ -2930,7 +2930,10 @@
     },
     "OpsiObscure": {
       "SkipHazard2Obscure": false,
-      "ForceRun": false
+      "ForceRun": false,
+      "FullScan": false,
+      "RadarScan": false,
+      "ResumeState": null
     },
     "OpsiFleet": {
       "Fleet": 1,
@@ -2952,7 +2955,8 @@
       "Sensitive": true
     },
     "OpsiAbyssal": {
-      "ForceRun": false
+      "ForceRun": false,
+      "ContinueAfterRestart": false
     },
     "OpsiFleetFilter": {
       "Filter": "Fleet-4 > CallSubmarine > Fleet-2 > Fleet-3 > Fleet-1"
@@ -3422,8 +3426,8 @@
       "Positions": 3,
       "MinShell": 50,
       "MinCatfish": 0,
-      "MinCommonCarp": 0,
       "MinKoiCarp": 0,
+      "MinCommonCarp": 0,
       "MinShrimp": 50,
       "MinCrayfish": 50,
       "MinBass": 50,
@@ -3438,8 +3442,8 @@
       "MinFreshwaterFishMeat": 0,
       "MinSaltwaterFishMeat": 0,
       "PlantYellowfinTuna": 3,
-      "RancherFilter": "WorkerJuu",
-      "DefaultFish": "yellowfin_tuna"
+      "DefaultFish": "yellowfin_tuna",
+      "RancherFilter": "WorkerJuu"
     },
     "Storage": {
       "Storage": {}
@@ -3459,22 +3463,22 @@
     "IslandMine": {
       "Positions": 1,
       "MineSilver": 1,
+      "DefaultOre": "Silver",
       "WorkerFilter": "WorkerJuu",
       "MinCopper": 50,
       "MinAluminium": 50,
       "MinIron": 50,
       "MinSulphur": 50,
-      "MinSilver": 50,
-      "DefaultOre": "Silver"
+      "MinSilver": 50
     },
     "IslandForest": {
       "Positions": 1,
       "CutElegant": 1,
+      "DefaultWood": "Elegant",
       "WorkerFilter": "WorkerJuu",
       "MinElegant": 50,
       "MinPractical": 50,
-      "MinSelected": 50,
-      "DefaultWood": "Elegant"
+      "MinSelected": 50
     },
     "Storage": {
       "Storage": {}

@@ -502,6 +502,7 @@ class IslandShopBase(Island, WarehouseOCR):
             str | None: 正在生产的商品名称，未匹配到返回 None。
         """
         for item in self.shop_items:
+            # 缺少岗位生产图时保留未知，不能调用空模板。
             if item.get('post_action') is not None and self.appear(item['post_action']):
                 return item['name']
         return None

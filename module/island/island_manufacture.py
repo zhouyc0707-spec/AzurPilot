@@ -53,6 +53,7 @@ SEASONAL_HANDMADE_ITEMS = {
 def _product(name, selection, selection_check):
     """可在产品列表中选择、但没有仓库模板和岗位「生产中」图的制造产品。
 
+    选品图复用上游国际服截图（图标不含文字）。
     库存由共享轮按产地读取，不依赖单品仓库模板；没有岗位图时，在制品保持未知，
     收获前保守暂停该产线追加任务。
     """
@@ -523,43 +524,41 @@ class IslandManufacture(IslandShopBase):
 
         self.schedule_handmade()
 
-    def schedule_wood_processing(self):
-        """安排木料加工生产（生产文件柜）。"""
-        idle_posts = self.get_idle_posts_by_category('wood_processing')
+    def _schedule_line(self, category, product_list):
+        """复用本轮按产地库存后，按配置产品顺序安排空岗。"""
+        idle_posts = self.get_idle_posts_by_category(category)
         if not idle_posts:
             return
-        self._observe_round_category('wood_processing', idle_posts[0])
+        self._observe_round_category(category, idle_posts[0])
+        for post_id in idle_posts:
+            self.select_product_with_material_check(post_id, product_list)
+
+    def schedule_wood_processing(self):
+        """安排木料加工生产：按 WoodProcessing.Products 的顺序，未配置时只生产文件柜。"""
         product_list = self.configured_product_list('wood_processing')
         if product_list is None:
             product_list = [item for item in self.manufacture['wood_processing']['items']
                             if item['name'] == 'file_cabinet']
-        for post_id in idle_posts:
-            self.select_product_with_material_check(post_id, product_list)
+        self._schedule_line('wood_processing', product_list)
 
     def schedule_electronic_processing(self):
-        """安排电子加工生产（生产滤芯）。"""
-        idle_posts = self.get_idle_posts_by_category('electronic_processing')
-        if not idle_posts:
-            return
-        self._observe_round_category('electronic_processing', idle_posts[0])
+        """安排电子加工生产：按 ElectronicProcessing.Products 的顺序，未配置时只生产净水滤芯。"""
         product_list = self.configured_product_list('electronic_processing')
         if product_list is None:
             product_list = [item for item in self.manufacture['electronic_processing']['items']
                             if item['name'] == 'filter_element']
-        for post_id in idle_posts:
-            self.select_product_with_material_check(post_id, product_list)
+        self._schedule_line('electronic_processing', product_list)
 
     def schedule_industrial_production(self):
-        """安排工业生产（根据铁钉库存切换铁钉或餐具生产）。"""
+        """安排工业生产：按 Industrial.Products 的顺序，未配置时根据铁钉库存切换铁钉或餐具。"""
+        product_list = self.configured_product_list('industrial_production')
+        if product_list is not None:
+            self._schedule_line('industrial_production', product_list)
+            return
         idle_posts = self.get_idle_posts_by_category('industrial_production')
         if not idle_posts:
             return
         self._observe_round_category('industrial_production', idle_posts[0])
-        configured = self.configured_product_list('industrial_production')
-        if configured is not None:
-            for post_id in idle_posts:
-                self.select_product_with_material_check(post_id, configured)
-            return
         # 检查库存iron_nail
         iron_nail_stock = self.warehouse_counts.get('iron_nail', 0)
         # 根据规则选择产品：铁钉足够时优先餐具；餐具未解锁或材料不足时继续生产铁钉，岗位不空闲
@@ -574,16 +573,15 @@ class IslandManufacture(IslandShopBase):
             self.select_product_with_material_check(post_id, product_list)
 
     def schedule_handmade(self):
-        """安排手工制品生产（优先季节限定品、皮靴与皮革）。"""
+        """安排手工制品生产：按 Handmade.Products 的顺序，未配置时优先季节限定品、皮靴与皮革。"""
+        product_list = self.configured_product_list('handmade')
+        if product_list is not None:
+            self._schedule_line('handmade', product_list)
+            return
         idle_posts = self.get_idle_posts_by_category('handmade')
         if not idle_posts:
             return
         self._observe_round_category('handmade', idle_posts[0])
-        configured = self.configured_product_list('handmade')
-        if configured is not None:
-            for post_id in idle_posts:
-                self.select_product_with_material_check(post_id, configured)
-            return
         # 检查库存leather
         leather_stock = self.warehouse_counts.get('leather', 0)
         # 构建产品选择列表（按优先级）

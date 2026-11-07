@@ -205,7 +205,7 @@ flowchart BT
 | `os_init()` | 所有任务的前置：强制潜艇每战出击、覆盖通用剧情配置（大世界处理器局部使用 SKIP）→ 进入海域 → `zone_init`/`hp_reset` → 从特殊海域退出 → 按任务身份决定是否 `run_first_auto_search()`（智能调度会把该决策延后到决策点） |
 | `globe_goto(zone, types, refresh, stop_if_safe)` | 跨海域导航的标准路径：特殊海域先退出 → 海域图进球面 → 聚焦/类型选择/进入 → `zone_init` |
 | `os_map_goto_globe()` | 包装重试 3 次：`RewardUncollectedError`（探索奖励未领不能离开海域）时先 `run_auto_search(rescan=True, after_auto_search=False)` 再试；禁用 after_auto_search 防止递归退出海域 |
-| `run_auto_search(question, rescan, after_auto_search, interrupt, on_search_finished)` | 自律寻敌主循环：drop 统计上下文内跑战斗、清问号、按 `rescan` 重扫（`current`/`full`），特殊任务可整体关闭；可在战斗结束、事件扫描开始前进入片段记录上下文 |
+| `run_auto_search(question, rescan, after_auto_search, interrupt, on_search_finished, on_map_scanned)` | 自律寻敌主循环：drop 统计上下文内跑战斗、清问号、按 `rescan` 重扫（`current`/`full`），特殊任务可整体关闭；可在战斗结束、事件扫描开始前进入片段记录上下文；完成常规扫描后、离图前调用 `on_map_scanned`，共用同一掉落记录 |
 | `map_rescan(rescan_mode)` | 全图重扫：明石商店、扫描装置、伐木塔、双舰队机关（`ALREADY_SOLVED_MAP_EVENTS` 集合去重）；明石/装置点击被遮挡时先收起舰队栏，再换舰队，仍不行走恢复式强制移动 |
 | `fleet_repair()` / `port_goto()` | 港口维修与「走不动就换港口绕路」的容错包装 |
 | `boss_clear()`（`fleet.py`） | 月度/要塞 Boss 的多舰队轮换攻击，`limit_walk` 限制单次行走曼哈顿距离 ≤3 格 |
@@ -217,6 +217,10 @@ flowchart BT
 初始化维修按实际子任务决定：智能调度及代理到智能调度／侵蚀一的防溢出任务先设置待检查标记，绑定第一个实际子任务后才检查维修。侵蚀一开启献祭模式时不读取血量、不用维修箱、不自动回港；普通模式保留维修箱与显式回港阈值，但单船扳手标记不额外强制回港。侵蚀一先完成当前自律与地图事件再维修，不因战后扳手标记提前关闭后续自律；其他任务维持原有阵亡处理。用户停止和任务切换仍独立生效。
 
 自律开启重试只在确认开启、领奖、剧情打断或离开地图时清零预算；点击冷却导致匹配返回假不等于已开启，持续无效点击也不能重置自律总时限。离开海域和全局地图定位过程中可处理尚未关闭的评价／经验结算；迷雾覆盖的地图返回按钮允许横向偏移。自动配队点击出发后先取新截图，再判断是否回到地图，避免缓存帧误报完成。
+
+隐秘海域在进入后记录服务器、重置月份、海域和续接标记；异常重启后最多续接一次，第二次恢复退出当前海域，其他任务只接管匹配记录。续接不重复进入时的侦察与潜艇调用，战斗、常规扫描、可选补扫和离图共用掉落记录。`OpsiObscure.FullScan` 与 `RadarScan` 默认关闭；开启时，只在常规扫描未处理事件后执行对应补扫。逐队清问号支持关闭额外全图重扫，侵蚀一主队预检与事件续查仍保持原有边界。
+
+深渊 `OpsiAbyssal.ContinueAfterRestart` 默认关闭。开启后，`abyssal_resume.py` 按服务器、重置月份、海域和入口／第二阶段／首领／舰队阶段保存进度，每阶段只允许一次续接，并在操作前标记；恢复使用实际子任务上下文与原舰队顺序。首领清除必须确认当前阶段，入口问号不能当作首领已经清空。低士气取消当前出击后换用后续舰队；舰队耗尽则退出海域、清理续接记录并维修，不再因本次耗尽要求人工接管。未开启续接时仍保留阶段确认与换队保护。离线回归见 `tests/test_opsi_abyssal_resume.py`、`tests/test_opsi_obscure.py`。
 
 ### 地图事件点击失败与重启续查（module/os/map_event_resume.py）
 

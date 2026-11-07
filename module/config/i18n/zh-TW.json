@@ -4159,6 +4159,18 @@
     "ForceRun": {
       "name": "無視執行間隔強制執行",
       "help": "開啟後將帶來額外的行動力消耗，一般不用開啟，慢慢打就好"
+    },
+    "FullScan": {
+      "name": "全圖掃描（實驗性）",
+      "help": "預設關閉，有機率卡死。自律尋敵、近距離問號及目前視野掃描後，若仍未處理到事件，只掃描一次全圖；發現事件則依現有流程處理。"
+    },
+    "RadarScan": {
+      "name": "雷達掃描",
+      "help": "預設關閉。全圖掃描後仍未處理到事件時，依序切換艦隊檢查雷達問號；未開啟全圖掃描時，在自律尋敵及原有目前視野檢查後執行。只換隊補查與處理發現的事件，不做固定座標巡邏，也不額外全圖掃描，結束後切回出擊艦隊。"
+    },
+    "ResumeState": {
+      "name": "隱秘海域續接記錄",
+      "help": "自動儲存本海域是否已續接一次；再次重啟回來正常退出，成功退出後清除。"
     }
   },
   "OpsiAbyssal": {
@@ -4169,6 +4181,10 @@
     "ForceRun": {
       "name": "無視執行間隔強制執行",
       "help": "開啟後將帶來額外的行動力消耗，一般不用開啟，慢慢打就好"
+    },
+    "ContinueAfterRestart": {
+      "name": "深淵海域續接戰鬥",
+      "help": "預設關閉。開啟後，重啟先完成目前深淵，探路沿用首次艦隊，Boss 維持原出戰順序。每階段僅續接一次；進入下一階段機會重設為1，不累計，同階段再次重啟則依原流程退出。士氣不足時關閉提示、脫離並換下一隊；深淵消失後清空所有標記並繼續後續任務。"
     }
   },
   "OpsiStronghold": {
@@ -4770,12 +4786,12 @@
       "name": "鯰魚底線",
       "help": ""
     },
-    "MinCommonCarp": {
-      "name": "鯽魚底線",
-      "help": ""
-    },
     "MinKoiCarp": {
       "name": "鯉魚底線",
+      "help": ""
+    },
+    "MinCommonCarp": {
+      "name": "鯽魚底線",
       "help": ""
     },
     "MinShrimp": {
@@ -4831,16 +4847,12 @@
       "help": "同上，針對海水魚肉。"
     },
     "PlantYellowfinTuna": {
-      "name": "養黃鰭鮪魚",
-      "help": "",
+      "name": "預設產品崗位數",
+      "help": "所有底線達標後，幾個空餘漁場崗位養殖預設產品。",
       "0": "0",
       "1": "1",
       "2": "2",
       "3": "3"
-    },
-    "RancherFilter": {
-      "name": "使用角色",
-      "help": "以>連接，例如肇和 新澤西 小天城：ChaoHo > NewJersey > Amagi_chan\n小加加：Saratoga > 明石：Akashi > 塔什干：Tashkent > 應瑞：YingSwei\n惡毒：LeMalin > 獨角獸：Unicorn > 島風：Shimakaze > 柴郡：Cheshire\n鎮海：ChenHai > 威廉D波特：WilliamDPorter\n海倫娜：Helena > 大帝：Friedrich > 愛宕：Atago\n逸仙：Yixian > 奧古斯特：August > 歐根親王：Eugen > 胡德：Hood > 標槍：Javelin > 拉菲：Laffey > 探索者：Explorer > 領航員：Navigator > 領洋者：OceanCrosser > 飛雲：FeiYun > 高雄：Takao > 安克雷奇：Anchorage > 貝爾法斯特：Belfast > 長風：ChangFeng > 莫加多爾：Mogador > 皇家財富號：RoyalFortune > 達芬奇：DaVinci > 大鳳：Taihou > 長門：Nagato > 埃吉爾：Agir > 華甲：HwahJah > 百眼巨人：Argus > 火力：Ognevoy\n僅識別預設排序前兩排；指定艦娘不可用時回退 WorkerJuu。"
     },
     "DefaultFish": {
       "name": "預設養殖產品",
@@ -4860,6 +4872,10 @@
       "red_sea_bream": "紅鯛魚",
       "yellowfin_tuna": "黃鰭金槍魚",
       "sea_cucumber": "海參"
+    },
+    "RancherFilter": {
+      "name": "使用角色",
+      "help": "以>連接，例如肇和 新澤西 小天城：ChaoHo > NewJersey > Amagi_chan\n小加加：Saratoga > 明石：Akashi > 塔什干：Tashkent > 應瑞：YingSwei\n惡毒：LeMalin > 獨角獸：Unicorn > 島風：Shimakaze > 柴郡：Cheshire\n鎮海：ChenHai > 威廉D波特：WilliamDPorter\n海倫娜：Helena > 大帝：Friedrich > 愛宕：Atago\n逸仙：Yixian > 奧古斯特：August > 歐根親王：Eugen > 胡德：Hood > 標槍：Javelin > 拉菲：Laffey > 探索者：Explorer > 領航員：Navigator > 領洋者：OceanCrosser > 飛雲：FeiYun > 高雄：Takao > 安克雷奇：Anchorage > 貝爾法斯特：Belfast > 長風：ChangFeng > 莫加多爾：Mogador > 皇家財富號：RoyalFortune > 達芬奇：DaVinci > 大鳳：Taihou > 長門：Nagato > 埃吉爾：Agir > 華甲：HwahJah > 百眼巨人：Argus > 火力：Ognevoy\n僅識別預設排序前兩排；指定艦娘不可用時回退 WorkerJuu。"
     }
   },
   "IslandMine": {
@@ -4876,13 +4892,22 @@
       "4": "4"
     },
     "MineSilver": {
-      "name": "採銀礦崗位數",
-      "help": "幾個空閒礦山崗位用於生產銀礦，其餘空著不動",
+      "name": "預設礦石崗位數",
+      "help": "幾個空閒礦山崗位用於生產預設礦石，其餘空著不動",
       "0": "0",
       "1": "1",
       "2": "2",
       "3": "3",
       "4": "4"
+    },
+    "DefaultOre": {
+      "name": "預設礦石",
+      "help": "所有礦石達到底線後，空餘礦山崗位生產的礦石（崗位數見上一項）。",
+      "Copper": "銅礦",
+      "Aluminium": "鋁礦",
+      "Iron": "鐵礦",
+      "Sulphur": "硫礦",
+      "Silver": "銀礦"
     },
     "WorkerFilter": {
       "name": "礦山使用角色",
@@ -4907,15 +4932,6 @@
     "MinSilver": {
       "name": "銀礦最低庫存",
       "help": "倉庫中銀礦數量低於此值時，礦山崗位才會生產"
-    },
-    "DefaultOre": {
-      "name": "預設礦石",
-      "help": "所有礦石達到底線後，空餘礦山崗位生產的礦石（崗位數見上一項）。",
-      "Copper": "銅礦",
-      "Aluminium": "鋁礦",
-      "Iron": "鐵礦",
-      "Sulphur": "硫礦",
-      "Silver": "銀礦"
     }
   },
   "IslandForest": {
@@ -4932,13 +4948,20 @@
       "4": "4"
     },
     "CutElegant": {
-      "name": "伐典雅之木崗位數",
-      "help": "幾個空閒林場崗位用於生產典雅之木，其餘空著不動",
+      "name": "預設木材崗位數",
+      "help": "幾個空閒林場崗位用於生產預設木材，其餘空著不動",
       "0": "0",
       "1": "1",
       "2": "2",
       "3": "3",
       "4": "4"
+    },
+    "DefaultWood": {
+      "name": "預設木材",
+      "help": "所有木材達到底線後，空餘林場崗位生產的木材（崗位數見上一項）。",
+      "Practical": "實用之木",
+      "Selected": "精選之木",
+      "Elegant": "典雅之木"
     },
     "WorkerFilter": {
       "name": "林場使用角色",
@@ -4955,13 +4978,6 @@
     "MinSelected": {
       "name": "精選木材最低庫存",
       "help": "倉庫中精選木材數量低於此值時，林場崗位才會生產"
-    },
-    "DefaultWood": {
-      "name": "預設木材",
-      "help": "所有木材達到底線後，空餘林場崗位生產的木材（崗位數見上一項）。",
-      "Practical": "實用之木",
-      "Selected": "精選之木",
-      "Elegant": "典雅之木"
     }
   },
   "IslandDailyGather": {

@@ -15234,6 +15234,19 @@
       "ForceRun": {
         "type": "checkbox",
         "value": false
+      },
+      "FullScan": {
+        "type": "checkbox",
+        "value": false
+      },
+      "RadarScan": {
+        "type": "checkbox",
+        "value": false
+      },
+      "ResumeState": {
+        "type": "stored",
+        "value": null,
+        "display": "hide"
       }
     },
     "OpsiFleet": {
@@ -15315,6 +15328,10 @@
     },
     "OpsiAbyssal": {
       "ForceRun": {
+        "type": "checkbox",
+        "value": false
+      },
+      "ContinueAfterRestart": {
         "type": "checkbox",
         "value": false
       }
@@ -17998,11 +18015,11 @@
         "type": "input",
         "value": 0
       },
-      "MinCommonCarp": {
+      "MinKoiCarp": {
         "type": "input",
         "value": 0
       },
-      "MinKoiCarp": {
+      "MinCommonCarp": {
         "type": "input",
         "value": 0
       },
@@ -18068,10 +18085,6 @@
           3
         ]
       },
-      "RancherFilter": {
-        "type": "textarea",
-        "value": "WorkerJuu"
-      },
       "DefaultFish": {
         "type": "select",
         "value": "yellowfin_tuna",
@@ -18092,6 +18105,10 @@
           "yellowfin_tuna",
           "sea_cucumber"
         ]
+      },
+      "RancherFilter": {
+        "type": "textarea",
+        "value": "WorkerJuu"
       }
     },
     "Storage": {
@@ -18177,6 +18194,17 @@
           4
         ]
       },
+      "DefaultOre": {
+        "type": "select",
+        "value": "Silver",
+        "option": [
+          "Copper",
+          "Aluminium",
+          "Iron",
+          "Sulphur",
+          "Silver"
+        ]
+      },
       "WorkerFilter": {
         "type": "textarea",
         "value": "WorkerJuu"
@@ -18200,17 +18228,6 @@
       "MinSilver": {
         "type": "input",
         "value": 50
-      },
-      "DefaultOre": {
-        "type": "select",
-        "value": "Silver",
-        "option": [
-          "Copper",
-          "Aluminium",
-          "Iron",
-          "Sulphur",
-          "Silver"
-        ]
       }
     },
     "IslandForest": {
@@ -18235,6 +18252,15 @@
           4
         ]
       },
+      "DefaultWood": {
+        "type": "select",
+        "value": "Elegant",
+        "option": [
+          "Practical",
+          "Selected",
+          "Elegant"
+        ]
+      },
       "WorkerFilter": {
         "type": "textarea",
         "value": "WorkerJuu"
@@ -18250,15 +18276,6 @@
       "MinSelected": {
         "type": "input",
         "value": 50
-      },
-      "DefaultWood": {
-        "type": "select",
-        "value": "Elegant",
-        "option": [
-          "Practical",
-          "Selected",
-          "Elegant"
-        ]
       }
     },
     "Storage": {

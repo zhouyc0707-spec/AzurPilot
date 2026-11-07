@@ -106,6 +106,7 @@ class BusinessListNavigationTests(unittest.TestCase):
                 device.rows = [(TEA, 'blue', 220), (FISH, 'darkblue', 380)]
             else:
                 device.rows = [(FISH, 'darkblue', 160), (TEA, 'darkblue', 320)]
+            return True
 
         business._process_shop_entry = start_shop
         result = business._run_batch([FISH, TEA])
@@ -127,6 +128,7 @@ class BusinessListNavigationTests(unittest.TestCase):
             # 第一次开业后按钮仍短暂呈蓝色，去重不能被当前位置优化绕开。
             if shop == TEA:
                 device.rows = [(FISH, 'blue', 160), (TEA, 'darkblue', 320)]
+            return True
 
         business._process_shop_entry = start_shop
         business._run_batch([FISH, TEA])
@@ -140,6 +142,7 @@ class BusinessListNavigationTests(unittest.TestCase):
 
         def start_shop(shop):
             device.rows = [(FISH, 'yellow', 160), (TEA, 'darkblue', 320)]
+            return True
 
         business._process_shop_entry = Mock(side_effect=start_shop)
         result = business._run_batch([FISH, TEA])

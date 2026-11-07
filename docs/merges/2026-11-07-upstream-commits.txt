@@ -1,0 +1,21 @@
+a1f2b4d94156f881d124b7f6e25b6fdfa4348ece fix(opsi): 战斗准备阶段识别战果页并交接结算 (#1465)
+6702f9ff815a33731ebf773c843f5ddfb0af269b fix(opsi): 战斗准备阶段识别战果页并交接结算
+48aa36d223e1328cc4ee1fdbb6033cf4ed00bc93 fix (#1464)
+3815e2763a2f5e25d1fbf8ea3b7f191a9daf2ee0 fix(opsi): 普通深渊也校验 Boss 阶段后再判断清除
+d3e4f59c19624c9d8c555c7b0a57662ea128d5e9 fix(opsi): 深渊舰队耗尽时退出海域并继续任务 (#1461)
+0da719179d4cdc9480c7d97905191098feb9bc8f fix(freebies): 先检查当前屏再滑动查找每周礼包 (#1463)
+4dbbd9f1da0e571d734856a6d46832dccc43c17f fix(opsi): 取消深渊和月度 Boss 的 S 评价等待 (#1462)
+5b854bcb3de7500275d5ba9490e7e1444070fa17 fix(freebies): 先检查当前屏再滑动查找每周礼包
+b7b42f0c5d334188f0403ad8b32fed9d70aa5fd9 fix(opsi): 取消深渊和月度 Boss 的 S 评价等待
+c79f41e861d83e3dc6c4717706c6b5c5a29e56eb fix(opsi): 深渊舰队耗尽时退出海域并继续任务
+2d40c6ec6c2e9c13de07b6bee7dedeb25b2dd8aa Island planner winter (#1454)
+9daf854068bc80431890f87f7d074b51ad326e84 fix(opsi): 避免将深渊入口问号误判为 Boss 已清除 (#1459)
+0afa6eec8aaf2518c56dfe1ee60c31afb5a8d448 fix(opsi): 避免将深渊入口问号误判为 Boss 已清除
+9ff63b530b686df0d626261cec4acbad1c1febf1 fix(runtime): 修复关闭异常处理后仍自动重启的问题 (#1458)
+08e11a8c28203779af2ce718c487b3d934b399c5 fix(runtime): 关闭异常处理时禁止错误触发重启
+4a6c2b2dca2b1948f8c0721c2149f25d93733862 feat(opsi): 增加默认关闭的深渊海域重启续战 (#1457)
+1d5f40352cfdfdf5e8375a5c2a5c1cb0d4a4dbd7 fix(opsi): 限定深渊分阶段续接并在士气不足时换队
+7d8d4c0c8da55976008c894d56b2c4dbad4d08c7 feat(opsi): 隐秘海域单次续接与可选事件补扫 (#1456)
+b35a59063b780aea161b58d84fbd0d5c207c916e feat(opsi): 增加默认关闭的深渊重启续战
+a1999d08a735a94f9d94f514f2da7ab48496e2df fix(opsi): 隐秘海域消失时清除续接记录
+5ac5f093b059eefd723ee7fdd3d3334d3f0aa467 feat(opsi): 增加隐秘海域单次续接和可选扫描

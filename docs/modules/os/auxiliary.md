@@ -139,6 +139,7 @@ META 作战只保留 `OpsiAshBeacon` 一个调度入口。支援开关和最低�
 - `ContinuousCombat`：塞壬扫描装置触发的连续战斗控制流异常，守护与任务循环捕获后继续。
 - `auto_search_combat(drop)`：自动搜索战斗的加载/执行两阶段循环。执行阶段确认 S/A/B/C/D 经验结算页不再受 `OpsiGeneral_RepairThreshold` 门控——关闭自动修理时也必须点掉结算页，否则战斗会停在该页直到卡死重启；点击沿用战斗结算冷却，不再用固定休眠猜测页面已关闭。战斗结束返回地图后记录 2 秒过渡窗口，期间不操作地图自律开关，避免按钮仍是界面重建的过渡外观时把仍在执行的自律寻敌点停（塞壬装置「探测敌人」连续战斗即触发该场景）。离线回归见 `tests/test_opsi_auto_search_combat.py`，夹具为故障截图脱敏。
 - `Combat(Combat_, MapEventHandler)` 覆写四个关键点：`_handle_auto_battle_status_s`（S 评价页自动点击，`battle_status_s_autoclick_delay` 可被子类改短）、`_os_combat_expected_end`（预期结束判定，大世界守护优先点 AUTO_SEARCH_REWARD）、`combat_status` 的结束判定、`handle_exp_info`。普通守护任务若用 `expected_end='no_searching'` 在大世界永不成立，会卡死在奖励页——`os_daemon` 的注释记录了这个坑。
+- 深渊与月度首领的 S 评价立即交给结算点击，其他任务保留原延迟回退。准备阶段若已确认 S/A/B/C/D 评价或 D 结算提示，直接交给正常结算阶段，不因漏过暂停按钮一直等待。深渊进行中的低士气弹窗可关闭并取消出击回到地图，再由深渊流程选择后续舰队；其他战斗不启用准备取消。
 
 ### os_shop
 
