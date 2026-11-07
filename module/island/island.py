@@ -315,7 +315,11 @@ class Island(SelectCharacter):
 
         Raises:
             ValueError: 传入未知的筛选按钮名称。
-            GameStuckError: 筛选器重置或按钮选择超时。
+            GameStuckError: 筛选器重置、按钮选择或返回仓库列表超时。
+
+        Pages:
+            in: 任意可导航页面。
+            out: page_island_warehouse，筛选已确认关闭。
         """
         self.ui_goto(page_island_warehouse_filter, get_ship=False)
         # 定义按钮名称到网格坐标的映射
@@ -401,8 +405,32 @@ class Island(SelectCharacter):
                     continue
             else:
                 raise GameStuckError(f"仓库筛选按钮选择超时: {button2}")
-        self.appear_then_click(FILTER_CONFIRM)
-        self.device.sleep(1)
+        self.warehouse_filter_confirm()
+
+    def warehouse_filter_confirm(self):
+        """确认筛选并等待无遮挡的仓库列表，点击未生效时有限重试。
+
+        Pages:
+            in: page_island_warehouse_filter，目标筛选项已选中。
+            out: page_island_warehouse。
+
+        Raises:
+            GameStuckError: 筛选弹窗未关闭或仓库列表未就绪。
+        """
+        filter_visible = False
+        for _ in self.loop(skip_first=False, timeout=12):
+            filter_visible = self.appear(page_island_warehouse_filter.check_button, offset=(30, 30))
+            # 弹窗优先于背景仓库，防止把蒙层下的仓库标题当作已返回列表。
+            if filter_visible:
+                self.appear_then_click(FILTER_CONFIRM, interval=1)
+                continue
+            if self.match_template_color(ISLAND_WAREHOUSE_CHECK, offset=(30, 30),
+                                         similarity=0.85, threshold=30):
+                logger.info('[岛屿仓库] 已确认筛选弹窗关闭，仓库列表就绪')
+                return
+        if filter_visible:
+            raise GameStuckError('仓库筛选确认超时，筛选弹窗未关闭')
+        raise GameStuckError('仓库筛选确认超时，仓库列表未就绪')
 
     def handle_island_info_popup(self):
         """关闭已识别的岛屿信息提示，只有实际点击才返回 True。"""
