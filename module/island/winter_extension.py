@@ -116,18 +116,51 @@ WINTER_RESTAURANT_RECIPES = {
     603: {4051: 9900027, 4052: 9900028},
 }
 
+# 来源同独立规划器 data.py（ALAS 9485310）；订单编号及活动日期保持官方值，
+# request 物品按完整中文名称映射到本地旧编号，避免把官方青枣 4049 当作冬菇炖鸡。
+WINTER_ORDER_ACTIVITY = {
+    990028: {
+        'type': 5002,
+        'start_time': {'cn': '2026-11-05 00:00:00', 'en': '2026-11-05 00:00:00',
+                       'jp': '2026-11-05 00:00:00', 'tw': ''},
+        'end_time': {'cn': '2027-02-01 12:00:00', 'en': '2027-02-01 23:59:59',
+                     'jp': '2027-02-01 16:00:00', 'tw': ''},
+        'config_data': list(range(100061, 100076)),
+    },
+}
+
+WINTER_SEASON_ORDERS = {
+    100061: {'activity_id': 990028, 'next_order': 100062, 'season_pt_num': 1000, 'request': {4045: 4}, 'award': {0: 4000}},
+    100062: {'activity_id': 990028, 'next_order': 100063, 'season_pt_num': 1000, 'request': {4046: 4}, 'award': {0: 4000}},
+    100063: {'activity_id': 990028, 'next_order': 100064, 'season_pt_num': 1000, 'request': {4043: 4}, 'award': {0: 4000}},
+    100064: {'activity_id': 990028, 'next_order': 100065, 'season_pt_num': 1000, 'request': {4044: 4}, 'award': {0: 4000}},
+    100065: {'activity_id': 990028, 'next_order': 100066, 'season_pt_num': 1000, 'request': {2023: 10}, 'award': {0: 4000}},
+    100066: {'activity_id': 990028, 'next_order': 100067, 'season_pt_num': 1000, 'request': {2024: 10}, 'award': {0: 4000}},
+    100067: {'activity_id': 990028, 'next_order': 100068, 'season_pt_num': 2500, 'request': {4049: 5}, 'award': {0: 10000}},
+    100068: {'activity_id': 990028, 'next_order': 100069, 'season_pt_num': 2500, 'request': {4050: 5}, 'award': {0: 10000}},
+    100069: {'activity_id': 990028, 'next_order': 100070, 'season_pt_num': 2500, 'request': {4051: 5}, 'award': {0: 10000}},
+    100070: {'activity_id': 990028, 'next_order': 100071, 'season_pt_num': 2500, 'request': {4052: 5}, 'award': {0: 10000}},
+    100071: {'activity_id': 990028, 'next_order': 100072, 'season_pt_num': 2500, 'request': {4047: 5}, 'award': {0: 10000}},
+    100072: {'activity_id': 990028, 'next_order': 100073, 'season_pt_num': 2500, 'request': {4048: 5}, 'award': {0: 10000}},
+    100073: {'activity_id': 990028, 'next_order': 100074, 'season_pt_num': 8000, 'request': {4050: 5, 4051: 5}, 'award': {0: 32000}},
+    100074: {'activity_id': 990028, 'next_order': 100075, 'season_pt_num': 8000, 'request': {4048: 5, 4052: 5}, 'award': {0: 32000}},
+    100075: {'activity_id': 990028, 'next_order': 0, 'season_pt_num': 8000, 'request': {4047: 5, 4050: 5}, 'award': {0: 32000}},
+}
+
 
 def apply_winter_extension(data):
-    """Merge winter items, recipes and restaurant menu entries into generated data.
+    """把冬季物品、配方、餐馆菜单和季节订单补入手工执行数据。
 
     Args:
-        data (module): The imported ``module.island_planner.data`` module.
+        data (module): 已导入的 ``module.island.data`` 模块。
 
     Returns:
-        module: The same module after applying the idempotent extension.
+        module: 幂等更新后的原模块。
     """
     data.DIC_ISLAND_ITEM.update(WINTER_ITEMS)
     data.DIC_ISLAND_RECIPE.update(WINTER_RECIPES)
+    data.DIC_ISLAND_ACTIVITY.update(WINTER_ORDER_ACTIVITY)
+    data.DIC_ISLAND_SEASON_ORDER.update(WINTER_SEASON_ORDERS)
     for restaurant_id, menu in WINTER_RESTAURANT_RECIPES.items():
         data.DIC_ISLAND_RESTAURANT_MENU_TO_RECIPE.setdefault(restaurant_id, {}).update(menu)
     return data

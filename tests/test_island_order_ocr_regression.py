@@ -16,6 +16,25 @@ class OrderItemAliasTests(unittest.TestCase):
         self.assertEqual(match_item_name('白莱', DIC_ISLAND_ITEM, 'cn'), 2003)
         self.assertEqual(match_item_name(' 离肉 ', DIC_ISLAND_ITEM, 'cn'), 2602)
 
+    def test_winter_soup_does_not_resolve_to_its_mushroom_ingredient(self):
+        self.assertEqual(match_item_name('冬菇鸡', DIC_ISLAND_ITEM, 'cn'), 4049)
+        self.assertEqual(match_item_name('冬菇', DIC_ISLAND_ITEM, 'cn'), 4043)
+        self.assertEqual(match_item_name('冬菇炖鸡', DIC_ISLAND_ITEM, 'cn'), 4049)
+        items = {1: {'name': {'cn': '冬菇鸡'}}, 2: {'name': {'cn': '冬菇炖鸡'}}}
+        self.assertEqual(match_item_name('冬菇鸡', items, 'cn'), 1)
+
+    def test_winter_alias_keeps_ambiguity_and_counter_guards(self):
+        missing = {1: {'name': {'cn': '冬菇'}}}
+        duplicated = {1: {'name': {'cn': '冬菇炖鸡'}}, 2: {'name': {'cn': '冬菇炖鸡'}}}
+        self.assertIsNone(match_item_name('冬菇鸡', missing, 'cn'))
+        self.assertIsNone(match_item_name('冬菇鸡', duplicated, 'cn'))
+        self.assertEqual(validate_requirements(['冬菇鸡', '', ''], [(0, 5, -5), None, None],
+                                              DIC_ISLAND_ITEM, 'cn'), {4049: (0, 5, -5)})
+        self.assertIsNone(validate_requirements(['冬菇鸡', '', ''], [None, None, None],
+                                               DIC_ISLAND_ITEM, 'cn'))
+        self.assertIsNone(validate_requirements(['冬菇鸡', '冬菇炖鸡', ''],
+                                               [(5, 5, 0), (5, 5, 0), None], DIC_ISLAND_ITEM, 'cn'))
+
     def test_exact_names_and_filter_items_keep_original_identity(self):
         for name, item_id in (('禽肉', 2602), ('鲜肉', 2600), ('白菜', 2003),
                               ('芝士', 3006), ('豆腐', 3011)):
@@ -63,6 +82,21 @@ class OrderItemAliasTests(unittest.TestCase):
 
 
 class OrderNameScreenshotTests(unittest.TestCase):
+    def test_real_winter_soup_name_with_local_ocr(self):
+        from module.ocr.al_ocr import AlOcr, OcrSettings
+        from module.ocr.ocr import Ocr
+
+        fixture = Path(__file__).parent / 'fixtures/island_order_ocr/winter_soup_name.png'
+        settings = OcrSettings(backend='onnx', device='cpu',
+                               allow_vendor_execution_providers=False, model_version='alocr_cn_v3')
+        model = AlOcr(name='cn', settings=settings)
+        ocr = Ocr([(0, 0, 160, 28)], lang='cnocr', letter=(57, 59, 61), threshold=160,
+                  name='WINTER_ORDER_NAME_REGRESSION')
+        with patch('module.ocr.ocr.OCR_MODEL', SimpleNamespace(cnocr=model)):
+            name = ocr.ocr(load_image(str(fixture)))
+        self.assertEqual(validate_requirements([name, '', ''], [(0, 5, -5), None, None],
+                                              DIC_ISLAND_ITEM, 'cn'), {4049: (0, 5, -5)})
+
     def test_sanitized_name_crops_with_local_ocr(self):
         from module.ocr.al_ocr import AlOcr, OcrSettings
         from module.ocr.ocr import Ocr

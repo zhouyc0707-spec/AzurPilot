@@ -383,7 +383,8 @@ class IslandOrder(IslandDailyOrder):
                 self.stuck_season_order_id = season_id
             else:
                 logger.warning('[岛屿-订单] 季节需求无法对应当前活动，保留原规划，不猜订单编号')
-                self._record_deadline(timedelta(hours=1))
+            # 缺货订单等手工生产补足后继续核验，不能因编号已识别就直接等到每日刷新。
+            self._record_deadline(timedelta(minutes=5))
         return False
 
     def run(self):

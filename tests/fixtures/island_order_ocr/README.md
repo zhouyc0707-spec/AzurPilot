@@ -7,5 +7,6 @@
 | `poultry_name.png` | 禽肉 | 离肉 |
 | `practical_wood_name.png` | 实用之木 | 无 |
 | `cabbage_name.png` | 白菜 | 白莱 |
+| `winter_soup_name.png` | 冬菇炖鸡 | 冬菇鸡 |
 
 测试通过固定的本地 CPU OCR 设置读取这些名称，不连接 OCR 服务、不读取用户配置；数量使用合成测试值。错字兼容仅适用于简体中文订单的完整名称，不修改其他语言，也不扩大模糊匹配阈值。
