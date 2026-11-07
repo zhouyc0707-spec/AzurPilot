@@ -11,7 +11,6 @@ from module.ui.page import *
 from module.logger import logger
 from module.base.button import Button
 from module.exception import GameStuckError
-from module.island.island_season import SEASONAL_ITEMS
 
 
 # 固定位置按钮 — 迎春花茶/西瓜汁使用槽位1固定坐标，不检测图标颜色，不向下滑动
@@ -125,7 +124,7 @@ class IslandTeahouse(IslandShopBase):
             else:
                 self.special_food = 'spring_flower_tea'
         else:
-            logger.info("[岛屿-白熊饮品] 迎春花茶优先生产已关闭，跳过季节限定饮品")
+            logger.info("[岛屿-白熊饮品] 季节饮品优先生产已关闭，手工目标按当前季节处理")
 
         # 设置商品列表
         self.shop_items = []
@@ -205,70 +204,30 @@ class IslandTeahouse(IslandShopBase):
             config_post_number="IslandTeahouse_PostNumber"
         )
 
-        # === 季节餐品自动切换 ===
-        # 若用户在 Meal 中配置了春季限定餐品（pineapple_juice），
-        # 但当前季节不是 spring，则自动替换为当前季节对应槽位的餐品
+        # 仅在本轮替换跨季目标；无对应槽位时跳过，保留用户保存的配置。
         self._auto_switch_seasonal_meals()
-
-        # === 补充季节饮品注册 ===
-        # “迎春花茶优先生产”关闭（默认）时，季节饮品不会进入 shop_items，
-        # 若用户又在餐品槽位中手动配置了季节饮品（如胡萝卜秋梨汁/菊花茶），
-        # 排产时 name_to_config 缺键会抛 KeyError 并触发重启。
-        # 这里把用户实际配置、且有真实选品资源的季节饮品补注册到商品列表；
-        # 迎春花茶走“迎春花茶优先生产”的固定坐标流程，不在此补注册。
-        for meal_name, _ in self.post_products:
-            drink = SEASONAL_DRINK_CONFIG.get(meal_name)
-            if not drink or not drink['selection'].area:
-                continue
-            if not any(item['name'] == meal_name for item in self.shop_items):
-                self.shop_items.append(drink.copy())
 
         # 特殊材料：蜂蜜（仅用于库存检查和限制，不再有强制消耗任务）
         self.fresh_honey = 0
         self.initialize_shop()
 
     def _auto_switch_seasonal_meals(self):
-        """自动切换用户配置中的春季限定饮品到当前季节对应槽位饮品。
-
-        迎春花茶在夏季切换为西瓜汁，秋季切换为胡萝卜秋梨汁；
-        鲜榨菠萝汁在夏季切换为黄瓜汁，秋季切换为菊花茶。
-        """
-        SEASONAL_TEAHOUSE_SWITCH = {
-            'spring_flower_tea': 0,  # 迎春花茶 -> 槽位0
-            'pineapple_juice': 1,    # 鲜榨菠萝汁 -> 槽位1
-        }
-        CN_NAMES = {
-            'spring_flower_tea': '迎春花茶',
-            'pineapple_juice': '鲜榨菠萝汁',
-        }
+        """复用当前季节同槽映射，只注册本轮手工目标需要的普通选品资源。"""
         if not hasattr(self, 'season_config') or not self.season_config:
             return
-        current_season = self.season_config.season
-        current_teahouse_items = SEASONAL_ITEMS.get(current_season, {}).get('teahouse', [])
-        for spring_item, slot_idx in SEASONAL_TEAHOUSE_SWITCH.items():
-            if not any(name == spring_item for name, _ in self.post_products):
-                continue
-            cn_name = CN_NAMES.get(spring_item, spring_item)
-            if slot_idx < len(current_teahouse_items):
-                seasonal_item = current_teahouse_items[slot_idx]
-                if seasonal_item != spring_item:
-                    self.post_products = [
-                        (seasonal_item, target) if name == spring_item else (name, target)
-                        for name, target in self.post_products
-                    ]
-                    logger.info(
-                        f"季节餐品自动切换: {self._item_cn(spring_item)}({cn_name}) -> {self._item_cn(seasonal_item)}"
-                        f"（当前季节: {self.season_config.season_name}）"
-                    )
-            else:
-                self.post_products = [
-                    (name, target) for name, target in self.post_products
-                    if name != spring_item
-                ]
-                logger.info(
-                    f"季节餐品自动移除: {self._item_cn(spring_item)}({cn_name})"
-                    f"（{self.season_config.season_name} 无对应槽位的季节餐品）"
-                )
+
+        registered_names = {item['name'] for item in self.shop_items}
+        # 父类要求替代品已有资源。固定位置专用饮品仍仅由优先开关注册。
+        for item_name in self.season_config.get_seasonal_items('teahouse'):
+            drink = SEASONAL_DRINK_CONFIG.get(item_name)
+            if item_name not in registered_names and drink and drink['selection'].area:
+                self.shop_items.append(drink.copy())
+
+        self._normalize_seasonal_post_products('teahouse')
+
+        # 库存需求按商品目录生成，未用于手工目标的候选不能额外请求季节原料。
+        required_names = registered_names | {name for name, _ in self.post_products}
+        self.shop_items = [item for item in self.shop_items if item['name'] in required_names]
 
     def get_warehouse_counts(self):
         """获取仓库饮品及特殊材料（新鲜蜂蜜）的库存数量。
