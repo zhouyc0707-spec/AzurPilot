@@ -444,6 +444,8 @@ stateDiagram-v2
 
 货运栏位（`IslandCargoPreparation`）另有六态：`locked/pending/running/finished/refreshing/empty`，由模板颜色逐栏判定，驱动领取、换货、装载三种动作。
 
+「全部装载」及其奖励只证明货物已提交，可能仍然缺货。操作循环持续确认目标栏位：`pending` 且按钮仍可用时限频继续装载；稳定待补货则保留，连续确认 `running`／`finished` 才认为已出发或完成。操作后重新截图读取全部栏位，不在内存中强改状态；新发现已完成的栏位沿用领取流程再复读。仅 `running`／`refreshing` 的剩余时长参与完成排期，待装载页的运输耗时不能当作倒计时。灰态及无确定时间的既有复查规则保持。回归见 `tests/test_island_cargo_start_state.py`。
+
 ## 10. 配置
 
 配置路径 `<Task>.<Group>.<Argument>`，代码经 `self.config.Group_Argument` 访问；以下为关键项（完整定义见 `module/config/argument/`）：

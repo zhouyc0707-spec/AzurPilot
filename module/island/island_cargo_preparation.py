@@ -268,14 +268,6 @@ class CargoPreparationTransport:
             return 'empty'
         return 'unknown'
 
-    def convert_to_running(self):
-        """将栏位状态本地转换为进行中，并记录创建时间。"""
-        if self.valid:
-            self.status = 'running'
-            self.start = False
-            self.refresh = False
-            self.create_time = current_time()
-
     @property
     def finish_time(self):
         """获取货运委托预计完成时间。
@@ -283,7 +275,8 @@ class CargoPreparationTransport:
         Returns:
             datetime.datetime | None: 预计完成时间点，无效时返回 None。
         """
-        if self.valid and self.duration is not None:
+        # 待装载页显示的是运输耗时，尚未出发时不能据此虚构完成时间。
+        if self.valid and self.status in {'running', 'refreshing'} and self.duration is not None:
             return (self.create_time + self.duration).replace(microsecond=0)
         return None
 
@@ -439,9 +432,15 @@ class IslandCargoPreparation(IslandUI):
                 break
             commissions = self.transport_detect(trial=5, skip_first_screenshot=False)
 
-        for comm in commissions.select(status='pending', start=True):
-            if self.transport_start(comm):
-                comm.convert_to_running()
+        actionable = commissions.select(status='pending', start=True)
+        for comm in actionable:
+            self.transport_start(comm)
+        if actionable.count:
+            # 「全部装载」可能只交付部分货物；用新截图记录真实状态和剩余时长。
+            commissions = self.transport_detect(trial=5, skip_first_screenshot=False)
+            if commissions.select(status='finished').count:
+                self.transport_receive()
+                commissions = self.transport_detect(trial=5, skip_first_screenshot=False)
 
         logger.hr('货物准备状态', level=2)
         for comm in commissions:
@@ -572,35 +571,50 @@ class IslandCargoPreparation(IslandUI):
         return success
 
     def transport_start(self, comm):
-        """启动指定的货运委托。"""
-        logger.info('[岛屿-货运] 运输委托开始')
-        self.interval_clear([GET_ITEMS_ISLAND, TRANSPORT_START, POPUP_CANCEL_WHITE])
-        success = True
-        confirm_timer = Timer(1, count=2).start()
-        for _ in self.loop(timeout=30):
-            if self.appear_then_click(TRANSPORT_START, offset=comm.offset, interval=2):
-                success = False
-                confirm_timer.reset()
-                continue
+        """装载指定委托，只有截图确认已出发或已完成时才返回 True。
 
-            if self.handle_get_items():
-                success = True
+        部分装载后仍缺货的委托保持 pending；弹窗和按钮冷却不作为出发依据。
+        """
+        logger.info(f'[岛屿-货运] 装载并核验委托 {comm.index + 1}')
+        self.interval_clear([GET_ITEMS_ISLAND, TRANSPORT_START, POPUP_CANCEL_WHITE])
+        confirmed_state = None
+        confirm_timer = Timer(1, count=2).start()
+        for _ in self.loop(timeout=30, skip_first=False):
+            # 奖励弹窗点击冷却期间仍需等待，不能识别其后方的运输状态。
+            if self.appear(GET_ITEMS_ISLAND, offset=(20, 20)):
+                self.handle_get_items()
+                confirmed_state = None
                 confirm_timer.reset()
                 continue
 
             if self.handle_popup_cancel('REFRESH_CANCEL', offset=(30, 30)):
+                confirmed_state = None
                 confirm_timer.reset()
                 continue
 
             if self.island_in_transport():
-                if success and confirm_timer.reached():
-                    break
-            else:
-                confirm_timer.reset()
-        else:
-            logger.warning('[岛屿-货运] 启动或装载货运委托超时')
-            return False
-        return success
+                state = comm.get_transport_status(self)
+                if state == 'pending' and self.match_template_color(TRANSPORT_START, offset=comm.offset):
+                    # 有货仍可装载时继续处理；不能在点击间隔内提前结束。
+                    self.appear_then_click(TRANSPORT_START, offset=comm.offset, interval=2)
+                    confirmed_state = None
+                    confirm_timer.reset()
+                    continue
+                if state in {'pending', 'running', 'finished'}:
+                    if state != confirmed_state:
+                        confirmed_state = state
+                        confirm_timer.reset()
+                    if confirm_timer.reached():
+                        if state == 'pending':
+                            logger.info(f'[岛屿-货运] 委托 {comm.index + 1} 仍待装载，保留待补货状态')
+                            return False
+                        logger.info(f'[岛屿-货运] 委托 {comm.index + 1} 已确认状态：{state}')
+                        return True
+                    continue
+            confirmed_state = None
+            confirm_timer.reset()
+        logger.warning('[岛屿-货运] 未确认出发或稳定待装载状态，本轮停止尝试并重新检测')
+        return False
 
     def _open_replace_page(self, comm):
         """从货运栏位打开更换委托页面。"""
