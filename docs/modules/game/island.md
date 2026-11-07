@@ -369,6 +369,8 @@ CN 空订单页新增今日次数确认：订单页与右侧地图背景均正�
 
 工具页入口 `IslandProductionPlanner`，参数统一位于 `IslandProductionPlanner.IslandProductionPlanner`。实现同步上游 AzurPilot `dev` 的 `module/island_planner/`，算法来源为 ALAS，保留 GPL-3.0 许可。运行一次计算一次，在日志预览或显式写入现有配置，不接管每轮实时调度。
 
+季节扫描先通过 `page_island_season` 确认开发季页面，再进入底部「开发计划」。国服 `ISLAND_SEASON_CHECK` 使用当前左上角「开发季」标题，不包含中间的季节活动海报；更新图像后由按钮生成器同步坐标与颜色，其他服务器资源独立保留。
+
 1. **条件**：扫描或读取科技缓存，结合店铺等级、经营角色、效率、季节和鱼种解锁。`Season=auto` 使用服务器季节日期，也可指定季节；配方仍受活动与科技限制。`AutoPositions` 开启时按已解锁岗位规划并写回，关闭时按原岗位配置限制产能。
 2. **需求**：`ScanSeasonTasks` 在季节任务页领取已完成奖励，再读取剩余任务；等待列表加载，半页翻动避免漏行，最多 30 页。`ScanCargoOrders` 读取部分提交货运的缺口，两帧完整一致才采用。失败保留原目标。`ExtraTargets` 接受额外物品数量与期限。
 3. **求解**：满足需求和每日净岛币下限后，`Priority=pt` 优先季节 PT，`coins` 优先岛币，再优化另一指标。未解锁或执行器不支持的配方提前排除；无可行解不改生产配置。
