@@ -376,32 +376,14 @@ class IslandDailyGather(Island):
         return False
 
     def _sort_by_life_level(self):
-        """通过模板匹配检测升序箭头，确保按生活等级升序排序。
+        """保留生活等级排序字段，确认升序后才允许继续选人。
 
-        按钮颜色不变仅箭头不同，截取按钮区域图像后匹配升序箭头模板来判断。
+        Raises:
+            GameStuckError: 限时重试后仍未确认升序，交给现有任务恢复。
         """
-        # 截取排序按钮区域，检测当前是否为升序
-        self.device.screenshot()
-        sort_area = crop(self.device.image, ISLAND_GATHER_SORT_LIFE.area)
-        if TEMPLATE_GATHER_SORT_LIFE_ASC.match(sort_area, similarity=0.8):
-            logger.info("[岛屿-每日采集] 当前已是生活等级升序排序，无需操作")
-            return
-
-        # 不是升序，点击排序按钮切换到升序
-        logger.info("[岛屿-每日采集] 点击生活等级排序按钮切换为升序")
-        self.device.click(ISLAND_GATHER_SORT_LIFE)
-        self.device.sleep(0.3)
-
-        # 验证是否成功切换为升序
-        self.device.screenshot()
-        sort_area = crop(self.device.image, ISLAND_GATHER_SORT_LIFE.area)
-        if TEMPLATE_GATHER_SORT_LIFE_ASC.match(sort_area, similarity=0.8):
-            logger.info("[岛屿-每日采集] 成功切换为生活等级升序排序")
-        else:
-            logger.warning("[岛屿-每日采集] 升序切换可能未生效，尝试再次点击")
-            self.device.click(ISLAND_GATHER_SORT_LIFE)
-            self.device.sleep(0.3)
-
+        # 复用角色页的正向箭头检测和点击冷却，避免旧帧导致重复切换。
+        if not self._set_character_sort(ascending=True):
+            raise GameStuckError('每日采集生活等级升序排序未确认')
         logger.info("[岛屿-每日采集] 生活等级升序排序完成")
 
     def _select_character_with_stamina_check(self):
