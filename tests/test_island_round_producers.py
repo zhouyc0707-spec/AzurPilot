@@ -91,7 +91,7 @@ class RoundProducerTests(unittest.TestCase):
         farm._plant_idle_posts = Mock(side_effect=plant)
         farm.run()
         farm._plant_idle_posts.assert_called_once()
-        self.assertEqual(page, ['island', 'postmanage'])
+        self.assertEqual(page, ['postmanage'])
         farm.post_manage_swipe.assert_not_called()
         farm.device.sleep.assert_not_called()
 

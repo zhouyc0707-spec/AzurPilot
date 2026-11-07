@@ -87,9 +87,10 @@ class RoundConfirmationTests(unittest.TestCase):
         self.assertEqual(main._round_dispatch_batches, 1)
         main.device.click.assert_called_once_with(POST_ADD_ORDER)
 
-    def test_limited_confirmation_does_not_reuse_read_before_page_interruption(self):
-        for missing in (ISLAND_SELECT_PRODUCT_CHECK, POST_ADD_ORDER):
-            with self.subTest(missing=missing):
+    def test_confirmation_does_not_reuse_read_before_page_interruption(self):
+        for missing, limit in ((page, limit) for page in (ISLAND_SELECT_PRODUCT_CHECK, POST_ADD_ORDER)
+                               for limit in (None, 1)):
+            with self.subTest(missing=missing, limit=limit):
                 main = self.make_main()
                 main._round_material_receipt = None
                 main._read_round_dispatch_amounts.return_value = (1, None, None)
@@ -105,7 +106,7 @@ class RoundConfirmationTests(unittest.TestCase):
                 main.appear.side_effect = lambda button, **kwargs: (
                     False if current['frame'] == 1 and button is missing
                     else original_appear(button, **kwargs))
-                self.assertTrue(main.confirm_post_add_order('铜矿', preserve_quantity=True, max_batches=1))
+                self.assertTrue(main.confirm_post_add_order('派遣', preserve_quantity=True, max_batches=limit))
                 self.assertEqual(main._read_round_dispatch_amounts.call_count, 3)
                 main.device.click.assert_called_once_with(POST_ADD_ORDER)
 

@@ -587,6 +587,7 @@ class IslandFarm(Island, WarehouseOCR, LoginHandler):
         selection = self.name_to_config[product]['selection']
         selection_check = self.name_to_config[product]['selection_check']
         seed_config = self.name_to_config[product]
+        material_read_failures = 0
         # 4x1 作物（秋月梨/柿子）：每次派遣只消耗 4 颗种子，与果园其他作物每单
         # 至少 4x4=16 颗不同，种子补货目标按 4 颗/单计算
         if seed_config.get('batch_4x1'):
@@ -626,7 +627,11 @@ class IslandFarm(Island, WarehouseOCR, LoginHandler):
                     if material == MATERIAL_RESTOCKED:
                         continue
                     if material == MATERIAL_INSUFFICIENT:
-                        logger.warning(f"[岛屿-农田] {self._item_cn(product)}种子不足且无法补买，跳过本次种植")
+                        if getattr(self, '_round_material_unconfirmed', False):
+                            material_read_failures += 1
+                            if material_read_failures < 3:
+                                continue
+                        logger.warning(f"[岛屿-农田] {self._item_cn(product)}种子数量未确认或补货不足，跳过本次种植")
                         self.back_to_postmanage_from_dispatch()
                         return False
                     self.device.sleep(0.3)
@@ -769,7 +774,9 @@ class IslandFarm(Island, WarehouseOCR, LoginHandler):
             GameBugError: 遇到游戏内部错误需要重启时抛出。
         """
         self.island_error = False
-        self.ui_ensure(page_island)
+        self._plant_retry_needed = False
+        if getattr(self, 'island_round', None) is None:
+            self.ui_ensure(page_island)
         self.check_inventory_and_prepare_lists()
 
         logger.info("[岛屿-农田] \n当前库存统计:")
@@ -857,6 +864,10 @@ class IslandFarm(Island, WarehouseOCR, LoginHandler):
 
         six_hours_later = current_time() + timedelta(hours=6)
         future_finish.append(six_hours_later)
+        if self._plant_retry_needed:
+            # 仅为本轮实际尝试却失败的空岗复查；继续由 task_delay 应用整点对齐。
+            future_finish.append(current_time() + timedelta(minutes=5))
+            logger.info('[岛屿-农田] 空岗种植未完成，加入五分钟后复查时间')
         future_finish.sort()
         self.config.task_delay(target=future_finish)
         logger.info(f'[岛屿-农田] 下次运行时间: {future_finish[0]}')
@@ -902,6 +913,8 @@ class IslandFarm(Island, WarehouseOCR, LoginHandler):
                 logger.info(f"[岛屿-农田] 播种{category}岗位{post_info['post_id']}成功: {crop_to_plant}")
                 if crop_to_plant in self.to_plant_lists[category]:
                     self.to_plant_lists[category].remove(crop_to_plant)
+            else:
+                self._plant_retry_needed = True
 
     def test(self):
         """测试农场仓库库存 OCR 识别。"""

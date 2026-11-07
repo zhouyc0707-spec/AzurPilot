@@ -133,30 +133,6 @@ SELECT_UI_CONFIRM_SAFE = Button(
     name='SELECT_UI_CONFIRM_SAFE',
 )
 
-# 岗位派遣页底部材料卡片上的数量文本，例如 150/2 或 150/(2+6)。
-OCR_SELECT_PRODUCT_MATERIAL_AMOUNT = Button(
-    area=(742, 536, 850, 562), color=(),
-    button=(742, 536, 850, 562),
-    file={'cn': '', 'en': '', 'jp': '', 'tw': ''}
-)
-
-# 同一张材料卡片中“当前库存/”所在的左侧前缀区域。
-# 完整宽区域容易把 0/9 识别成 09、把 110/(2+6) 识别成 1102，
-# 因此当前库存优先从斜杠左侧前缀读取。
-OCR_SELECT_PRODUCT_MATERIAL_CURRENT_AREAS = (
-    (742, 536, 800, 562),
-    (742, 536, 792, 562),
-    (745, 536, 795, 562),
-    (750, 536, 800, 562),
-    (755, 536, 800, 562),
-    (765, 536, 805, 562),
-)
-
-OCR_SELECT_PRODUCT_MATERIAL_COUNTER_AREAS = (
-    (770, 536, 850, 562),
-    (775, 536, 850, 562),
-)
-
 # 商店购买弹窗右上角的 ✕ 关闭按钮。各服务器位置相同，没有单独的模板图片，
 # 只在 ISLAND_SHOPPING_CHECK 确认弹窗打开时按固定坐标点击。
 ISLAND_SHOPPING_CLOSE = Button(
@@ -1183,7 +1159,9 @@ class Island(SelectCharacter):
             return False
 
         current, required = self.ocr_select_product_material_counter()
-        if required and current < required:
+        if current is None or required <= 0:
+            logger.warning(f"[岛屿] {context}材料数量未确认，确认按钮不可用")
+        elif current < required:
             logger.warning(f"[岛屿] {context}材料不足，确认按钮不可用: {current}/{required}")
         else:
             logger.warning(f"[岛屿] {context}材料已确认足够，但确认按钮不可用，可能角色体力不足")
@@ -1201,10 +1179,10 @@ class Island(SelectCharacter):
         if receipt is None:
             return int(batches), None, None
         stock, counter = self.ocr_select_product_material_detail()
-        matched = re.fullmatch(r'\s*(\d+)\s*/\s*(\d+)\s*', str(counter))
-        if not matched or stock != int(matched[1]) or int(matched[2]) <= 0:
+        parsed = self.parse_select_product_material_counter(counter)
+        if parsed is None or stock != parsed[0]:
             return None
-        return int(batches), stock, int(matched[2])
+        return int(batches), stock, parsed[1]
 
     def _confirm_round_post_add_order(self, context, preserve_quantity=False, max_batches=None):
         """本轮派遣只确认一次，正向确认工作/管理页后提交实际耗料。"""
@@ -1236,16 +1214,14 @@ class Island(SelectCharacter):
                 # 确认结果不明时只观察；重复点击可能新增一笔生产。
                 continue
             if not self.appear(ISLAND_SELECT_PRODUCT_CHECK, offset=1):
-                if max_batches is not None:
-                    previous = None
+                previous = None
                 continue
             if not maximum_selected:
                 if self.appear_then_click(POST_MAX, interval=2):
                     maximum_selected = True
                 continue
             if not self.appear(POST_ADD_ORDER):
-                if max_batches is not None:
-                    previous = None
+                previous = None
                 continue
             candidate = self._read_round_dispatch_amounts()
             if (max_batches is not None and candidate is not None
@@ -2130,33 +2106,8 @@ class Island(SelectCharacter):
         return str(result).replace('I', '1').replace('D', '0').replace('S', '5').replace('B', '8')
 
     @staticmethod
-    def parse_select_product_material_current(result, require_separator=False):
-        """解析岗位材料文本中的当前库存数值。
-
-        Args:
-            result (str): 材料数量文本（如 "12/20" 或 "12"）。
-            require_separator (bool): 是否强制要求包含分隔符 '/'。默认为 False。
-
-        Returns:
-            int | None: 解析出的库存数量；未找到或不符合要求返回 None。
-        """
-        result = Island.normalize_select_product_material_text(result)
-        if '/' in result:
-            current_text = result.split('/', 1)[0]
-            current_numbers = re.findall(r'\d+', current_text)
-            if current_numbers:
-                return int(current_numbers[-1])
-            return None
-        if require_separator:
-            return None
-        match = re.search(r'\d+', result)
-        if match:
-            return int(match.group())
-        return None
-
-    @staticmethod
     def parse_select_product_material_required(counter_text):
-        """解析材料计数文本中斜杠右侧的单次派遣需求数。
+        """解析材料计数文本中斜杠右侧的当前派遣总需求数。
 
         Args:
             counter_text (str): 规范化后的材料文本（如 "35/9" 或 "110/(2+6)"）。
@@ -2168,6 +2119,23 @@ class Island(SelectCharacter):
             return 0
         required_text = counter_text.split('/', 1)[1]
         return sum(int(number) for number in re.findall(r'\d+', required_text))
+
+    @staticmethod
+    def parse_select_product_material_counter(counter_text):
+        """严格读取完整的库存/需求；括号及加项仅允许出现在需求侧。
+
+        Returns:
+            tuple[int, int] | None: 明确的库存与总需求；缺分隔符、残缺表达式
+                或需求不为正数时返回 None，不能从连在一起的数字猜测库存。
+        """
+        text = Island.normalize_select_product_material_text(counter_text)
+        matched = re.fullmatch(
+            r'\s*([0-9]+)\s*/\s*(?:([0-9]+(?:\s*\+\s*[0-9]+)*)'
+            r'|\(\s*([0-9]+(?:\s*\+\s*[0-9]+)*)\s*\))\s*', text)
+        if matched is None:
+            return None
+        required = sum(int(number) for number in re.findall(r'[0-9]+', matched[2] or matched[3]))
+        return (int(matched[1]), required) if required > 0 else None
 
     @staticmethod
     def plan_select_product_material(current, target, page_required, failed_quantity=None):
@@ -2198,156 +2166,25 @@ class Island(SelectCharacter):
             return 'buy', page_required - current
         return MATERIAL_INSUFFICIENT, 0
 
-    @staticmethod
-    def build_select_product_material_counter_text(current, result, prefix_text=None, allow_suffix_rebuild=True):
-        """构建规范化的岗位材料需求计数文本。
-
-        Args:
-            current (int): 当前材料库存数量。
-            result (str): 识别到的原始材料文本。
-            prefix_text (str, optional): 前缀候选文本。默认为 None。
-            allow_suffix_rebuild (bool): 是否允许通过后缀重建需求数。默认为 True。
-
-        Returns:
-            str: 格式化后的材料文本（如 "current/required" 或 "current"）。
-        """
-        result = Island.normalize_select_product_material_text(result)
-        prefix_text = Island.normalize_select_product_material_text(prefix_text or '')
-
-        if '/' in result and Island.parse_select_product_material_current(result, require_separator=True) == current:
-            return result
-
-        texts = [prefix_text, result]
-        for text in texts:
-            if '/' not in text:
-                continue
-            current_text, required_text = text.split('/', 1)
-            current_numbers = re.findall(r'\d+', current_text)
-            required_numbers = re.findall(r'\d+', required_text)
-            if current_numbers and int(current_numbers[-1]) == current and required_numbers:
-                return f"{current}/{' + '.join(required_numbers)}".replace(' + ', '+')
-
-        full_numbers = re.findall(r'\d+', result)
-        if (allow_suffix_rebuild or current == 0) and full_numbers:
-            full_text = full_numbers[0]
-            current_text = str(current)
-            if full_text.startswith(current_text) and len(full_text) > len(current_text):
-                return f"{current}/{full_text[len(current_text):]}"
-
-        return str(current)
-
-    def ocr_select_product_material_text(self, button=None, show_log=True):
-        """读取岗位产品选择页底部材料数量文本。
-
-        Args:
-            button (Button, optional): OCR 识别区域按钮。默认为 OCR_SELECT_PRODUCT_MATERIAL_AMOUNT。
-            show_log (bool): 是否打印 OCR 日志。默认为 True。
-
-        Returns:
-            str: 规范化后的材料数量文本。
-        """
-        button = button or OCR_SELECT_PRODUCT_MATERIAL_AMOUNT
-        ocr = Ocr(
-            button,
-            letter=(225, 225, 226),
-            threshold=128,
-            alphabet='0123456789/+()IDSB',
-            name=getattr(button, 'name', None) or 'OCR_SELECT_PRODUCT_MATERIAL_AMOUNT',
-        )
-        ocr.SHOW_LOG = show_log
-        result = ocr.ocr(self.device.image)
-        if isinstance(result, list):
-            result = ''.join(str(item) for item in result)
-        return self.normalize_select_product_material_text(result)
-
     def ocr_select_product_material_detail(self, expected_quantity=None):
-        """读取岗位产品选择页材料数量，返回当前库存和页面材料文本。
+        """从完整材料标签读取库存及总需求；不明确时返回未知。
 
         Args:
-            expected_quantity (int, optional): 期望或最大需要的数量，用于辅助校验 OCR 候选值。默认为 None。
+            expected_quantity (int, optional): 保留补货调用接口；目标数量不作为
+                OCR 数字拆分或补全的依据，现有库存也可以高于补货目标。
 
         Returns:
-            tuple[int, str]: (当前库存数量, 格式化后的材料文本)。
+            tuple[int | None, str]: 当前库存和完整计数文本；未知库存为 None。
         """
-        result = self.ocr_select_product_material_text()
-        current = self.parse_select_product_material_current(result, require_separator=True)
-        if current is not None:
-            return current, self.build_select_product_material_counter_text(current, result)
+        from module.island.material_counter import read_material_counter_text
 
-        for area in OCR_SELECT_PRODUCT_MATERIAL_COUNTER_AREAS:
-            button = Button(
-                area=area,
-                color=(),
-                button=area,
-                file={'cn': '', 'en': '', 'jp': '', 'tw': ''},
-                name=f'OCR_SELECT_PRODUCT_MATERIAL_COUNTER_{area[0]}_{area[2]}',
-            )
-            counter_text = self.ocr_select_product_material_text(button, show_log=False)
-            current = self.parse_select_product_material_current(counter_text, require_separator=True)
-            full_numbers = re.findall(r'\d+', result)
-            if (
-                    current is not None
-                    and (expected_quantity is None or current <= expected_quantity)
-                    and (not full_numbers or full_numbers[0].startswith(str(current)))
-            ):
-                return current, self.build_select_product_material_counter_text(current, result, counter_text)
-
-        slash_without_current = False
-        prefix_candidates = []
-        slash_prefix_text = ''
-        for area in OCR_SELECT_PRODUCT_MATERIAL_CURRENT_AREAS:
-            button = Button(
-                area=area,
-                color=(),
-                button=area,
-                file={'cn': '', 'en': '', 'jp': '', 'tw': ''},
-                name=f'OCR_SELECT_PRODUCT_MATERIAL_CURRENT_{area[0]}_{area[2]}',
-            )
-            current_text = self.ocr_select_product_material_text(button, show_log=False)
-            current = self.parse_select_product_material_current(current_text, require_separator=True)
-            if current is not None:
-                return current, self.build_select_product_material_counter_text(
-                    current,
-                    result,
-                    current_text,
-                    allow_suffix_rebuild=expected_quantity is not None and current == expected_quantity,
-                )
-            if '/' in current_text:
-                slash_without_current = True
-                slash_prefix_text = current_text
-            for number in re.findall(r'\d+', current_text):
-                candidate = int(number)
-                if expected_quantity is None or candidate <= expected_quantity:
-                    prefix_candidates.append((candidate, current_text))
-
-        full_numbers = re.findall(r'\d+', result)
-        if full_numbers and prefix_candidates:
-            full_text = full_numbers[0]
-            for candidate, current_text in prefix_candidates:
-                candidate_text = str(candidate)
-                if candidate_text != full_text and full_text.startswith(candidate_text):
-                    return candidate, self.build_select_product_material_counter_text(
-                        candidate,
-                        result,
-                        current_text,
-                        allow_suffix_rebuild=expected_quantity is not None and candidate == expected_quantity,
-                    )
-
-        if slash_without_current:
-            return 0, self.build_select_product_material_counter_text(
-                0,
-                result,
-                slash_prefix_text,
-                allow_suffix_rebuild=expected_quantity is not None and expected_quantity == 0,
-            )
-
-        current = self.parse_select_product_material_current(result)
-        if current is not None:
-            logger.warning(f"[岛屿] 岗位派遣页材料数量未识别到分隔符，使用兜底结果: {result}")
-            return current, str(current)
-
-        logger.warning(f"[岛屿] 岗位派遣页材料数量识别失败: {result}")
-        return 0, '0'
+        counter = self.normalize_select_product_material_text(
+            read_material_counter_text(self.device.image))
+        parsed = self.parse_select_product_material_counter(counter)
+        if parsed is None:
+            logger.warning(f'[岛屿] 材料计数不完整，保留未知: {counter!r}')
+            return None, counter
+        return parsed[0], counter
 
     def ocr_select_product_material(self, expected_quantity=None):
         """读取岗位产品选择页中当前种子、鱼苗或饲料数量。
@@ -2356,7 +2193,7 @@ class Island(SelectCharacter):
             expected_quantity (int, optional): 期望数量，用于辅助校验。默认为 None。
 
         Returns:
-            int: 当前材料库存数量。
+            int | None: 当前材料库存数量，未明确识别时为 None。
         """
         current, _ = self.ocr_select_product_material_detail(expected_quantity=expected_quantity)
         return current
@@ -2368,11 +2205,11 @@ class Island(SelectCharacter):
             tuple[int | None, int]: (当前库存数量, 总需求数量)。
         """
         current, result = self.ocr_select_product_material_detail()
-        required = self.parse_select_product_material_required(result)
-
-        if current is None:
+        parsed = self.parse_select_product_material_counter(result)
+        if parsed is None or current != parsed[0]:
             logger.warning(f"[岛屿] 岗位派遣页材料数量识别失败: {result}")
-        return current, required
+            return None, 0
+        return current, parsed[1]
 
     def back_to_select_product_after_shop(self, back_button=ISLAND_BACK):
         """从补货商店返回岗位产品选择页。
@@ -2418,20 +2255,27 @@ class Island(SelectCharacter):
 
         Returns:
             str: MATERIAL_READY 表示可直接确认派遣；MATERIAL_RESTOCKED 表示离开过产品选择页，
-                调用方需要重新选择产品；MATERIAL_INSUFFICIENT 表示补货失败且不够一次派遣，调用方应跳过岗位。
+                调用方需要重新选择产品；MATERIAL_INSUFFICIENT 表示数量未确认或补货仍不足。
+                _round_material_unconfirmed 标记识别失败，供调用方在原循环内有限复读。
         """
+        self._round_material_unconfirmed = False
         required_quantity = max(1, int(required_quantity))
         current_quantity, counter_text = self.ocr_select_product_material_detail(expected_quantity=required_quantity)
-        page_required = self.parse_select_product_material_required(counter_text)
         ledger = getattr(self, 'island_round', None)
+        parsed = self.parse_select_product_material_counter(counter_text)
+        if parsed is None or current_quantity != parsed[0]:
+            self._round_material_unconfirmed = True
+            if ledger is not None:
+                if material_id is None:
+                    raise ValueError('本轮种苗补充必须指定材料编号')
+                ledger.observe(material_id, None)
+            logger.warning(f'[岛屿] 种苗数量未明确识别：{counter_text!r} '
+                           f'(库存候选 {current_quantity})，跳过补货和派遣')
+            return MATERIAL_INSUFFICIENT
+        page_required = parsed[1]
         if ledger is not None:
             if material_id is None:
                 raise ValueError('本轮种苗补充必须指定材料编号')
-            matched = re.fullmatch(r'\s*(\d+)\s*/\s*(\d+)\s*', str(counter_text))
-            if not matched or current_quantity != int(matched[1]):
-                ledger.observe(material_id, None)
-                logger.warning('[岛屿单轮] 种苗数量未明确识别，跳过补货和派遣')
-                return MATERIAL_INSUFFICIENT
             ledger.observe(material_id, current_quantity)
             self._round_material_receipt = {'item_id': material_id}
         display_name = item_name or getattr(item_button, 'name', '材料')

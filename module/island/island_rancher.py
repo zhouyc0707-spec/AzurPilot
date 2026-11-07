@@ -504,6 +504,7 @@ class IslandRancher(Island, WarehouseOCR, LoginHandler):
         collection_pending = False
         collection_requested = False
         collection_ready = Timer(0.5, count=2)
+        material_read_failures = 0
         self.ranch_last_finish_time = None
         for _ in self.loop(timeout=40, skip_first=False):
             if self.appear(ERROR1, offset=30):
@@ -563,12 +564,17 @@ class IslandRancher(Island, WarehouseOCR, LoginHandler):
                 if ledger is not None and feed_item:
                     from module.island.item_ids import LOCAL_TO_ITEM_ID
                     stock, counter = self.ocr_select_product_material_detail()
-                    required = self.parse_select_product_material_required(counter)
-                    matched = re.fullmatch(r'\s*(\d+)\s*/\s*(\d+)\s*', str(counter))
-                    if not matched or stock != int(matched[1]) or required <= 0:
+                    parsed = self.parse_select_product_material_counter(counter)
+                    if parsed is None or stock != parsed[0]:
+                        material_read_failures += 1
+                        logger.warning(f'[岛屿-牧场] 牧场岗位{post_id}材料计数未确认'
+                                       f'（{material_read_failures}/3）: {counter!r}，库存读数={stock}')
+                        if material_read_failures < 3:
+                            continue
                         ledger.block(feed_item)
                         self.back_to_postmanage_from_dispatch()
                         return False
+                    _, required = parsed
                     ledger.observe(feed_item, stock)
                     self.inventory_counts['mill'][feed_item] = stock
                     self._round_material_receipt = {'item_id': LOCAL_TO_ITEM_ID[feed_item],
@@ -576,11 +582,11 @@ class IslandRancher(Island, WarehouseOCR, LoginHandler):
                 if feed_item and self.inventory_counts['mill'].get(feed_item, 0) < 50:
                     logger.info(f"[岛屿-牧场] {self._item_cn(feed_item)}仓库库存仍不足 50，跳过牧场岗位{post_id}")
                     self.back_to_postmanage_after_feed_purchase()
-                    return True
+                    return False
                 self.device.sleep(0.3)
                 if not self.confirm_post_add_order(f"牧场岗位{post_id}派遣"):
                     self.back_to_postmanage_from_dispatch()
-                    return True
+                    return False
                 if ledger is not None:
                     from module.island.data import DIC_ISLAND_RECIPE
                     recipe_id = {'ISLAND_RANCH_POST1': 101013, 'ISLAND_RANCH_POST2': 101015,
@@ -892,7 +898,7 @@ class IslandRancher(Island, WarehouseOCR, LoginHandler):
             GameBugError: 遇到游戏内部错误需要重启时抛出。
         """
         self.island_error = False
-        self.ui_ensure(page_island)
+        self._round_dispatch_retry = False
         time_vars = ['time_ranch1', 'time_ranch2', 'time_ranch3', 'time_ranch4']
         all_configs = [
             ('ISLAND_RANCH_POST1', 'time_ranch1'),
@@ -901,6 +907,7 @@ class IslandRancher(Island, WarehouseOCR, LoginHandler):
             ('ISLAND_RANCH_POST4', 'time_ranch4'),
         ]
         if getattr(self, 'island_round', None) is None:
+            self.ui_ensure(page_island)
             for var in time_vars:
                 setattr(self, var, None)
             self.warehouse_mill_ranch()
@@ -943,10 +950,14 @@ class IslandRancher(Island, WarehouseOCR, LoginHandler):
                         break
 
                 if time_var_name:
+                    planned_idle = (getattr(self, 'island_round', None) is not None
+                                    and getattr(self, '_round_ranch_states', {}).get(post_id) == 'idle')
                     success = self.ranch_post(post_id, time_var_name)
                     self.raise_if_island_error()
                     if not success:
                         logger.warning(f"[岛屿-牧场] 牧场岗位 {post_id} 执行失败，跳过")
+                        if planned_idle and self._round_ranch_states.get(post_id) != 'working':
+                            self._round_dispatch_retry = True
                 else:
                     logger.warning(f"[岛屿-牧场] 未找到岗位 {post_id} 对应的时间变量名")
         else:
@@ -955,6 +966,11 @@ class IslandRancher(Island, WarehouseOCR, LoginHandler):
         finish_times = [getattr(self, var) for var in time_vars if getattr(self, var) is not None]
         six_hours_later = current_time() + timedelta(hours=6)
         finish_times.append(six_hours_later)
+        if self._round_dispatch_retry:
+            # 局部空岗失败尽早复查；交由渔场合并后统一沿用岛屿整点对齐。
+            retry_time = current_time() + timedelta(minutes=5)
+            finish_times.append(retry_time)
+            logger.info(f'[岛屿-牧场] 计划中的空岗未完成派遣，加入失败重试时间: {retry_time}')
         finish_times.sort()
         logger.info(f'[岛屿-牧场] 牧场任务完成，暂存 {len(finish_times)} 个计时器，最早结束时间: {finish_times[0]}')
         # 不立即写入 task_delay，而是将牧场结束时间传给渔场，
