@@ -210,28 +210,53 @@ class IslandRancher(Island, WarehouseOCR, LoginHandler):
         mill_needs = []
 
         ledger = getattr(self, 'island_round', None)
-        wheat_flour_count = self.inventory_counts['mill'].get('wheat_flour', 0)
+        wheat_flour_count = (ledger.get('wheat_flour') if ledger is not None else
+                             self.inventory_counts['mill'].get('wheat_flour', 0))
         flour_threshold = 150
         flour_target = 200
-        if (ledger is None or ledger.get('wheat_flour') is not None) and wheat_flour_count < flour_threshold:
-            target = flour_target - wheat_flour_count
-            mill_needs.append(('wheat_flour', target))
-            logger.info(f"[岛屿-牧场] {self._item_cn('wheat_flour')}库存不足: {wheat_flour_count}/150，需加工 {target} 个补到 200")
+        wheat_feed_unknown = False
 
         for post_id, feed_item in self.ranch_feed_map.items():
             # 岗位已在配置中关闭时不再为其补充饲料，避免浪费牧场原料
-            if not self.is_ranch_post_enabled(post_id):
+            if (not self.is_ranch_post_enabled(post_id)
+                    or (post_id == 'ISLAND_RANCH_POST1' and self.ranch_chicken_threshold <= 0)
+                    or (post_id == 'ISLAND_RANCH_POST2' and self.ranch_pork_threshold <= 0)):
                 logger.info(f"[岛屿-牧场] {self._item_cn(feed_item)}对应岗位已关闭，跳过饲料补充")
                 continue
-            if ledger is not None and ledger.get(feed_item) is None:
+            current_quantity = (ledger.get(feed_item) if ledger is not None else
+                                self.inventory_counts['mill'].get(feed_item, 0))
+            if current_quantity is None:
+                if self.name_to_config[feed_item]['required_material'] == 'wheat':
+                    wheat_feed_unknown = True
                 continue
-            current_quantity = self.inventory_counts['mill'].get(feed_item, 0)
             item_target = feed_target_quantity
             if current_quantity < item_target:
                 minimum = self.name_to_config[feed_item]['number']
                 target = max(minimum, (item_target - current_quantity + 9) // 10)
                 mill_needs.append((feed_item, target))
                 logger.info(f"[岛屿-牧场] {self._item_cn(feed_item)}库存不足: {current_quantity}/{feed_target_quantity}，固定加工 {target} 组")
+
+        if wheat_flour_count is not None and wheat_flour_count < flour_threshold:
+            wheat = (ledger.get('wheat') if ledger is not None else
+                     self.inventory_counts['farm'].get('wheat'))
+            if wheat is None or wheat_feed_unknown:
+                logger.warning('[岛屿-牧场] 小麦或启用牧场的饲料库存未知，暂不分配小麦加工面粉')
+                return mill_needs
+
+            # 仅预留现货能够加工的完整饲料批次；面粉仍按原顺序执行。
+            available = max(wheat, 0)
+            reserved = 0
+            for feed_item, quantity in mill_needs:
+                if self.name_to_config[feed_item]['required_material'] != 'wheat':
+                    continue
+                unit_cost = self.mill_material_needed(feed_item, 1)
+                batches = min(quantity, (available - reserved) // unit_cost)
+                reserved += self.mill_material_needed(feed_item, batches)
+            target = min(flour_target - wheat_flour_count,
+                         (available - reserved) // self.mill_material_needed('wheat_flour', 1))
+            logger.info(f'[岛屿-牧场] 小麦现货 {available}，为饲料预留 {reserved}，剩余可加工面粉 {target} 个')
+            if target > 0:
+                mill_needs.insert(0, ('wheat_flour', target))
 
         return mill_needs
 
@@ -246,7 +271,7 @@ class IslandRancher(Island, WarehouseOCR, LoginHandler):
         """
         mill_needs = self.check_mill_supplement_needs(feed_target_quantity=feed_target_quantity)
         if not mill_needs:
-            logger.info("[岛屿-牧场] 牧场饲料和面粉库存充足")
+            logger.info("[岛屿-牧场] 本轮没有已确认需要加工的饲料或面粉")
             return []
 
         logger.info(f"[岛屿-牧场] 需要补充的磨坊项目: {[(self._item_cn(name), target) for name, target in mill_needs]}")
@@ -297,23 +322,15 @@ class IslandRancher(Island, WarehouseOCR, LoginHandler):
                     logger.warning(f'[岛屿-统一生产] {self._item_cn(name)} 库存未知，暂不加工')
                     return False
                 self.inventory_counts[category][name] = value
-        if ledger is not None:
-            current_material = self.inventory_counts['farm'].get(required_material)
-            if current_material is None:
-                logger.warning(f'[岛屿-牧场] {required_material} 现货未观测，暂不加工 {mill_item}')
-                return False
-            unit_cost = self.mill_material_needed(mill_item, 1)
-            quantity = min(quantity, max(current_material, 0) // unit_cost)
-            if quantity <= 0:
-                return False
-        material_needed = self.mill_material_needed(mill_item, quantity)
         current_material = self.inventory_counts['farm'].get(required_material)
-
-        if current_material is not None and current_material < material_needed:
-            logger.info(
-                f"{self._item_cn(required_material)}不足，无法加工{self._item_cn(mill_item)}: {current_material}/{material_needed}"
-            )
+        if current_material is None:
+            logger.warning(f'[岛屿-牧场] {required_material} 现货未观测，暂不加工 {mill_item}')
             return False
+        unit_cost = self.mill_material_needed(mill_item, 1)
+        quantity = min(quantity, max(current_material, 0) // unit_cost)
+        if quantity <= 0:
+            return False
+        material_needed = self.mill_material_needed(mill_item, quantity)
 
         self._round_mill_batches = None
         if not self.process_mill_item(mill_item, quantity=quantity):
