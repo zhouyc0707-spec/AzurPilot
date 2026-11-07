@@ -365,6 +365,8 @@ CN 空订单页新增今日次数确认：订单页与右侧地图背景均正�
 
 白熊饮品同样在初始化时规范化手工季节目标；关闭 `Seasonal` 只关闭优先生产，不阻止有效手工目标的同槽替换。只为本轮实际目标补注册已有普通选品资源，固定坐标专用饮品继续由原优先开关管理。冬季无对应饮品槽位时，旧菊花茶等目标及其临时商品目录一并排除，集中盘点不再请求秋菊；保存的菜单、目标数量和常驻生产配置不改写。回归见 `tests/test_island_teahouse_season_targets.py`。
 
+餐品的本轮跳过集合同时包含原料不足、角色不可用及派遣未确认，后续重算只说明不重复派遣；具体原因以首次失败日志为准，不能统一解释成「无可用角色」。
+
 ### 独立岛屿生产规划工具（IslandProductionPlanner）
 
 工具页入口 `IslandProductionPlanner`，参数统一位于 `IslandProductionPlanner.IslandProductionPlanner`。实现同步上游 AzurPilot `dev` 的 `module/island_planner/`，算法来源为 ALAS，保留 GPL-3.0 许可。运行一次计算一次，在日志预览或显式写入现有配置，不接管每轮实时调度。

@@ -95,7 +95,7 @@ class IslandShopBase(Island, WarehouseOCR):
         # 特殊材料（子类可覆盖）
         self.special_materials = {}
 
-        # 本轮因无可用角色而跳过生产的餐品（避免严格模式重复尝试）
+        # 本轮暂不重试的餐品（原料不足、角色不可用或派遣未确认）
         self.chef_unavailable_products = set()
 
         # 套餐组成（子类可覆盖）
@@ -1015,7 +1015,7 @@ class IslandShopBase(Island, WarehouseOCR):
                     logger.info(f"[岛屿] 槽位{idx + 1} {self._item_cn(name)} 本轮已尝试失败，强制跳过")
                     continue
                 if name in self.chef_unavailable_products:
-                    logger.info(f"[岛屿] 槽位{idx + 1} {self._item_cn(name)} 无可用角色，本轮跳过")
+                    logger.info(f"[岛屿] 槽位{idx + 1} {self._item_cn(name)} 本轮已跳过，不重复派遣，具体原因见前序日志")
                     continue
                 deficit = target - current
                 # check_materials=True 时严格检查零库存，用于跳过无法生产的缺口
@@ -1594,7 +1594,7 @@ class IslandShopBase(Island, WarehouseOCR):
                 continue
             # 套餐拆解和特殊材料补产也会重新加入已失败的商品；最终派遣必须统一拦截。
             if product in self.chef_unavailable_products:
-                logger.info(f"[岛屿] {self._item_cn(product)} 本轮已确认不可生产，跳过补料派遣")
+                logger.info(f"[岛屿] {self._item_cn(product)} 本轮已跳过，不重复补料派遣，具体原因见前序日志")
                 continue
 
             # 获取当前还有需求的量
