@@ -33,7 +33,7 @@ from module.exception import (GameNotRunningError, GamePageUnknownError,
 from module.exercise.assets import EXERCISE_PREPARATION
 from module.handler.assets import (AUTO_SEARCH_MENU_EXIT, BATTLE_PASS_NEW_SEASON, BATTLE_PASS_NOTICE,
                                    BILIBILI_LOGIN_BUTTON, BILIBILI_LOGIN_RECORD,
-                                   GAME_TIPS, GAME_TIPS3, GAME_TIPS4, GUILD_POPUP_CANCEL, GUILD_POPUP_CONFIRM,
+                                   GUILD_POPUP_CANCEL, GUILD_POPUP_CONFIRM,
                                    LOGIN_ANNOUNCE, LOGIN_ANNOUNCE_2, LOGIN_CHECK, LOGIN_RETURN_SIGN,
                                    MAINTENANCE_ANNOUNCE, MONTHLY_PASS_NOTICE)
 from module.handler.info_handler import InfoHandler
@@ -46,7 +46,8 @@ from module.os_handler.assets import (AUTO_SEARCH_REWARD, EXCHANGE_CHECK, RESET_
                                       RESET_FLEET_PREPARATION_2, RESET_TICKET_POPUP)
 from module.raid.assets import *
 from module.ui.assets import *
-from module.ui.page import (Page, page_academy, page_campaign, page_campaign_menu, page_event, page_island,
+from module.ui.island_entry_diagnostic import IslandEntryDiagnostic
+from module.ui.page import (Page, page_academy, page_campaign, page_campaign_menu, page_dormmenu, page_event, page_island,
                             page_island_management, page_island_phone, page_main, page_main_white, page_sp,
                             page_tactical)
 from module.ui_white.assets import *
@@ -374,6 +375,8 @@ class UI(InfoHandler):
         # 初始化页面连接
         Page.init_connection(destination)
         self.interval_clear(list(Page.iter_check_buttons()))
+        dorm_entry_navigation = (page_main.parent is page_dormmenu
+                                 or page_main_white.parent is page_dormmenu)
 
         logger.hr(f"UI 导航到 {destination}")
         # 导航超时计时器：长时间无法识别页面时触发恢复
@@ -384,6 +387,7 @@ class UI(InfoHandler):
         navigation_retry_confirm = Timer(0.4, count=2)
         navigation_retry_area = None
         navigation_retry_used = set()
+        island_entry_diagnostic = IslandEntryDiagnostic()
         while 1:
             GOTO_MAIN.clear_offset()
             if skip_first_screenshot:
@@ -391,13 +395,34 @@ class UI(InfoHandler):
             else:
                 self.device.screenshot()
 
+            # 提示仍可见时，不能识别其背后的目标页或点击生活区入口。
+            tips_button = self.game_tips_appear() if dorm_entry_navigation else None
+            if tips_button is not None:
+                if self.handle_game_tips(button=tips_button):
+                    nav_timeout.reset()
+                    # 仅恢复这次被提示打断的生活区入口，不解除其他页面的限频。
+                    if (last_navigation_page is not None
+                            and last_navigation_page in (page_main, page_main_white)
+                            and last_navigation_page.parent is page_dormmenu
+                            and last_navigation_page.check_button.name not in navigation_retry_used
+                            and not self.get_interval_timer(
+                                last_navigation_page.check_button, interval=5).reached()):
+                        navigation_retry_page = last_navigation_page
+                        navigation_retry_confirm = Timer(0.4, count=2)
+                island_entry_confirm.clear()
+                navigation_retry_confirm.clear()
+                navigation_retry_area = None
+                # 未能关闭时仍走既有超时恢复；不能因按钮冷却而穿透提示背景。
+                if not nav_timeout.reached():
+                    continue
+
             # 到达目标页面
-            if self.ui_page_appear(page=destination, offset=offset):
+            if tips_button is None and self.ui_page_appear(page=destination, offset=offset):
                 logger.info(f'[UI] 到达页面: {destination}')
                 break
             # 主界面新旧主题互为等价：目标为任一主界面时，
             # 检测到另一主题也视为到达
-            if destination in (page_main, page_main_white) and self.is_in_main():
+            if tips_button is None and destination in (page_main, page_main_white) and self.is_in_main():
                 logger.info(f'[UI] 到达页面: {destination}')
                 break
 
@@ -426,7 +451,7 @@ class UI(InfoHandler):
             # 其他页面：按 A* 路径点击导航
             clicked = False
             for page in Page.iter_pages():
-                if guild_popup_visible:
+                if guild_popup_visible or tips_button is not None:
                     break
                 if page.parent is None or page.check_button is None:
                     continue
@@ -468,6 +493,11 @@ class UI(InfoHandler):
                 if self.appear(page.check_button, offset=offset, interval=5):
                     logger.info(f'[UI] 页面切换: {page} -> {page.parent}')
                     button = page.links[page.parent]
+                    if page in (page_main, page_main_white) and page.parent is page_dormmenu:
+                        island_entry_diagnostic.capture(self.device.image, 'returned_main')
+                    elif page is page_dormmenu and page.parent is page_island:
+                        island_entry_diagnostic.capture(self.device.image, 'repeat_island_entry')
+                        island_entry_diagnostic.start(self.device.image)
                     self.device.click(button)
                     self.ui_button_interval_reset(button)
                     island_entry_confirm.clear()
@@ -488,7 +518,7 @@ class UI(InfoHandler):
                 continue
 
             # 处理额外弹窗
-            if not guild_popup_visible and self.ui_additional(get_ship=get_ship):
+            if tips_button is None and not guild_popup_visible and self.ui_additional(get_ship=get_ship):
                 nav_timeout.reset()
                 island_entry_confirm.clear()
                 navigation_retry_confirm.clear()
@@ -868,9 +898,6 @@ class UI(InfoHandler):
         # 提示模板在高清缩放后可能命中主页元素，须核验确认按钮背景。
         # 复用提示处理器关闭当前弹窗，不从未知画面盲点 HOME 坐标。
         if self.handle_game_tips():
-            # 同一提示可能同时匹配多个版本，统一冷却防止转场时换模板补点。
-            for tips_button in (GAME_TIPS, GAME_TIPS3, GAME_TIPS4):
-                self.interval_reset(tips_button, interval=2)
             return True
 
         # 后宅弹窗

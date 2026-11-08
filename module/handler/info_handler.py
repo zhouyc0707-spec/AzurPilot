@@ -952,23 +952,30 @@ class InfoHandler(ModuleBase):
         self.ensure_no_story()
         return True
 
-    def handle_game_tips(self):
+    def game_tips_appear(self):
+        """识别仍可见的游戏提示，不受关闭按钮的点击冷却影响。"""
+        for button in (GAME_TIPS, GAME_TIPS3, GAME_TIPS4):
+            if self.appear(button, offset=(20, 20)) and self.image_color_count(
+                    button.button, color=(40, 40, 40), threshold=15, count=50):
+                return button
+        return None
+
+    def handle_game_tips(self, button=None):
         """处理游戏提示弹窗。
+
+        Args:
+            button: 本帧已经确认的提示模板；省略时自行识别。
 
         Returns:
             bool: 是否处理了游戏提示。
         """
-        if self.appear(GAME_TIPS, offset=(20, 20), interval=2) and self.image_color_count(
-                GAME_TIPS.button, color=(40, 40, 40), threshold=15, count=50):
+        if button is None:
+            button = self.game_tips_appear()
+        if button is not None and self.get_interval_timer(button, interval=2).reached():
             self.device.click(GAME_TIPS)
-            return True
-        if self.appear(GAME_TIPS3, offset=(20, 20), interval=2) and self.image_color_count(
-                GAME_TIPS3.button, color=(40, 40, 40), threshold=15, count=50):
-            self.device.click(GAME_TIPS)
-            return True
-        if self.appear(GAME_TIPS4, offset=(20, 20), interval=2) and self.image_color_count(
-                GAME_TIPS4.button, color=(40, 40, 40), threshold=15, count=50):
-            self.device.click(GAME_TIPS)
+            # 同一提示可命中多个版本，统一限频，避免转场中换模板连点。
+            for tips_button in (GAME_TIPS, GAME_TIPS3, GAME_TIPS4):
+                self.interval_reset(tips_button, interval=2)
             return True
 
         return False

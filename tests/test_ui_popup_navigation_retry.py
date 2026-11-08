@@ -7,12 +7,15 @@ from unittest.mock import Mock, patch
 import numpy as np
 
 import module.base.timer as timer_module
+from module.base import utils
+from module.base.button import Button
 from module.base.timer import Timer
 from module.base.utils import load_image
 from module.exception import GameStuckError
-from module.handler.assets import GUILD_POPUP_CANCEL, GUILD_POPUP_CONFIRM
+from module.handler.assets import GAME_TIPS, GAME_TIPS3, GAME_TIPS4, GUILD_POPUP_CANCEL, GUILD_POPUP_CONFIRM
 from module.ui.assets import BACK_ARROW, MAIN_GOTO_CAMPAIGN, MAIN_GOTO_FLEET
-from module.ui.page import Page, page_campaign, page_campaign_menu, page_fleet, page_main, page_main_white
+from module.ui.page import (Page, page_campaign, page_campaign_menu, page_dorm, page_dormmenu,
+                            page_fleet, page_island, page_main, page_main_white, page_meowfficer)
 from module.ui.ui import UI
 from module.ui_white.assets import MAIN_GOTO_CAMPAIGN_WHITE
 from tests.test_island_goto_management import FakeClock, FakeDevice, build_frame
@@ -37,6 +40,14 @@ def shifted_button(button, x_offset):
     frame[y1:y2, x1:x2] = 0
     frame[y1:y2, x1 + x_offset:x2 + x_offset] = region
     return frame
+
+
+def with_game_tips(frame):
+    """在可识别背景上叠加国服提示模板及其深色确认区。"""
+    result = np.maximum(frame, build_frame(GAME_TIPS))
+    x1, y1, x2, y2 = GAME_TIPS.button
+    result[y1:y2, x1:x2] = (40, 40, 40)
+    return result
 
 
 class PopupNavigationRetryTest(unittest.TestCase):
@@ -475,6 +486,257 @@ class PopupNavigationRetryTest(unittest.TestCase):
         self.assertGreaterEqual(self.clock.now - device.t0, 30.0)
         ui.ui_get_current_page.assert_called_once_with(
             skip_first_screenshot=True, recover_unknown=False)
+
+
+class GameTipsNavigationRetryTest(unittest.TestCase):
+    """生活区提示恢复使用真实国服资源，时间与页面进度由离线帧驱动。"""
+
+    make_ui = PopupNavigationRetryTest.make_ui
+    navigation_clicks = staticmethod(PopupNavigationRetryTest.navigation_clicks)
+
+    def setUp(self):
+        self.clock = FakeClock()
+        self.enterContext(patch.object(timer_module, 'time', lambda: self.clock.now))
+        previous_mode = utils.TEMPLATE_MATCH_NON_NATIVE_720P
+        previous_resolution = utils.TEMPLATE_MATCH_NON_NATIVE_720P_RESOLUTION
+        self.addCleanup(utils.set_template_match_non_native_720p, previous_mode, previous_resolution)
+        utils.set_template_match_non_native_720p(False)
+        self.pages = (page_main_white, page_main, page_dormmenu, page_island,
+                      page_dorm, page_meowfficer, page_fleet)
+
+        def cn(button):
+            def field(value):
+                return value['cn'] if isinstance(value, dict) else value
+            return Button(area=field(button.raw_area), color=field(button.raw_color),
+                          button=field(button.raw_button), file=field(button.raw_file), name=button.name)
+
+        for page in self.pages:
+            self.enterContext(patch.object(page, 'check_button', cn(page.check_button)))
+            self.enterContext(patch.object(page, 'links', {target: cn(button)
+                                                         for target, button in page.links.items()}))
+        self.enterContext(patch.object(Page, 'all_pages', {page.name: page for page in self.pages}))
+        self.addCleanup(Page.clear_connection)
+        for tip in (GAME_TIPS, GAME_TIPS3, GAME_TIPS4):
+            tip.clear_offset()
+            self.addCleanup(tip.clear_offset)
+        self.entry = page_main_white.links[page_dormmenu]
+        self.main = build_frame(page_main_white.check_button, self.entry)
+        self.menu = build_frame(page_dormmenu.check_button)
+
+    def tips_ui(self, timeline, **kwargs):
+        ui, device = self.make_ui(timeline, **kwargs)
+        # 旧 ui_goto 在通用额外处理器关闭提示，新实现则在导航前优先处理；
+        # 两者均使用真实提示识别和点击限频，避免红例只因遗漏旧关闭入口而失败。
+        ui.ui_additional = Mock(side_effect=lambda get_ship=True: ui.handle_game_tips())
+        return ui, device
+
+    def test_closed_tips_recovers_main_entry_before_five_seconds_for_all_three_destinations(self):
+        cases = ((source, destination) for source in (page_main_white, page_main)
+                 for destination in (page_island, page_dorm, page_meowfficer))
+        for source, destination in cases:
+            with self.subTest(source=source.name, destination=destination.name):
+                entry = source.links[page_dormmenu]
+                source_frame = build_frame(source.check_button, entry)
+                target = build_frame(destination.check_button)
+                def timeline(t):
+                    if t >= 2.4:
+                        return target
+                    if t >= 2.0:
+                        return self.menu
+                    return with_game_tips(source_frame) if 0.2 <= t < 0.8 else source_frame
+                ui, device = self.tips_ui(timeline)
+                ui.ui_goto(destination, get_ship=False)
+                clicks = self.navigation_clicks(device, entry.name)
+                self.assertEqual(len(clicks), 2)
+                self.assertEqual(clicks[0], 0.0)
+                self.assertGreaterEqual(clicks[1], 1.2)
+                self.assertLess(clicks[1], 2.0)
+                self.assertIn(GAME_TIPS.name, [name for _, name in device.clicks])
+                self.assertEqual(len(self.navigation_clicks(
+                    device, page_dormmenu.links[destination].name)), 1)
+
+    def test_visible_tips_never_click_background_even_when_source_cooldown_has_expired(self):
+        def timeline(t):
+            if t >= 7.4:
+                return self.menu
+            return with_game_tips(self.main) if 0.2 <= t < 6.4 else self.main
+        ui, device = self.tips_ui(timeline)
+        ui.ui_goto(page_dormmenu, get_ship=False)
+        clicks = self.navigation_clicks(device, self.entry.name)
+        self.assertEqual(len(clicks), 2)
+        self.assertGreaterEqual(clicks[1], 6.4)
+        self.assertTrue(all(stamp < 0.2 or stamp >= 6.4 for stamp in clicks))
+
+    def test_visible_tips_covering_destination_are_closed_before_accepting_arrival(self):
+        ui, device = self.tips_ui(lambda t: with_game_tips(self.menu) if t < 1.0 else self.menu)
+        ui.ui_goto(page_dormmenu, get_ship=False)
+        self.assertGreaterEqual(self.clock.now - device.t0, 1.0)
+        self.assertEqual([name for _, name in device.clicks], [GAME_TIPS.name])
+
+    def test_reaching_dormmenu_after_tips_does_not_click_main_again(self):
+        target = build_frame(page_meowfficer.check_button)
+        def timeline(t):
+            if t >= 1.4:
+                return target
+            if t >= 0.8:
+                return self.menu
+            return with_game_tips(self.main) if t >= 0.2 else self.main
+        ui, device = self.tips_ui(timeline)
+        ui.ui_goto(page_meowfficer, get_ship=False)
+        self.assertEqual(self.navigation_clicks(device, self.entry.name), [0.0])
+        self.assertEqual(len(self.navigation_clicks(
+            device, page_dormmenu.links[page_meowfficer].name)), 1)
+
+    def test_tips_on_other_main_navigation_do_not_grant_early_retry(self):
+        entry = page_main_white.links[page_fleet]
+        source = build_frame(page_main_white.check_button, entry)
+        target = build_frame(page_fleet.check_button)
+        def timeline(t):
+            if t >= 5.8:
+                return target
+            return with_game_tips(source) if 0.2 <= t < 0.8 else source
+        ui, device = self.tips_ui(timeline)
+        ui.ui_goto(page_fleet, get_ship=False)
+        clicks = self.navigation_clicks(device, entry.name)
+        self.assertEqual(len(clicks), 2)
+        self.assertGreaterEqual(clicks[1] - clicks[0], 5.0)
+
+    def test_repeated_tips_grant_only_one_early_retry_for_the_same_source(self):
+        def timeline(t):
+            if t >= 7.4:
+                return self.menu
+            if 0.2 <= t < 0.8 or 1.6 <= t < 2.8:
+                return with_game_tips(self.main)
+            return self.main
+        ui, device = self.tips_ui(timeline)
+        ui.ui_goto(page_dormmenu, get_ship=False)
+        clicks = self.navigation_clicks(device, self.entry.name)
+        self.assertEqual(len(clicks), 3)
+        self.assertLess(clicks[1], 1.6)
+        self.assertGreaterEqual(clicks[2] - clicks[1], 5.0)
+        self.assertTrue(all(not 1.6 <= stamp < 2.8 for stamp in clicks))
+
+    def test_tips_before_first_navigation_do_not_grant_an_extra_retry(self):
+        ui, device = self.tips_ui(lambda t: self.menu if t >= 6.8 else (
+            with_game_tips(self.main) if t < 1.0 else self.main))
+        ui.ui_goto(page_dormmenu, get_ship=False)
+        clicks = self.navigation_clicks(device, self.entry.name)
+        self.assertEqual(len(clicks), 2)
+        self.assertGreaterEqual(clicks[0], 1.0)
+        self.assertGreaterEqual(clicks[1] - clicks[0], 5.0)
+
+    def test_unknown_or_dark_entry_does_not_accumulate_early_ready_time(self):
+        dark = self.main.copy()
+        x1, y1, x2, y2 = self.entry.area
+        dark[y1:y2, x1:x2] //= 2
+        self.assertTrue(self.entry.match(dark, offset=(30, 30)))
+        self.assertFalse(self.entry.match_template_color(dark, offset=(30, 30)))
+        for waiting in (UNKNOWN, dark):
+            with self.subTest(unknown=waiting is UNKNOWN):
+                def timeline(t):
+                    if t >= 5.8:
+                        return self.menu
+                    if 0.2 <= t < 0.8:
+                        return with_game_tips(self.main)
+                    return waiting if 0.8 <= t < 5.0 else self.main
+                ui, device = self.tips_ui(timeline)
+                ui.ui_goto(page_dormmenu, get_ship=False)
+                clicks = self.navigation_clicks(device, self.entry.name)
+                self.assertEqual(len(clicks), 2)
+                self.assertGreaterEqual(clicks[1], 5.0)
+
+    def test_normal_dormmenu_transition_does_not_add_wait_or_repeat_click(self):
+        ui, device = self.tips_ui(lambda t: self.main if t < 0.4 else self.menu)
+        ui.ui_goto(page_dormmenu, get_ship=False)
+        self.assertEqual(self.navigation_clicks(device, self.entry.name), [0.0])
+        self.assertLess(self.clock.now - device.t0, 1.0)
+
+    def test_unrelated_additional_action_does_not_clear_main_entry_cooldown(self):
+        ui, device = self.tips_ui(lambda t: self.main if t < 5.8 else self.menu)
+        handled = []
+        def additional(get_ship=True):
+            stamp = round(self.clock.now - device.t0, 2)
+            if stamp >= 0.4 and not handled:
+                handled.append(stamp)
+                return True
+            return False
+        ui.ui_additional = Mock(side_effect=additional)
+        ui.ui_goto(page_dormmenu, get_ship=False)
+        self.assertEqual(len(handled), 1)
+        clicks = self.navigation_clicks(device, self.entry.name)
+        self.assertEqual(len(clicks), 2)
+        self.assertGreaterEqual(clicks[1] - clicks[0], 5.0)
+
+    def test_normal_eight_second_island_loading_does_not_retry_or_write_diagnostics(self):
+        target = build_frame(page_island.check_button)
+        def timeline(t):
+            if t < 0.4:
+                return self.main
+            if t < 0.8:
+                return self.menu
+            return UNKNOWN if t < 8.8 else target
+        ui, device = self.tips_ui(timeline)
+        with patch('module.ui.island_entry_diagnostic.save_image') as save, patch(
+                'module.ui.island_entry_diagnostic.Path.mkdir') as mkdir:
+            ui.ui_goto(page_island, get_ship=False)
+        self.assertEqual(self.navigation_clicks(device, self.entry.name), [0.0])
+        self.assertEqual(len(self.navigation_clicks(device, page_dormmenu.links[page_island].name)), 1)
+        self.assertGreaterEqual(self.clock.now - device.t0, 8.8)
+        save.assert_not_called()
+        mkdir.assert_not_called()
+
+    def test_island_return_and_repeat_record_current_frames_without_changing_click_cooldown(self):
+        target = build_frame(page_island.check_button)
+        def timeline(t):
+            if t >= 10.0:
+                return target
+            if t < 0.4 or 5.2 <= t < 5.6:
+                return self.main
+            if 0.4 <= t < 0.8 or 5.6 <= t < 6.0:
+                return self.menu
+            return UNKNOWN
+        ui, device = self.tips_ui(timeline)
+        events = []
+        original_click = device.click
+        def click(button, control_check=True):
+            events.append(('click', button.name))
+            original_click(button, control_check=control_check)
+        device.click = click
+        with patch('module.ui.ui.IslandEntryDiagnostic') as diagnostic:
+            recorder = diagnostic.return_value
+            def capture(image, reason):
+                self.assertIs(image, device.image)
+                events.append(('capture', reason))
+            def start(image):
+                self.assertIs(image, device.image)
+                events.append(('start', None))
+            recorder.capture.side_effect = capture
+            recorder.start.side_effect = start
+            ui.ui_goto(page_island, get_ship=False)
+        main_clicks = self.navigation_clicks(device, self.entry.name)
+        island_clicks = self.navigation_clicks(device, page_dormmenu.links[page_island].name)
+        self.assertEqual(len(main_clicks), 2)
+        self.assertEqual(len(island_clicks), 2)
+        self.assertGreaterEqual(main_clicks[1] - main_clicks[0], 5.0)
+        self.assertGreaterEqual(island_clicks[1] - island_clicks[0], 5.0)
+        one_pass = [('capture', 'returned_main'), ('click', self.entry.name),
+                    ('capture', 'repeat_island_entry'), ('start', None),
+                    ('click', page_dormmenu.links[page_island].name)]
+        self.assertEqual(events, one_pass * 2)
+
+    def test_original_cooldown_expired_after_unknown_frames_does_not_add_ready_wait(self):
+        def timeline(t):
+            if t >= 5.6:
+                return self.menu
+            if 0.2 <= t < 0.8:
+                return with_game_tips(self.main)
+            return UNKNOWN if 0.8 <= t < 5.1 else self.main
+        ui, device = self.tips_ui(timeline)
+        ui.ui_goto(page_dormmenu, get_ship=False)
+        clicks = self.navigation_clicks(device, self.entry.name)
+        self.assertEqual(len(clicks), 2)
+        self.assertGreaterEqual(clicks[1], 5.1)
+        self.assertLess(clicks[1], 5.5)
 
 
 if __name__ == '__main__':

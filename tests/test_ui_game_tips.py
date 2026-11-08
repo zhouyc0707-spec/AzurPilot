@@ -87,6 +87,43 @@ class UiGameTipsTest(unittest.TestCase):
 
         ui.device.click.assert_not_called()
 
+    def test_visible_prompt_detection_ignores_close_cooldown_and_has_no_side_effects(self):
+        image = utils.load_image(GAME_TIPS.file).copy()
+        x1, y1, x2, y2 = GAME_TIPS.button
+        image[y1:y2, x1:x2] = (40, 40, 40)
+        ui = self.make_ui(image)
+        ui.appear = Mock(wraps=ui.appear)
+
+        self.assertIs(ui.game_tips_appear(), GAME_TIPS)
+        self.assertEqual(ui.interval_timer, {})
+        ui.device.click.assert_not_called()
+        self.assertTrue(all(call.kwargs.get('interval', 0) == 0 for call in ui.appear.call_args_list))
+
+        self.assertTrue(ui.handle_game_tips())
+        self.assertIsNotNone(ui.game_tips_appear())
+        self.assertFalse(ui.handle_game_tips())
+        self.assertIsNotNone(ui.game_tips_appear())
+        self.assertEqual(ui.device.click.call_count, 1)
+
+    def test_real_main_false_positive_is_not_reported_as_visible_prompt(self):
+        fixture = Path(__file__).parent / 'fixtures' / 'ui_game_tips' / 'main_false_positive.png'
+        ui = self.make_ui(utils.load_image(str(fixture)))
+        self.assertIsNone(ui.game_tips_appear())
+        self.assertEqual(ui.interval_timer, {})
+        ui.device.click.assert_not_called()
+
+    def test_each_real_prompt_variant_remains_visible_while_close_is_cooling(self):
+        for button in (GAME_TIPS3, GAME_TIPS4):
+            with self.subTest(button=button.name):
+                for tip in (GAME_TIPS, GAME_TIPS3, GAME_TIPS4):
+                    tip.clear_offset()
+                ui = self.make_ui(utils.load_image(button.file))
+                self.assertIsNotNone(ui.game_tips_appear())
+                self.assertTrue(ui.handle_game_tips())
+                self.assertIsNotNone(ui.game_tips_appear())
+                self.assertFalse(ui.handle_game_tips())
+                self.assertEqual(ui.device.click.call_count, 1)
+
 
 if __name__ == '__main__':
     unittest.main()
