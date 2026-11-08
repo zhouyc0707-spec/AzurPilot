@@ -175,6 +175,15 @@ class IslandManufacture(IslandShopBase):
                 self.manufacture['handmade']['items'].append(item_config.copy())
                 logger.info(f"[岛屿-制造业] 季节限定：{self._item_cn(item_name)} 已添加到手工产品列表")
 
+        # 新库存目标补足历季缺图产品；没有真实图像时只走官方完整名称选品。
+        from module.island.manufacture_catalog import get_catalog
+        targets = self.seasonal_stock_targets('handmade')
+        registered = {item['name'] for item in self.manufacture['handmade']['items']}
+        for item in get_catalog(self.current_season)['handmade']:
+            if item['name'] in targets and item['name'] not in registered:
+                item = dict(item, generic_recipe=True)
+                self.manufacture['handmade']['items'].append(item)
+
         # 根据配置初始化岗位按钮
         self.post_buttons = self._init_post_buttons()
 
@@ -237,11 +246,16 @@ class IslandManufacture(IslandShopBase):
         """单任务按已有模板读取，缺图保持未知；共享轮仅复用产地库存。"""
         if getattr(self, 'island_round', None) is not None:
             return self._load_round_stock()
+        if self.seasonal_stock_targets():
+            return super().get_warehouse_counts()
         self.warehouse_filter(self.filter_asset)
         image = self.device.screenshot()
         templates = {item['name']: item['template'] for item in self.shop_items if item.get('template') is not None}
         self.warehouse_counts = self.ocr_item_quantities(image, templates) if templates else {}
         return self.warehouse_counts
+
+    def seasonal_stock_targets(self, category=None):
+        return super().seasonal_stock_targets(category or 'handmade')
 
     def _prepare_recipe_page(self, post_id):
         """选择岗位和原有角色，正向确认选品页后交给独立识别阶段。"""
@@ -389,6 +403,12 @@ class IslandManufacture(IslandShopBase):
             # 同一批内前面岗位已确认材料不足的物品，直接跳过
             if product_name in self.unavailable_products:
                 logger.info(f"[岛屿-制造业] {self._item_cn(product_name)} 本批已确认材料不足，直接跳过")
+                continue
+
+            if product_info.get('generic_recipe'):
+                if self._dispatch_seasonal_manufacture(
+                        post_id, product_name, self.get_product_production_limit(product_name)):
+                    return product_info
                 continue
 
             # 每个产品：进入岗位搜索并选择；找不到则退出岗位重进重试
@@ -574,6 +594,7 @@ class IslandManufacture(IslandShopBase):
 
     def schedule_handmade(self):
         """安排手工制品生产：按 Handmade.Products 的顺序，未配置时优先季节限定品、皮靴与皮革。"""
+        self._schedule_seasonal_handmade()
         product_list = self.configured_product_list('handmade')
         if product_list is not None:
             self._schedule_line('handmade', product_list)
@@ -591,7 +612,7 @@ class IslandManufacture(IslandShopBase):
         if hasattr(self, 'season_config') and self.season_config.is_seasonal_enabled:
             seasonal_names = self.season_config.get_seasonal_items('handmade') or []
         for item in self.manufacture['handmade']['items']:
-            if item['name'] in seasonal_names:
+            if item['name'] in seasonal_names and item['name'] not in self.seasonal_stock_targets():
                 product_list.append(item)
 
         # 如果leather库存>=10，则生产boot
@@ -607,6 +628,62 @@ class IslandManufacture(IslandShopBase):
 
         for post_id in idle_posts:
             self.select_product_with_material_check(post_id, product_list)
+
+    def _schedule_seasonal_handmade(self):
+        """工坊没有常规有限目标；当季有限缺口排在原无限候选之前。"""
+        targets = self.seasonal_stock_targets()
+        if not targets or 'handmade' in self._unknown_working_categories:
+            return
+        from module.island.item_ids import LOCAL_TO_ITEM_ID
+        from module.island.data import DIC_ISLAND_RECIPE
+        from module.island.production_recipe import recipe_for_local_name
+        produced = {}
+        ledger = getattr(self, 'island_round', None)
+        for post_id in self.get_idle_posts_by_category('handmade'):
+            for name, target in targets.items():
+                if name not in self.name_to_config or name in self.unavailable_products:
+                    continue
+                stock = ledger.get(name) if ledger is not None else self.warehouse_counts.get(name)
+                if stock is None:
+                    logger.info(f'[岛屿-制造业] 季节目标 {self._item_cn(name)} 现货未确认，本轮跳过')
+                    continue
+                in_production = (ledger.in_production.get(LOCAL_TO_ITEM_ID[name], 0)
+                                 if ledger is not None else produced.get(name, 0))
+                deficit = target - stock - self.post_check_meal.get(name, 0) - in_production
+                if deficit <= 0:
+                    continue
+                logger.info(f'[岛屿-制造业] 季节目标 {self._item_cn(name)}：目标 {target}，'
+                            f'现货及在制 {target - deficit}，待补 {deficit}')
+                recipe = DIC_ISLAND_RECIPE[recipe_for_local_name(name)]
+                output = recipe['commission_product'][LOCAL_TO_ITEM_ID[name]]
+                batches = min((deficit + output - 1) // output, recipe['production_limit'])
+                actual = self._dispatch_seasonal_manufacture(post_id, name, batches)
+                if actual:
+                    produced[name] = produced.get(name, 0) + actual * output
+                    break
+
+    def _dispatch_seasonal_manufacture(self, post_id, name, batches):
+        """有限工坊目标沿用选人、选品、按钮检查和真实派遣回执。"""
+        ledger = getattr(self, 'island_round', None)
+        if ledger is not None:
+            batches = self._limit_round_food_batch(name, batches, respect_deficit=False)
+        if batches <= 0:
+            return 0
+        if not self._open_round_recipe_page(post_id):
+            self.unavailable_products.add(name)
+            return 0
+        selected, fast = self._select_round_product(name)
+        if not selected or self.produce_check():
+            self.unavailable_products.add(name)
+            if ledger is not None:
+                ledger.block(name)
+            self._close_round_recipe_page()
+            return 0
+        self._set_round_product_quantity(name, batches, fast)
+        preview, confirmed_at = self.confirm_food_dispatch(batches, f'{self._item_cn(name)}季节制造派遣')
+        self._round_recipe_post = None
+        return self.finish_food_dispatch(post_id, name, self._post_time_vars[post_id],
+                                         batches, preview, confirmed_at)
 
     def _open_round_recipe_page(self, post_id, product=None):
         """制造品共用原有选人规则，打开实际派遣的选品页。"""

@@ -400,6 +400,11 @@ Island:
       - Scheduler
       - IslandPlan
       - IslandWalk
+    IslandSeasonalProduction:
+      - IslandSeasonSpring
+      - IslandSeasonSummer
+      - IslandSeasonAutumn
+      - IslandSeasonWinter
     IslandBusiness:
       - Scheduler
       - IslandBusiness

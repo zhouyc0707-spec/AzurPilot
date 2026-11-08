@@ -30,7 +30,9 @@ DISPATCH_PRODUCT_DURATION = Button(
 
 # 使用手工执行数据的编号；这些原料未确认仓库产地，数量未知时交给生产按钮判断。
 LEGACY_BUTTON_MATERIALS = frozenset((
-    4003, 4015, 4016,  # 花生、春笋、荠菜原料
+    4001, 4002, 4003, 4004,  # 秋菊、芦苇花、花生、松茸
+    4015, 4016, 4017, 4018,  # 春笋、荠菜、迎春花、风信子
+    4029, 4030, 4031, 4032,  # 茉莉花、向日葵、西瓜、红米苋
     4043, 4044, 4045, 4046,  # 冬菇、马蹄、梅花、水仙花
 ))
 
@@ -255,9 +257,21 @@ class IslandShopBase(Island, WarehouseOCR):
         for post_id, button in self.post_buttons.items():
             self.posts[post_id] = {'status': 'none', 'button': button}
 
+    def seasonal_stock_targets(self, category=None):
+        """独立页面的当季库存目标，不写入或占用手工菜单槽位。"""
+        from module.island.seasonal_targets import seasonal_targets
+        return seasonal_targets(self.config, category or self.shop_type)
+
+    def _production_targets(self):
+        """手工有限目标先执行，季节目标仅追加到本轮需求尾部。"""
+        return list(self.post_products) + [
+            (name, target) for name, target in self.seasonal_stock_targets().items()
+            if name in self.name_to_config
+        ]
+
     # ============ 通用方法 ============
     def round_stock_items(self):
-        """本场所成品和需盘点的配方原料；三项旧按钮判断原料不请求盘点。"""
+        """本场所成品和需盘点的配方原料；季节采集原料沿用按钮判断，不请求盘点。"""
         from module.island.data import DIC_ISLAND_RECIPE
         from module.island.production_recipe import recipe_for_local_name
         from module.island.item_ids import LOCAL_TO_ITEM_ID
@@ -532,6 +546,15 @@ class IslandShopBase(Island, WarehouseOCR):
         """
         if getattr(self, 'island_round', None) is not None:
             return self._load_round_stock()
+        if self.seasonal_stock_targets():
+            # 缺少单品模板的季节成品也按产地全名读取；未知不补成零。
+            from module.island.item_ids import ITEM_ID_TO_LOCAL
+            from module.island.round_warehouse import RoundWarehouseReader, warehouse_catalog
+            templates = warehouse_catalog((self,))[self.filter_asset]
+            counts = RoundWarehouseReader(self).read_group(self.filter_asset, templates, set(templates))
+            self.warehouse_counts = {ITEM_ID_TO_LOCAL[item]: count for item, count in counts.items()
+                                     if item in ITEM_ID_TO_LOCAL}
+            return self.warehouse_counts
         self.warehouse_filter(self.filter_asset)
         image = self.device.screenshot()
         counts = self.ocr_item_quantities(
@@ -995,12 +1018,21 @@ class IslandShopBase(Island, WarehouseOCR):
             dict[str, int]: 计算后的当前总库存映射。
         """
         totals = {}
-        all_product_names = set(name for name, _ in self.post_products)
+        all_product_names = set(name for name, _ in self._production_targets())
         for item in all_product_names | set(self.post_check_meal.keys()) | set(
                 self.warehouse_counts.keys()):
             totals[item] = self.post_check_meal.get(item, 0) + self.warehouse_counts.get(item, 0)
         for name, qty in produced_pass.items():
             totals[name] = totals.get(name, 0) + qty
+        ledger = getattr(self, 'island_round', None)
+        if ledger is not None:
+            from module.island.item_ids import LOCAL_TO_ITEM_ID
+            # 季节目标复用共享轮已确认的下单记录，中断后也不重复补量。
+            for name in self.seasonal_stock_targets():
+                stock = ledger.get(name)
+                if stock is not None:
+                    totals[name] = (stock + self.post_check_meal.get(name, 0)
+                                    + ledger.in_production.get(LOCAL_TO_ITEM_ID[name], 0))
         return totals
 
     def _compute_base_demands(self, check_materials=False, force_skip=None):
@@ -1024,31 +1056,44 @@ class IslandShopBase(Island, WarehouseOCR):
         force_skip = force_skip or set()
 
         # 遍历槽位，找到第一个有缺口且可生产的就只处理它
-        break_idx = len(self.post_products)
-        for idx, (name, target) in enumerate(self.post_products):
+        targets = self._production_targets()
+        break_idx = len(targets)
+        self._seasonal_demand = False
+        for idx, (name, target) in enumerate(targets):
+            seasonal = idx >= len(self.post_products)
+            target_label = (f'季节目标 {self._item_cn(name)}' if seasonal
+                            else f'槽位{idx + 1} {self._item_cn(name)}')
+            if seasonal and (self.warehouse_counts.get(name) is None or any(
+                    post.get('status') == 'working' and not post.get('crop')
+                    for post in self.posts.values())):
+                logger.info(f'[岛屿] 季节目标 {self._item_cn(name)} 的现货或在制品未确认，本轮跳过')
+                continue
             current = virtual_totals.get(name, 0)
             if current < target:
                 if name in force_skip:
-                    logger.info(f"[岛屿] 槽位{idx + 1} {self._item_cn(name)} 本轮已尝试失败，强制跳过")
+                    logger.info(f"[岛屿] {target_label} 本轮已尝试失败，强制跳过")
                     continue
                 if name in self.chef_unavailable_products:
-                    logger.info(f"[岛屿] 槽位{idx + 1} {self._item_cn(name)} 本轮已跳过，不重复派遣，具体原因见前序日志")
+                    logger.info(f"[岛屿] {target_label} 本轮已跳过，不重复派遣，具体原因见前序日志")
                     continue
                 deficit = target - current
                 # check_materials=True 时严格检查零库存，用于跳过无法生产的缺口
                 if self.get_max_producible(
                         name, deficit,
                         skip_zero_materials=not check_materials) <= 0:
-                    logger.info(f"[岛屿] 槽位{idx + 1} {self._item_cn(name)} 材料完全不足，本轮跳过")
+                    logger.info(f"[岛屿] {target_label} 材料完全不足，本轮跳过")
                     continue
                 self.to_post_products[name] = deficit
+                if seasonal:
+                    logger.info(f'[岛屿] {target_label}：目标 {target}，现货及在制 {current}，待补 {deficit}')
+                self._seasonal_demand = seasonal
                 virtual_totals[name] = target
                 break_idx = idx
                 break
 
         # 保留线：只取已迭代槽位（含 break 点）中的最高目标
         max_targets = {}
-        for name, target in self.post_products[:break_idx + 1]:
+        for name, target in targets[:break_idx + 1]:
             max_targets[name] = max(max_targets.get(name, 0), target)
         # 记录保留线目标，供排产阶段限制套餐对其库存的消耗
         self._reserved_targets = dict(max_targets)
@@ -1132,7 +1177,9 @@ class IslandShopBase(Island, WarehouseOCR):
             _loop_count = 0
 
             # 季节优先排产也记入本轮在制品；基础需求必须按扣料后的库存重算。
-            priority_products = self.get_priority_production()
+            seasonal_targets = self.seasonal_stock_targets()
+            priority_products = {name: count for name, count in self.get_priority_production().items()
+                                 if name not in seasonal_targets}
             if priority_products:
                 self._round_filler = True
                 self.to_post_products = priority_products
@@ -1194,7 +1241,8 @@ class IslandShopBase(Island, WarehouseOCR):
             idle_posts_after_basic = self.get_idle_posts()
             # 获取特殊餐品和常驻餐品配置
             self._round_filler = True
-            special_food = self.special_food if self.FILL_SPECIAL_FOOD else None
+            special_food = (self.special_food if self.FILL_SPECIAL_FOOD
+                            and self.special_food not in seasonal_targets else None)
             away_cook = getattr(self.config, self.config_away_cook, None)
 
             # 检查特殊餐品是否为有效值（不为None且不为"None"）
@@ -1543,7 +1591,7 @@ class IslandShopBase(Island, WarehouseOCR):
         is_away_cook_mode = False
         away_cook_product = None
         for product, quantity in self.to_post_products.items():
-            if quantity == 9999:  # 常驻餐品模式的标识
+            if quantity == 9999 and not getattr(self, '_seasonal_demand', False):  # 常驻餐品标识
                 is_away_cook_mode = True
                 away_cook_product = product
                 break
@@ -1576,7 +1624,7 @@ class IslandShopBase(Island, WarehouseOCR):
             # 构建槽位顺序映射
             slot_index = {}
             idx = 0
-            for name, _ in self.post_products:
+            for name, _ in self._production_targets():
                 if name not in slot_index:
                     slot_index[name] = idx
                     idx += 1

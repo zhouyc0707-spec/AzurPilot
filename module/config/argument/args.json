@@ -16625,6 +16625,312 @@
       }
     }
   },
+  "IslandSeasonalProduction": {
+    "IslandSeasonSpring": {
+      "double_bamboo_shoots": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      },
+      "asparagus_shrimp": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      },
+      "spring_flower_tea": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      },
+      "pineapple_juice": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      },
+      "asparagus": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      },
+      "pineapple": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      },
+      "shepherd_purse": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      },
+      "spring_bouquet": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      }
+    },
+    "IslandSeasonSummer": {
+      "amaranth_rice_ball": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      },
+      "tomato_egg": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      },
+      "watermelon_juice": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      },
+      "cucumber_juice": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      },
+      "tomato": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      },
+      "cucumber": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      },
+      "jasmine_oil": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      },
+      "summer_bouquet": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      }
+    },
+    "IslandSeasonAutumn": {
+      "persimmon_cake": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      },
+      "matsutake_chicken_soup": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      },
+      "carrot_pear_juice": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      },
+      "chrysanthemum_tea": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      },
+      "pear": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      },
+      "persimmon": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      },
+      "peanut_oil": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      },
+      "autumn_bouquet": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      }
+    },
+    "IslandSeasonWinter": {
+      "shiitake_chicken_soup": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      },
+      "green_jujube_porridge": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      },
+      "water_chestnut_cake": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      },
+      "sugar_tangerine_daifuku": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      },
+      "sugar_tangerine": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      },
+      "green_jujube": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      },
+      "plum_blossom_sachet": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      },
+      "winter_bouquet": {
+        "type": "input",
+        "value": 0,
+        "valuetype": "int",
+        "validate": [
+          0,
+          9007199254740991
+        ]
+      }
+    },
+    "Storage": {
+      "Storage": {
+        "type": "storage",
+        "value": {},
+        "valuetype": "ignore",
+        "display": "disabled"
+      }
+    }
+  },
   "IslandBusiness": {
     "Scheduler": {
       "Enable": {

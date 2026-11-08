@@ -911,6 +911,46 @@ class GeneratedConfig:
     IslandPlan_Season = 'spring'  # spring, summer, autumn, winter
     IslandPlan_TaskAlignment = 'half_hour'  # half_hour, hour, disabled
 
+    # 配置组 `IslandSeasonSpring`
+    IslandSeasonSpring_double_bamboo_shoots = 0
+    IslandSeasonSpring_asparagus_shrimp = 0
+    IslandSeasonSpring_spring_flower_tea = 0
+    IslandSeasonSpring_pineapple_juice = 0
+    IslandSeasonSpring_asparagus = 0
+    IslandSeasonSpring_pineapple = 0
+    IslandSeasonSpring_shepherd_purse = 0
+    IslandSeasonSpring_spring_bouquet = 0
+
+    # 配置组 `IslandSeasonSummer`
+    IslandSeasonSummer_amaranth_rice_ball = 0
+    IslandSeasonSummer_tomato_egg = 0
+    IslandSeasonSummer_watermelon_juice = 0
+    IslandSeasonSummer_cucumber_juice = 0
+    IslandSeasonSummer_tomato = 0
+    IslandSeasonSummer_cucumber = 0
+    IslandSeasonSummer_jasmine_oil = 0
+    IslandSeasonSummer_summer_bouquet = 0
+
+    # 配置组 `IslandSeasonAutumn`
+    IslandSeasonAutumn_persimmon_cake = 0
+    IslandSeasonAutumn_matsutake_chicken_soup = 0
+    IslandSeasonAutumn_carrot_pear_juice = 0
+    IslandSeasonAutumn_chrysanthemum_tea = 0
+    IslandSeasonAutumn_pear = 0
+    IslandSeasonAutumn_persimmon = 0
+    IslandSeasonAutumn_peanut_oil = 0
+    IslandSeasonAutumn_autumn_bouquet = 0
+
+    # 配置组 `IslandSeasonWinter`
+    IslandSeasonWinter_shiitake_chicken_soup = 0
+    IslandSeasonWinter_green_jujube_porridge = 0
+    IslandSeasonWinter_water_chestnut_cake = 0
+    IslandSeasonWinter_sugar_tangerine_daifuku = 0
+    IslandSeasonWinter_sugar_tangerine = 0
+    IslandSeasonWinter_green_jujube = 0
+    IslandSeasonWinter_plum_blossom_sachet = 0
+    IslandSeasonWinter_winter_bouquet = 0
+
     # 配置组 `IslandFarm`
     IslandFarm_Positions = 3  # 1, 2, 3, 4
     IslandFarm_WorkerFilter = 'WorkerJuu'

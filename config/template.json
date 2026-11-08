@@ -3273,6 +3273,51 @@
       "Storage": {}
     }
   },
+  "IslandSeasonalProduction": {
+    "IslandSeasonSpring": {
+      "double_bamboo_shoots": 0,
+      "asparagus_shrimp": 0,
+      "spring_flower_tea": 0,
+      "pineapple_juice": 0,
+      "asparagus": 0,
+      "pineapple": 0,
+      "shepherd_purse": 0,
+      "spring_bouquet": 0
+    },
+    "IslandSeasonSummer": {
+      "amaranth_rice_ball": 0,
+      "tomato_egg": 0,
+      "watermelon_juice": 0,
+      "cucumber_juice": 0,
+      "tomato": 0,
+      "cucumber": 0,
+      "jasmine_oil": 0,
+      "summer_bouquet": 0
+    },
+    "IslandSeasonAutumn": {
+      "persimmon_cake": 0,
+      "matsutake_chicken_soup": 0,
+      "carrot_pear_juice": 0,
+      "chrysanthemum_tea": 0,
+      "pear": 0,
+      "persimmon": 0,
+      "peanut_oil": 0,
+      "autumn_bouquet": 0
+    },
+    "IslandSeasonWinter": {
+      "shiitake_chicken_soup": 0,
+      "green_jujube_porridge": 0,
+      "water_chestnut_cake": 0,
+      "sugar_tangerine_daifuku": 0,
+      "sugar_tangerine": 0,
+      "green_jujube": 0,
+      "plum_blossom_sachet": 0,
+      "winter_bouquet": 0
+    },
+    "Storage": {
+      "Storage": {}
+    }
+  },
   "IslandBusiness": {
     "Scheduler": {
       "Enable": false,

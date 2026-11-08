@@ -2044,11 +2044,25 @@ class Island(SelectCharacter):
         if item_name:
             logger.info(f"[岛屿] 购买 {self._item_cn(item_name)} x{quantity}")
 
+        name_timer = Timer(1.2)
         for _ in self.loop(timeout=10, skip_first=False):
             # 使用模板检测（offset=(1,1)）判断购买弹窗是否打开，
             # 不能退化为颜色检测，避免商店 3D 背景像素恰好匹配导致误判
             if self.appear(ISLAND_SHOPPING_CHECK, offset=(1, 1)):
                 break
+            # 尚无旧图标的季节种子按官方商品全名定位；不借用其他种子的坐标。
+            if isinstance(item_button, int):
+                from module.island.data import DIC_ISLAND_SHOP_ITEM_TO_RECIPE
+                from module.island.shop_selector import _find_shop_card
+                recipe_id = DIC_ISLAND_SHOP_ITEM_TO_RECIPE.get(item_button)
+                if recipe_id is None:
+                    return False
+                if self.appear(shop_check, offset=(1, 1)) and name_timer.reached():
+                    card = _find_shop_card(self, recipe_id)
+                    if card is not None:
+                        self.device.click(card)
+                        name_timer.reset()
+                continue
             # 按图标搜索整页定位商品；商品未解锁或不在列表时不会误点其他格子，超时后放弃购买
             if self.appear(
                     item_button,

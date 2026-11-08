@@ -78,7 +78,8 @@ class ProductOrderTest(unittest.TestCase):
         with patch.object(IslandManufacture, '__init__', lambda self: None):
             factory = IslandManufacture()
         factory.manufacture = {category: {'items': [item(name) for name in names]}}
-        factory.config = SimpleNamespace(**{f'{line}_Products': products})
+        factory.config = SimpleNamespace(cross_get=lambda path, default=None: default,
+                                         **{f'{line}_Products': products})
         factory.warehouse_counts = {}
         factory.get_idle_posts_by_category = Mock(return_value=['POST1', 'POST2'])
         factory.select_product_with_material_check = Mock()

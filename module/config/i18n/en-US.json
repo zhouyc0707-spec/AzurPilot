@@ -322,6 +322,10 @@
       "name": "Global Config",
       "help": "Global settings of the island: season and every walk route. Running this task walks each route ticked in \"Island walk rules\" once on the island so you can check whether the character reaches the target; afterwards (or when nothing is ticked) the task is postponed to the next day."
     },
+    "IslandSeasonalProduction": {
+      "name": "Seasonal Item Production",
+      "help": "Uses the season selected in Global Settings. Only current-season items are shown; each season keeps its own targets. Quantities are stock targets, not amounts per dispatch. Set 0 to add no demand here. Each production area handles regular stock targets, then seasonal targets, then fallback products. Disabled production tasks stay disabled. These targets are saved independently and are not overwritten by the island production planner."
+    },
     "IslandBusiness": {
       "name": "Business Module",
       "help": "Auto-manage 5 shops: Fish Restaurant, Polar Bear Drinks, Squid Grill, Juu Eatery, Juu Coffee."
@@ -4573,6 +4577,158 @@
       "half_hour": "Half-hour (:00 / :30)",
       "hour": "Hour (:00)",
       "disabled": "Disabled"
+    }
+  },
+  "IslandSeasonSpring": {
+    "_info": {
+      "name": "Spring target stock",
+      "help": "Seasonal gathered materials: Spring Bamboo Shoots, Shepherd's Purse, Winter Jasmine, Hyacinth. Source: Daily Gathering. These materials are not produced by work posts; only their names and source are listed here."
+    },
+    "double_bamboo_shoots": {
+      "name": "Cold Mixed Bamboo Shoots and Asparagus",
+      "help": "Target stock; 0 adds no demand here. Fin-'n'-Feather Restaurant replenishes this item after its regular targets."
+    },
+    "asparagus_shrimp": {
+      "name": "Shrimp and Asparagus Stir-Fry",
+      "help": "Target stock; 0 adds no demand here. Fin-'n'-Feather Restaurant replenishes this item after its regular targets."
+    },
+    "spring_flower_tea": {
+      "name": "Winter Jasmine Tea",
+      "help": "Target stock; 0 adds no demand here. Polar Bear Teahouse replenishes this item after its regular targets."
+    },
+    "pineapple_juice": {
+      "name": "Fresh Pineapple Juice",
+      "help": "Target stock; 0 adds no demand here. Polar Bear Teahouse replenishes this item after its regular targets."
+    },
+    "asparagus": {
+      "name": "Asparagus",
+      "help": "Target stock; 0 adds no demand here. Nursery replenishes this item after its regular targets. A positive target replaces the shared area stock floor; explicit per-crop targets still take priority."
+    },
+    "pineapple": {
+      "name": "Pineapple",
+      "help": "Target stock; 0 adds no demand here. Nursery replenishes this item after its regular targets. A positive target replaces the shared area stock floor; explicit per-crop targets still take priority."
+    },
+    "shepherd_purse": {
+      "name": "Dried Shepherd's Purse",
+      "help": "Target stock; 0 adds no demand here. Handicrafts workshop replenishes this item after its regular targets."
+    },
+    "spring_bouquet": {
+      "name": "Spring Bouquet",
+      "help": "Target stock; 0 adds no demand here. Handicrafts workshop replenishes this item after its regular targets."
+    }
+  },
+  "IslandSeasonSummer": {
+    "_info": {
+      "name": "Summer target stock",
+      "help": "Seasonal gathered materials: Jasmine, Sunflower, Watermelon, Amaranth Greens. Source: Daily Gathering. These materials are not produced by work posts; only their names and source are listed here."
+    },
+    "amaranth_rice_ball": {
+      "name": "Amaranth Onigiri",
+      "help": "Target stock; 0 adds no demand here. Fin-'n'-Feather Restaurant replenishes this item after its regular targets."
+    },
+    "tomato_egg": {
+      "name": "Tomato and Egg Stir-Fry",
+      "help": "Target stock; 0 adds no demand here. Fin-'n'-Feather Restaurant replenishes this item after its regular targets."
+    },
+    "watermelon_juice": {
+      "name": "Watermelon Juice",
+      "help": "Target stock; 0 adds no demand here. Polar Bear Teahouse replenishes this item after its regular targets."
+    },
+    "cucumber_juice": {
+      "name": "Cucumber Juice",
+      "help": "Target stock; 0 adds no demand here. Polar Bear Teahouse replenishes this item after its regular targets."
+    },
+    "tomato": {
+      "name": "Tomato",
+      "help": "Target stock; 0 adds no demand here. Nursery replenishes this item after its regular targets. A positive target replaces the shared area stock floor; explicit per-crop targets still take priority."
+    },
+    "cucumber": {
+      "name": "Cucumber",
+      "help": "Target stock; 0 adds no demand here. Nursery replenishes this item after its regular targets. A positive target replaces the shared area stock floor; explicit per-crop targets still take priority."
+    },
+    "jasmine_oil": {
+      "name": "Jasmine Essential Oil",
+      "help": "Target stock; 0 adds no demand here. Handicrafts workshop replenishes this item after its regular targets."
+    },
+    "summer_bouquet": {
+      "name": "Summery Bouquet",
+      "help": "Target stock; 0 adds no demand here. Handicrafts workshop replenishes this item after its regular targets."
+    }
+  },
+  "IslandSeasonAutumn": {
+    "_info": {
+      "name": "Autumn target stock",
+      "help": "Seasonal gathered materials: Autumn Chrysanthemum, Reed Flowers, Peanuts, Matsutake. Source: Daily Gathering. These materials are not produced by work posts; only their names and source are listed here."
+    },
+    "persimmon_cake": {
+      "name": "Dried Persimmon",
+      "help": "Target stock; 0 adds no demand here. Fin-'n'-Feather Restaurant replenishes this item after its regular targets."
+    },
+    "matsutake_chicken_soup": {
+      "name": "Matsutake and Chicken Soup",
+      "help": "Target stock; 0 adds no demand here. Fin-'n'-Feather Restaurant replenishes this item after its regular targets."
+    },
+    "carrot_pear_juice": {
+      "name": "Carrot and Pear Juice",
+      "help": "Target stock; 0 adds no demand here. Polar Bear Teahouse replenishes this item after its regular targets."
+    },
+    "chrysanthemum_tea": {
+      "name": "Chrysanthemum Tea",
+      "help": "Target stock; 0 adds no demand here. Polar Bear Teahouse replenishes this item after its regular targets."
+    },
+    "pear": {
+      "name": "Yoizuki Pear",
+      "help": "Target stock; 0 adds no demand here. Orchard replenishes this item after its regular targets. A positive target replaces the shared area stock floor; explicit per-crop targets still take priority."
+    },
+    "persimmon": {
+      "name": "Kaki Persimmon",
+      "help": "Target stock; 0 adds no demand here. Orchard replenishes this item after its regular targets. A positive target replaces the shared area stock floor; explicit per-crop targets still take priority."
+    },
+    "peanut_oil": {
+      "name": "Peanut Oil",
+      "help": "Target stock; 0 adds no demand here. Handicrafts workshop replenishes this item after its regular targets."
+    },
+    "autumn_bouquet": {
+      "name": "Autumn Bouquet",
+      "help": "Target stock; 0 adds no demand here. Handicrafts workshop replenishes this item after its regular targets."
+    }
+  },
+  "IslandSeasonWinter": {
+    "_info": {
+      "name": "Winter target stock",
+      "help": "Seasonal gathered materials: Plum Blossoms, Daffodils, Winter Shiitake, Water Chestnut. Source: Daily Gathering. These materials are not produced by work posts; only their names and source are listed here."
+    },
+    "shiitake_chicken_soup": {
+      "name": "Shiitake Mushroom Chicken Stew",
+      "help": "Target stock; 0 adds no demand here. Fin-'n'-Feather Restaurant replenishes this item after its regular targets."
+    },
+    "green_jujube_porridge": {
+      "name": "Green Jujube Porridge",
+      "help": "Target stock; 0 adds no demand here. Fin-'n'-Feather Restaurant replenishes this item after its regular targets."
+    },
+    "water_chestnut_cake": {
+      "name": "Water Chestnut Cakes",
+      "help": "Target stock; 0 adds no demand here. Juju Eatery replenishes this item after its regular targets."
+    },
+    "sugar_tangerine_daifuku": {
+      "name": "Satsuma Mandarin Daifuku",
+      "help": "Target stock; 0 adds no demand here. Juju Eatery replenishes this item after its regular targets."
+    },
+    "sugar_tangerine": {
+      "name": "Satsuma Mandarin",
+      "help": "Target stock; 0 adds no demand here. Orchard replenishes this item after its regular targets. A positive target replaces the shared area stock floor; explicit per-crop targets still take priority."
+    },
+    "green_jujube": {
+      "name": "Green Jujube",
+      "help": "Target stock; 0 adds no demand here. Orchard replenishes this item after its regular targets. A positive target replaces the shared area stock floor; explicit per-crop targets still take priority."
+    },
+    "plum_blossom_sachet": {
+      "name": "Plum-Scented Sachet",
+      "help": "Target stock; 0 adds no demand here. Handicrafts workshop replenishes this item after its regular targets."
+    },
+    "winter_bouquet": {
+      "name": "Brumal Bouquet",
+      "help": "Target stock; 0 adds no demand here. Handicrafts workshop replenishes this item after its regular targets."
     }
   },
   "IslandFarm": {

@@ -27,7 +27,7 @@ import { EditStatus } from '../components/EditStatus'
 import { AccountPanel } from '../components/AccountPanel'
 import { IslandSuspendControl } from '../components/IslandSuspendControl'
 import { EmulatorRuntimeStatus } from '../components/EmulatorRuntimeStatus'
-import { isFieldVisible } from './configVisibility'
+import { isFieldVisible, isSeasonGroupVisible } from './configVisibility'
 import { FleetInfoPage } from './FleetInfoPage'
 
 export function TaskConfig() {
@@ -112,14 +112,19 @@ export function TaskConfig() {
   }
 
   const groups = schema?.args[task]
-  const visibleGroups = Object.entries(groups ?? {}).map(([group, fields]) => {
-    const visible = Object.entries(fields).filter(([arg, field]) => {
-      const edit = edits[`${task}.${group}.${arg}`]
-      const value = edit?.status === 'saved' ? edit.value : config?.values[task]?.[group]?.[arg] ?? field.value
-      return isFieldVisible(arg, field, value) && `${t(`${group}.${arg}.name`)} ${group}.${arg}`.toLowerCase().includes(search.toLowerCase())
-    })
-    return {group, visible}
-  }).filter(({visible}) => visible.length)
+  const islandSeason = edits['IslandPlan.IslandPlan.Season']?.value
+    ?? config?.values.IslandPlan?.IslandPlan?.Season
+    ?? schema?.args.IslandPlan?.IslandPlan?.Season?.value ?? null
+  const visibleGroups = Object.entries(groups ?? {})
+    .filter(([group]) => isSeasonGroupVisible(task, group, islandSeason))
+    .map(([group, fields]) => {
+      const visible = Object.entries(fields).filter(([arg, field]) => {
+        const edit = edits[`${task}.${group}.${arg}`]
+        const value = edit?.status === 'saved' ? edit.value : config?.values[task]?.[group]?.[arg] ?? field.value
+        return isFieldVisible(arg, field, value) && `${t(`${group}.${arg}.name`)} ${group}.${arg}`.toLowerCase().includes(search.toLowerCase())
+      })
+      return {group, visible}
+    }).filter(({visible}) => visible.length)
 
   const tool = Object.values(schema?.menu ?? {}).some(group => group.page === 'tool' && group.tasks.includes(task))
   // 指挥喵评分保留参数卡（评分来源、截图目录等），报告面板挂在参数卡上方。
@@ -188,6 +193,9 @@ export function TaskConfig() {
           <h2 data-text={t(`${group}._info.name`)}>{t(`${group}._info.name`)}</h2>
         </div>
       </div>
+      {task === 'IslandSeasonalProduction' && <div className="field-row">
+        <div className="field-label"><p>{htmlToPlainText(t(`${group}._info.help`))}</p></div>
+      </div>}
       {task === 'Alas' && group === 'EmulatorManagement' && <EmulatorRuntimeStatus instance={instance}/>}
       {visible.map(([arg, definition]) => {
         const path = `${task}.${group}.${arg}`

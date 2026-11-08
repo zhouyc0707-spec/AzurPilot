@@ -35,6 +35,11 @@ SEASONAL_DRINK_CONFIG = {
         'template': TEMPLATE_WINTER_JASMINE_TEA, 'post_action': POST_WINTER_JASMINE_TEA,
         'selection': FIXED_SELECT_SPRING_FLOWER_TEA, 'selection_check': FIXED_SELECT_SPRING_FLOWER_TEA,
     },
+    'pineapple_juice': {
+        'name': 'pineapple_juice', 'cn_name': '鲜榨菠萝汁',
+        'template': None, 'post_action': None,
+        'selection': None, 'selection_check': None, 'generic_recipe': True,
+    },
     'carrot_pear_juice': {
         'name': 'carrot_pear_juice', 'cn_name': '胡萝卜秋梨汁',
         'template': TEMPLATE_CARROT_PEAR_JUICE, 'post_action': POST_CARROT_PEAR_JUICE,
@@ -217,16 +222,22 @@ class IslandTeahouse(IslandShopBase):
             return
 
         registered_names = {item['name'] for item in self.shop_items}
+        seasonal_targets = self.seasonal_stock_targets()
         # 父类要求替代品已有资源。固定位置专用饮品仍仅由优先开关注册。
         for item_name in self.season_config.get_seasonal_items('teahouse'):
             drink = SEASONAL_DRINK_CONFIG.get(item_name)
-            if item_name not in registered_names and drink and drink['selection'].area:
-                self.shop_items.append(drink.copy())
+            if (item_name not in registered_names and drink
+                    and (getattr(drink['selection'], 'area', ()) or item_name in seasonal_targets)):
+                item = drink.copy()
+                if not getattr(item['selection'], 'area', ()):
+                    # 新目标不依赖未核实固定位置，复用完整配方名与选中蓝框确认。
+                    item.update(selection=None, selection_check=None, generic_recipe=True)
+                self.shop_items.append(item)
 
         self._normalize_seasonal_post_products('teahouse')
 
         # 库存需求按商品目录生成，未用于手工目标的候选不能额外请求季节原料。
-        required_names = registered_names | {name for name, _ in self.post_products}
+        required_names = registered_names | {name for name, _ in self.post_products} | set(seasonal_targets)
         self.shop_items = [item for item in self.shop_items if item['name'] in required_names]
 
     def get_warehouse_counts(self):

@@ -34,7 +34,7 @@ def make_shop(season='winter', products=(), *, seasonal=False, away='None'):
     config = SimpleNamespace(
         **{f'IslandTeahouse_{key}': value for key, value in values.items()},
         IslandTeahouseNextTask_AwayCook=away,
-        cross_get=lambda path: season,
+        cross_get=lambda path, default=None: season if path == 'IslandPlan.IslandPlan.Season' else default,
         data=deepcopy(data),
     )
     original = deepcopy(vars(config))

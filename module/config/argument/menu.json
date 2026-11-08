@@ -114,6 +114,7 @@
     "page": "setting",
     "tasks": [
       "IslandPlan",
+      "IslandSeasonalProduction",
       "IslandBusiness",
       "IslandFarm",
       "IslandRancher",

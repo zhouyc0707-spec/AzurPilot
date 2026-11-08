@@ -1851,6 +1851,76 @@ IslandPlan:
   TaskAlignment:
     value: half_hour
     option: [ half_hour, hour, disabled ]
+IslandSeasonSpring:
+  double_bamboo_shoots: &IslandSeasonTarget
+    value: 0
+    valuetype: int
+    validate: [0, 9007199254740991]
+  asparagus_shrimp:
+    <<: *IslandSeasonTarget
+  spring_flower_tea:
+    <<: *IslandSeasonTarget
+  pineapple_juice:
+    <<: *IslandSeasonTarget
+  asparagus:
+    <<: *IslandSeasonTarget
+  pineapple:
+    <<: *IslandSeasonTarget
+  shepherd_purse:
+    <<: *IslandSeasonTarget
+  spring_bouquet:
+    <<: *IslandSeasonTarget
+IslandSeasonSummer:
+  amaranth_rice_ball:
+    <<: *IslandSeasonTarget
+  tomato_egg:
+    <<: *IslandSeasonTarget
+  watermelon_juice:
+    <<: *IslandSeasonTarget
+  cucumber_juice:
+    <<: *IslandSeasonTarget
+  tomato:
+    <<: *IslandSeasonTarget
+  cucumber:
+    <<: *IslandSeasonTarget
+  jasmine_oil:
+    <<: *IslandSeasonTarget
+  summer_bouquet:
+    <<: *IslandSeasonTarget
+IslandSeasonAutumn:
+  persimmon_cake:
+    <<: *IslandSeasonTarget
+  matsutake_chicken_soup:
+    <<: *IslandSeasonTarget
+  carrot_pear_juice:
+    <<: *IslandSeasonTarget
+  chrysanthemum_tea:
+    <<: *IslandSeasonTarget
+  pear:
+    <<: *IslandSeasonTarget
+  persimmon:
+    <<: *IslandSeasonTarget
+  peanut_oil:
+    <<: *IslandSeasonTarget
+  autumn_bouquet:
+    <<: *IslandSeasonTarget
+IslandSeasonWinter:
+  shiitake_chicken_soup:
+    <<: *IslandSeasonTarget
+  green_jujube_porridge:
+    <<: *IslandSeasonTarget
+  water_chestnut_cake:
+    <<: *IslandSeasonTarget
+  sugar_tangerine_daifuku:
+    <<: *IslandSeasonTarget
+  sugar_tangerine:
+    <<: *IslandSeasonTarget
+  green_jujube:
+    <<: *IslandSeasonTarget
+  plum_blossom_sachet:
+    <<: *IslandSeasonTarget
+  winter_bouquet:
+    <<: *IslandSeasonTarget
 IslandFarm:
   Positions:
     value: 3

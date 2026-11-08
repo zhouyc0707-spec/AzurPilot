@@ -22,6 +22,7 @@ from datetime import timedelta
 from module.config.time_source import now as current_time
 from module.handler.login import LoginHandler
 from module.island.farm_targets import crop_target, parse_crop_targets, plan_crops_to_restock
+from module.island.seasonal_targets import seasonal_targets
 from module.island.warehouse import *
 from module.logger import logger
 from module.island.data import DIC_ISLAND_RECIPE
@@ -248,6 +249,18 @@ class IslandFarm(Island, WarehouseOCR, LoginHandler):
             }
         }
 
+        # 夏季作物没有旧图标资源，按官方完整名称选品、按产地读取库存。
+        summer_crops = {'tomato': ('番茄', 4034), 'cucumber': ('黄瓜', 4036)}
+        for name in seasonal_targets(self.config, 'nursery'):
+            if name in summer_crops:
+                cn_name, seed_id = summer_crops[name]
+                self.INVENTORY_CONFIG['nursery']['items'].append({
+                    'cn_name': cn_name, 'name': name, 'var_name': name,
+                    'template': None, 'selection': None, 'selection_check': None,
+                    'post_action': None, 'category': 'nursery', 'seed_number': 12,
+                    'shop': seed_id,
+                })
+
         # 简化岗位信息，只保留按钮和作物信息
         self.posts = {
             'ISLAND_FARM_POST1': {'button': ISLAND_FARM_POST1, 'crop': None},
@@ -292,8 +305,8 @@ class IslandFarm(Island, WarehouseOCR, LoginHandler):
     def check_inventory_and_prepare_lists(self):
         """检查库存并准备需要补种的列表。
 
-        有效自动计划优先；手工模式用 `CropTargets` 单独目标，否则用区域阈值。
-        按「库存/目标」升序排序，优先补种缺口比例最大的作物。
+        常规目标优先，季节页目标补在其后；每阶段按缺口比例排序。
+        季节页已接管的作物不再继承区域统一底线，显式 CropTargets 仍保留。
         """
         for category in ['farm', 'orchard', 'nursery']:
             config = self.INVENTORY_CONFIG[category]
@@ -321,13 +334,24 @@ class IslandFarm(Island, WarehouseOCR, LoginHandler):
                     skip.add(item_name)
             if self.crop_targets[category]:
                 logger.info(f"[岛屿-农田] {category}单独设置的作物目标: {self.crop_targets[category]}")
+            seasonal = seasonal_targets(self.config, category)
             targets = {
-                name: crop_target(name, self.crop_targets[category], config['threshold'])
+                name: crop_target(name, self.crop_targets[category],
+                                  0 if name in seasonal else config['threshold'])
                 for name in inventory
             }
-            # 缺口比例最大的作物排最前，轮转分配时优先补种
-            self.to_plant_lists[category] = plan_crops_to_restock(
+            regular = plan_crops_to_restock(
                 inventory, targets, config['threshold'], skip=skip)
+            extra = plan_crops_to_restock(inventory, seasonal, 0, skip=skip | set(regular))
+            # 无模板的在制品不能猜成其他作物；等本区身份明确后再补季节数量。
+            if any(info.get('state') == 'working' and not info.get('crop')
+                   for post, info in getattr(self, 'posts', {}).items()
+                   if post.startswith(f'ISLAND_{category.upper()}_POST')):
+                extra = []
+                unidentifiable = {item['name'] for item in config.get('items', ())
+                                  if item.get('post_action') is None}
+                regular = [name for name in regular if name not in unidentifiable]
+            self.to_plant_lists[category] = regular + extra
 
     def _is_orchard_crop_in_season(self, crop_name):
         """检查果园作物是否在当季（按季节配置）。
@@ -443,6 +467,15 @@ class IslandFarm(Island, WarehouseOCR, LoginHandler):
                 setattr(self, item['var_name'], count)
             return results
         self.warehouse_filter(config['filter'])
+        if any(item['template'] is None for item in config['items']):
+            from module.island.item_ids import resolve_item_id
+            from module.island.round_warehouse import RoundWarehouseReader, stocks_from_rows
+            templates = {resolve_item_id(item['name']): [item['template']] if item['template'] else []
+                         for item in config['items']}
+            page = RoundWarehouseReader(self).stable_page(templates)
+            stocks = stocks_from_rows(page.rows, templates, page.complete and not page.bottom_partial)
+            return {item['name']: stocks[resolve_item_id(item['name'])]
+                    for item in config['items'] if resolve_item_id(item['name']) in stocks}
         image = self.device.screenshot()
         results = {}
         for item_config in config['items']:
@@ -466,7 +499,7 @@ class IslandFarm(Island, WarehouseOCR, LoginHandler):
         """
         config = self.INVENTORY_CONFIG[category]
         for item in config['items']:
-            if self.appear(item['post_action']):
+            if item['post_action'] is not None and self.appear(item['post_action']):
                 return item['name']
         return None
 
@@ -613,7 +646,12 @@ class IslandFarm(Island, WarehouseOCR, LoginHandler):
                     return False
                 continue
             if self.appear(ISLAND_SELECT_PRODUCT_CHECK, offset=1):
-                if self.select_product(selection, selection_check):
+                if selection is None:
+                    from module.island.manufacture_selector import select_manufacture_recipe
+                    selected = select_manufacture_recipe(self, recipe_for_local_name(product))
+                else:
+                    selected = self.select_product(selection, selection_check)
+                if selected:
                     # seed_number 是补货目标而非单次需求；补货买不起时，
                     # 现有种子够页面显示的单次需求就直接种，不够才跳过
                     material = self.ensure_select_product_material(
@@ -797,6 +835,22 @@ class IslandFarm(Island, WarehouseOCR, LoginHandler):
             self.goto_postmanage()
             self.post_manage_mode(POST_MANAGE_PRODUCTION)
             self.post_close()
+        # 独立入口在盘点后才巡岗；用已有库存重查在制身份，不重新进入仓库。
+        for category in ('farm', 'orchard', 'nursery'):
+            if any(info.get('state') == 'working' and not info.get('crop')
+                   for post, info in self.posts.items()
+                   if post.startswith(f'ISLAND_{category.upper()}_POST')):
+                seasonal = seasonal_targets(self.config, category)
+                explicit = self.crop_targets[category]
+                inventory = self.inventory_counts[category]
+                unidentifiable = {item['name'] for item in self.INVENTORY_CONFIG[category].get('items', ())
+                                  if item.get('post_action') is None}
+                self.to_plant_lists[category] = [
+                    name for name in self.to_plant_lists[category]
+                    if name not in unidentifiable
+                    and (name not in seasonal or (name in explicit and name in inventory
+                                                  and inventory[name] < explicit[name]))
+                ]
         idle_posts = self._round_idle_posts
 
 
