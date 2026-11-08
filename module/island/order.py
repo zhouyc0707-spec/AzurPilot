@@ -229,12 +229,17 @@ class IslandOrder(IslandDailyOrder):
         self.device.click(button)
         target = ((button.area[0] + button.area[2]) // 2, (button.area[1] + button.area[3]) // 2)
         positions = self._order_positions
+        original = (button, kind, target)
+        target_retried = False
+        reference_attempted = False
+        reference_active = False
         stable = Timer(0.5, count=1)
         retry = Timer(2).start()
         candidate = None
         popup_seen = False
         for _ in self.loop(skip_first=False, timeout=Timer(8)):
-            if self._handle_popups():
+            popup_visible = self._order_popup_visible()
+            if self._handle_popups() or popup_visible:
                 stable.clear()
                 candidate = None
                 popup_seen = True
@@ -244,6 +249,9 @@ class IslandOrder(IslandDailyOrder):
             detail = self.appear(ALAS_ORDER_REQUIREMENTS_CHECK, offset=20) and self.appear(accept, offset=20)
             page_ready = self.appear(DAILY_ORDER_CHECK)
             after = get_order_detail_signature(self.device.image) if server.server == 'cn' and detail else None
+            if popup_seen and reference_attempted and page_ready:
+                # 复选途中出现弹窗后旧基准失效，本次不能继续据此确认目标。
+                break
             if popup_seen:
                 # 弹窗处理可能改变上一单，重新建立点击前基准后再点目标。
                 if page_ready and (detail or cooldown or self.appear(ALAS_ORDER_BACKGROUND, offset=20)):
@@ -263,12 +271,29 @@ class IslandOrder(IslandDailyOrder):
             changed = after is not None and (empty_before or order_detail_changed(before, after))
             # 详情切换可确认遮挡订单；另一单或多个选中候选均不能由文字变化旁路。
             confirmed = len(selected_positions) <= 1 and (selected or (changed and not other_selected))
+            if reference_active:
+                # 参照详情必须确实改变，否则切回原目标也无法取得独立证据。
+                confirmed = confirmed and changed
             if confirmed and page_ready and (cooldown or detail):
                 if after is not None and not same_order_detail(candidate, after):
                     stable.clear()
                 candidate = after
                 stable.start()
                 if stable.reached():
+                    if reference_active:
+                        orders = self.detect_all_orders()
+                        positions = self._order_positions
+                        if not any(np.linalg.norm(np.subtract(position, original[2])) <= 12
+                                   for position in orders[original[1]]):
+                            break
+                        before, empty_before = after, False
+                        button, kind, target = original
+                        reference_active = False
+                        candidate = None
+                        stable.clear()
+                        self.device.click(button)
+                        retry.reset()
+                        continue
                     if not selected:
                         logger.info('[岛屿-订单] 右侧委托人/货物已切换并稳定，确认目标订单')
                     elif not changed:
@@ -278,6 +303,32 @@ class IslandOrder(IslandDailyOrder):
                 stable.clear()
                 candidate = None
                 if page_ready and retry.reached():
+                    if reference_active:
+                        break
+                    if not target_retried:
+                        self.device.click(button)
+                        target_retried = True
+                        retry.reset()
+                        continue
+                    if not reference_attempted and not selected_positions and after is not None and (
+                            before is not None and same_order_detail(before, after)):
+                        reference_attempted = True
+                        orders = self.detect_all_orders()
+                        positions = self._order_positions
+                        if not any(np.linalg.norm(np.subtract(position, original[2])) <= 12
+                                   for position in orders[original[1]]):
+                            break
+                        alternatives = [(other_kind, position)
+                                        for other_kind in ('regular', 'urgent', 'season')
+                                        for position in orders[other_kind]
+                                        if np.linalg.norm(np.subtract(position, target)) > 12]
+                        if not alternatives:
+                            break
+                        kind, target = alternatives[0]
+                        button = self._order_button(target)
+                        before, empty_before = after, False
+                        reference_active = True
+                        logger.info('[岛屿-订单] 当前角标未确认，导航到另一订单建立复选基准')
                     self.device.click(button)
                     retry.reset()
         if self.appear(DAILY_ORDER_CHECK):
