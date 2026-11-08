@@ -114,6 +114,18 @@ class IslandBusinessEventStateTests(unittest.TestCase):
 class IslandBusinessEventImageTests(unittest.TestCase):
     def setUp(self):
         self.enterContext(patch('module.island.island.logger'))
+        # 实屏是 CN；使用独立按钮，避免导入顺序或默认服务器改变图像测试含义。
+        names = ('ISLAND_BUSINESS_EVENT_POPUP', 'ISLAND_BUSINESS_EVENT_POPUP_CANCEL',
+                 'ISLAND_BUSINESS_EVENT_SAFE_AREA', 'POST_MANAGE_BUSINESS',
+                 'POST_MANAGE_PRODUCTION', 'ISLAND_GATHER_COLLECT', 'ISLAND_GATHER_COLLECT_CHECK')
+        self.original_buttons = {name: globals()[name] for name in names}
+        cn_buttons = {
+            name: Button(area=button.raw_area['cn'], color=button.raw_color['cn'],
+                         button=button.raw_button['cn'], file=button.raw_file['cn'], name=name)
+            for name, button in self.original_buttons.items()
+        }
+        self.enterContext(patch.dict(globals(), cn_buttons))
+        self.enterContext(patch.multiple('module.island.island', **cn_buttons))
         self.addCleanup(utils.set_template_match_non_native_720p,
                         utils.TEMPLATE_MATCH_NON_NATIVE_720P,
                         utils.TEMPLATE_MATCH_NON_NATIVE_720P_RESOLUTION)
@@ -176,17 +188,35 @@ class IslandBusinessEventImageTests(unittest.TestCase):
                 self.assertEqual(flow.reads, 7)
                 self.assertEqual(flow.clicks, [])
 
+    def test_dimmed_cn_resource_shape_cannot_replace_normal_tab_colors(self):
+        # 由 CN 资源构造变暗负例，单独证明颜色门禁；不将其称作现场截图。
+        for method, args, target in (
+                ('post_manage_mode', (POST_MANAGE_BUSINESS,), POST_MANAGE_BUSINESS),
+                ('post_manage_mode_collection', (), ISLAND_GATHER_COLLECT_CHECK)):
+            with self.subTest(method=method):
+                clean = utils.load_image(target.file)
+                dimmed = (clean.astype(float) * 0.6).astype(np.uint8)
+                self.assertTrue(target.match(dimmed, offset=(20, 20)))
+                self.assertFalse(target.match_template_color(dimmed, offset=(20, 20)))
+                flow = FrameFlow([]).use_images([dimmed] * 6 + [clean])
+                self.assertTrue(flow.run(method, *args))
+                self.assertEqual(flow.reads, 7)
+                self.assertEqual(flow.clicks, [])
+
     def test_all_servers_keep_upstream_geometry_and_resources(self):
-        for name in (ISLAND_BUSINESS_EVENT_POPUP, ISLAND_BUSINESS_EVENT_POPUP_CANCEL):
+        for name in (self.original_buttons['ISLAND_BUSINESS_EVENT_POPUP'],
+                     self.original_buttons['ISLAND_BUSINESS_EVENT_POPUP_CANCEL']):
             for server in ('cn', 'en', 'jp', 'tw'):
                 with self.subTest(resource=name.name, server=server):
                     button = Button(area=name.raw_area[server], color=name.raw_color[server],
                                     button=name.raw_button[server], file=name.raw_file[server], name=name.name)
                     self.assertTrue(button.match(utils.load_image(button.file), offset=(20, 20), similarity=0.95))
-        self.assertEqual(ISLAND_BUSINESS_EVENT_POPUP.raw_area['cn'], (593, 388, 604, 400))
-        self.assertEqual(ISLAND_BUSINESS_EVENT_POPUP.raw_area['en'], (562, 388, 574, 400))
+        popup = self.original_buttons['ISLAND_BUSINESS_EVENT_POPUP']
+        self.assertEqual(popup.raw_area['cn'], (593, 388, 604, 400))
+        self.assertEqual(popup.raw_area['en'], (562, 388, 574, 400))
         for server in ('cn', 'en', 'jp', 'tw'):
-            self.assertEqual(ISLAND_BUSINESS_EVENT_SAFE_AREA.raw_button[server], (596, 687, 680, 720))
+            self.assertEqual(self.original_buttons['ISLAND_BUSINESS_EVENT_SAFE_AREA'].raw_button[server],
+                             (596, 687, 680, 720))
 
 
 if __name__ == '__main__':
