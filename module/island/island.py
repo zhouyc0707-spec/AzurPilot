@@ -5,6 +5,8 @@
 定义岛屿地图确认等待时间、产品选择安全区域及材料数量 OCR 区域等公共常量。
 """
 from module.island.assets import *
+from module.island.assets import ISLAND_MILL_CHECK as ISLAND_MILL_PROCESS_CHECK
+from module.island_exchange.assets import ALAS_EXCHANGE_GOTO_SHOP, ALAS_EXCHANGE_SHOP_CHECK
 from module.ui.page import *
 import cv2
 import numpy as np
@@ -2502,32 +2504,83 @@ class Island(SelectCharacter):
         self.back_to_select_product_after_shop()
         return MATERIAL_RESTOCKED
 
-    def goto_mill(self, max_attempts=3):
-        """前往磨坊并打开磨坊界面。
+    def _mill_shop_ready(self):
+        """标题与加工页签同时恢复，避免商店切换时残留的旧标题。"""
+        return (self.match_template_color(ISLAND_MILL_CHECK, offset=(20, 20))
+                and self.match_template_color(ISLAND_MILL_PROCESS_CHECK, offset=(20, 20)))
 
-        Args:
-            max_attempts (int): 最大尝试次数。默认为 3。
+    def _click_mill_shop_tab(self):
+        """定位侧栏完整名称；展开的子菜单会改变磨坊的位置。"""
+        from module.island.data import DIC_ISLAND_SHOP
+        language = self.config.SERVER
+        ocr = Ocr([], lang=language if language in ('jp', 'tw') else 'cnocr', name='ISLAND_MILL_TAB')
+        detections = ocr.cnocr.det(crop(self.device.image, (0, 70, 168, 695)))
+        # 官方主标题优先，英文副标题只作后备；不按固定行号点击。
+        for label in (DIC_ISLAND_SHOP[10019]['name'][language], 'Mill'):
+            matches = [box for text, box, score in detections
+                       if score >= 0.90 and re.sub(r'\s+', '', text).casefold()
+                       == re.sub(r'\s+', '', label).casefold()]
+            if not matches:
+                continue
+            if len(matches) != 1:
+                return False
+            box = matches[0]
+            area = (min(x for x, _ in box), min(y for _, y in box) + 70,
+                    max(x for x, _ in box), max(y for _, y in box) + 70)
+            self.device.click(Button(area=area, color=(), button=area, name='ISLAND_MILL_TAB'))
+            return True
+        return False
+
+    def goto_mill(self):
+        """通过本岛商店进入磨坊，不移动角色或进入生产选人。
 
         Returns:
-            bool: 成功到达并打开磨坊界面返回 True，失败返回 False。
+            bool: 磨坊标题和加工页稳定就绪才返回 True。
+
+        Pages:
+            in: 本岛、已关闭详情的岗位管理、管理、仓库或岛屿商店页
+            out: page_island_mill
         """
-        for attempt in range(max_attempts):
-            logger.info(f"[岛屿] 尝试前往磨坊，第{attempt + 1}次尝试")
-            if not self.island_map_goto('farm'):
+        logger.hr('岛屿-通过商店进入磨坊', level=2)
+        retry = Timer(2)
+        ready = Timer(0.5, count=2)
+        navigated = False
+        for _ in self.loop(timeout=30, skip_first=False):
+            if self._island_map_popup_pending():
+                ready.clear()
                 continue
-            # 磨坊路线不在可配置的走位规则里：它和地图跳转强绑定，长度也短，
-            # 保持写死更省事（顺序 U,L,D,L,D）。
-            self.island_up(800)
-            self.island_left(1300)
-            self.island_down(1000)
-            self.island_left(500)
-            self.island_down(2500)
-            for _ in self.loop(timeout=5, skip_first=False):
-                if self.appear_then_click(ISLAND_MILL, interval=1):
-                    continue
-                if self.appear(ISLAND_MILL_CHECK):
-                    logger.info("[岛屿] 成功到达磨坊")
+            if self.appear(ISLAND_SHOPPING_CHECK, offset=(20, 20)):
+                ready.clear()
+                continue
+            if self._mill_shop_ready():
+                ready.start()
+                if ready.reached():
+                    logger.info('[岛屿] 商店磨坊加工页已就绪')
                     return True
-            logger.info("[岛屿] 超时，重新尝试")
-        logger.info(f"[岛屿] 尝试{max_attempts}次后仍然失败")
+                continue
+            ready.clear()
+            if self.ui_page_appear(page_island):
+                if (retry.reached()
+                        and self.match_template_color(ALAS_EXCHANGE_GOTO_SHOP, offset=(20, 20))):
+                    self.device.click(ALAS_EXCHANGE_GOTO_SHOP)
+                    retry.reset()
+                continue
+            if self.match_template_color(ALAS_EXCHANGE_SHOP_CHECK, offset=(20, 20)):
+                if retry.reached() and self._click_mill_shop_tab():
+                    retry.reset()
+                continue
+            status = self._island_map_entry_status()
+            if status['post_detail']:
+                continue
+            if status['postmanage']:
+                if retry.reached():
+                    self.device.click(page_island_postmanage.links[page_island_management])
+                    retry.reset()
+                continue
+            if not navigated and any(self.ui_page_appear(page) for page in (
+                    page_island_management, page_island_warehouse)):
+                navigated = True
+                self.ui_goto(page_island, get_ship=False)
+                continue
+        logger.warning('[岛屿] 通过商店进入磨坊超时，未进行加工')
         return False
