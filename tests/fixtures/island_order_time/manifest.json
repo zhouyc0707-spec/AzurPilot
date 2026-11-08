@@ -1,0 +1,58 @@
+[
+  {
+    "file": "urgent_075946.png",
+    "source": "1794071041856.png",
+    "area": [
+      369,
+      398,
+      459,
+      424
+    ],
+    "expected": "07:59:46",
+    "letter": "白色",
+    "source_sha256": "a0ab34ecaf7476201032a041869e6c471e44ba7e0ce9e32860691698eb877645",
+    "fixture_sha256": "b532be4ad2794b8bb6b2c15f5dd794fce0d8657c8ff9e0bf71cc15388bf1786d"
+  },
+  {
+    "file": "cooldown_map_001941.png",
+    "source": "1794071041856.png",
+    "area": [
+      547,
+      200,
+      637,
+      226
+    ],
+    "expected": "00:19:41",
+    "letter": "白色",
+    "source_sha256": "a0ab34ecaf7476201032a041869e6c471e44ba7e0ce9e32860691698eb877645",
+    "fixture_sha256": "64947c4f403220a2946432386376fab64c187a38de04ec82b4fe7a14380c6d43"
+  },
+  {
+    "file": "cooldown_map_000939.png",
+    "source": "1794071041856.png",
+    "area": [
+      726,
+      617,
+      816,
+      643
+    ],
+    "expected": "00:09:39",
+    "letter": "白色",
+    "source_sha256": "a0ab34ecaf7476201032a041869e6c471e44ba7e0ce9e32860691698eb877645",
+    "fixture_sha256": "fcf9565414e394c9d03c533921460c6a2c9d5510447b45e4221460717b82a111"
+  },
+  {
+    "file": "cooldown_detail_000913.png",
+    "source": "1794069058377.png",
+    "area": [
+      989,
+      427,
+      1101,
+      473
+    ],
+    "expected": "00:09:13",
+    "letter": "深灰色",
+    "source_sha256": "3c6f922bbf6b19613e186fa9d661680b2ce3b32044f37a7ffb6d22af5e28cf9c",
+    "fixture_sha256": "5c6e56f771d4eb8217de2f6b9705a2a55a90568ac9d5d54cab86239ae718f882"
+  }
+]

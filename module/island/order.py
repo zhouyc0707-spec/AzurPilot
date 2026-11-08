@@ -1,6 +1,7 @@
 """ALAS 普通、紧急、季节订单流程与本地过滤、确认及调度适配。"""
 
 from datetime import timedelta
+import re
 
 import cv2
 import numpy as np
@@ -28,7 +29,7 @@ from module.island_daily_order.assets import (
 )
 from module.island.assets import ISLAND_BACK, ISLAND_CLICK_SAFE_AREA, ISLAND_GET, ISLAND_LEVEL_UP
 from module.logger import logger
-from module.ocr.ocr import Duration, Ocr
+from module.ocr.ocr import Ocr
 from module.ui.page import page_island, page_island_phone
 
 
@@ -285,9 +286,15 @@ class IslandOrder(IslandDailyOrder):
             return 'unconfirmed'
         self._unknown('点击订单后页面未确认')
 
-    def _read_time(self, button):
+    def _read_time(self, button, *, letter=(255, 255, 255)):
+        """地图计时使用白字，详情调用显式深灰；截断或噪声保留未知。"""
         try:
-            remaining = Duration(button, letter=(57, 59, 61), name='ORDER_REMAIN_TIME').ocr(self.device.image)
+            text = Ocr(button, letter=letter, alphabet=None, name='ORDER_REMAIN_TIME').ocr(self.device.image)
+            matched = re.fullmatch(r'([0-9]{1,2}):([0-5][0-9]):([0-5][0-9])', text)
+            if matched is None:
+                return None
+            hours, minutes, seconds = map(int, matched.groups())
+            remaining = timedelta(hours=hours, minutes=minutes, seconds=seconds)
             return remaining if timedelta(0) < remaining < timedelta(days=8) else None
         except (TypeError, ValueError):
             return None
@@ -306,7 +313,7 @@ class IslandOrder(IslandDailyOrder):
                 return False
             if clicked and self.appear(ALAS_ORDER_COOLDOWN_SPEED_UP, offset=20):
                 self.reject_count += 1
-                self._record_deadline(self._read_time(ALAS_ORDER_COOLDOWN_TIME))
+                self._record_deadline(self._read_time(ALAS_ORDER_COOLDOWN_TIME, letter=(57, 59, 61)))
                 return True
             if self.appear_then_click(ALAS_ORDER_REJECT, offset=20, interval=2):
                 clicked = True
@@ -339,7 +346,7 @@ class IslandOrder(IslandDailyOrder):
             self._record_deadline(timedelta(minutes=5))
             return False
         if state == 'cooldown':
-            self._record_deadline(self._read_time(ALAS_ORDER_COOLDOWN_TIME))
+            self._record_deadline(self._read_time(ALAS_ORDER_COOLDOWN_TIME, letter=(57, 59, 61)))
             return False
         requirements = None
         for _ in range(3):
@@ -472,7 +479,7 @@ class IslandOrder(IslandDailyOrder):
                 if remaining is None:
                     state = self._click_order(button, 'regular')
                     if state == 'cooldown':
-                        remaining = self._read_time(ALAS_ORDER_COOLDOWN_TIME)
+                        remaining = self._read_time(ALAS_ORDER_COOLDOWN_TIME, letter=(57, 59, 61))
                     else:
                         self._record_deadline(timedelta(minutes=5))
                         continue
