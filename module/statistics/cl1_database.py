@@ -1033,6 +1033,7 @@ class Cl1Database:
 
     def _native_month_for_update(self, conn, instance, month):
         """仅允许原生月数据及不覆盖统计族的已知扩展进入增量写路径。"""
+        from module.persistence.snapshots import MONTH_FIELDS
         from module.persistence.values import read_value
 
         month_row = conn.execute(
@@ -1048,11 +1049,29 @@ class Cl1Database:
         independent_fields = {'coins_month_start_residue', 'akashi_shop_champion'}
         if any(field['name'] not in independent_fields or field['mode'] != 'value' for field in compat_fields):
             return None
+        # 科研领奖会保存原始物品与分项明细；这些扩展不覆盖明石或凭证统计，
+        # 不能因此让每次购买和后台余额采样都退回整月重建。
+        research_rows = conn.execute(
+            '''SELECT entry_kind, compat_value_set_id FROM research_drops
+            WHERE instance=? AND month=? AND compat_value_set_id IS NOT NULL''',
+            (instance, month),
+        ).fetchall()
+        if research_rows and not month_row['field_mask'] & (1 << MONTH_FIELDS.index('research_drop_entries')):
+            return None
+        allowed_values = {field['value_set_id'] for field in compat_fields}
+        for row in research_rows:
+            if row['entry_kind'] != 'record':
+                return None
+            extra = read_value(conn, row['compat_value_set_id'])
+            if (type(extra) is not dict or not extra.keys() <= {'source_items', 'item_entries'}
+                    or any(type(value) is not list for value in extra.values())):
+                return None
+            allowed_values.add(row['compat_value_set_id'])
         typed_values = conn.execute(
             'SELECT id FROM typed_value_sets WHERE instance=? AND month=?',
             (instance, month),
         ).fetchall()
-        if {row['id'] for row in typed_values} != {field['value_set_id'] for field in compat_fields}:
+        if {row['id'] for row in typed_values} != allowed_values:
             # 其他兼容值仍由完整路径校验，不能绕过统计族覆盖或未知字段。
             return None
         for field in compat_fields:

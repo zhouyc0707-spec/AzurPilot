@@ -84,7 +84,7 @@ WebUI 通过只读 `statistics.akashiRecord` 按需取得纪录及图片，截�
 
 本 fork 继续保留全部黄币／紫币原始历史点、月初残留、未知快照扩展字段、实例及月份查询、耄耋截图归类和旧版统计接口。月度快照缓存按总库路径、主文件和 WAL 的时间／大小签名及 TTL 失效，写事务成功后主动清理缓存；原生迁移不启用有损抽稀。
 
-`Cl1Database.add_yellow_coin_snapshot()`／`add_coins_snapshot()` 对规范且按时间有序的原生凭证序列，在原写事务中只追加新行、更新字段存在标记，不再读取并删除重建整月其他统计族。保留原余额去重、每笔观测的时间和来源、历史补齐、写后读缓存失效及并发序号保护。只有独立且有效的 `coins_month_start_residue` 兼容档案可与快路径共存，档案先读取校验且原树保留；新月份、首条双方凭证记录、其他兼容数据、非规范记录和时间乱序回退原路径，损坏兼容树仍报错并回滚，不跳过或覆写。该优化不改变数据库模式、统计口径或原始历史保留策略。离线回归见 `tests/test_coins_snapshot_append.py`。
+`Cl1Database.add_yellow_coin_snapshot()`／`add_coins_snapshot()` 对规范且按时间有序的原生凭证序列，在原写事务中只追加新行、更新字段存在标记，不再读取并删除重建整月其他统计族。保留原余额去重、每笔观测的时间和来源、历史补齐、写后读缓存失效及并发序号保护。有效的月初残留、猫王档案与正常科研附加明细可与快路径共存，具体校验边界见下方并发模型；新月份、首条双方凭证记录、其他兼容数据、非规范记录和时间乱序回退原路径，损坏兼容树仍报错并回滚，不跳过或覆写。该优化不改变数据库模式、统计口径或原始历史保留策略。离线回归见 `tests/test_coins_snapshot_append.py`、`tests/test_akashi_research_compatibility.py`。
 
 `opsi_plain.py`、`opsi_secure.Vault`、旧钥匙提供方与 Broker 保留给显式旧目录兼容工具及隔离测试。正常运行入口统一调用 `module.persistence.database.initialize()`，不同时启动旧目录的原地解密或安全状态初始化。旧源和凭据不删除；正常统计不再写回旧库、JSON 和 CSV。回退代码后的可见数据格式限制见 [普通业务数据存储](persistence.md)。
 
@@ -444,7 +444,7 @@ stateDiagram-v2
 
 耄耋相接同样通过 `record_meow_akashi_encounter()` 返回写入 Future。`increment_meow_akashi_encounter(instance, hazard_level, month=None)` 保留侵蚀等级分桶，提交后才返回该桶累计次数；月份在事件入队时固定，回调打印实际次数或记录写入异常。任务的 `_meow_record_akashi_if_solved()` 消费已解决的明石标记，避免后续轮次重复计数。该链路原本已异步，本次语义是确认实际落库，不增加游戏主线程等待。
 
-明石计数和购买使用短增量事务：规范数据的 `increment_akashi_encounter()` 只更新 `cl1_months.akashi_encounters`；`add_akashi_ap_entry()` 在同一事务追加 `akashi_ap_purchases` 并更新 `akashi_ap` 与字段存在位。耄耋对应方法只更新分级桶，不重建行动力曲线、货币历史或其他月份。初次月份和需要兼容处理的旧格式仍走原读改写；分级数据若需要归一化，也沿用旧路径。原生快速路径只接受无兼容树或独立的 `coins_month_start_residue`／`akashi_shop_champion` 扩展，逐树校验后保留原值；其他兼容值不绕过完整校验。凭证快照复用同一守卫，避免新增猫王元数据导致每次采样重建整月。
+明石计数和购买使用短增量事务：规范数据的 `increment_akashi_encounter()` 只更新 `cl1_months.akashi_encounters`；`add_akashi_ap_entry()` 在同一事务追加 `akashi_ap_purchases` 并更新 `akashi_ap` 与字段存在位。耄耋对应方法只更新分级桶，不重建行动力曲线、货币历史或其他月份。初次月份和需要兼容处理的旧格式仍走原读改写；分级数据若需要归一化，也沿用旧路径。原生快速路径允许独立的 `coins_month_start_residue`／`akashi_shop_champion` 扩展，以及可见科研记录的正常附加明细：记录须为 `record`，扩展须为字典且仅含列表类型的 `source_items`／`item_entries`。所有允许的树均通过原解码器校验并原样保留；未知、覆盖原生字段或孤立的兼容值仍走完整路径，损坏树报错并回滚。凭证快照复用同一守卫，避免正常科研明细使后台余额采样重建整月、占用写锁并阻塞同步领奖记账。科研收益自身的兼容与截断处理保持原路径。
 
 增量写入仍在 `BEGIN IMMEDIATE` 内完成，保持 `synchronous=FULL`、失败回滚、成功后清理只读缓存与按实际提交结果记录成功的语义。未更改奖励旁路记账、游戏点击及猫王截图的确认流程。并发、旧格式回退与历史行保持验证见 `tests/test_akashi_incremental_statistics.py`、`tests/test_statistics_transactions.py`。
 
