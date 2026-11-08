@@ -35,6 +35,7 @@ def get_available_func():
         'OcrBenchmark',
         'MeowfficerScore',
         'IslandProductionPlanner',
+        'IslandSeasonTargetScan',
         'FleetScan',
         'DockScan',
         'GameManager',

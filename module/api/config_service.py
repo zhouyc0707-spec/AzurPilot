@@ -520,6 +520,12 @@ class ConfigService:
                 parse_codes(value)
             except ValueError as exc:
                 raise ApiError('INVALID_PARAMS', str(exc)) from exc
+        if parts[0] == 'IslandSeasonalProduction' and parts[2] == 'ImportedTargets':
+            from module.island.seasonal_task_targets import parse_imported_targets
+            try:
+                parse_imported_targets(value, season=parts[1].removeprefix('IslandSeason').lower())
+            except ValueError as exc:
+                raise ApiError('INVALID_PARAMS', str(exc)) from exc
         rule = field.get('validate')
         if rule == 'datetime' or kind == 'datetime':
             try:

@@ -11,6 +11,7 @@ from module.config.utils import *
 from module.island.warehouse import *
 from datetime import timedelta
 from module.config.time_source import now as current_time
+from module.island.seasonal_targets import seasonal_targets
 
 
 # 矿山与林场岗位生产派遣的最低角色体力（低于该值不派遣，避免体力消耗确认失败）
@@ -132,6 +133,12 @@ class IslandMineForest(Island,LoginHandler):
                     continue
                 results[item['name']] = count
             return results
+        if seasonal_targets(self.config, category):
+            from module.island.item_ids import ITEM_ID_TO_LOCAL
+            from module.island.round_warehouse import RoundWarehouseReader, warehouse_catalog
+            templates = warehouse_catalog((self,))[config['filter']]
+            counts = RoundWarehouseReader(self).read_group(config['filter'], templates, set(templates))
+            return {ITEM_ID_TO_LOCAL[item]: count for item, count in counts.items()}
         self.warehouse_filter(config['filter'])
         image = self.device.screenshot()
 
@@ -196,6 +203,7 @@ class IslandMineForest(Island,LoginHandler):
         """
         needs = {'mine': [], 'forest': []}
         self.needs_count = {}
+        self._seasonal_needs_count = {}
         self.inventory_counts = {}
 
         for category in ['mine', 'forest']:
@@ -204,6 +212,10 @@ class IslandMineForest(Island,LoginHandler):
                           if ledger.get(item['name']) is not None} if ledger is not None
                          else self.warehouse_inventory(category))
             self.inventory_counts[category] = inventory
+            additional = seasonal_targets(self.config, category)
+            post_ids = self.mine_post_ids if category == 'mine' else self.forest_post_ids
+            unknown_working = any(self.posts.get(pid, {}).get('state') == 'working'
+                                  and self.posts[pid].get('crop') in (None, 'unknown') for pid in post_ids)
             for item in self.inventory_config[category]['items']:
                 name = item['name']
                 if ledger is not None and ledger.is_blocked(name):
@@ -221,6 +233,10 @@ class IslandMineForest(Island,LoginHandler):
                         in_production += runs * self.UNITS_PER_RUN
 
                 effective_count = warehouse_count + in_production
+                if name in inventory and not unknown_working:
+                    deficit = additional.get(name, 0) - effective_count
+                    if deficit > 0:
+                        self._seasonal_needs_count[(category, name)] = deficit
                 threshold = self._get_threshold(name)
                 if effective_count < threshold:
                     needs[category].append(name)
@@ -625,6 +641,19 @@ class IslandMineForest(Island,LoginHandler):
                     assigned[name] += 1
                     all_to_plant[category].append((name, post_need))
                 idx += 1
+
+            # 所有常规底线分配完，再以剩余岗位补导入目标；已排常规产量只扣一次。
+            for (target_category, name), deficit in self._seasonal_needs_count.items():
+                if target_category != category:
+                    continue
+                planned = sum(-(-count // self.UNITS_PER_RUN) * self.UNITS_PER_RUN
+                              for product, count in all_to_plant[category] if product == name)
+                remaining_target = max(0, deficit - planned)
+                while remaining_target > 0 and len(all_to_plant[category]) < idle_count:
+                    max_units = self.PRODUCT_MAX_RUNS.get(name, 5) * self.UNITS_PER_RUN
+                    post_need = min(remaining_target, max_units)
+                    all_to_plant[category].append((name, post_need))
+                    remaining_target -= -(-post_need // self.UNITS_PER_RUN) * self.UNITS_PER_RUN
 
             # 所有缺口产物岗位需求满足后，剩余空闲 → 按配置分配默认产物
             remaining = idle_count - len(all_to_plant[category])

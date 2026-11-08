@@ -78,7 +78,7 @@ for (const [theme, instance] of [['legacy-light', 'demo-main'], ['light', 'demo-
     await page.reload()
     const winter = page.locator('#group-IslandSeasonWinter')
     await expect(winter.locator('[id$=".shiitake_chicken_soup"]')).toHaveValue('37')
-    await expect(page.locator('.tool-log-panel')).toHaveCount(0)
+    await expect(page.getByRole('button', {name: '自动读取季节目标', exact: true})).toBeVisible()
     await page.setViewportSize({width: 1440, height: 1800})
     await expect(winter.locator('[id$=".winter_bouquet"]')).toBeInViewport()
     await winter.screenshot({path: testInfo.outputPath(`季节物品生产-${theme}.png`), animations: 'disabled'})

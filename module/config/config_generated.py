@@ -920,6 +920,7 @@ class GeneratedConfig:
     IslandSeasonSpring_pineapple = 0
     IslandSeasonSpring_shepherd_purse = 0
     IslandSeasonSpring_spring_bouquet = 0
+    IslandSeasonSpring_ImportedTargets = '{}'
 
     # 配置组 `IslandSeasonSummer`
     IslandSeasonSummer_amaranth_rice_ball = 0
@@ -930,6 +931,7 @@ class GeneratedConfig:
     IslandSeasonSummer_cucumber = 0
     IslandSeasonSummer_jasmine_oil = 0
     IslandSeasonSummer_summer_bouquet = 0
+    IslandSeasonSummer_ImportedTargets = '{}'
 
     # 配置组 `IslandSeasonAutumn`
     IslandSeasonAutumn_persimmon_cake = 0
@@ -940,6 +942,7 @@ class GeneratedConfig:
     IslandSeasonAutumn_persimmon = 0
     IslandSeasonAutumn_peanut_oil = 0
     IslandSeasonAutumn_autumn_bouquet = 0
+    IslandSeasonAutumn_ImportedTargets = '{}'
 
     # 配置组 `IslandSeasonWinter`
     IslandSeasonWinter_shiitake_chicken_soup = 0
@@ -950,6 +953,7 @@ class GeneratedConfig:
     IslandSeasonWinter_green_jujube = 0
     IslandSeasonWinter_plum_blossom_sachet = 0
     IslandSeasonWinter_winter_bouquet = 0
+    IslandSeasonWinter_ImportedTargets = '{}'
 
     # 配置组 `IslandFarm`
     IslandFarm_Positions = 3  # 1, 2, 3, 4

@@ -16698,6 +16698,11 @@
           0,
           9007199254740991
         ]
+      },
+      "ImportedTargets": {
+        "type": "textarea",
+        "value": "{}",
+        "valuetype": "str"
       }
     },
     "IslandSeasonSummer": {
@@ -16772,6 +16777,11 @@
           0,
           9007199254740991
         ]
+      },
+      "ImportedTargets": {
+        "type": "textarea",
+        "value": "{}",
+        "valuetype": "str"
       }
     },
     "IslandSeasonAutumn": {
@@ -16846,6 +16856,11 @@
           0,
           9007199254740991
         ]
+      },
+      "ImportedTargets": {
+        "type": "textarea",
+        "value": "{}",
+        "valuetype": "str"
       }
     },
     "IslandSeasonWinter": {
@@ -16920,6 +16935,11 @@
           0,
           9007199254740991
         ]
+      },
+      "ImportedTargets": {
+        "type": "textarea",
+        "value": "{}",
+        "valuetype": "str"
       }
     },
     "Storage": {

@@ -153,7 +153,7 @@ class RoundProducerTests(unittest.TestCase):
 
     def test_farm_uses_confirmed_warehouse_stock_and_does_not_queue_unknown(self):
         farm = object.__new__(IslandFarm)
-        farm.config = SimpleNamespace()
+        farm.config = SimpleNamespace(cross_get=lambda path, default=None: default)
         farm.island_round = IslandRoundInventory({'wheat': 20, 'corn': 0, 'carrot': 12})
         farm.INVENTORY_CONFIG = {
             'farm': {'threshold': 10, 'items': [{'name': name} for name in ('wheat', 'corn', 'pasture')]},
@@ -222,7 +222,7 @@ class RoundProducerTests(unittest.TestCase):
 
     def make_mill(self, stocks):
         task = object.__new__(IslandRancher)
-        task.config = SimpleNamespace()
+        task.config = SimpleNamespace(cross_get=lambda path, default=None: default)
         task.island_round = IslandRoundInventory(stocks)
         task.inventory_counts = {'farm': {}, 'mill': {}, 'ranch': {}}
         task.INVENTORY_CONFIG = {
@@ -318,7 +318,8 @@ class RoundProducerTests(unittest.TestCase):
         fishery.prepare_round.assert_called_once_with()
 
     def test_ranch_loads_warehouse_feed_and_materials_without_borrowing_posts(self):
-        config = SimpleNamespace(IslandRancher_MinChicken=20, IslandRancher_MinPork=0,
+        config = SimpleNamespace(cross_get=lambda path, default=None: default,
+                                 IslandRancher_MinChicken=20, IslandRancher_MinPork=0,
                                  IslandRancher_ChickenFilter='WorkerJuu')
 
         def init(task, config):
@@ -341,7 +342,8 @@ class RoundProducerTests(unittest.TestCase):
         task.warehouse_filter.assert_not_called()
 
     def test_mine_collects_all_posts_and_only_dispatches_confirmed_zero_stock(self):
-        config = SimpleNamespace(IslandMine_WorkerFilter='WorkerJuu', IslandForest_WorkerFilter='WorkerJuu',
+        config = SimpleNamespace(cross_get=lambda path, default=None: default,
+                                 IslandMine_WorkerFilter='WorkerJuu', IslandForest_WorkerFilter='WorkerJuu',
                                  IslandMine_Positions=1, IslandForest_Positions=0, IslandMine_MinCopper=4,
                                  IslandMine_MineSilver=0, IslandForest_CutElegant=0, task_delay=Mock())
 
@@ -381,7 +383,8 @@ class RoundProducerTests(unittest.TestCase):
         task.device.sleep.assert_not_called()
 
     def test_upstream_default_ore_and_wood_are_executed_after_targets(self):
-        config = SimpleNamespace(IslandMine_WorkerFilter='WorkerJuu', IslandForest_WorkerFilter='WorkerJuu',
+        config = SimpleNamespace(cross_get=lambda path, default=None: default,
+                                 IslandMine_WorkerFilter='WorkerJuu', IslandForest_WorkerFilter='WorkerJuu',
                                  IslandMine_Positions=1, IslandForest_Positions=1,
                                  IslandMine_MineSilver=1, IslandForest_CutElegant=1,
                                  IslandMine_DefaultOre='Copper', IslandForest_DefaultWood='Practical',

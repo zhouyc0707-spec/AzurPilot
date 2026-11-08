@@ -1870,6 +1870,10 @@ IslandSeasonSpring:
     <<: *IslandSeasonTarget
   spring_bouquet:
     <<: *IslandSeasonTarget
+  ImportedTargets: &IslandImportedTargets
+    value: '{}'
+    type: textarea
+    valuetype: str
 IslandSeasonSummer:
   amaranth_rice_ball:
     <<: *IslandSeasonTarget
@@ -1887,6 +1891,8 @@ IslandSeasonSummer:
     <<: *IslandSeasonTarget
   summer_bouquet:
     <<: *IslandSeasonTarget
+  ImportedTargets:
+    <<: *IslandImportedTargets
 IslandSeasonAutumn:
   persimmon_cake:
     <<: *IslandSeasonTarget
@@ -1904,6 +1910,8 @@ IslandSeasonAutumn:
     <<: *IslandSeasonTarget
   autumn_bouquet:
     <<: *IslandSeasonTarget
+  ImportedTargets:
+    <<: *IslandImportedTargets
 IslandSeasonWinter:
   shiitake_chicken_soup:
     <<: *IslandSeasonTarget
@@ -1921,6 +1929,8 @@ IslandSeasonWinter:
     <<: *IslandSeasonTarget
   winter_bouquet:
     <<: *IslandSeasonTarget
+  ImportedTargets:
+    <<: *IslandImportedTargets
 IslandFarm:
   Positions:
     value: 3

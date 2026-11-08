@@ -324,7 +324,7 @@
     },
     "IslandSeasonalProduction": {
       "name": "Seasonal Item Production",
-      "help": "Uses the season selected in Global Settings. Only current-season items are shown; each season keeps its own targets. Quantities are stock targets, not amounts per dispatch. Set 0 to add no demand here. Each production area handles regular stock targets, then seasonal targets, then fallback products. Disabled production tasks stay disabled. These targets are saved independently and are not overwritten by the island production planner."
+      "help": "Uses the season selected in Global Settings. Current-season exclusive items and imported task items are shown; each season keeps its own targets. Quantities are stock targets, not amounts per dispatch. Set 0 to add no demand here. Each production area handles regular stock targets, then seasonal targets, then fallback products. Disabled production tasks stay disabled. These targets are saved independently and are not overwritten by the island production planner."
     },
     "IslandBusiness": {
       "name": "Business Module",
@@ -4615,6 +4615,10 @@
     "spring_bouquet": {
       "name": "Spring Bouquet",
       "help": "Target stock; 0 adds no demand here. Handicrafts workshop replenishes this item after its regular targets."
+    },
+    "ImportedTargets": {
+      "name": "Imported season task targets",
+      "help": "Use Read season targets above to import unsubmitted tasks, including those ready to submit, without submitting items or claiming rewards. Quantities are stock targets; the higher of the existing and scanned value is kept. Regular production targets run first. Saved targets are not removed when a task is completed; set them to 0 when no longer needed. Production tasks and slots must be enabled; missing materials must be supplied."
     }
   },
   "IslandSeasonSummer": {
@@ -4653,6 +4657,10 @@
     "summer_bouquet": {
       "name": "Summery Bouquet",
       "help": "Target stock; 0 adds no demand here. Handicrafts workshop replenishes this item after its regular targets."
+    },
+    "ImportedTargets": {
+      "name": "Imported season task targets",
+      "help": "Use Read season targets above to import unsubmitted tasks, including those ready to submit, without submitting items or claiming rewards. Quantities are stock targets; the higher of the existing and scanned value is kept. Regular production targets run first. Saved targets are not removed when a task is completed; set them to 0 when no longer needed. Production tasks and slots must be enabled; missing materials must be supplied."
     }
   },
   "IslandSeasonAutumn": {
@@ -4691,6 +4699,10 @@
     "autumn_bouquet": {
       "name": "Autumn Bouquet",
       "help": "Target stock; 0 adds no demand here. Handicrafts workshop replenishes this item after its regular targets."
+    },
+    "ImportedTargets": {
+      "name": "Imported season task targets",
+      "help": "Use Read season targets above to import unsubmitted tasks, including those ready to submit, without submitting items or claiming rewards. Quantities are stock targets; the higher of the existing and scanned value is kept. Regular production targets run first. Saved targets are not removed when a task is completed; set them to 0 when no longer needed. Production tasks and slots must be enabled; missing materials must be supplied."
     }
   },
   "IslandSeasonWinter": {
@@ -4729,6 +4741,10 @@
     "winter_bouquet": {
       "name": "Brumal Bouquet",
       "help": "Target stock; 0 adds no demand here. Handicrafts workshop replenishes this item after its regular targets."
+    },
+    "ImportedTargets": {
+      "name": "Imported season task targets",
+      "help": "Use Read season targets above to import unsubmitted tasks, including those ready to submit, without submitting items or claiming rewards. Quantities are stock targets; the higher of the existing and scanned value is kept. Regular production targets run first. Saved targets are not removed when a task is completed; set them to 0 when no longer needed. Production tasks and slots must be enabled; missing materials must be supplied."
     }
   },
   "IslandFarm": {

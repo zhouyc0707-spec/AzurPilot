@@ -175,14 +175,24 @@ class IslandManufacture(IslandShopBase):
                 self.manufacture['handmade']['items'].append(item_config.copy())
                 logger.info(f"[岛屿-制造业] 季节限定：{self._item_cn(item_name)} 已添加到手工产品列表")
 
-        # 新库存目标补足历季缺图产品；没有真实图像时只走官方完整名称选品。
+        # 追加目标及其工坊原料都要能盘点；缺图时只走官方完整名称选品。
         from module.island.manufacture_catalog import get_catalog
-        targets = self.seasonal_stock_targets('handmade')
-        registered = {item['name'] for item in self.manufacture['handmade']['items']}
-        for item in get_catalog(self.current_season)['handmade']:
-            if item['name'] in targets and item['name'] not in registered:
-                item = dict(item, generic_recipe=True)
-                self.manufacture['handmade']['items'].append(item)
+        catalog = get_catalog(self.current_season)
+        by_id = {item['item_id']: item for entries in catalog.values() for item in entries}
+        required = set(self.seasonal_stock_targets())
+        pending = [item for item in by_id.values() if item['name'] in required]
+        while pending:
+            item = pending.pop()
+            for material in item['ingredients']:
+                dependency = by_id.get(material)
+                if dependency is not None and dependency['name'] not in required:
+                    required.add(dependency['name'])
+                    pending.append(dependency)
+        for category, entries in catalog.items():
+            registered = {item['name'] for item in self.manufacture[category]['items']}
+            for item in entries:
+                if item['name'] in required and item['name'] not in registered:
+                    self.manufacture[category]['items'].append(dict(item, generic_recipe=True))
 
         # 根据配置初始化岗位按钮
         self.post_buttons = self._init_post_buttons()
@@ -255,7 +265,12 @@ class IslandManufacture(IslandShopBase):
         return self.warehouse_counts
 
     def seasonal_stock_targets(self, category=None):
-        return super().seasonal_stock_targets(category or 'handmade')
+        if category is not None:
+            return super().seasonal_stock_targets(category)
+        targets = {}
+        for line_category in PRODUCT_LINES.values():
+            targets.update(super().seasonal_stock_targets(line_category))
+        return targets
 
     def _prepare_recipe_page(self, post_id):
         """选择岗位和原有角色，正向确认选品页后交给独立识别阶段。"""
@@ -555,6 +570,7 @@ class IslandManufacture(IslandShopBase):
 
     def schedule_wood_processing(self):
         """安排木料加工生产：按 WoodProcessing.Products 的顺序，未配置时只生产文件柜。"""
+        self._schedule_seasonal_production('wood_processing')
         product_list = self.configured_product_list('wood_processing')
         if product_list is None:
             product_list = [item for item in self.manufacture['wood_processing']['items']
@@ -563,6 +579,7 @@ class IslandManufacture(IslandShopBase):
 
     def schedule_electronic_processing(self):
         """安排电子加工生产：按 ElectronicProcessing.Products 的顺序，未配置时只生产净水滤芯。"""
+        self._schedule_seasonal_production('electronic_processing')
         product_list = self.configured_product_list('electronic_processing')
         if product_list is None:
             product_list = [item for item in self.manufacture['electronic_processing']['items']
@@ -571,6 +588,7 @@ class IslandManufacture(IslandShopBase):
 
     def schedule_industrial_production(self):
         """安排工业生产：按 Industrial.Products 的顺序，未配置时根据铁钉库存切换铁钉或餐具。"""
+        self._schedule_seasonal_production('industrial_production')
         product_list = self.configured_product_list('industrial_production')
         if product_list is not None:
             self._schedule_line('industrial_production', product_list)
@@ -594,7 +612,7 @@ class IslandManufacture(IslandShopBase):
 
     def schedule_handmade(self):
         """安排手工制品生产：按 Handmade.Products 的顺序，未配置时优先季节限定品、皮靴与皮革。"""
-        self._schedule_seasonal_handmade()
+        self._schedule_seasonal_production('handmade')
         product_list = self.configured_product_list('handmade')
         if product_list is not None:
             self._schedule_line('handmade', product_list)
@@ -629,17 +647,17 @@ class IslandManufacture(IslandShopBase):
         for post_id in idle_posts:
             self.select_product_with_material_check(post_id, product_list)
 
-    def _schedule_seasonal_handmade(self):
+    def _schedule_seasonal_production(self, category='handmade'):
         """工坊没有常规有限目标；当季有限缺口排在原无限候选之前。"""
-        targets = self.seasonal_stock_targets()
-        if not targets or 'handmade' in self._unknown_working_categories:
+        targets = self.seasonal_stock_targets(category)
+        if not targets or category in self._unknown_working_categories:
             return
         from module.island.item_ids import LOCAL_TO_ITEM_ID
         from module.island.data import DIC_ISLAND_RECIPE
         from module.island.production_recipe import recipe_for_local_name
         produced = {}
         ledger = getattr(self, 'island_round', None)
-        for post_id in self.get_idle_posts_by_category('handmade'):
+        for post_id in self.get_idle_posts_by_category(category):
             for name, target in targets.items():
                 if name not in self.name_to_config or name in self.unavailable_products:
                     continue

@@ -91,13 +91,19 @@ class IslandFishery(Island, WarehouseOCR, LoginHandler, IslandFishMeatExchange):
         fishery_times (list): 各岗位预计完成时间列表。
     """
     def run_fish_meat_targets(self):
-        """按手工鱼肉目标兑换，并保留养殖底线、订单及经营原料。"""
+        """合并手工与导入鱼肉目标兑换，保留养殖底线、订单及经营原料。"""
+        from module.island.seasonal_targets import seasonal_targets
+        additional = seasonal_targets(self.config, 'fish_meat')
         targets = {
-            FRESHWATER_FISH_MEAT: self.config.IslandFishery_MinFreshwaterFishMeat,
-            SALTWATER_FISH_MEAT: self.config.IslandFishery_MinSaltwaterFishMeat,
+            FRESHWATER_FISH_MEAT: max(self.config.IslandFishery_MinFreshwaterFishMeat,
+                                     additional.get('freshwater_fish_meat', 0)),
+            SALTWATER_FISH_MEAT: max(self.config.IslandFishery_MinSaltwaterFishMeat,
+                                     additional.get('saltwater_fish_meat', 0)),
         }
         if not any(target > 0 for target in targets.values()):
             return
+        if additional:
+            logger.info('[岛屿-鱼肉兑换] 季节任务目标复用现有鱼肉加工；仅兑换保留量之外的现货，不追加养鱼目标')
         from module.island.fish_exchange import FishExchangeSession, get_fish_protection
         protected = get_fish_protection(self.config)
         # 鱼肉兑换不得消耗用户配置的养殖最低库存。

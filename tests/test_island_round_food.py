@@ -515,7 +515,7 @@ class RoundDispatchServerOCRTests(unittest.TestCase):
 class RoundManufactureTests(WarehouseRoundTestCase):
     def factory(self, product='file_cabinet', stocks=None):
         factory = IslandManufacture.__new__(IslandManufacture)
-        factory.config = SimpleNamespace()
+        factory.config = SimpleNamespace(cross_get=lambda path, default=None: default)
         factory.island_round = IslandRoundInventory(recipe_stocks(product, batches=4) if stocks is None else stocks)
         factory._reserved_targets = {}
         factory.chef_unavailable_products = set()

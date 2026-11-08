@@ -26,13 +26,15 @@ import { editor, prepareValue } from '../config/editors'
 import { EditStatus } from '../components/EditStatus'
 import { AccountPanel } from '../components/AccountPanel'
 import { IslandSuspendControl } from '../components/IslandSuspendControl'
+import { IslandSeasonTargetScan, SEASON_SCAN_TASK } from '../components/IslandSeasonTargetScan'
+import { IslandImportedTargets } from '../components/IslandImportedTargets'
 import { EmulatorRuntimeStatus } from '../components/EmulatorRuntimeStatus'
 import { isFieldVisible, isSeasonGroupVisible } from './configVisibility'
 import { FleetInfoPage } from './FleetInfoPage'
 
 export function TaskConfig() {
   const {instance = '', task = ''} = useParams()
-  const {schema, t, ui, notify, theme} = useApp()
+  const {schema, t, ui, notify, theme, instances} = useApp()
   const connection = useConnection()
   const railView = useSyncExternalStore(subscribeRailView, readRailView, readRailView)
   // 只在真的切到调度器时才请求总览数据，否则这一页白拉一份队列。
@@ -42,6 +44,12 @@ export function TaskConfig() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [confirmRun, setConfirmRun] = useState(false)
+  const [seasonScanInstance, setSeasonScanInstance] = useState('')
+  const setSeasonScanBusy = useCallback((value: boolean) => {
+    setSeasonScanInstance(previous => value ? instance : previous === instance ? '' : previous)
+  }, [instance])
+  const importedTargetsLocked = seasonScanInstance === instance || instances.some(item =>
+    item.name === instance && item.status === 'running' && item.currentTask === SEASON_SCAN_TASK)
 
   const queue = editor(`config:${instance}`)
   const {edits, storageError} = useSyncExternalStore(queue.subscribe, queue.getSnapshot, queue.getSnapshot)
@@ -50,16 +58,19 @@ export function TaskConfig() {
   const [startupEnabled, setStartupEnabled] = useState<boolean>()
   const [startupRemember, setStartupRemember] = useState<boolean>()
   const legacy = usesLegacyLayout(theme)
+  const refreshConfig = useCallback(async () => {
+    const confirmed = queue.confirmed()
+    setConfig(await api.request('config.get', {instance}))
+    queue.reconcile(confirmed)
+    setError('')
+  }, [instance, queue])
   const reload = useCallback(async () => {
     try {
-      const confirmed = queue.confirmed()
-      setConfig(await api.request('config.get', {instance}))
-      queue.reconcile(confirmed)
-      setError('')
+      await refreshConfig()
     } catch (error) {
       setError((error as Error).message)
     }
-  }, [instance, queue])
+  }, [refreshConfig])
 
   // 字段保存成功后用服务端回传的整份配置替换本地副本。
   useEffect(() => {
@@ -121,7 +132,8 @@ export function TaskConfig() {
       const visible = Object.entries(fields).filter(([arg, field]) => {
         const edit = edits[`${task}.${group}.${arg}`]
         const value = edit?.status === 'saved' ? edit.value : config?.values[task]?.[group]?.[arg] ?? field.value
-        return isFieldVisible(arg, field, value) && `${t(`${group}.${arg}.name`)} ${group}.${arg}`.toLowerCase().includes(search.toLowerCase())
+        const imported = task === 'IslandSeasonalProduction' && arg === 'ImportedTargets' ? String(value ?? '') : ''
+        return isFieldVisible(arg, field, value) && `${t(`${group}.${arg}.name`)} ${group}.${arg} ${imported}`.toLowerCase().includes(search.toLowerCase())
       })
       return {group, visible}
     }).filter(({visible}) => visible.length)
@@ -210,6 +222,13 @@ export function TaskConfig() {
         const clearProgress = path === 'OpsiExplore.OpsiExplore.ExploreProgress'
           || path === 'OpsiScheduling.OpsiSmartExplore.Progress'
         const isMultiline = ['textarea', 'task_priority', 'yaml', 'storage'].includes(field.type) || field.mode === 'yaml'
+
+        if (task === 'IslandSeasonalProduction' && arg === 'ImportedTargets') return <div key={arg} id={path}>
+          <div className="field-row"><div className="field-label"><strong>{label}</strong><p>{htmlToPlainText(help)}</p></div>
+            <EditStatus id={path} edit={edit} retry={queue.retry} queue={queue}/></div>
+          <IslandImportedTargets id={path} value={value} disabled={importedTargetsLocked}
+            onChange={(next, error) => queue.change(path, next, next, error)}/>
+        </div>
 
         return (
           <div className={`field-row ${isMultiline ? 'field-row-multiline' : ''}`} key={arg}>
@@ -316,7 +335,10 @@ export function TaskConfig() {
     ? <section className="panel task-help-panel"><p className="task-help">{htmlToPlainText(taskHelp)}</p></section>
     : null
 
-  const groupCardsBlock = <div className="config-groups">{taskHelpBlock}{startupPanel}{task === 'Alas' && !search && <AccountPanel key={instance} instance={instance}/>} {groupCards}</div>
+  const groupCardsBlock = <div className="config-groups">{taskHelpBlock}{startupPanel}
+    {task === 'IslandSeasonalProduction' && <div hidden={!!search}><IslandSeasonTargetScan key={instance} instance={instance}
+      beforeStart={() => queue.settled()} onFinished={refreshConfig} onBusyChange={setSeasonScanBusy}/></div>}
+    {task === 'Alas' && !search && <AccountPanel key={instance} instance={instance}/>} {groupCards}</div>
   const groupNav = <nav className="group-nav">
     {visibleGroups.map(({group}) => (
       <a

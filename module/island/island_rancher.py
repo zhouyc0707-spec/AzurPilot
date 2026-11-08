@@ -821,6 +821,13 @@ class IslandRancher(Island, WarehouseOCR, LoginHandler):
         Returns:
             list[str]: 需要执行的牧场岗位 ID 列表。
         """
+        from module.island.seasonal_targets import seasonal_targets
+        additional = seasonal_targets(self.config, 'ranch')
+        if additional.get('milk', 0) > 0:
+            if self.is_ranch_post_enabled('ISLAND_RANCH_POST3'):
+                logger.info('[岛屿-牧场] 导入牛奶目标由已启用的养牛岗位继续供应，不改写养牛开关')
+            else:
+                logger.warning('[岛屿-牧场] 已导入牛奶库存目标，但养牛开关关闭，无法自动生产；请按需启用养牛')
         ranch_needs = []
         ledger = getattr(self, 'island_round', None)
         chicken_count = (ledger.get('chicken') if ledger is not None else

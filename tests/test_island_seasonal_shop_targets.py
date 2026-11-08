@@ -278,7 +278,7 @@ class SeasonalManufactureTests(unittest.TestCase):
                             {'plum_blossom_sachet': 5, 'winter_bouquet': 1})
         shop.island_round.production_started('plum_blossom_sachet', 1)
         shop.confirm_food_dispatch.side_effect = lambda count, label: ((min(count, 2), timedelta(hours=1)), NOW)
-        shop._schedule_seasonal_handmade()
+        shop._schedule_seasonal_production()
         self.assertEqual([call.args[0] for call in shop.confirm_food_dispatch.call_args_list], [4, 2])
         self.assertEqual(shop.island_round.get('plum_blossom'), 18)
         self.assertEqual(shop.island_round.in_production[4047], 5)
@@ -291,13 +291,13 @@ class SeasonalManufactureTests(unittest.TestCase):
                     shop._unknown_working_categories.add('handmade')
                 else:
                     shop.island_round.observe('plum_blossom_sachet', None)
-                shop._schedule_seasonal_handmade()
+                shop._schedule_seasonal_production()
                 self.assertEqual(shop.selections, [])
 
     def test_gray_button_keeps_stocks_and_is_not_retried_on_second_post(self):
         shop = self.factory({'winter_bouquet': 1, 'plum_blossom': 30})
         shop.produce_check.return_value = True
-        shop._schedule_seasonal_handmade()
+        shop._schedule_seasonal_production()
         self.assertEqual(shop.selections, ['plum_blossom_sachet'])
         shop.confirm_food_dispatch.assert_not_called()
         self.assertEqual(shop.island_round.get('plum_blossom'), 30)
@@ -307,14 +307,14 @@ class SeasonalManufactureTests(unittest.TestCase):
         shop = self.factory({'winter_bouquet': 1})
         for post in shop.posts.values():
             post['round_enabled'] = False
-        shop._schedule_seasonal_handmade()
+        shop._schedule_seasonal_production()
         self.assertEqual(shop.selections, [])
 
     def test_standalone_manufacture_counts_only_actual_partial_receipts(self):
         shop = self.factory({'winter_bouquet': 1}, {'plum_blossom_sachet': 3, 'winter_bouquet': 1})
         shop.island_round = None
         shop.confirm_food_dispatch.side_effect = lambda count, label: ((min(count, 2), timedelta(hours=1)), NOW)
-        shop._schedule_seasonal_handmade()
+        shop._schedule_seasonal_production()
         self.assertEqual([call.args[0] for call in shop.confirm_food_dispatch.call_args_list], [3, 1])
         self.assertEqual(shop.selections, ['plum_blossom_sachet', 'plum_blossom_sachet'])
         self.assertEqual(shop.warehouse_counts['plum_blossom_sachet'], 0)

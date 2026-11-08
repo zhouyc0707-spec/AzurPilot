@@ -2210,6 +2210,10 @@ class AzurLaneAutoScript:
         from module.island_planner.planner import IslandProductionPlanner
         IslandProductionPlanner(config=self.config, device=self.device, task="IslandProductionPlanner").run()
 
+    def island_season_target_scan(self):
+        from module.island_planner.season_target_scan import IslandSeasonTargetScan
+        IslandSeasonTargetScan(config=self.config, device=self.device, task='IslandSeasonalProduction').run()
+
     def fleet_scan(self):
         from module.retire.fleet_management import FleetManagement
         FleetManagement(config=self.config, device=self.device, task="FleetScan").run()

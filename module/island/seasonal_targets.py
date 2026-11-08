@@ -62,4 +62,8 @@ def seasonal_targets(config, category):
                 continue
         if isinstance(value, int) and not isinstance(value, bool) and value > 0:
             result[name] = value
+    from module.island.seasonal_task_targets import imported_targets_for_category
+
+    for name, count in imported_targets_for_category(config, season, category).items():
+        result[name] = max(result.get(name, 0), count)
     return result

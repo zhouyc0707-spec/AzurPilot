@@ -251,6 +251,16 @@ class IslandShopBase(Island, WarehouseOCR):
 
     def initialize_shop(self):
         """初始化店铺商品配置与岗位状态，子类必须在初始化时调用。"""
+        # 扫描导入的任务可能要求旧菜单未列出的官方成品，例如柠檬虾。
+        # 场所归属由目标目录限定，缺图商品沿用完整配方名与蓝框正向确认。
+        from module.island.production_recipe import recipe_for_local_name
+        registered = {item['name'] for item in self.shop_items}
+        for name in self.seasonal_stock_targets():
+            if name not in registered:
+                recipe_for_local_name(name)
+                self.shop_items.append({'name': name, 'var_name': name, 'template': None,
+                                        'selection': None, 'selection_check': None,
+                                        'post_action': None, 'generic_recipe': True})
         self.name_to_config = {item['name']: item for item in self.shop_items}
 
         # 初始化岗位状态

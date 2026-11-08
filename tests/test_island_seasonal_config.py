@@ -24,9 +24,11 @@ class SeasonalConfigTests(unittest.TestCase):
         for season, categories in SEASONAL_PRODUCTION_ITEMS.items():
             group = f'IslandSeason{season.capitalize()}'
             names = {name for products in categories.values() for name in products}
-            self.assertEqual(set(groups[group]), names)
+            self.assertEqual(set(groups[group]), names | {'ImportedTargets'})
             self.assertEqual(len(names), 8)
-            self.assertEqual(template['IslandSeasonalProduction'][group], dict.fromkeys(names, 0))
+            self.assertEqual(template['IslandSeasonalProduction'][group], {
+                **dict.fromkeys(names, 0), 'ImportedTargets': '{}',
+            })
 
     def test_backend_rejects_invalid_quantities_for_every_generated_field(self):
         # 只使用校验方法，不构造配置服务或连接用户数据库。
@@ -36,6 +38,8 @@ class SeasonalConfigTests(unittest.TestCase):
             if not group.startswith('IslandSeason'):
                 continue
             for field in fields:
+                if field == 'ImportedTargets':
+                    continue
                 path = f'IslandSeasonalProduction.{group}.{field}'
                 for value in (0, 1, 250):
                     self.assertEqual(service.validate(path, value), path.split('.'))

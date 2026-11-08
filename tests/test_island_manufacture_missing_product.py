@@ -61,7 +61,7 @@ class MissingProductTest(unittest.TestCase):
     def test_industrial_falls_back_to_nails(self):
         with patch.object(IslandManufacture, '__init__', lambda self: None):
             factory = IslandManufacture()
-        factory.config = SimpleNamespace(Industrial_Products='')
+        factory.config = SimpleNamespace(Industrial_Products='', cross_get=lambda path, default=None: default)
         factory.manufacture = {'industrial_production': {'items': [item('iron_nail'), item('cutlery')]}}
         factory.warehouse_counts = {'iron_nail': 30}
         factory.get_idle_posts_by_category = Mock(return_value=['POST1'])

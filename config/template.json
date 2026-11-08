@@ -3282,7 +3282,8 @@
       "asparagus": 0,
       "pineapple": 0,
       "shepherd_purse": 0,
-      "spring_bouquet": 0
+      "spring_bouquet": 0,
+      "ImportedTargets": "{}"
     },
     "IslandSeasonSummer": {
       "amaranth_rice_ball": 0,
@@ -3292,7 +3293,8 @@
       "tomato": 0,
       "cucumber": 0,
       "jasmine_oil": 0,
-      "summer_bouquet": 0
+      "summer_bouquet": 0,
+      "ImportedTargets": "{}"
     },
     "IslandSeasonAutumn": {
       "persimmon_cake": 0,
@@ -3302,7 +3304,8 @@
       "pear": 0,
       "persimmon": 0,
       "peanut_oil": 0,
-      "autumn_bouquet": 0
+      "autumn_bouquet": 0,
+      "ImportedTargets": "{}"
     },
     "IslandSeasonWinter": {
       "shiitake_chicken_soup": 0,
@@ -3312,7 +3315,8 @@
       "sugar_tangerine": 0,
       "green_jujube": 0,
       "plum_blossom_sachet": 0,
-      "winter_bouquet": 0
+      "winter_bouquet": 0,
+      "ImportedTargets": "{}"
     },
     "Storage": {
       "Storage": {}

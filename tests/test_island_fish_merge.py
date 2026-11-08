@@ -13,7 +13,8 @@ from tests.test_island_fish_meat import image
 class FishEntryTest(unittest.TestCase):
     def setUp(self):
         self.main = object.__new__(fishery.IslandFishery)
-        self.main.config = SimpleNamespace(IslandFishery_MinFreshwaterFishMeat=30,
+        self.main.config = SimpleNamespace(cross_get=lambda path, default=None: default,
+                                           IslandFishery_MinFreshwaterFishMeat=30,
                                            IslandFishery_MinSaltwaterFishMeat=20)
         self.main.run_fish_meat_exchange = Mock()
         self.main.ui_ensure = Mock()

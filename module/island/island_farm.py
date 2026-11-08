@@ -22,7 +22,7 @@ from datetime import timedelta
 from module.config.time_source import now as current_time
 from module.handler.login import LoginHandler
 from module.island.farm_targets import crop_target, parse_crop_targets, plan_crops_to_restock
-from module.island.seasonal_targets import seasonal_targets
+from module.island.seasonal_targets import SEASONAL_PRODUCTION_ITEMS, seasonal_targets
 from module.island.warehouse import *
 from module.logger import logger
 from module.island.data import DIC_ISLAND_RECIPE
@@ -335,9 +335,11 @@ class IslandFarm(Island, WarehouseOCR, LoginHandler):
             if self.crop_targets[category]:
                 logger.info(f"[岛屿-农田] {category}单独设置的作物目标: {self.crop_targets[category]}")
             seasonal = seasonal_targets(self.config, category)
+            limited_names = SEASONAL_PRODUCTION_ITEMS.get(
+                self.config.cross_get('IslandPlan.IslandPlan.Season', default='spring'), {}).get(category, ())
             targets = {
                 name: crop_target(name, self.crop_targets[category],
-                                  0 if name in seasonal else config['threshold'])
+                                  0 if name in seasonal and name in limited_names else config['threshold'])
                 for name in inventory
             }
             regular = plan_crops_to_restock(
