@@ -24,6 +24,11 @@ PRODUCTION_TASKS = {
     'IslandManufacture': ('island_manufacture', 'IslandManufacture'),
 }
 
+# 渔业属于牧场；鱼肉兑换另依赖经营菜单预留和季节订单保留量。
+ROUND_CONFIG_TASKS = frozenset(PRODUCTION_TASKS) | {
+    'IslandPlan', 'IslandSeasonalProduction', 'IslandBusiness', 'IslandDailyOrder',
+}
+
 
 def invalidates_round(task):
     """委托、科研等不消耗岛屽物资；岛屿其他玩法和重启使本轮账失效。"""
@@ -85,16 +90,30 @@ def select_unfinished_task(config, task, session):
 
 
 def round_config_signature(config):
-    """任务定时器和运行记录不影响本轮，手工目标/开关变化立即使其失效。"""
+    """只比较生产输入；定时器、运行记录和其他岛屿任务设置不影响本轮。"""
     result = {}
     for name, values in config.data.items():
-        if not name.startswith('Island'):
+        if name not in ROUND_CONFIG_TASKS:
             continue
         values = deepcopy(values)
         values.pop('Storage', None)
         values.get('Scheduler', {}).pop('NextRun', None)
         result[name] = values
     return result
+
+
+def _changed_config_paths(previous, current, prefix=()):
+    """差异仅定位到配置参数，不展开参数内容或输出前后值。"""
+    if isinstance(previous, dict) and isinstance(current, dict) and len(prefix) < 3:
+        paths = []
+        for key in sorted(previous.keys() | current.keys()):
+            path = (*prefix, key)
+            if key not in previous or key not in current:
+                paths.append('.'.join(path))
+            else:
+                paths.extend(_changed_config_paths(previous[key], current[key], path))
+        return paths
+    return ['.'.join(prefix)] if previous != current else []
 
 
 def collection_config(config, task):
@@ -132,6 +151,31 @@ def has_idle_posts(runner):
     return fishery is not None and has_idle_posts(fishery)
 
 
+def collect_cn_posts(runners, check_stop):
+    """国服按已核实的八行顺序收获，生产任务资格与调度顺序保持独立。"""
+    from module.island.assets import POST_MANAGE_PRODUCTION
+    from module.island.post_list import CN_POST_ROWS
+
+    order = {f'ISLAND_{category}': index for index, (_, category) in enumerate(
+        entry for row in CN_POST_ROWS for entry in row)}
+    posts = []
+    for runner in runners.values():
+        check_stop()
+        for post_id in runner.prepare_round_start():
+            category, number = post_id.rsplit('_POST', 1)
+            posts.append((order[category], int(number), runner, post_id))
+    first = next(iter(runners.values()))
+    first.goto_postmanage()
+    first.post_manage_mode(POST_MANAGE_PRODUCTION)
+    first.post_close()
+    for _, _, runner, post_id in sorted(posts, key=lambda post: post[:2]):
+        check_stop()
+        runner.prepare_round_post(post_id)
+    for runner in runners.values():
+        check_stop()
+        runner.prepare_round_finish()
+
+
 class IslandProductionRound:
     """保留尚未完成的本轮任务，允许委托科研插队后继续，不持久化到磁盘。"""
 
@@ -154,12 +198,17 @@ class IslandProductionRound:
         from module.island.round_warehouse import read_round_warehouse_stocks
 
         logger.hr('岛屿单轮：统一收获', level=1)
+        collect_by_row = getattr(config, 'SERVER', None) == 'cn'
         for name, (module, class_name) in PRODUCTION_TASKS.items():
             self._check_stop(config)
             cls = getattr(import_module(f'module.island.{module}'), class_name)
             runner = cls(config=collection_config(config, name), device=device)
-            runner.prepare_round()
             self.runners[name] = runner
+            if not collect_by_row:
+                runner.prepare_round()
+        if collect_by_row:
+            collect_cn_posts(self.runners, lambda: self._check_stop(config))
+        for name, runner in self.runners.items():
             enabled = config.data.get(name, {}).get('Scheduler', {}).get('Enable', False)
             if name == task or (enabled and (task_due(config, name, self.started_at) or has_idle_posts(runner))):
                 self.pending.add(name)
@@ -186,10 +235,25 @@ class IslandProductionRound:
         logger.attr('岛屿本轮明确库存', len(observed))
 
     def valid(self, config):
-        return self.ready and bool(self.pending) and self.signature == round_config_signature(config)
+        return self.invalid_reason(config) is None
+
+    def invalid_reason(self, config, task=None):
+        """返回重建原因；配置变化只显示至多八个参数路径，不泄露取值。"""
+        if not self.ready:
+            return '准备尚未完成'
+        if not self.pending:
+            return '本轮任务已全部完成'
+        current = round_config_signature(config)
+        if self.signature != current:
+            changed = _changed_config_paths(self.signature, current)
+            extra = f'（另 {len(changed) - 8} 项省略）' if len(changed) > 8 else ''
+            return f'生产相关配置改变：{", ".join(changed[:8])}{extra}'
+        if task is not None and task not in self.pending:
+            return '请求任务不在本轮待执行集合中'
+        return None
 
     def matches(self, config, task):
-        return self.valid(config) and task in self.pending
+        return self.invalid_reason(config, task) is None
 
     def run_task(self, config, task):
         runner = self.runners[task]
@@ -203,7 +267,10 @@ def run_production_task(owner, task, cls):
 
     session = getattr(owner, '_island_production_round', None)
     try:
-        if session is None or not session.matches(owner.config, task):
+        reason = session.invalid_reason(owner.config, task) if session is not None else None
+        if session is None or reason is not None:
+            if session is not None:
+                logger.info(f'[岛屿单轮] 重建 {task}：{reason}，未完成任务 {len(session.pending)} 个')
             owner._island_production_round = None
             try:
                 session = IslandProductionRound(owner.config, owner.device, task)
@@ -214,7 +281,9 @@ def run_production_task(owner, task, cls):
         else:
             logger.info(f'[岛屿单轮] 继续 {task}，复用本轮库存，剩余任务 {len(session.pending)} 个')
         session.run_task(owner.config, task)
-    except BaseException:
+    except BaseException as exc:
+        if getattr(owner, '_island_production_round', None) is not None:
+            logger.info(f'[岛屿单轮] 丢弃本轮：{task} 执行中断（{type(exc).__name__}）')
         owner._island_production_round = None
         raise
     if not session.pending:

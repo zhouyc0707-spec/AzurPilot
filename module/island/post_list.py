@@ -9,6 +9,19 @@ from module.island.assets import (
 )
 
 
+# 国服连续实屏确认的八行顺序，供导航和统一收获共用。
+CN_POST_ROWS = (
+    (('island', 'FARM'), ('island_rancher', 'RANCH')),
+    (('island_rancher', 'FISHERY'), ('island_mine_forest', 'MINE')),
+    (('island_mine_forest', 'FOREST'), ('island_farm', 'ORCHARD')),
+    (('island_farm', 'NURSERY'), ('island_restaurant', 'RESTAURANT')),
+    (('island_teahouse', 'TEAHOUSE'), ('island_juu_eatery', 'JUU_EATERY')),
+    (('island_grill', 'GRILL'), ('island_manufacture', 'WOOD_PROCESSING')),
+    (('island_manufacture', 'INDUSTRIAL'), ('island_manufacture', 'ELECTRONIC_PROCESSING')),
+    (('island_manufacture', 'HANDMADE'), ('island_juu_coffee', 'JUU_COFFEE')),
+)
+
+
 def is_post_title_confirmed(image, post):
     """严格复核本帧定位处的类别标题，不受高分辨率全局降阈值影响。"""
     if not isinstance(image, np.ndarray) or image.shape != (720, 1280, 3):
@@ -70,16 +83,7 @@ def post_scroll_direction(image, post, server='cn'):
         return 0
     from importlib import import_module
 
-    rows = (
-        (('island', 'FARM'), ('island_rancher', 'RANCH')),
-        (('island_rancher', 'FISHERY'), ('island_mine_forest', 'MINE')),
-        (('island_mine_forest', 'FOREST'), ('island_farm', 'ORCHARD')),
-        (('island_farm', 'NURSERY'), ('island_restaurant', 'RESTAURANT')),
-        (('island_teahouse', 'TEAHOUSE'), ('island_juu_eatery', 'JUU_EATERY')),
-        (('island_grill', 'GRILL'), ('island_manufacture', 'WOOD_PROCESSING')),
-        (('island_manufacture', 'INDUSTRIAL'), ('island_manufacture', 'ELECTRONIC_PROCESSING')),
-        (('island_manufacture', 'HANDMADE'), ('island_juu_coffee', 'JUU_COFFEE')),
-    )
+    rows = CN_POST_ROWS
     name, separator, number = post.name.rpartition('_POST')
     if not separator or not number.isdigit():
         return 0

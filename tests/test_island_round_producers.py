@@ -308,6 +308,7 @@ class RoundProducerTests(unittest.TestCase):
             setattr(task, name, Mock())
         task.post_list_is_empty = Mock(return_value=True)
         fishery = Mock()
+        fishery.prepare_round_start.return_value = [f'ISLAND_FISHERY_POST{i}' for i in range(1, 4)]
         with patch('module.island.island_fishery.IslandFishery', return_value=fishery):
             task.prepare_round()
         self.assertEqual([call.args[0] for call in task.post_list_is_empty.call_args_list],
@@ -315,7 +316,11 @@ class RoundProducerTests(unittest.TestCase):
         self.assertEqual(task._round_ranch_states, {post: 'idle' for post in task.posts_ranch})
         task.post_open.assert_not_called()
         task.post_manage_swipe_to_top.assert_not_called()
-        fishery.prepare_round.assert_called_once_with()
+        fishery.prepare_round_start.assert_called_once_with()
+        self.assertEqual([call.args[0] for call in fishery.prepare_round_post.call_args_list],
+                         [f'ISLAND_FISHERY_POST{i}' for i in range(1, 4)])
+        fishery.prepare_round_finish.assert_called_once_with()
+        fishery.prepare_round.assert_not_called()
 
     def test_ranch_loads_warehouse_feed_and_materials_without_borrowing_posts(self):
         config = SimpleNamespace(cross_get=lambda path, default=None: default,

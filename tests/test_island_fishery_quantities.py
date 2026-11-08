@@ -16,6 +16,7 @@ class FisheryUI:
     def __init__(self, demand=None, fry_stock=None, positions=3, default_posts=0, working=None,
                  default_fish='yellowfin_tuna'):
         config = SimpleNamespace(
+            cross_get=lambda path, default=None: default,
             IslandFishery_Positions=positions, IslandFishery_PlantYellowfinTuna=default_posts,
             IslandFishery_DefaultFish=default_fish,
             IslandFishery_RancherFilter='WorkerJuu', task_delay=Mock(),

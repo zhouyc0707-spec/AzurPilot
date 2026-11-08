@@ -1,11 +1,13 @@
 """牧场岗位全部工作时复用地图入口补料，不取消派遣或放宽加工前置条件。"""
 
 import unittest
+from types import SimpleNamespace
 from unittest.mock import Mock, call, patch
 
 from module.exception import GameBugError, GameStuckError
 from module.island.island import ISLAND_MILL_CHECK, ISLAND_WORKING, POST_CLOSE
 from module.island.island_rancher import IslandRancher
+from module.island.round_inventory import IslandRoundInventory
 from tests.test_island_reward_state import FrameFlow
 
 
@@ -74,6 +76,66 @@ class RanchMillFallbackTests(unittest.TestCase):
         with self.assertRaises(GameStuckError):
             self.flow.run('process_mill_supplements')
         self.task.process_mill_item_with_inventory.assert_not_called()
+
+
+class SharedMillShortcutTests(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(patch('module.island.island_rancher.logger'))
+        self.task = task = IslandRancher.__new__(IslandRancher)
+        task.device = SimpleNamespace(image=object())
+        task.island_round = IslandRoundInventory()
+        task.posts_ranch = {
+            f'post{i}': SimpleNamespace(name=f'post{i}', button=(400, 300, 480, 380)) for i in range(1, 5)
+        }
+        task.ui_page_appear = Mock(return_value=True)
+        task.is_post_detail_visible = Mock(return_value=False)
+        task.goto_mill_from_ranch_post = Mock(return_value=False)
+        task.back_to_postmanage_after_mill_purchase = Mock(return_value=True)
+        self.match = self.enterContext(patch('module.island.post_list.match_post_title', return_value=False))
+
+    def test_shared_working_and_locked_posts_are_not_opened(self):
+        self.task._round_ranch_states = {
+            'post1': 'working', 'post2': 'locked', 'post3': 'working', 'post4': 'locked',
+        }
+        self.assertFalse(self.task.goto_mill_from_any_ranch_post())
+        self.task.goto_mill_from_ranch_post.assert_not_called()
+        self.task.back_to_postmanage_after_mill_purchase.assert_not_called()
+
+    def test_unknown_posts_still_use_original_bounded_shortcut(self):
+        self.task._round_ranch_states = {'post1': 'working', 'post2': 'unknown', 'post3': 'locked'}
+        self.assertFalse(self.task.goto_mill_from_any_ranch_post())
+        self.assertEqual(self.task.goto_mill_from_ranch_post.call_args_list, [call('post2'), call('post4')])
+
+    def test_current_visible_idle_post_precedes_offscreen_idle_and_unknown(self):
+        self.task._round_ranch_states = {'post1': 'idle', 'post2': 'unknown', 'post3': 'idle', 'post4': 'working'}
+        self.match.side_effect = lambda image, button, **kwargs: button.name == 'post3'
+        self.task.goto_mill_from_ranch_post.return_value = True
+        self.assertTrue(self.task.goto_mill_from_any_ranch_post())
+        self.task.goto_mill_from_ranch_post.assert_called_once_with('post3')
+        self.task.back_to_postmanage_after_mill_purchase.assert_not_called()
+
+    def test_clipped_idle_post_is_not_prioritized_as_visible(self):
+        self.task._round_ranch_states = {'post1': 'idle', 'post2': 'unknown', 'post3': 'idle', 'post4': 'working'}
+        self.task.posts_ranch['post3'].button = (400, 610, 480, 690)
+        self.match.side_effect = lambda image, button, **kwargs: button.name == 'post3'
+        self.task.goto_mill_from_ranch_post.return_value = True
+        self.assertTrue(self.task.goto_mill_from_any_ranch_post())
+        self.task.goto_mill_from_ranch_post.assert_called_once_with('post1')
+
+    def test_detail_overlay_cannot_supply_visible_post_priority(self):
+        self.task._round_ranch_states = {'post1': 'idle', 'post2': 'idle', 'post3': 'locked', 'post4': 'working'}
+        self.task.is_post_detail_visible.return_value = True
+        self.assertFalse(self.task.goto_mill_from_any_ranch_post())
+        self.match.assert_not_called()
+        self.assertEqual(self.task.goto_mill_from_ranch_post.call_args_list, [call('post1'), call('post2')])
+
+    def test_independent_task_does_not_reuse_stale_round_states(self):
+        self.task.island_round = None
+        self.task._round_ranch_states = dict.fromkeys(self.task.posts_ranch, 'working')
+        self.assertFalse(self.task.goto_mill_from_any_ranch_post())
+        self.assertEqual(self.task.goto_mill_from_ranch_post.call_args_list,
+                         [call(post) for post in self.task.posts_ranch])
+        self.match.assert_not_called()
 
 
 class ExistingMillRouteTests(unittest.TestCase):

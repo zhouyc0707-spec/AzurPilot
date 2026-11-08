@@ -280,7 +280,7 @@ OCR 推理的线程模型围绕「模型实例非线程安全」这一前提设�
 | 默认配置快照 | `_default_config` | 按 `ALAS_CONFIG_NAME` 环境变量或默认配置名惰性读取；reset 时置空以在下次使用时重读 |
 | OCR 调试图 | `ocr_debug/` 目录 | 默认关闭；识别器显式设置 `save_debug_images=True` 时每次单行识别写入一张 PNG，超过 100 张按修改时间清理最旧的 |
 
-空闲释放策略（`module/base/resource.py` 的 `release_resources`）：下一任务是大世界/委托时保留全部模型；有后续任务时仅保留 `azur_lane`；完全空闲时释放全部语言模型与独立检测缓存，并触发一次 `gc.collect(2)`。`UseOcrServer` 模式下空闲时改为断开 RPC 连接。
+空闲释放策略（`module/base/resource.py` 的 `release_resources`）：下一任务是大世界/委托/岛屿时保留已经加载的模型，岛屿连续任务不再逐模块释放并重载中文 OCR；其他后续任务仅保留 `azur_lane`。完全空闲或切换服务器时仍释放全部语言模型与独立检测缓存，实际释放模型后触发一次 `gc.collect(2)`。此策略不主动加载模型，不缓存库存或识别结果；OCR 设置变化仍沿原重置逻辑处理。`UseOcrServer` 模式下空闲时改为断开 RPC 连接。生命周期回归见 `tests/test_resource_ocr_release.py`。
 
 ## 14. 生命周期
 

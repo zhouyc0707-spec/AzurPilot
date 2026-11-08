@@ -407,12 +407,33 @@ class IslandRancher(Island, WarehouseOCR, LoginHandler):
         return self.back_to_postmanage_after_mill_purchase()
 
     def goto_mill_from_any_ranch_post(self):
-        """尝试通过任意一个牧场岗位详情进入磨坊界面。
+        """优先当前可见空岗，共享轮不重复尝试已确认工作中或锁定的岗位。
 
         Returns:
             bool: 是否成功进入磨坊。
         """
-        for post_id in self.posts_ranch:
+        states = (getattr(self, '_round_ranch_states', {})
+                  if getattr(self, 'island_round', None) is not None else {})
+        candidates = [post_id for post_id in self.posts_ranch
+                      if states.get(post_id) not in ('working', 'locked')]
+        visible = set()
+        if (states and candidates and self.ui_page_appear(page_island_postmanage)
+                and not self.is_post_detail_visible()):
+            from module.island.post_list import match_post_title
+            for post_id in candidates:
+                if states.get(post_id) != 'idle':
+                    continue
+                button = self.posts_ranch[post_id]
+                if not match_post_title(self.device.image, button, strict=False):
+                    continue
+                x1, y1, x2, y2 = button.button
+                cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
+                if (190 <= cx - 45 and cx + 45 <= 1225
+                        and 115 <= cy - 45 and cy + 45 <= POST_LIST_VISIBLE_BOTTOM):
+                    visible.add(post_id)
+        # 未知状态仍交原有界详情流程确认，不能因没有记录就跳过。
+        candidates.sort(key=lambda post_id: (post_id not in visible, states.get(post_id) != 'idle'))
+        for post_id in candidates:
             logger.info(f"[岛屿-牧场] 尝试通过牧场岗位{post_id}进入磨坊")
             if self.goto_mill_from_ranch_post(post_id):
                 logger.info(f"[岛屿-牧场] 已通过牧场岗位{post_id}进入磨坊")
@@ -875,37 +896,58 @@ class IslandRancher(Island, WarehouseOCR, LoginHandler):
         return True
 
     def prepare_round(self):
-        """本轮先收取全部牧场及渔场岗位，关闭岗位只领取不派工。"""
-        self.island_error = False
-        self._round_ranch_states = {}
+        """本轮先收取全部牧场及渔场岗位，独立入口保留原顺序。"""
+        posts = self.prepare_round_start()
         self.goto_postmanage()
         self.post_manage_mode(POST_MANAGE_PRODUCTION)
-        for index, (post_id, button) in enumerate(self.posts_ranch.items(), 1):
+        self.post_close()
+        for post_id in posts:
+            self.prepare_round_post(post_id)
+        self.prepare_round_finish()
+
+    def prepare_round_start(self):
+        """初始化牧场及内置渔场，国服统一按列表行序巡检。"""
+        self.island_error = False
+        self._round_ranch_states = {}
+        for index in range(1, len(self.posts_ranch) + 1):
             setattr(self, f'time_ranch{index}', None)
-            self.post_close()
-            if self.post_list_is_empty(button):
-                self._round_ranch_states[post_id] = 'idle'
-                continue
-            if not self.post_open(button):
-                self._round_ranch_states[post_id] = 'locked'
-                continue
-            if not self.post_get_stay():
-                raise GameStuckError(f'{post_id} 收获状态未确认，未建立共享库存')
-            self.device.screenshot()
-            if self.appear(ISLAND_WORKING):
-                finish = self.ranch_ocr_finish_time(post_id)
-                if finish is None:
-                    raise GameStuckError(f'{post_id} 收获后剩余时间未确认')
-                setattr(self, f'time_ranch{index}', finish)
-                self._round_ranch_states[post_id] = 'working'
-            elif self.appear(ISLAND_POST_VACANT_CHECK, offset=1) or self.appear(ISLAND_POST_SELECT, offset=1):
-                self._round_ranch_states[post_id] = 'idle'
-            else:
-                raise GameStuckError(f'{post_id} 收获后岗位状态未知')
-            self.post_close()
         from module.island.island_fishery import IslandFishery
         self._round_fishery = IslandFishery(config=self.config, device=self.device)
-        self._round_fishery.prepare_round()
+        fishery_posts = self._round_fishery.prepare_round_start()
+        return list(self.posts_ranch) + fishery_posts
+
+    def prepare_round_post(self, post_id):
+        """收取单岗并复核剩余工作状态，不把部分收获当成空岗。"""
+        if post_id.startswith('ISLAND_FISHERY_POST'):
+            self._round_fishery.prepare_round_post(post_id)
+            return
+        index = int(post_id.rsplit('_POST', 1)[1])
+        button = self.posts_ranch[post_id]
+        self.post_close()
+        if self.post_list_is_empty(button):
+            self._round_ranch_states[post_id] = 'idle'
+            return
+        if not self.post_open(button):
+            self._round_ranch_states[post_id] = 'locked'
+            return
+        if not self.post_get_stay():
+            raise GameStuckError(f'{post_id} 收获状态未确认，未建立共享库存')
+        self.device.screenshot()
+        if self.appear(ISLAND_WORKING):
+            finish = self.ranch_ocr_finish_time(post_id)
+            if finish is None:
+                raise GameStuckError(f'{post_id} 收获后剩余时间未确认')
+            setattr(self, f'time_ranch{index}', finish)
+            self._round_ranch_states[post_id] = 'working'
+        elif self.appear(ISLAND_POST_VACANT_CHECK, offset=1) or self.appear(ISLAND_POST_SELECT, offset=1):
+            self._round_ranch_states[post_id] = 'idle'
+        else:
+            raise GameStuckError(f'{post_id} 收获后岗位状态未知')
+        self.post_close()
+
+    def prepare_round_finish(self):
+        """全部巡检结束后汇总内置渔场。"""
+        self._round_fishery.prepare_round_finish()
 
     def round_stock_items(self):
         """牧场与磨坊需求合并其内置渔场，鱼苗不要求提前入库。"""

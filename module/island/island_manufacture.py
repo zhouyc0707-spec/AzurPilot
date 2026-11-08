@@ -323,7 +323,7 @@ class IslandManufacture(IslandShopBase):
 
         return post_buttons
 
-    def prepare_round(self):
+    def prepare_round_start(self):
         """收取四类全部岗位；停用岗位保留在制时间，但不重新派遣。"""
         self._round_prepared = False
         self._round_collect_all = True
@@ -343,17 +343,13 @@ class IslandManufacture(IslandShopBase):
             'ISLAND_HANDMADE_POST1': ISLAND_HANDMADE_POST1,
             'ISLAND_HANDMADE_POST2': ISLAND_HANDMADE_POST2,
         }
-        self.goto_postmanage()
-        self.post_manage_mode(POST_MANAGE_PRODUCTION)
-        self.post_close()
         for index, (post_id, button) in enumerate(all_buttons.items(), 1):
             self.posts.setdefault(post_id, {'status': 'none', 'button': button})
             time_var = f'{self.time_prefix}{index}'
             self._post_time_vars[post_id] = time_var
             setattr(self, time_var, None)
-            self.post_check(post_id, time_var)
             self.posts[post_id]['round_enabled'] = post_id in enabled
-        self._round_prepared = True
+        return list(all_buttons)
 
     def get_idle_posts_by_category(self, category):
         """获取指定制造类别的空闲岗位 ID 列表。

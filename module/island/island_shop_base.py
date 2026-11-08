@@ -300,22 +300,38 @@ class IslandShopBase(Island, WarehouseOCR):
 
     def prepare_round(self):
         """只巡检收获全部岗位，保留状态供本轮实际派遣使用。"""
+        posts = self.prepare_round_start()
+        self.goto_postmanage()
+        self.post_manage_mode(POST_MANAGE_PRODUCTION)
+        self.post_close()
+        for post_id in posts:
+            self.prepare_round_post(post_id)
+        self.prepare_round_finish()
+
+    def prepare_round_start(self):
+        """初始化本场所全部岗位，不导航或读取库存。"""
         self._round_prepared = False
         self._round_collect_all = True
         self._round_recipe_post = None
         self.post_check_meal.clear()
         self._post_check_contributions = {}
-        self.goto_postmanage()
-        self.post_manage_mode(POST_MANAGE_PRODUCTION)
-        self.post_close()
         self._round_time_vars = []
+        self._post_time_vars = {}
         enabled = getattr(self.config, self.config_post_number, 2)
         for index, post_id in enumerate(self.post_buttons, 1):
             time_var = f'{self.time_prefix}{index}'
             self._round_time_vars.append(time_var)
+            self._post_time_vars[post_id] = time_var
             setattr(self, time_var, None)
-            self.post_check(post_id, time_var)
             self.posts[post_id]['round_enabled'] = index <= enabled
+        return list(self.post_buttons)
+
+    def prepare_round_post(self, post_id):
+        """仅巡检指定岗位，原在制数量仍按岗位替换累计。"""
+        self.post_check(post_id, self._post_time_vars[post_id])
+
+    def prepare_round_finish(self):
+        """全部岗位巡检完成后才允许派工阶段复用状态。"""
         self._round_prepared = True
 
     def _load_round_stock(self):

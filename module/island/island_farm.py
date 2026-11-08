@@ -715,90 +715,50 @@ class IslandFarm(Island, WarehouseOCR, LoginHandler):
         return True
 
     def prepare_round(self, collect_all=True):
-        """本轮盘点前收获并记录岗位，派工阶段复用同一结果。"""
-        self.island_error = False
-        self._round_collect_all = collect_all
+        """本轮盘点前收获并记录岗位，独立入口保留原类别顺序。"""
+        posts = self.prepare_round_start(collect_all=collect_all)
         self.goto_postmanage()
         self.post_manage_mode(POST_MANAGE_PRODUCTION)
         self.post_close()
+        for post_id in posts:
+            self.prepare_round_post(post_id)
+        self.prepare_round_finish()
 
+    def prepare_round_start(self, collect_all=True):
+        """初始化收获记录，不导航、不读取库存。"""
+        self.island_error = False
+        self._round_collect_all = collect_all
         self.time_vars = {
             'farm': [None] * (4 if collect_all else self.farm_positions),
             'orchard': [None] * (4 if collect_all else self.orchard_positions),
-            'nursery': [None] * (2 if collect_all else self.nursery_positions)
+            'nursery': [None] * (2 if collect_all else self.nursery_positions),
         }
+        self._round_idle_posts = {category: [] for category in self.time_vars}
+        posts = []
+        for category, times in self.time_vars.items():
+            for index in range(len(times)):
+                post_id = f'ISLAND_{category.upper()}_POST{index + 1}'
+                self.posts[post_id]['round_enabled'] = index < getattr(self, f'{category}_positions')
+                posts.append(post_id)
+        return posts
 
-        post_button_mapping = {
-            'farm': [self.posts['ISLAND_FARM_POST1']['button'],
-                     self.posts['ISLAND_FARM_POST2']['button'],
-                     self.posts['ISLAND_FARM_POST3']['button'],
-                     self.posts['ISLAND_FARM_POST4']['button']],
-            'orchard': [self.posts['ISLAND_ORCHARD_POST1']['button'],
-                        self.posts['ISLAND_ORCHARD_POST2']['button'],
-                        self.posts['ISLAND_ORCHARD_POST3']['button'],
-                        self.posts['ISLAND_ORCHARD_POST4']['button']],
-            'nursery': [self.posts['ISLAND_NURSERY_POST1']['button'],
-                        self.posts['ISLAND_NURSERY_POST2']['button']]
-        }
+    def prepare_round_post(self, post_id):
+        """收获一个岗位，供国服按列表行序交错巡检。"""
+        category = post_id.removeprefix('ISLAND_').split('_POST')[0].lower()
+        index = int(post_id.rsplit('_POST', 1)[1]) - 1
+        button = self.posts[post_id]['button']
+        time_var = f'{category}_time_{index}'
+        if not self.decided_lists(button, post_id, category, time_var):
+            return
+        if self.posts[post_id].get('state') == 'idle' and self.posts[post_id]['round_enabled']:
+            self._round_idle_posts[category].append({
+                'post_id': post_id, 'button': button, 'index': index, 'time_var_name': time_var,
+            })
 
-        post_buttons = {
-            category: buttons[:len(self.time_vars[category])]
-            for category, buttons in post_button_mapping.items()
-        }
-
-        post_id_to_button = {}
-        for category in ['farm', 'orchard', 'nursery']:
-            positions_count = getattr(self, f'{category}_positions')
-            for i, button in enumerate(post_buttons[category]):
-                post_id = f'ISLAND_{category.upper()}_POST{i + 1}'
-                post_id_to_button[post_id] = button
-                self.posts[post_id]['round_enabled'] = i < positions_count
-
-        idle_posts = {'farm': [], 'orchard': [], 'nursery': []}
-
-        # 先遍历农田和果园
-        for category in ['farm', 'orchard']:
-            positions = len(self.time_vars[category])
-            for i in range(positions):
-                post_id = f'ISLAND_{category.upper()}_POST{i + 1}'
-                time_var_name = f'{category}_time_{i}'
-
-                button = post_id_to_button[post_id]
-                if not self.decided_lists(button, post_id, category, time_var_name):
-                    continue
-
-                if self.posts[post_id].get('state') == 'idle' and self.posts[post_id]['round_enabled']:
-                    idle_posts[category].append({
-                        'post_id': post_id,
-                        'button': button,
-                        'index': i,
-                        'time_var_name': time_var_name
-                    })
-
-        # 然后遍历苗圃
-        category = 'nursery'
-        positions = len(self.time_vars[category])
-        for i in range(positions):
-            post_id = f'ISLAND_{category.upper()}_POST{i + 1}'
-            time_var_name = f'{category}_time_{i}'
-
-            button = post_id_to_button[post_id]
-            if not self.decided_lists(button, post_id, category, time_var_name):
-                continue
-
-            if self.posts[post_id].get('state') == 'idle' and self.posts[post_id]['round_enabled']:
-                idle_posts[category].append({
-                    'post_id': post_id,
-                    'button': button,
-                    'index': i,
-                    'time_var_name': time_var_name
-                })
-
-        logger.info(f"[岛屿-农田] \n空闲岗位统计:")
-        for category in ['farm', 'orchard', 'nursery']:
-            logger.info(f"[岛屿-农田] {category}: {len(idle_posts[category])}个空闲岗位")
-
-        self._round_idle_posts = idle_posts
+    def prepare_round_finish(self):
+        """汇总已巡检结果，不重复进入岗位。"""
+        for category, posts in self._round_idle_posts.items():
+            logger.info(f"[岛屿-农田] {category}: {len(posts)}个空闲岗位")
 
     def round_stock_items(self):
         """声明本轮农作物库存，种子仍在选品页即时补充。"""

@@ -586,6 +586,46 @@ class Island(SelectCharacter):
         logger.warning("[岛屿] 退出好友岛屿超时")
         return False
 
+    def _island_map_entry_status(self):
+        """用当前页和入口图案确认地图路径，浅色背景不能充当按钮。"""
+        in_map = self.match_template_color(ISLAND_MAP_CHECK, offset=(20, 20))
+        leave = self.appear(AIR_DROP_RUN_AWAY, offset=(20, 20))
+        access_map = self.match_template_color(ISLAND_ACCESS_MAP, offset=(20, 20))
+        home_map = (self.ui_page_appear(page_island)
+                    and self.match_template_color(ISLAND_GOTO_MAP, offset=(20, 20)))
+        postmanage_candidate = (
+            self.ui_page_appear(page_island_postmanage)
+            or (self.match_template_color(POST_MANAGE_PRODUCTION, offset=(20, 20))
+                and self.match_template_color(
+                    page_island_postmanage.links[page_island_management], offset=(20, 20))))
+        # 详情旧检测包含颜色判断，只用于已确认具有岗位页特征的画面。
+        post_detail = postmanage_candidate and self.is_post_detail_visible()
+        postmanage = postmanage_candidate and not post_detail
+        return {
+            "in_map": in_map,
+            "in_friend": leave and access_map,
+            "home_map": home_map,
+            "access_map": access_map,
+            "leave": leave,
+            "postmanage": postmanage,
+            "post_detail": post_detail,
+        }
+
+    def _island_map_popup_pending(self):
+        """优先关闭导航遮挡；弹窗点击冷却期间仍阻止背景导航。"""
+        if self.is_business_event_popup():
+            self.handle_business_event_popup()
+            return True
+        if self.appear(ISLAND_GET, offset=(30, 30)):
+            self.handle_island_reward_popup()
+            return True
+        if (is_daily_supply_reward(self.device.image)
+                or self.appear(ISLAND_INFO_EXIT, offset=(30, 30))
+                or self.game_tips_appear() is not None):
+            self.ui_additional(get_ship=False)
+            return True
+        return self.ui_additional(get_ship=False)
+
     def _wait_island_map_entry(self, timeout=3):
         """等待并检测岛屿地图入口相关按钮的状态。
 
@@ -597,28 +637,24 @@ class Island(SelectCharacter):
         """
         last_status = None
         for _ in self.loop(timeout=timeout, skip_first=False):
-            in_map = self.appear(ISLAND_MAP_CHECK)
-            leave = self.appear(AIR_DROP_RUN_AWAY, offset=(20, 20))
-            access_map = self.appear(ISLAND_ACCESS_MAP, offset=(20, 20))
-            home_map = self.appear(ISLAND_GOTO_MAP)
-            in_friend = leave and access_map
-            last_status = {
-                "in_map": in_map,
-                "in_friend": in_friend,
-                "home_map": home_map,
-                "access_map": access_map,
-                "leave": leave,
-            }
-            if in_map or in_friend or home_map or access_map:
-                return last_status
-            if self.ui_additional(get_ship=False):
+            if self._island_map_popup_pending():
                 continue
+            last_status = self._island_map_entry_status()
+            if any(last_status[key] for key in (
+                    'in_map', 'in_friend', 'home_map', 'access_map', 'postmanage', 'post_detail')):
+                return last_status
+            # 这些页面已明确需要沿导航图返回本岛，无需空等地图入口出现。
+            if any(self.ui_page_appear(page) for page in (
+                    page_island_management, page_island_warehouse)):
+                return last_status
         return last_status or {
             "in_map": False,
             "in_friend": False,
             "home_map": False,
             "access_map": False,
             "leave": False,
+            "postmanage": False,
+            "post_detail": False,
         }
 
     def goto_island_map(self):
@@ -626,6 +662,10 @@ class Island(SelectCharacter):
 
         Returns:
             bool: 进入成功返回 True，超时返回 False。
+
+        Pages:
+            in: 本岛场景、已关闭详情的岗位管理页、岛屿管理页或好友岛场景
+            out: page_island_map
         """
         logger.hr("岛屿-前往地图", level=2)
         expect_friend = bool(getattr(self, "_island_expect_friend", False))
@@ -634,21 +674,52 @@ class Island(SelectCharacter):
         in_friend = status["in_friend"]
         home_map = status["home_map"]
         access_map = status["access_map"]
-        if not in_map and not in_friend and not home_map and not access_map:
-            if expect_friend:
-                logger.warning("[岛屿] 预期已进入好友岛，但暂未识别到地图入口，继续等待好友岛入口")
-            else:
-                logger.info("[岛屿] 当前不在岛屿地图或好友岛，先导航到本岛")
-                self.ui_goto(page_island, get_ship=False)
+        navigate_home = not (in_map or in_friend or home_map or access_map) and not expect_friend
+        if expect_friend and not (in_map or in_friend or home_map or access_map):
+            logger.warning("[岛屿] 预期已进入好友岛，但暂未识别到地图入口，继续等待好友岛入口")
 
+        retry = Timer(3)
+        returning_management = False
         for _ in self.loop(timeout=30 if expect_friend else 20, skip_first=False):
-            if self.appear(ISLAND_MAP_CHECK):
+            if self._island_map_popup_pending():
+                continue
+            status = self._island_map_entry_status()
+            if status['post_detail']:
+                # 调用方须先关闭详情；遮挡未解除时不能点击后方导航。
+                continue
+            if status["in_map"]:
                 logger.info("[岛屿] 已进入岛屿地图")
                 return True
-            if self.appear_then_click(ISLAND_GOTO_MAP):
+            if status['postmanage']:
+                if expect_friend:
+                    continue
+                navigate_home = True
+                returning_management = True
+                if retry.reached():
+                    self.device.click(page_island_postmanage.links[page_island_management])
+                    retry.reset()
+                    logger.info('[岛屿] 从岗位管理返回管理页，再前往本岛地图')
+                continue
+            if navigate_home:
+                if (returning_management
+                        and not self.ui_page_appear(page_island_management)
+                        and not (status['home_map'] or status['access_map'] or status['in_friend'])):
+                    continue
+                navigate_home = False
+                if not (status["home_map"] or status["access_map"] or status["in_friend"]):
+                    logger.info("[岛屿] 当前不在岛屿地图或好友岛，先导航到本岛")
+                    self.ui_goto(page_island, get_ship=False)
+                    continue
+            if not retry.reached():
+                continue
+            if status["home_map"]:
+                self.device.click(ISLAND_GOTO_MAP)
+                retry.reset()
                 logger.info("[岛屿] 点击本岛地图入口")
                 continue
-            if self.appear_then_click(ISLAND_ACCESS_MAP, offset=(20, 20)):
+            if status["access_map"]:
+                self.device.click(ISLAND_ACCESS_MAP)
+                retry.reset()
                 logger.info("[岛屿] 点击好友岛右上角地图入口")
                 continue
         else:

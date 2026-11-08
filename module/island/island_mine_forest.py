@@ -516,60 +516,53 @@ class IslandMineForest(Island,LoginHandler):
 
     # ==================== 主运行流程 ====================
     def prepare_round(self, collect_all=True):
-        """盘点前收取矿林产物并保存岗位状态。"""
-        self.island_error = False
-        self._round_collect_all = collect_all
-        # ===== 读取岗位数量 =====
-        mine_positions = 4 if collect_all else self.config.IslandMine_Positions
-        forest_positions = 4 if collect_all else self.config.IslandForest_Positions
-
-        # ===== 初始化岗位信息 =====
-        self.posts = {}
-        MINE_POST_BUTTONS = [ISLAND_MINE_POST1, ISLAND_MINE_POST2, ISLAND_MINE_POST3, ISLAND_MINE_POST4]
-        FOREST_POST_BUTTONS = [ISLAND_FOREST_POST1, ISLAND_FOREST_POST2, ISLAND_FOREST_POST3, ISLAND_FOREST_POST4]
-        self.time_vars = {'mine': [None] * mine_positions, 'forest': [None] * forest_positions}
-
-        self.mine_post_ids = []
-        for i in range(mine_positions):
-            pid = f'ISLAND_MINE_POST{i + 1}'
-            self.mine_post_ids.append(pid)
-            self.posts[pid] = {'button': MINE_POST_BUTTONS[i], 'crop': None, 'runs': 0, 'state': 'unknown',
-                               'round_enabled': i < self.config.IslandMine_Positions}
-
-        self.forest_post_ids = []
-        for i in range(forest_positions):
-            pid = f'ISLAND_FOREST_POST{i + 1}'
-            self.forest_post_ids.append(pid)
-            self.posts[pid] = {'button': FOREST_POST_BUTTONS[i], 'crop': None, 'runs': 0, 'state': 'unknown',
-                               'round_enabled': i < self.config.IslandForest_Positions}
-
-        # ===== 步骤1：进入管理 → 收获 + 检测所有岗位 =====
-        logger.info("[岛屿-矿山林场] 进入管理页面，收获已完成产物并检测岗位状态")
+        """盘点前收取矿林产物，独立入口保留矿山、林场顺序。"""
+        posts = self.prepare_round_start(collect_all=collect_all)
         self.goto_postmanage()
         self.post_manage_mode(POST_MANAGE_PRODUCTION)
         self.post_close()
+        for post_id in posts:
+            self.prepare_round_post(post_id)
+        self.prepare_round_finish()
 
-        # 按具体岗位定位，依次检查矿山和林场。
-        collected_posts = []
-        for pid in self.mine_post_ids:
-            info = self.posts[pid]
-            time_var = f'time_{pid}'
-            setattr(self, time_var, None)
-            if self.collect_and_detect_post(info['button'], pid, 'mine', time_var):
-                collected_posts.append(pid)
+    def prepare_round_start(self, collect_all=True):
+        """初始化全部矿林岗位，不导航或读取库存。"""
+        self.island_error = False
+        self._round_collect_all = collect_all
+        mine_positions = 4 if collect_all else self.config.IslandMine_Positions
+        forest_positions = 4 if collect_all else self.config.IslandForest_Positions
+        buttons = {
+            'mine': [ISLAND_MINE_POST1, ISLAND_MINE_POST2, ISLAND_MINE_POST3, ISLAND_MINE_POST4],
+            'forest': [ISLAND_FOREST_POST1, ISLAND_FOREST_POST2, ISLAND_FOREST_POST3, ISLAND_FOREST_POST4],
+        }
+        self.posts = {}
+        self.time_vars = {'mine': [None] * mine_positions, 'forest': [None] * forest_positions}
+        self._round_collected_posts = []
+        for category, positions, enabled in (
+                ('mine', mine_positions, self.config.IslandMine_Positions),
+                ('forest', forest_positions, self.config.IslandForest_Positions)):
+            post_ids = []
+            for index in range(positions):
+                post_id = f'ISLAND_{category.upper()}_POST{index + 1}'
+                post_ids.append(post_id)
+                self.posts[post_id] = {
+                    'button': buttons[category][index], 'crop': None, 'runs': 0,
+                    'state': 'unknown', 'round_enabled': index < enabled,
+                }
+            setattr(self, f'{category}_post_ids', post_ids)
+        return self.mine_post_ids + self.forest_post_ids
 
-        # 林场
-        for pid in self.forest_post_ids:
-            info = self.posts[pid]
-            time_var = f'time_{pid}'
-            setattr(self, time_var, None)
-            if self.collect_and_detect_post(info['button'], pid, 'forest', time_var):
-                collected_posts.append(pid)
+    def prepare_round_post(self, post_id):
+        """收取单个矿林岗位并保存其状态。"""
+        category = 'mine' if post_id.startswith('ISLAND_MINE_') else 'forest'
+        time_var = f'time_{post_id}'
+        setattr(self, time_var, None)
+        if self.collect_and_detect_post(self.posts[post_id]['button'], post_id, category, time_var):
+            self._round_collected_posts.append(post_id)
 
-        if collected_posts:
-            logger.info(f"[岛屿-矿山林场] 首轮岗位检查已收取完成产物: {collected_posts}")
-        else:
-            logger.info("[岛屿-矿山林场] 首轮岗位检查没有发现可收取产物")
+    def prepare_round_finish(self):
+        """收获结束后汇总，不重复访问岗位。"""
+        logger.info(f"[岛屿-矿山林场] 首轮岗位检查已收取产物: {self._round_collected_posts}")
 
     def round_stock_items(self):
         """声明本轮矿石与木材库存。"""

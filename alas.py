@@ -1221,6 +1221,8 @@ class AzurLaneAutoScript:
         from module.island.production_round import invalidates_round
         if invalidates_round(inflection.camelize(inflection.underscore(command))):
             # 委托、科研插队保留本轮；订单、经营、重启等须重新确认岛屿库存。
+            if self.__dict__.get('_island_production_round') is not None:
+                logger.info(f'[岛屿单轮] 丢弃本轮：执行 {command}，需要重新确认岛屿库存')
             self._island_production_round = None
         elif self.__dict__.get('_island_production_round') is not None and not command.lower().startswith('island'):
             logger.info(f'[岛屿单轮] 保留库存和剩余任务，先执行 {command}')
@@ -1233,6 +1235,8 @@ class AzurLaneAutoScript:
                 campaign_recovery_scope(self):
             result = self._run(command, skip_first_screenshot)
             if result is not True:
+                if self.__dict__.get('_island_production_round') is not None:
+                    logger.info(f'[岛屿单轮] 丢弃本轮：{command} 未正常完成')
                 self._island_production_round = None
             return result
 

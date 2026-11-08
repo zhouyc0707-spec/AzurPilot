@@ -641,56 +641,44 @@ class IslandFishery(Island, WarehouseOCR, LoginHandler, IslandFishMeatExchange):
 
     def prepare_round(self, collect_all=True):
         """本轮盘点前收取鱼获并记录岗位，派工阶段不重复领取。"""
-        self.island_error = False
-        self._round_collect_all = collect_all
-        # 重置渔场时间追踪列表
-        positions = 3 if collect_all else self.fishery_positions
-        self.fishery_times = [None] * positions
-
-        # 首轮先检查岗位并收取已完成鱼获，确保随后读取的仓库库存包含本轮收获。
+        posts = self.prepare_round_start(collect_all=collect_all)
         self.goto_postmanage()
         self.post_manage_mode(POST_MANAGE_PRODUCTION)
         self.post_close()
+        for post_id in posts:
+            self.prepare_round_post(post_id)
+        self.prepare_round_finish()
 
-        post_buttons = [
-            self.posts['ISLAND_FISHERY_POST1']['button'],
-            self.posts['ISLAND_FISHERY_POST2']['button'],
-            self.posts['ISLAND_FISHERY_POST3']['button'],
-        ]
+    def prepare_round_start(self, collect_all=True):
+        """初始化全部渔场岗位，关闭岗位只收获。"""
+        self.island_error = False
+        self._round_collect_all = collect_all
+        positions = 3 if collect_all else self.fishery_positions
+        self.fishery_times = [None] * positions
+        self._round_idle_posts = []
+        self._round_collected_posts = []
+        posts = []
+        for index in range(positions):
+            post_id = f'ISLAND_FISHERY_POST{index + 1}'
+            self.posts[post_id]['round_enabled'] = index < self.fishery_positions
+            posts.append(post_id)
+        return posts
 
-        post_button_mapping = post_buttons[:positions]
+    def prepare_round_post(self, post_id):
+        """收取单个鱼获并记录实际工作状态。"""
+        index = int(post_id.rsplit('_POST', 1)[1]) - 1
+        button = self.posts[post_id]['button']
+        if self.decided_lists(button, post_id, index):
+            self._round_collected_posts.append(post_id)
+        if self._post_available_for_dispatch(self.posts[post_id]) and self.posts[post_id]['round_enabled']:
+            self._round_idle_posts.append({
+                'post_id': post_id, 'button': button, 'index': index,
+                'time_var_name': f'time_fishery_{index}',
+            })
 
-        post_id_to_button = {}
-        for i, button in enumerate(post_button_mapping):
-            post_id = f'ISLAND_FISHERY_POST{i + 1}'
-            post_id_to_button[post_id] = button
-            self.posts[post_id]['round_enabled'] = i < self.fishery_positions
-
-        idle_posts = []
-        collected_posts = []
-
-        logger.info("[岛屿-渔场] 首轮检查渔场岗位，收取已完成鱼获并记录工作中岗位")
-        for i in range(positions):
-            post_id = f'ISLAND_FISHERY_POST{i + 1}'
-            button = post_id_to_button[post_id]
-
-            if self.decided_lists(button, post_id, i):
-                collected_posts.append(post_id)
-
-            if self._post_available_for_dispatch(self.posts[post_id]) and self.posts[post_id]['round_enabled']:
-                idle_posts.append({
-                    'post_id': post_id,
-                    'button': button,
-                    'index': i,
-                    'time_var_name': f'time_fishery_{i}',
-                })
-
-        if collected_posts:
-            logger.info(f"[岛屿-渔场] 首轮渔场岗位检查已收取完成鱼获: {collected_posts}")
-        else:
-            logger.info("[岛屿-渔场] 首轮渔场岗位检查没有发现可收取鱼获")
-
-        self._round_idle_posts = idle_posts
+    def prepare_round_finish(self):
+        """收获结束后汇总，不再领取或盘点。"""
+        logger.info(f"[岛屿-渔场] 首轮岗位检查已收取鱼获: {self._round_collected_posts}")
 
     def round_stock_items(self):
         """鱼苗继续走选品页补充；本轮统一读取养殖成品。"""

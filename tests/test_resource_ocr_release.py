@@ -156,9 +156,36 @@ class TestResourceOcrRelease(unittest.TestCase):
         # ONNX 检测模型按语言分别缓存，两个入口都必须重新加载。
         self.assertEqual(self.det_factory.call_count, 2)
 
+    def test_island_tasks_reuse_loaded_models_until_leaving_or_idle(self):
+        self.load_models()
+        before_properties = dict(vars(self.models))
+        before_recognition = dict(al_ocr._model_cache)
+        before_detection = dict(al_ocr._det_model_cache)
+        self.rec_factory.reset_mock()
+        self.det_factory.reset_mock()
+
+        for next_task in ('IslandFarm', 'IslandRestaurant', 'IslandRancher', 'IslandDailyOrder'):
+            with self.subTest(next_task=next_task):
+                resource.release_resources(next_task=next_task)
+                self.assertEqual(vars(self.models), before_properties)
+                self.assertEqual(al_ocr._model_cache, before_recognition)
+                self.assertEqual(al_ocr._det_model_cache, before_detection)
+        self.rec_factory.assert_not_called()
+        self.det_factory.assert_not_called()
+        self.collect.assert_not_called()
+
+        resource.release_resources(next_task='Campaign')
+        self.assertEqual(set(vars(self.models)), {'azur_lane'})
+        self.assertTrue(before_properties['cnocr'].model.closed)
+        resource.release_resources()
+        self.assertEqual(vars(self.models), {})
+        self.assertEqual(al_ocr._model_cache, {})
+        self.assertEqual(al_ocr._det_model_cache, {})
+
     def test_releasing_unloaded_models_does_not_load_models_or_collect(self):
         resource.release_resources()
         resource.release_resources(next_task='Campaign')
+        resource.release_resources(next_task='IslandFarm')
 
         self.assertEqual(vars(self.models), {})
         self.rec_factory.assert_not_called()

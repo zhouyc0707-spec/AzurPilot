@@ -177,7 +177,7 @@ def release_resources(next_task=''):
     3. 地图检测缓存图像
 
     释放策略根据下一个任务动态调整：
-    - 大世界/委托任务即将执行时，保留 OCR 模型
+    - 大世界/委托/岛屿任务即将执行时，保留已加载的 OCR 模型
     - 有后续任务时，保留 azur_lane 模型和 UI 导航资源
     - 空闲时释放所有资源
 
@@ -198,8 +198,8 @@ def release_resources(next_task=''):
         # 仅在使用实例内 OCR 时释放
         from module.ocr.al_ocr import release_ocr_models
         from module.ocr.ocr import OCR_MODEL
-        if 'Opsi' in next_task or 'commission' in next_task:
-            # OCR 模型即将被使用，不释放
+        if 'Opsi' in next_task or 'commission' in next_task or next_task.startswith('Island'):
+            # 岛屿连续任务共用语言 OCR，避免每个模块重新加载；空闲仍全量释放。
             models = []
         elif next_task:
             # 释放除 'azur_lane' 以外的 OCR 模型
