@@ -1045,41 +1045,9 @@ class IslandBusiness(Island):
         return ['WorkerJuu']
 
     def _switch_to_business_tab(self):
-        """
-        切换到经营页签，并处理切换后可能出现的美食评审弹窗遮挡问题。
-
-        点击经营页签按钮后，游戏可能弹出美食评审界面遮挡所有页签按钮，
-        导致 post_manage_mode() 陷入死循环。此方法在每次点击后检测弹窗
-        并及时关闭，确保成功切换到经营页签。
-        """
-        for attempt in range(10):
-            self.device.screenshot()
-
-            # 已成功切换到经营页签
-            if self.appear(POST_MANAGE_BUSINESS, offset=30):
-                logger.info("[岛屿-经营] 已在经营页签")
-                return
-
-            # 检查是否有弹窗遮挡（生产和经营页签的蓝色指示器都不可见）
-            if not self.appear(POST_MANAGE_PRODUCTION, offset=30) \
-                    and not self.appear(POST_MANAGE_BUSINESS, offset=30):
-                # 不使用 appear 判断但使用固定坐标检测弹窗位置
-                logger.info("[岛屿-经营] 页签按钮被弹窗遮挡，点击安全区域关闭")
-                self.device.click(BUSINESS_REVIEW_SAFE_AREA)
-                self.device.sleep(1)
-                continue
-
-            # 在采集页签
-            if self.appear(ISLAND_GATHER_COLLECT_CHECK, offset=30):
-                self.device.click(POST_MANAGE_PRODUCTION)
-                self.device.sleep(0.5)
-                continue
-
-            # 在其他页签（如生产），点击经营页签按钮切换
-            self.device.click(POST_MANAGE_PRODUCTION)
-            self.device.sleep(0.5)
-
-        logger.warning("[岛屿-经营] 切换到经营页签失败（超过最大尝试次数）")
+        """通过共用状态循环关闭经营事件，并正向确认经营页签。"""
+        self.post_manage_mode(POST_MANAGE_BUSINESS)
+        logger.info("[岛屿-经营] 已在经营页签")
 
     # ===================================================================
     # 主入口 run() - 支持分批和传统模式
@@ -1088,17 +1056,9 @@ class IslandBusiness(Island):
     def run(self):
         logger.info("[岛屿-经营] === 开始经营模块 ===")
         self.goto_postmanage()
-        self.device.sleep(1)
-
-        # 处理每日首次进入可能出现的美食评审界面
-        self._handle_food_review()
 
         logger.info("[岛屿-经营] 切换到经营页签")
         self._switch_to_business_tab()
-        self.device.sleep(1)
-
-        # 切换页签后再次处理可能出现的弹窗
-        self._handle_food_review()
 
         if self.batch_enabled:
             self._run_batch_mode()
@@ -1817,35 +1777,8 @@ class IslandBusiness(Island):
         return None
 
     def _handle_food_review(self):
-        """
-        处理每日首次进入经营页签时可能出现的美食评审界面
-        流程：检测弹窗 → 点击安全区域关闭 → 检测详情弹窗 → 再点安全区域
-        """
-        logger.info("[岛屿-经营] 检测美食评审界面")
-        self.device.screenshot()
-
-        # 如果经营页签按钮被遮挡，说明有弹窗
-        if not self.appear(POST_MANAGE_BUSINESS, offset=30) and not self.appear(POST_MANAGE_PRODUCTION, offset=30):
-            logger.info("[岛屿-经营] 检测到美食评审界面，点击安全区域关闭")
-            self.device.click(BUSINESS_REVIEW_SAFE_AREA)
-            self.device.sleep(1)
-
-            # 检测详情界面
-            self.device.screenshot()
-            if not self.appear(POST_MANAGE_BUSINESS, offset=30) and not self.appear(POST_MANAGE_PRODUCTION, offset=30):
-                logger.info("[岛屿-经营] 检测到美食评审详情界面，再次点击安全区域")
-                self.device.click(BUSINESS_REVIEW_SAFE_AREA)
-                self.device.sleep(1)
-
-            # 确保回到经营页签
-            self.device.screenshot()
-            if not self.appear(POST_MANAGE_BUSINESS, offset=30) and not self.appear(POST_MANAGE_PRODUCTION, offset=30):
-                logger.warning("[岛屿-经营] 关闭美食评审后未回到经营页签，重新进入")
-                self.goto_postmanage()
-                self.post_manage_mode(POST_MANAGE_BUSINESS)
-                self.device.sleep(1)
-
-        logger.info("[岛屿-经营] 美食评审处理完成")
+        """美食评审与健康开发日共用经营事件窗口，按识别状态完成两阶段关闭。"""
+        self.post_manage_mode(POST_MANAGE_BUSINESS)
 
     def _calculate_darkblue_delay(self):
         """计算深蓝（经营中）状态的延后检测时间（对齐服务器 0 点刷新）"""

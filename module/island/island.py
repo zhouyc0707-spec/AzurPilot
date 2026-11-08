@@ -765,6 +765,22 @@ class Island(SelectCharacter):
             logger.warning(f"[岛屿] 岛屿地图进入目的地超时: {destination}")
             return False
 
+    def is_business_event_popup(self):
+        """正向识别经营事件的提示页或详情页，不受点击冷却影响。"""
+        return (self.appear(ISLAND_BUSINESS_EVENT_POPUP, offset=(50, 50))
+                or self.appear(ISLAND_BUSINESS_EVENT_POPUP_CANCEL, offset=(20, 20)))
+
+    def handle_business_event_popup(self):
+        """展开已识别事件，或关闭其详情；仅实际操作后返回 True。"""
+        if self.appear(ISLAND_BUSINESS_EVENT_POPUP, offset=(50, 50), interval=2):
+            logger.info('[岛屿-经营] 展开经营事件提示')
+            self.device.click(ISLAND_BUSINESS_EVENT_SAFE_AREA)
+            return True
+        if self.appear_then_click(ISLAND_BUSINESS_EVENT_POPUP_CANCEL, offset=(20, 20), interval=2):
+            logger.info('[岛屿-经营] 关闭经营事件详情')
+            return True
+        return False
+
     def post_manage_mode(self, post_manage_mode):
         """切换岗位管理的模式页签（生产/经营）。
 
@@ -778,20 +794,24 @@ class Island(SelectCharacter):
             GameStuckError: 切换岗位管理页签超时。
 
         Pages:
-            in: 岗位管理页，允许领取奖励尚未关闭。
+            in: 岗位管理页，允许领取奖励或经营事件尚未关闭。
             out: 已确认的目标岗位页签。
         """
         post_manage_button = POST_MANAGE_BUSINESS if post_manage_mode == POST_MANAGE_PRODUCTION else POST_MANAGE_PRODUCTION
         direct_click_timer = Timer(1)
         for _ in self.loop(timeout=15, skip_first=False):
+            if self.is_business_event_popup():
+                self.handle_business_event_popup()
+                continue
             if self.appear(ISLAND_GET, offset=30):
                 self.handle_island_reward_popup()
                 continue
-            if self.appear_then_click(post_manage_button, interval=1):
+            if self.match_template_color(post_manage_button, offset=(20, 20), interval=1):
+                self.device.click(post_manage_button)
                 continue
-            elif self.appear(post_manage_mode):
+            elif self.match_template_color(post_manage_mode, offset=(20, 20)):
                 return True
-            elif self.appear(ISLAND_GATHER_COLLECT_CHECK, offset=30):
+            elif self.match_template_color(ISLAND_GATHER_COLLECT_CHECK, offset=(20, 30)):
                 # 当前在采集页签，appear_then_click 无法匹配到生产和经营页签
                 # 直接点击目标页签按钮（Button.button 返回点击坐标 tuple）
                 if direct_click_timer.reached():
@@ -812,12 +832,16 @@ class Island(SelectCharacter):
             GameStuckError: 切换采集页签超时。
         """
         for _ in self.loop(timeout=15, skip_first=False):
+            if self.is_business_event_popup():
+                self.handle_business_event_popup()
+                continue
             if self.appear(ISLAND_GET, offset=30):
                 self.handle_island_reward_popup()
                 continue
-            if self.appear(ISLAND_GATHER_COLLECT_CHECK):
+            if self.match_template_color(ISLAND_GATHER_COLLECT_CHECK, offset=(20, 20)):
                 return True
-            if self.appear_then_click(ISLAND_GATHER_COLLECT, interval=1):
+            if self.match_template_color(ISLAND_GATHER_COLLECT, offset=(20, 20), interval=1):
+                self.device.click(ISLAND_GATHER_COLLECT)
                 continue
         raise GameStuckError("切换采集页签超时")
 
