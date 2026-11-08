@@ -154,6 +154,9 @@ MATERIAL_INSUFFICIENT = 'insufficient'
 SELECTION_UP_SWIPE_NAME = "SelectionUpSwipe"
 # select_product 最大滑动尝试次数，覆盖列表底部产品（海参等位于列表末尾）
 _SELECT_PRODUCT_MAX_SWIPES = 8
+_SELECT_PRODUCT_CONFIRM_WAIT = 2
+_SELECT_PRODUCT_MAX_CLICKS = 3
+_SELECT_PRODUCT_TIMEOUT = 30
 
 # 岛屿物品英文 key -> 中文名映射，仅用于日志输出本地化。
 # 名称来源：module/config/i18n/zh-CN.json 的餐品选项、各模块配置中的 cn_name 与既有中文注释。
@@ -854,32 +857,69 @@ class Island(SelectCharacter):
 
         Returns:
             bool: 是否成功选中目标产品。
+
+        Pages:
+            in: 产品选择页，允许正在切换产品或列表滑动。
+            out: 已确认选中目标；失败时保留当前页，由调用方恢复。
         """
         # 清理之前可能残留的滑动记录，避免多次调用累积触发单按钮死循环检测
         # （click_record maxlen=15，两次调用各 _SELECT_PRODUCT_MAX_SWIPES 条 >12 阈值）
         self.device.click_record_remove(SELECTION_UP_SWIPE_NAME)
 
-        for _ in range(_SELECT_PRODUCT_MAX_SWIPES):
-            self.device.screenshot()
+        swipes = 0
+        clicks = 0
+        confirm_wait = Timer(_SELECT_PRODUCT_CONFIRM_WAIT)
+        swipe_pending = False
+        swipe_stop_wait = Timer(0.3)
+        swipe_settle_wait = Timer(0.2)
+        for _ in self.loop(timeout=Timer(_SELECT_PRODUCT_TIMEOUT), skip_first=False):
+            if swipe_pending:
+                # 滑动后仍先确认当前页面，再消除惯性；过渡帧不点旧坐标。
+                if (self.match_template_color(ISLAND_SELECT_PRODUCT_CHECK, offset=(20, 20))
+                        and swipe_stop_wait.reached()):
+                    # 安全区不计入连击记录，避免与滑动交替触发双按钮保护。
+                    self.device.click(SELECT_PRODUCT_INERTIA_STOP, control_check=False)
+                    swipe_pending = False
+                    swipe_settle_wait.reset()
+                continue
+            if not swipe_settle_wait.reached():
+                continue
 
             # 使用形状+颜色双重验证来识别 product_selection_check
             if self.match_template_color(product_selection_check, offset=20, similarity=0.85, threshold=10):
                 return True
 
+            if clicks:
+                # 点击后右侧选中图尚未刷新时只等待，不能把暂时缺图当成需要翻页。
+                if not confirm_wait.reached():
+                    continue
+                if clicks >= _SELECT_PRODUCT_MAX_CLICKS:
+                    logger.warning(f"[岛屿] 产品点击后未能确认选中: {product_selection_check}")
+                    return False
+
+            if not self.match_template_color(ISLAND_SELECT_PRODUCT_CHECK, offset=(20, 20)):
+                continue
+
             # 使用形状+颜色双重验证来识别 product_selection 并点击
             if self.match_template_color(product_selection, offset=300, similarity=0.85, threshold=10):
                 self.device.click(product_selection)
+                clicks += 1
+                confirm_wait.reset()
                 continue
 
-            # 如果都不匹配，则滑动寻找
-            self.device.swipe_vector(vector=(0, -200), box=(333, 142, 431, 602), name=SELECTION_UP_SWIPE_NAME)
-            self.device.sleep(0.3)
-            # 点击安全区域消除滑动惯性，使用 control_check=False 避免与 swipe 交替
-            # 触发 GameTooManyClickError（两个按钮各 ≥6 次即报错）。
-            # swipe 本身仍记录在 click_record 中，8 次滑动 < 12 次单按钮阈值，安全。
-            self.device.click(SELECT_PRODUCT_INERTIA_STOP, control_check=False)
-            self.device.sleep(0.2)
+            # 已点击的目标必须由新帧重新定位才允许补点，确认失败不再盲目滑动。
+            if clicks:
+                continue
+            if swipes >= _SELECT_PRODUCT_MAX_SWIPES:
+                logger.warning(f"[岛屿] 产品列表滑动 {_SELECT_PRODUCT_MAX_SWIPES} 次后仍未找到: {product_selection}")
+                return False
 
+            self.device.swipe_vector(vector=(0, -200), box=(333, 142, 431, 602), name=SELECTION_UP_SWIPE_NAME)
+            swipes += 1
+            swipe_pending = True
+            swipe_stop_wait.reset()
+
+        logger.warning(f"[岛屿] 产品选择页或选中状态确认超时: {product_selection_check}")
         return False
 
     def _handle_select_product_failure(self, product):
