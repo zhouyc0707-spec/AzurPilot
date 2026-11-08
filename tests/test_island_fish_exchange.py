@@ -4,7 +4,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from module.exception import GameStuckError
+from module.exception import GameStuckError, IslandFishExchangeError
 from module.island.fish_exchange import (
     FishExchangeSession, get_fish_protection, parse_exchange_amounts,
     parse_exchange_cards, plan_fish_exchange,
@@ -59,6 +59,69 @@ class ExchangeMain:
 
 
 class TestFishExchange(unittest.TestCase):
+    def navigation_session(self, frames, initial=None):
+        main = SimpleNamespace(
+            device=SimpleNamespace(screenshot=Mock(), save_screenshot=Mock()),
+            ui_goto=Mock(), ui_page_appear=Mock(return_value=False),
+            appear_then_click=Mock(return_value=False), state=initial)
+
+        def loop(**kwargs):
+            for frame in frames:
+                main.state = frame
+                yield None
+
+        main.loop = loop
+        session = FishExchangeSession(main)
+        session._panel = lambda item: main.state == item
+        session._amounts = Mock(return_value=(0, 0))
+        session._click_side_label = Mock(return_value=True)
+        return main, session
+
+    def test_open_processing_page_switches_groups_without_generic_navigation(self):
+        main, session = self.navigation_session([2521, 2521, 2522], initial=2521)
+        self.assertEqual(session._goto_group(2522), 0)
+        main.ui_goto.assert_not_called()
+        main.device.screenshot.assert_called_once()
+        session._click_side_label.assert_called_once_with(('海水鱼', '海水魚'))
+
+    def test_new_processing_visit_navigates_then_clears_selection(self):
+        main, session = self.navigation_session([2522, 2521])
+        self.assertEqual(session._goto_group(2521), 0)
+        main.ui_goto.assert_called_once()
+        self.assertFalse(main.ui_goto.call_args.kwargs['recover_unknown'])
+
+    def test_unknown_amount_waits_without_reclicking_open_group(self):
+        main, session = self.navigation_session([2521, 2522, 2522], initial=2521)
+        session._amounts.return_value = None
+        with self.assertRaisesRegex(IslandFishExchangeError, '数量无法确认'):
+            session._goto_group(2522)
+        session._click_side_label.assert_not_called()
+        main.ui_goto.assert_not_called()
+
+    def test_selection_must_be_cleared_before_returning_stock(self):
+        _, session = self.navigation_session([2521, 2522, 2522], initial=2521)
+        session._amounts.side_effect = [(25, 4), (25, 0)]
+        self.assertEqual(session._goto_group(2522), 25)
+        self.assertEqual(session._amounts.call_count, 2)
+
+    def test_leave_processing_page_confirms_home_without_generic_navigation(self):
+        from module.ui.page import page_island
+        from module.ui_white.assets import BACK_ARROW_WHITE
+        main, session = self.navigation_session([2522, 'home'])
+        main.ui_page_appear.side_effect = lambda page: page == page_island and main.state == 'home'
+        session.leave_shop()
+        main.ui_goto.assert_not_called()
+        self.assertIn(unittest.mock.call(BACK_ARROW_WHITE, offset=(20, 20), interval=2),
+                      main.appear_then_click.call_args_list)
+
+    def test_leave_unknown_page_does_not_click_unverified_back_button(self):
+        from module.ui_white.assets import BACK_ARROW_WHITE
+        main, session = self.navigation_session([None, None])
+        with self.assertRaisesRegex(IslandFishExchangeError, '返回本岛'):
+            session.leave_shop()
+        self.assertNotIn(unittest.mock.call(BACK_ARROW_WHITE, offset=(20, 20), interval=2),
+                         main.appear_then_click.call_args_list)
+
     def test_season_order_protection_survives_removal_of_old_auto_targets(self):
         config = ReadConfig({'IslandPlan.IslandProductionPlanner.HardFloorItems': 'catfish: 999',
                              'IslandPlan.IslandProductionPlanner.TaskTarget': 'catfish: 999'})
@@ -152,6 +215,17 @@ class TestFishExchange(unittest.TestCase):
             session._exchange_batch(2521, 20, {5002: {'button': (10, 10, 20, 20)}}, {5002: 1}, 4)
         self.assertEqual(main.clicks, ['FISH_EXCHANGE_CARD_5002'])
         main.device.save_screenshot.assert_called_once()
+
+    def test_unknown_amount_respects_action_timeout_without_selection(self):
+        main = ExchangeMain()
+        session = self.session(main)
+        session._amounts = Mock(return_value=None)
+        with patch('module.island.fish_exchange.Timer') as timer:
+            timer.return_value.start.return_value = timer.return_value
+            timer.return_value.reached.return_value = True
+            with self.assertRaisesRegex(IslandFishExchangeError, '数量无法确认'):
+                session._exchange_batch(2521, 20, {5002: {'button': (10, 10, 20, 20)}}, {5002: 1}, 4)
+        self.assertEqual(main.clicks, [])
 
     def test_target_already_met_skips_cards(self):
         main = ExchangeMain()

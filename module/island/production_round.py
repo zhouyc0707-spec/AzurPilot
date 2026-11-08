@@ -7,7 +7,7 @@ from importlib import import_module
 from module.config.time_source import now as current_time
 from module.config.config import TaskEnd, _round_up_half_hour, _round_up_hour, name_to_function
 from module.config.utils import ensure_time
-from module.exception import GamePageUnknownError, GameStuckError, GameTooManyClickError
+from module.exception import GamePageUnknownError, GameStuckError, GameTooManyClickError, IslandFishExchangeError
 from module.island.round_inventory import IslandRoundInventory
 from module.logger import logger
 
@@ -36,7 +36,7 @@ def invalidates_round(task):
 
 
 def preparation_retry_deadline(owner, task):
-    """共享准备的冷却跨游戏重启保留，不阻挡委托、科研或恢复入口。"""
+    """岛屿生产故障冷却跨游戏重启保留，不阻挡委托、科研或恢复入口。"""
     deadline = getattr(owner, '_island_prepare_retry_at', None)
     if deadline is None:
         return None
@@ -51,8 +51,8 @@ def preparation_retry_deadline(owner, task):
     return max(deadline, previous) if previous is not None else deadline
 
 
-def delay_failed_preparation(owner, task):
-    """同一准备流程失败时延后整组，避免换一个原任务入口重复触发故障。"""
+def delay_failed_preparation(owner, task, *, reason='共享准备失败'):
+    """准备或专项兑换失败时延后整组，避免换入口重复触发同一故障。"""
     config = owner.config
     deadline = (current_time() + timedelta(minutes=ensure_time(config.Scheduler_FailureInterval))).replace(microsecond=0)
     alignment = config.cross_get('IslandPlan.IslandPlan.TaskAlignment', default=config.IslandPlan_TaskAlignment)
@@ -74,7 +74,7 @@ def delay_failed_preparation(owner, task):
             if previous is None or previous < deadline:
                 # 沿用原整点/半点对齐；已经排得更晚的任务保持不变。
                 config.task_delay(target=deadline, task=name)
-    logger.warning(f'[岛屿单轮] 共享准备失败，生产任务统一冷却至 '
+    logger.warning(f'[岛屿单轮] {reason}，生产任务统一冷却至 '
                    f'{owner._island_prepare_retry_at}，保留更晚排期：{tasks}')
 
 
@@ -280,7 +280,13 @@ def run_production_task(owner, task, cls):
             owner._island_production_round = session
         else:
             logger.info(f'[岛屿单轮] 继续 {task}，复用本轮库存，剩余任务 {len(session.pending)} 个')
-        session.run_task(owner.config, task)
+        try:
+            session.run_task(owner.config, task)
+        except IslandFishExchangeError:
+            # 兑换结果可能不确定，先丢弃共享账；冷却后必须重新收获和盘点。
+            owner._island_production_round = None
+            delay_failed_preparation(owner, task, reason='鱼肉兑换未确认，已丢弃本轮库存')
+            raise
     except BaseException as exc:
         if getattr(owner, '_island_production_round', None) is not None:
             logger.info(f'[岛屿单轮] 丢弃本轮：{task} 执行中断（{type(exc).__name__}）')

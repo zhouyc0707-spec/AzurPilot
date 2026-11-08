@@ -110,8 +110,18 @@ class IslandFishery(Island, WarehouseOCR, LoginHandler, IslandFishMeatExchange):
         for name, fish_id in FISH_MEAT_FISH_IDS.items():
             protected[fish_id] = max(protected.get(fish_id, 0), self.fishery_threshold.get(name, 0))
         if server.server in ('cn', 'tw'):
-            FishExchangeSession(self).run(targets, protected)
-            self.ui_ensure(page_island)
+            from module.exception import (
+                GamePageUnknownError, GameStuckError, GameTooManyClickError, IslandFishExchangeError,
+            )
+            session = FishExchangeSession(self)
+            try:
+                session.run(targets, protected)
+                session.leave_shop()
+            except IslandFishExchangeError:
+                raise
+            except (GamePageUnknownError, GameStuckError, GameTooManyClickError) as exc:
+                # 进入商店的通用导航也可能失败，须经过同一生产轮冷却。
+                raise IslandFishExchangeError('鱼肉加工导航或点击状态无法确认') from exc
         elif server.server in ('en', 'jp'):
             self.run_fish_meat_exchange(targets, keep=protected)
         else:

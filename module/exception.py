@@ -136,6 +136,10 @@ class GameBugError(Exception):
     pass
 
 
+class IslandFishExchangeError(GameStuckError):
+    """鱼肉兑换状态未确认；先延期岛屿生产，再沿原卡死恢复保存现场。"""
+
+
 class GameTooManyClickError(Exception):
     """点击次数过多，疑似陷入循环。
 

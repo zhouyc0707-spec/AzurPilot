@@ -9,9 +9,10 @@ import module.config.server as server
 from module.base.button import Button
 from module.base.timer import Timer
 from module.base.utils import crop
-from module.exception import GameStuckError
+from module.exception import IslandFishExchangeError
 from module.island.data import DIC_ISLAND_EXCHANGE_RECIPE, DIC_ISLAND_ITEM, DIC_ISLAND_RECIPE
 from module.island.order_stock import get_menu_reserve_items
+from module.island.fish_exchange_ocr import read_exchange_amounts, read_exchange_cards
 from module.island.planner_utils import (
     get_stuck_season_order_requirements, resolve_stuck_season_order_id,
 )
@@ -19,7 +20,8 @@ from module.island.assets import GET_ITEMS_ISLAND
 from module.island_exchange.assets import ALAS_EXCHANGE_CONFIRM
 from module.logger import logger
 from module.ocr.ocr import Ocr
-from module.ui.page import page_island_exchange_shop
+from module.ui_white.assets import BACK_ARROW_WHITE
+from module.ui.page import page_island, page_island_exchange_shop
 
 
 FISH_MEAT_IDS = (2521, 2522)
@@ -165,14 +167,14 @@ class FishExchangeSession:
 
     def __init__(self, main):
         self.main = main
-        self.ocr = Ocr([], lang='cnocr', name='FISH_EXCHANGE_TEXT')
+        self.ocr = Ocr([], lang='tw' if server.server == 'tw' else 'cnocr', name='FISH_EXCHANGE_TEXT')
 
     def _detect(self, area):
         return self.ocr.cnocr.det(crop(self.main.device.image, area))
 
     def _unknown(self, reason):
         self.main.device.save_screenshot(genre='island_fish_exchange_unknown', interval=0)
-        raise GameStuckError(f'鱼肉兑换未得到正向确认：{reason}')
+        raise IslandFishExchangeError(f'鱼肉兑换未得到正向确认：{reason}')
 
     def _panel(self, meat_id):
         if not self.main.appear(ALAS_EXCHANGE_CONFIRM, offset=(20, 20)):
@@ -182,7 +184,7 @@ class FishExchangeSession:
         return any(score >= 0.90 and _normalize_text(text) == expected for text, _, score in names)
 
     def _amounts(self):
-        return parse_exchange_amounts(self._detect(AMOUNT_AREA))
+        return read_exchange_amounts(self.main.device.image)
 
     def _click_side_label(self, labels):
         detections = self._detect((0, 70, 168, 695))
@@ -198,9 +200,13 @@ class FishExchangeSession:
 
     def _goto_group(self, meat_id):
         """切换另一组再返回，游戏 FlushGroup 会清空选择，不使用全选按钮。"""
-        self.main.ui_goto(page_island_exchange_shop, get_ship=False)
+        self.main.device.screenshot()
+        # 加工页没有普通商店的金币标志，已在加工页时只切换侧栏。
+        if not any(self._panel(item) for item in FISH_MEAT_IDS):
+            self.main.ui_goto(page_island_exchange_shop, get_ship=False, recover_unknown=False)
         other = 2522 if meat_id == 2521 else 2521
         phase = 0
+        group_seen = False
         click_timer = Timer(2, count=4)
         for _ in self.main.loop(skip_first=False, timeout=Timer(25)):
             target = other if phase == 0 else meat_id
@@ -209,24 +215,41 @@ class FishExchangeSession:
                     phase = 1
                     click_timer.clear()
                     continue
+                group_seen = True
                 amounts = self._amounts()
                 if amounts is not None and amounts[1] == 0:
                     return amounts[0]
+                # 分组已就绪时等待数量确认，重复点同一分组不能修复数字识别。
+                continue
             if click_timer.reached():
                 clicked = self._click_side_label(EXCHANGE_GROUP_LABELS[target])
                 if not clicked:
                     clicked = self._click_side_label(EXCHANGE_MAIN_LABELS)
                 if clicked:
                     click_timer.reset()
-        self._unknown('未能进入已清空选择的鱼肉加工分组')
+        self._unknown('加工页已打开，但现货或清空后的预览数量无法确认' if group_seen
+                      else '未能进入鱼肉加工分组')
 
     def _cards(self, meat_id):
-        cards = parse_exchange_cards(self._detect(FISH_CARD_AREA), meat_id, server.server)
-        for info in cards.values():
-            x1, y1, x2, y2 = info['button']
-            info['button'] = (x1 + FISH_CARD_AREA[0], y1 + FISH_CARD_AREA[1],
-                              x2 + FISH_CARD_AREA[0], y2 + FISH_CARD_AREA[1])
-        return cards
+        return read_exchange_cards(self.main.device.image, meat_id, server.server)
+
+    def leave_shop(self):
+        """从已确认的加工页或商店返回，避免通用导航将加工页判为未知。
+
+        Pages:
+            in: 鱼肉加工页、page_island_exchange_shop
+            out: page_island
+        """
+        for _ in self.main.loop(skip_first=False, timeout=Timer(15)):
+            if self.main.ui_page_appear(page_island):
+                return
+            if self.main.appear_then_click(GET_ITEMS_ISLAND, offset=(20, 20), interval=2):
+                continue
+            if (any(self._panel(item) for item in FISH_MEAT_IDS)
+                    or self.main.ui_page_appear(page_island_exchange_shop)):
+                if self.main.appear_then_click(BACK_ARROW_WHITE, offset=(20, 20), interval=2):
+                    continue
+        self._unknown('加工结束后未能确认返回本岛')
 
     def _handle_exchange_popup(self):
         """只接受游戏鱼肉加工专用确认文案，其他确认弹窗不点击。"""
@@ -254,6 +277,8 @@ class FishExchangeSession:
             if self._panel(meat_id):
                 amounts = self._amounts()
                 if amounts is None:
+                    if action_timeout.reached():
+                        self._unknown('加工期间现货或预览数量无法确认；未继续补点')
                     continue
                 stock, preview = amounts
                 if clicked_confirm:

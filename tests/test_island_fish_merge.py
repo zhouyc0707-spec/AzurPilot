@@ -31,7 +31,23 @@ class FishEntryTest(unittest.TestCase):
                 expected = {fish_id: 0 for fish_id in fishery.FISH_MEAT_FISH_IDS.values()}
                 expected.update({5003: 30, 5107: 5})
                 session.return_value.run.assert_called_once_with({2521: 30, 2522: 20}, expected)
+                session.return_value.leave_shop.assert_called_once_with()
+                self.main.ui_ensure.assert_not_called()
                 self.main.run_fish_meat_exchange.assert_not_called()
+
+    def test_cn_navigation_errors_use_same_fish_failure_cooldown(self):
+        from module.exception import (
+            GamePageUnknownError, GameStuckError, GameTooManyClickError, IslandFishExchangeError,
+        )
+        for error in (GameStuckError('导航失败'), GameTooManyClickError('重复点击'),
+                      GamePageUnknownError('未知页面')):
+            with self.subTest(error=type(error).__name__), patch.object(server, 'server', 'cn'), \
+                    patch.object(local, 'FishExchangeSession') as session:
+                session.return_value.run.side_effect = error
+                with self.assertRaises(IslandFishExchangeError) as caught:
+                    self.main.run_fish_meat_targets()
+                self.assertIs(caught.exception.__cause__, error)
+                session.return_value.leave_shop.assert_not_called()
 
     def test_en_jp_manual_targets_forward_all_protected_stock(self):
         for language in ('en', 'jp'):
