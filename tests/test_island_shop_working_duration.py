@@ -37,7 +37,7 @@ class DurationUI:
         task.post_open = Mock(return_value=True)
         task.post_list_is_empty = Mock(return_value=False)
         task.post_product_check = Mock(return_value='lavender_tea')
-        task.post_get_and_close = Mock(return_value=True)
+        task.post_get_stay = Mock(return_value=True)
         task.appear = lambda button, **kwargs: button is self.frame[0]
         task.loop = Mock(wraps=ModuleBase.loop.__get__(task, IslandShopBase))
 
@@ -78,7 +78,7 @@ class WorkingDurationTests(unittest.TestCase):
         self.assertEqual(self.raw.return_value.ocr.call_count, 2)
         self.assertIsNone(self.raw.call_args.kwargs['alphabet'])
         self.assertIs(task.loop.call_args.kwargs['skip_first'], False)
-        task.post_get_and_close.assert_called_once()
+        task.post_get_stay.assert_called_once()
 
     def test_invalid_duration_times_out_without_finishing_or_losing_in_production(self):
         for raw in ('01:01:1', '010117', '前01:01:17', '01:01:17后', '01:01:X17',
@@ -95,7 +95,7 @@ class WorkingDurationTests(unittest.TestCase):
                 self.assertEqual(task.posts['POST1']['runs'], 4)
                 self.assertEqual(task.post_check_meal, {'lavender_tea': 4})
                 self.assertEqual(self.raw.return_value.ocr.call_count, 6)
-                task.post_get_and_close.assert_called_once()
+                task.post_get_stay.assert_called_once()
 
     def test_unknown_transition_does_not_read_ocr_until_working_is_confirmed(self):
         flow = DurationUI([(None, '00:01:00'), (ISLAND_WORKING, '00:02:00')])
@@ -103,8 +103,8 @@ class WorkingDurationTests(unittest.TestCase):
         self.assertEqual(task.time_1, NOW + timedelta(minutes=2))
         self.raw.return_value.ocr.assert_called_once_with((ISLAND_WORKING, '00:02:00'))
 
-    def test_positive_complete_or_idle_during_retry_clears_working_only_once(self):
-        for state in (ISLAND_WORK_COMPLETE, ISLAND_POST_SELECT):
+    def test_positive_idle_during_retry_clears_working_only_once(self):
+        for state in (ISLAND_POST_SELECT,):
             with self.subTest(state=state):
                 self.raw.reset_mock()
                 flow = DurationUI([(ISLAND_WORKING, '01:01:1'), (state, '')])
@@ -115,16 +115,17 @@ class WorkingDurationTests(unittest.TestCase):
                 self.assertIsNone(task.time_1)
                 self.assertEqual(task.post_check_meal, {})
                 self.assertEqual(self.raw.return_value.ocr.call_count, 1)
-                task.post_get_and_close.assert_called_once()
+                task.post_get_stay.assert_called_once()
 
-    def test_initial_complete_or_idle_does_not_start_duration_retry(self):
+    def test_initial_complete_or_idle_is_rechecked_after_collection(self):
         for state in (ISLAND_WORK_COMPLETE, ISLAND_POST_SELECT):
             with self.subTest(state=state):
-                flow = DurationUI([], initial=state)
+                flow = DurationUI([(ISLAND_POST_SELECT, '')], initial=state)
                 task = self.run_flow(flow)
                 self.assertEqual(task.posts['POST1']['status'], 'idle')
-                task.loop.assert_not_called()
-                self.assertEqual(flow.reads, 1)
+                task.loop.assert_called_once()
+                task.post_get_stay.assert_called_once()
+                self.assertEqual(flow.reads, 2)
 
     def test_unknown_working_product_keeps_working_without_inventing_product(self):
         flow = DurationUI([(ISLAND_WORKING, '01:01:1')])

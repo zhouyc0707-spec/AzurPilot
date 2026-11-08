@@ -100,6 +100,8 @@ class EmptyPostInspectionTests(unittest.TestCase):
 
     def test_fishery_actual_run_still_dispatches_empty_slots(self):
         ui = FisheryUI(demand={'crayfish': 1}, fry_stock={'crayfish': 20}, positions=1)
+        # 此用例没有季节目标，补齐配置读取接口以沿用默认空目标。
+        ui.fishery.config.cross_get = lambda path, default=None: default
         ui.fishery.decided_lists = IslandFishery.decided_lists.__get__(ui.fishery)
         ui.fishery.post_list_is_empty = Mock(return_value=True)
         ui.run()

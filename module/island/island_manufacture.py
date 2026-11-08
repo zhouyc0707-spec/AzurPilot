@@ -247,9 +247,21 @@ class IslandManufacture(IslandShopBase):
     def post_check(self, post_id, time_var_name):
         self._last_manufacture_product = None
         super().post_check(post_id, time_var_name)
-        if self.posts[post_id]['status'] == 'working' and getattr(self, '_last_manufacture_product', None) is None:
-            category = self._post_category(post_id)
-            self._unknown_working_categories.add(category)
+        self._refresh_unknown_working_categories()
+
+    def refresh_post_occupation(self, post_id, time_var_name=None):
+        state = super().refresh_post_occupation(post_id, time_var_name)
+        self._refresh_unknown_working_categories()
+        return state
+
+    def _refresh_unknown_working_categories(self):
+        """复核一个岗位不能抹去同类别其他岗位仍未知的在制品。"""
+        self._unknown_working_categories = {
+            self._post_category(post_id) for post_id, post in self.posts.items()
+            if (post.get('status') == 'unknown'
+                or (post.get('status') == 'working' and post.get('crop') is None))
+        }
+        for category in self._unknown_working_categories:
             logger.info(f'[岛屿-制造业] {category} 存在未知在制品，收取前暂停该类别追加派遣')
 
     def get_warehouse_counts(self):
@@ -317,6 +329,7 @@ class IslandManufacture(IslandShopBase):
         self._round_collect_all = True
         self._round_recipe_post = None
         self.post_check_meal.clear()
+        self._post_check_contributions = {}
         self._unknown_working_categories.clear()
         self._post_time_vars = {}
         enabled = set(self.post_buttons)
@@ -406,6 +419,7 @@ class IslandManufacture(IslandShopBase):
         Returns:
             dict | None: 成功安排生产的产品配置，全部失败则返回 None。
         """
+        self._dispatch_post_busy = False
         if getattr(self, 'island_round', None) is not None:
             return self._select_round_manufacture(post_id, product_list)
         post_button = self.posts[post_id]['button']
@@ -424,6 +438,8 @@ class IslandManufacture(IslandShopBase):
                 if self._dispatch_seasonal_manufacture(
                         post_id, product_name, self.get_product_production_limit(product_name)):
                     return product_info
+                if getattr(self, '_dispatch_post_busy', False):
+                    return None
                 continue
 
             # 每个产品：进入岗位搜索并选择；找不到则退出岗位重进重试
@@ -436,6 +452,15 @@ class IslandManufacture(IslandShopBase):
                 entered_product_page = False
                 while True:
                     self.device.screenshot()
+                    if self.appear(ISLAND_GET, offset=(30, 30)):
+                        self.handle_island_reward_popup()
+                        continue
+                    if self.appear(ISLAND_WORKING) or self.appear(POST_ADD, offset=1):
+                        self._dispatch_post_busy = True
+                        self.refresh_post_occupation(post_id)
+                        if not self.post_close():
+                            raise GameStuckError(f'{post_id} 占用复核后未能关闭岗位')
+                        return None
                     if self.appear_then_click(ISLAND_POST_SELECT, offset=1):
                         self.device.sleep(0.5)
                         continue
@@ -658,6 +683,8 @@ class IslandManufacture(IslandShopBase):
         produced = {}
         ledger = getattr(self, 'island_round', None)
         for post_id in self.get_idle_posts_by_category(category):
+            if category in self._unknown_working_categories:
+                break
             for name, target in targets.items():
                 if name not in self.name_to_config or name in self.unavailable_products:
                     continue
@@ -676,19 +703,23 @@ class IslandManufacture(IslandShopBase):
                 output = recipe['commission_product'][LOCAL_TO_ITEM_ID[name]]
                 batches = min((deficit + output - 1) // output, recipe['production_limit'])
                 actual = self._dispatch_seasonal_manufacture(post_id, name, batches)
+                if getattr(self, '_dispatch_post_busy', False):
+                    break
                 if actual:
                     produced[name] = produced.get(name, 0) + actual * output
                     break
 
     def _dispatch_seasonal_manufacture(self, post_id, name, batches):
         """有限工坊目标沿用选人、选品、按钮检查和真实派遣回执。"""
+        self._dispatch_post_busy = False
         ledger = getattr(self, 'island_round', None)
         if ledger is not None:
             batches = self._limit_round_food_batch(name, batches, respect_deficit=False)
         if batches <= 0:
             return 0
         if not self._open_round_recipe_page(post_id):
-            self.unavailable_products.add(name)
+            if not getattr(self, '_dispatch_post_busy', False):
+                self.unavailable_products.add(name)
             return 0
         selected, fast = self._select_round_product(name)
         if not selected or self.produce_check():
@@ -721,6 +752,7 @@ class IslandManufacture(IslandShopBase):
 
     def _select_round_manufacture(self, post_id, product_list):
         """按原手工候选顺序，以共享现货确定批次并确认扣料。"""
+        self._dispatch_post_busy = False
         if self._post_category(post_id) in self._unknown_working_categories:
             return None
         for item in product_list:
@@ -774,6 +806,7 @@ class IslandManufacture(IslandShopBase):
             self._unknown_working_categories.clear()
         if not prepared:
             self.post_check_meal.clear()
+            self._post_check_contributions = {}
             self._post_time_vars = {}
         # 每批生产开始时清空“材料不足”记忆，避免跨批沿用旧库存状态
         self.unavailable_products = set()
@@ -825,7 +858,7 @@ class IslandManufacture(IslandShopBase):
             if time_value is not None:
                 finish_times.append(time_value)
         # 统一收获包含未启用岗位，按实际检查的岗位映射保留复查时间。
-        if any(self.posts[post_id]['status'] == 'working'
+        if any(self.posts[post_id]['status'] in ('working', 'unknown')
                and getattr(self, var) is None
                for post_id, var in self._post_time_vars.items()):
             finish_times.append(current_time() + timedelta(minutes=5))

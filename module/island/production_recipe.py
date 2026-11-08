@@ -2,7 +2,8 @@
 
 from module.base.timer import Timer
 from module.exception import GameStuckError
-from module.island.assets import ISLAND_POST_SELECT, ISLAND_SELECT_CHARACTER_CHECK, ISLAND_SELECT_PRODUCT_CHECK
+from module.island.assets import (ISLAND_GET, ISLAND_POST_SELECT, ISLAND_SELECT_CHARACTER_CHECK,
+                                 ISLAND_SELECT_PRODUCT_CHECK, ISLAND_WORKING, POST_ADD)
 from module.island.data import DIC_ISLAND_RECIPE
 from module.island.item_ids import LOCAL_TO_ITEM_ID
 from module.island_manufacture.assets import ALAS_RECIPE_CHECK
@@ -21,10 +22,15 @@ class ProductionRecipeMixin:
 
     def _dispatch_stage(self):
         for _ in self.loop(timeout=Timer(25), skip_first=False):
+            if self.appear(ISLAND_GET, offset=(30, 30)):
+                self.handle_island_reward_popup()
+                continue
             if self.appear(ISLAND_SELECT_PRODUCT_CHECK, offset=1) or self.appear(ALAS_RECIPE_CHECK, offset=(20, 20)):
                 return 'products'
             if self.appear(ISLAND_SELECT_CHARACTER_CHECK, offset=1):
                 return 'characters'
+            if self.appear(ISLAND_WORKING, offset=1) or self.appear(POST_ADD, offset=1):
+                return 'working'
             if self.appear_then_click(ISLAND_POST_SELECT, offset=1, interval=2):
                 continue
             if self.ui_additional():
@@ -32,6 +38,7 @@ class ProductionRecipeMixin:
         raise GameStuckError('进入原料派遣页超时')
 
     def _open_product_page(self, post_id, characters=None, product=None):
+        self._dispatch_post_busy = False
         self.post_close()
         if not self.post_open(self.posts[post_id]['button']):
             raise GameStuckError(f'{post_id} 无法打开岗位')
@@ -47,6 +54,14 @@ class ProductionRecipeMixin:
             if not self.confirm_selected_character(f'{post_id}生产派遣'):
                 self.back_to_postmanage_from_dispatch()
                 return False
-            if self._dispatch_stage() != 'products':
-                raise GameStuckError(f'{post_id} 选人后未进入选品页')
+            stage = self._dispatch_stage()
+        if stage == 'working':
+            # 收获后仍有队列或岗位状态已变化，不能把追加入口当作空岗派遣。
+            self._dispatch_post_busy = True
+            self.refresh_post_occupation(post_id)
+            if not self.post_close():
+                raise GameStuckError(f'{post_id} 工作中岗位复核后未能关闭详情')
+            return False
+        if stage != 'products':
+            raise GameStuckError(f'{post_id} 未进入选品页')
         return True

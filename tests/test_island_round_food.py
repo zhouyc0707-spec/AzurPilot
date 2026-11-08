@@ -49,7 +49,7 @@ class RoundCollectionConfirmationTests(unittest.TestCase):
         task.post_list_is_empty = Mock(return_value=False)
         task.post_open = Mock(return_value=True)
         task.appear = lambda button, **kwargs: button is ISLAND_WORK_COMPLETE
-        task.post_get_and_close = Mock(return_value=False)
+        task.post_get_stay = Mock(return_value=False)
         for name in ('goto_postmanage', 'post_manage_mode', 'post_close', 'post_manage_swipe'):
             setattr(task, name, Mock())
         return task
@@ -62,7 +62,7 @@ class RoundCollectionConfirmationTests(unittest.TestCase):
                 with self.assertRaisesRegex(GameStuckError, '收获结果未确认'):
                     task.prepare_round()
                 self.assertFalse(task._round_prepared)
-                task.post_get_and_close.assert_called_once()
+                task.post_get_stay.assert_called_once()
                 task.post_open.assert_called_once()
                 task.post_manage_swipe.assert_not_called()
 
@@ -71,7 +71,7 @@ class RoundCollectionConfirmationTests(unittest.TestCase):
             with self.subTest(kind=kind.__name__):
                 task = self.task(kind)
                 task.post_check('ISLAND_WOOD_PROCESSING_POST1', 'time_1')
-                task.post_get_and_close.assert_called_once()
+                task.post_get_stay.assert_called_once()
 
 
 class WarehouseRoundTestCase(unittest.TestCase):

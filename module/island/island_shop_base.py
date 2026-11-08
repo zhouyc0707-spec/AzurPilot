@@ -86,6 +86,7 @@ class IslandShopBase(Island, WarehouseOCR):
         self.name_to_config = {}
         self.posts = {}
         self.post_check_meal = {}  # 岗位生产中的产品
+        self._post_check_contributions = {}  # 每岗已计入的在制数量，复核时替换而非累加
         self.post_products = []  # 有序列表，允许同名餐品出现在多个槽位
         self.warehouse_counts = {}  # 仓库识别到的产品
         self.to_post_products = {}
@@ -303,6 +304,7 @@ class IslandShopBase(Island, WarehouseOCR):
         self._round_collect_all = True
         self._round_recipe_post = None
         self.post_check_meal.clear()
+        self._post_check_contributions = {}
         self.goto_postmanage()
         self.post_manage_mode(POST_MANAGE_PRODUCTION)
         self.post_close()
@@ -437,6 +439,8 @@ class IslandShopBase(Island, WarehouseOCR):
                     self.island_round.block(candidate)
                 continue
             if not self._open_round_recipe_page(post_id, candidate):
+                if getattr(self, '_dispatch_post_busy', False):
+                    return 0
                 self.island_round.block(candidate)
                 continue
             selected, fast = self._select_round_product(candidate)
@@ -480,61 +484,99 @@ class IslandShopBase(Island, WarehouseOCR):
             time_var_name (str): 存储该岗位完成时间的属性名。
         """
         post_button = self.posts[post_id]['button']
-        self.posts[post_id]['status'] = 'none'
-        self.posts[post_id]['crop'] = None
-        self.posts[post_id]['runs'] = 0
+        self.posts[post_id]['time_var_name'] = time_var_name
+        self.posts[post_id].pop('dispatched_in_run', None)
+        self._set_post_occupation(post_id, 'none')
         setattr(self, time_var_name, None)
         self.post_close()
         if self.post_list_is_empty(post_button):
             self.posts[post_id]['status'] = 'idle'
             return
-        self.post_open(post_button)
-        self.device.sleep(0.5)
-        image = self.device.screenshot()
+        if not self.post_open(post_button):
+            return
+        self.device.screenshot()
+        # 可领取仅说明已有完成批次；领取后仍可能有队列正在生产。
+        # 留在详情复核，不能把收获前的完成标志直接记成空岗。
+        collected = self.post_get_stay()
+        if not collected:
+            if getattr(self, '_round_collect_all', False):
+                raise GameStuckError(f'{post_id} 收获结果未确认，未建立共享库存')
+            self.post_close()
+            return
+        self.refresh_post_occupation(post_id, time_var_name)
+        if not self.post_close():
+            raise GameStuckError(f'{post_id} 收获复核后未能关闭岗位')
+
+    def _set_post_occupation(self, post_id, status, product=None, number=0):
+        """替换本岗位的在制贡献，保留其他岗位和共享仓库账。"""
+        if not hasattr(self, '_post_check_contributions'):
+            self._post_check_contributions = {}
+        previous = self._post_check_contributions.pop(post_id, None)
+        if previous is not None:
+            name, count = previous
+            remaining = self.post_check_meal.get(name, 0) - count
+            if remaining > 0:
+                self.post_check_meal[name] = remaining
+            else:
+                self.post_check_meal.pop(name, None)
+        self.posts[post_id].update(status=status, crop=product, runs=number)
+        if (status == 'working' and product is not None and number > 0
+                and not self.posts[post_id].get('dispatched_in_run', False)):
+            self.post_check_meal[product] = self.post_check_meal.get(product, 0) + number
+            self._post_check_contributions[post_id] = (product, number)
+
+    def refresh_post_occupation(self, post_id, time_var_name=None):
+        """在已打开的详情页重新确认岗位；只读状态，不领取、不关闭、不读仓库。
+
+        Pages:
+            in: 岗位详情
+            out: 岗位详情
+        """
+        post = self.posts[post_id]
+        if time_var_name is None:
+            time_var_name = post.get('time_var_name') or getattr(self, '_post_time_vars', {}).get(post_id)
+        if time_var_name is None:
+            time_var_name = f'{self.time_prefix}{post_id[-1]}'
+        post['time_var_name'] = time_var_name
+        setattr(self, time_var_name, None)
+        self._set_post_occupation(post_id, 'unknown')
         ocr_post_number = Digit(OCR_POST_NUMBER, letter=(57, 58, 60), threshold=100,
                                 alphabet='0123456789')
-        if self.appear(ISLAND_WORK_COMPLETE, offset=1):
-            self.posts[post_id]['status'] = 'idle'
-            setattr(self, time_var_name, None)
-        elif self.appear(ISLAND_WORKING):
+        time_work = Ocr(ISLAND_WORKING_TIME, alphabet=None)
+        for image in self.loop(timeout=Timer(5), skip_first=False):
+            # 奖励或可领取批次仍覆盖详情时，背景空岗不能证明队列已结束。
+            if (self.appear(ISLAND_GET, offset=(30, 30))
+                    or self.appear(ISLAND_WORK_COMPLETE, offset=1)
+                    or self.appear(POST_GET, offset=(50, 0))):
+                continue
+            if (self.appear(ISLAND_POST_SELECT, offset=1)
+                    or self.appear(ISLAND_POST_VACANT_CHECK, offset=1)):
+                self._set_post_occupation(post_id, 'idle')
+                logger.info(f'[岛屿] {post_id} 收获复核：岗位空闲')
+                return 'idle'
+            if not self.appear(ISLAND_WORKING):
+                continue
             product = self.post_product_check()
             number = ocr_post_number.ocr(image)
-            self.posts[post_id]['status'] = 'working'
-            self.posts[post_id]['crop'] = product
-            self.posts[post_id]['runs'] = number
+            self._set_post_occupation(post_id, 'working', product, number)
             # 保留原始识别文本；不删除噪声，也不把截断时长当作零秒完成。
-            time_work = Ocr(ISLAND_WORKING_TIME, alphabet=None)
-            for image in self.loop(timeout=Timer(5), skip_first=False):
-                if (self.appear(ISLAND_WORK_COMPLETE, offset=1)
-                        or self.appear(ISLAND_POST_SELECT)):
-                    self.posts[post_id].update(status='idle', crop=None, runs=0)
-                    break
-                if not self.appear(ISLAND_WORKING):
-                    continue
-                text = time_work.ocr(image)
-                matched = re.fullmatch(r'(\d{1,2}):([0-5]\d):([0-5]\d)', str(text).strip())
-                if not matched:
-                    continue
-                hours, minutes, seconds = map(int, matched.groups())
-                duration = timedelta(hours=hours, minutes=minutes, seconds=seconds)
-                if duration.total_seconds() <= 0:
-                    continue
-                setattr(self, time_var_name, current_time() + duration)
-                break
-            else:
-                logger.warning(f'[岛屿] {post_id} 工作时长未确认，保留在制状态并稍后复查')
-            if self.posts[post_id]['status'] == 'working' and product is not None:
-                if product in self.post_check_meal:
-                    self.post_check_meal[product] += number
-                else:
-                    self.post_check_meal[product] = number
-        elif self.appear(ISLAND_POST_SELECT):
-            self.posts[post_id]['status'] = 'idle'
-            setattr(self, time_var_name, None)
-        collected = self.post_get_and_close()
-        if not collected and getattr(self, '_round_collect_all', False):
-            raise GameStuckError(f'{post_id} 收获结果未确认，未建立共享库存')
-        self.device.sleep(0.5)
+            text = time_work.ocr(image)
+            matched = re.fullmatch(r'(\d{1,2}):([0-5]\d):([0-5]\d)', str(text).strip())
+            if not matched:
+                continue
+            hours, minutes, seconds = map(int, matched.groups())
+            duration = timedelta(hours=hours, minutes=minutes, seconds=seconds)
+            if duration.total_seconds() <= 0:
+                continue
+            setattr(self, time_var_name, current_time() + duration)
+            logger.info(f'[岛屿] {post_id} 收获复核：仍在生产 {self._item_cn(product)} '
+                        f'x{number}，剩余 {text}')
+            return 'working'
+        if post['status'] == 'working':
+            logger.warning(f'[岛屿] {post_id} 工作时长未确认，保留在制状态并稍后复查')
+        else:
+            logger.warning(f'[岛屿] {post_id} 收获后岗位状态未确认，本轮跳过并稍后复查')
+        return post['status']
 
     def post_product_check(self):
         """识别当前岗位详情中正在生产的商品名称。
@@ -807,6 +849,8 @@ class IslandShopBase(Island, WarehouseOCR):
         setattr(self, time_var_name, finish_time)
         self.posts[post_id]['status'] = 'working'
         self.posts[post_id]['crop'] = product
+        # 本轮新单已由共享账或 produced_pass 计入，不再重复计入巡检在制数。
+        self.posts[post_id]['dispatched_in_run'] = True
         if isinstance(self, IslandShopBase) and getattr(self, 'island_round', None) is not None:
             from module.island.data import DIC_ISLAND_RECIPE
             from module.island.production_recipe import recipe_for_local_name
@@ -839,6 +883,7 @@ class IslandShopBase(Island, WarehouseOCR):
         Raises:
             GameStuckError: 派遣流程超时或界面卡死时抛出。
         """
+        self._dispatch_post_busy = False
         if getattr(self, 'island_round', None) is not None:
             return self._post_produce_round_food(post_id, product, number, time_var_name, product2)
         if self.name_to_config[product].get('generic_recipe'):
@@ -853,6 +898,15 @@ class IslandShopBase(Island, WarehouseOCR):
         selection_check = self.name_to_config[product]['selection_check']
         product_select_failures = {}
         for _ in self.loop(timeout=120, skip_first=False):
+            if self.appear(ISLAND_GET, offset=(30, 30)):
+                self.handle_island_reward_popup()
+                continue
+            if self.appear(ISLAND_WORKING) or self.appear(POST_ADD, offset=1):
+                self._dispatch_post_busy = True
+                self.refresh_post_occupation(post_id, time_var_name)
+                if not self.post_close():
+                    raise GameStuckError(f'{post_id} 占用复核后未能关闭岗位')
+                return 0
             if self.appear_then_click(ISLAND_POST_SELECT, offset=1):
                 self.device.sleep(0.5)
                 continue
@@ -944,7 +998,8 @@ class IslandShopBase(Island, WarehouseOCR):
         """缺少旧模板的配方用完整名称与蓝框确认，仍保留本地角色选择规则。"""
         from module.island.production_recipe import ProductionRecipeMixin
         if not ProductionRecipeMixin._open_product_page(self, post_id, self.chef_config, product):
-            self.chef_unavailable_products.add(product)
+            if not getattr(self, '_dispatch_post_busy', False):
+                self.chef_unavailable_products.add(product)
             return 0
         number = self._limit_food_batch(product, number)
         if number <= 0:
@@ -1074,7 +1129,8 @@ class IslandShopBase(Island, WarehouseOCR):
             target_label = (f'季节目标 {self._item_cn(name)}' if seasonal
                             else f'槽位{idx + 1} {self._item_cn(name)}')
             if seasonal and (self.warehouse_counts.get(name) is None or any(
-                    post.get('status') == 'working' and not post.get('crop')
+                    post.get('status') == 'unknown'
+                    or (post.get('status') == 'working' and not post.get('crop'))
                     for post in self.posts.values())):
                 logger.info(f'[岛屿] 季节目标 {self._item_cn(name)} 的现货或在制品未确认，本轮跳过')
                 continue
@@ -1134,6 +1190,7 @@ class IslandShopBase(Island, WarehouseOCR):
                     and getattr(self, '_round_prepared', False))
         if not prepared:
             self.post_check_meal.clear()
+            self._post_check_contributions = {}
         self._reserved_targets.clear()
         self._round_recipe_post = None
         self.goto_postmanage()
@@ -1220,6 +1277,9 @@ class IslandShopBase(Island, WarehouseOCR):
 
                 prev_pass_total = sum(_produced_pass.values())
                 self._schedule_and_track(_produced_pass)
+                if getattr(self, '_dispatch_post_busy', False):
+                    # 新发现的旧在制品改变了缺口；下一轮先重算，不算产品失败。
+                    continue
 
                 if sum(_produced_pass.values()) == prev_pass_total and self.to_post_products:
                     # 先切严格模式（绕"原料真没有"的坎儿）
@@ -1237,6 +1297,8 @@ class IslandShopBase(Island, WarehouseOCR):
 
                     strict_prev_total = sum(_produced_pass.values())
                     self._schedule_and_track(_produced_pass)
+                    if getattr(self, '_dispatch_post_busy', False):
+                        continue
 
                     if sum(_produced_pass.values()) == strict_prev_total and self.to_post_products:
                         # 严格模式也无产出 → 非原料原因（角色被占等），强制跳过
@@ -1287,6 +1349,8 @@ class IslandShopBase(Island, WarehouseOCR):
                         )
 
                         if result == 0:
+                            if getattr(self, '_dispatch_post_busy', False):
+                                continue
                             # 特殊餐品和常驻餐品都原料不足
                             logger.info(f"[岛屿] 特殊餐品 {self._item_cn(special_food)} 和常驻餐品 {self._item_cn(away_cook)} 都原料不足，保持岗位空闲")
                             break
@@ -1305,6 +1369,8 @@ class IslandShopBase(Island, WarehouseOCR):
                         )
 
                         if result == 0:
+                            if getattr(self, '_dispatch_post_busy', False):
+                                continue
                             # 特殊餐品原料不足
                             logger.info(f"[岛屿] 特殊餐品 {self._item_cn(special_food)} 原料不足，保持岗位空闲")
                             break
@@ -1328,6 +1394,8 @@ class IslandShopBase(Island, WarehouseOCR):
                             )
 
                             if result == 0:
+                                if getattr(self, '_dispatch_post_busy', False):
+                                    continue
                                 logger.info(f"[岛屿] 常驻餐品 {self._item_cn(away_cook)} 原料不足，保持岗位空闲")
                                 break
                             else:
@@ -1354,7 +1422,7 @@ class IslandShopBase(Island, WarehouseOCR):
             if time_value is not None:
                 finish_times.append(time_value)
         # 时长未知仍是工作岗；加入复查候选，继续沿用全局时间对齐。
-        if any(self.posts[post_id]['status'] == 'working'
+        if any(self.posts[post_id]['status'] in ('working', 'unknown')
                and getattr(self, var) is None
                for post_id, var in zip(self.post_buttons, time_vars)):
             finish_times.append(current_time() + timedelta(minutes=5))
@@ -1587,6 +1655,7 @@ class IslandShopBase(Island, WarehouseOCR):
 
     def schedule_production(self):
         """遍历所有空闲岗位并按优先级分配生产任务。"""
+        self._dispatch_post_busy = False
         if not self.to_post_products:
             logger.info("[岛屿] 没有需要生产的餐品")
             return
@@ -1710,6 +1779,9 @@ class IslandShopBase(Island, WarehouseOCR):
 
                 # 数量为零也可能由选人或界面确认失败造成，不能据此认定原料不足。
                 if actual_number == 0:
+                    if getattr(self, '_dispatch_post_busy', False):
+                        logger.info(f'[岛屿] {post_id} 已被占用，重算在制缺口后继续其他空岗')
+                        return
                     if getattr(self, '_round_deficit_satisfied', False):
                         # 本轮首次补读发现已有足量现货，重算后续需求；不是派遣失败。
                         return
