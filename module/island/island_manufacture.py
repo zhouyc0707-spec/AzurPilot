@@ -729,6 +729,11 @@ class IslandManufacture(IslandShopBase):
             time_value = getattr(self, var)
             if time_value is not None:
                 finish_times.append(time_value)
+        # 统一收获包含未启用岗位，按实际检查的岗位映射保留复查时间。
+        if any(self.posts[post_id]['status'] == 'working'
+               and getattr(self, var) is None
+               for post_id, var in self._post_time_vars.items()):
+            finish_times.append(current_time() + timedelta(minutes=5))
         hours_later = current_time() + timedelta(hours=6)
         finish_times.append(hours_later)
         finish_times.sort()

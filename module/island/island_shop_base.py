@@ -475,14 +475,31 @@ class IslandShopBase(Island, WarehouseOCR):
         elif self.appear(ISLAND_WORKING):
             product = self.post_product_check()
             number = ocr_post_number.ocr(image)
-            time_work = Duration(ISLAND_WORKING_TIME)
-            time_value = time_work.ocr(self.device.image)
-            finish_time = current_time() + time_value
-            setattr(self, time_var_name, finish_time)
             self.posts[post_id]['status'] = 'working'
             self.posts[post_id]['crop'] = product
             self.posts[post_id]['runs'] = number
-            if product is not None:
+            # 保留原始识别文本；不删除噪声，也不把截断时长当作零秒完成。
+            time_work = Ocr(ISLAND_WORKING_TIME, alphabet=None)
+            for image in self.loop(timeout=Timer(5), skip_first=False):
+                if (self.appear(ISLAND_WORK_COMPLETE, offset=1)
+                        or self.appear(ISLAND_POST_SELECT)):
+                    self.posts[post_id].update(status='idle', crop=None, runs=0)
+                    break
+                if not self.appear(ISLAND_WORKING):
+                    continue
+                text = time_work.ocr(image)
+                matched = re.fullmatch(r'(\d{1,2}):([0-5]\d):([0-5]\d)', str(text).strip())
+                if not matched:
+                    continue
+                hours, minutes, seconds = map(int, matched.groups())
+                duration = timedelta(hours=hours, minutes=minutes, seconds=seconds)
+                if duration.total_seconds() <= 0:
+                    continue
+                setattr(self, time_var_name, current_time() + duration)
+                break
+            else:
+                logger.warning(f'[岛屿] {post_id} 工作时长未确认，保留在制状态并稍后复查')
+            if self.posts[post_id]['status'] == 'working' and product is not None:
                 if product in self.post_check_meal:
                     self.post_check_meal[product] += number
                 else:
@@ -1278,6 +1295,11 @@ class IslandShopBase(Island, WarehouseOCR):
             time_value = getattr(self, var)
             if time_value is not None:
                 finish_times.append(time_value)
+        # 时长未知仍是工作岗；加入复查候选，继续沿用全局时间对齐。
+        if any(self.posts[post_id]['status'] == 'working'
+               and getattr(self, var) is None
+               for post_id, var in zip(self.post_buttons, time_vars)):
+            finish_times.append(current_time() + timedelta(minutes=5))
         hours_later = current_time() + timedelta(hours=6)
         finish_times.append(hours_later)
         finish_times.sort()
