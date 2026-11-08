@@ -27,7 +27,10 @@ class _RecognitionStub:
 
     def __init__(self, results):
         self.results = list(results)
-        self.templates = [object()]
+        self.templates = {'Oil': object()}
+        self.colors = {'Oil': (1, 2, 3)}
+        self.templates_hit = {'Oil': 0}
+        self.next_template_index = 1
         self.items = []
         self.grids = None
         self.item_class = None
@@ -35,7 +38,7 @@ class _RecognitionStub:
         self.amount_ocr = None
 
     def load_template_folder(self, folder):  # noqa: ARG002 - 接口对齐
-        self.templates = [object()]
+        self.templates = {'Oil': object()}
 
     def predict(self, image, **kwargs):  # noqa: ARG002 - 接口对齐
         self.items = self.results.pop(0) if self.results else []

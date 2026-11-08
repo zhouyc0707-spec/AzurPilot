@@ -12,6 +12,7 @@ import {resourceIcons} from '../components/StatisticsTable'
 import {Sankey} from '../resources/Sankey'
 import type {UiKey} from '../i18n'
 import '../resources/resources.css'
+import {createStatisticsRefresh} from '../app/statisticsRefresh'
 
 const resourceKeys: Record<string, UiKey> = {Oil: 'resource.Oil', Coin: 'resource.Coin', Gem: 'resource.Gem', Cube: 'resource.Cube', Pt: 'resource.Pt', Core: 'resource.Core', Medal: 'resource.Medal', Merit: 'resource.Merit', GuildCoin: 'resource.GuildCoin', ActionPoint: 'resource.ActionPoint', YellowCoin: 'resource.YellowCoin', PurpleCoin: 'resource.PurpleCoin', Chip: 'resource.Chip', Food: 'flow.food', URPt: 'flow.urPt', FurnitureCoin: 'flow.furnitureCoin', GachaTicket: 'flow.gachaTicket'}
 
@@ -49,19 +50,17 @@ export function ResourceManagement() {
   useEffect(() => {
     if (connection !== 'ready') return
     const owner = ++generation.current
-    let active = true, pending = false, running = false
-    async function load() {
-      if (running) {pending = true; return}
-      running = true; setBusy(true)
+    let active = true
+    const updater = createStatisticsRefresh(async () => {
+      setBusy(true)
       try {
         const result = await api.request('statistics.resourceFlows', {instance, days: Number(days) || 7, ...interval, resource: resource || null, task: task || null, offset, limit: 100})
         if (active && generation.current === owner) {setReport(result); setError('')}
       } catch (error) {if (active && generation.current === owner) setError((error as Error).message)}
-      finally {running = false; if (active) {setBusy(false); if (pending) {pending = false; void load()}}}
-    }
-    void load()
-    const unsubscribe = api.onEvent(event => {if (event.topic === 'statistics' && (event.data as {instance?: string})?.instance === instance) void load()})
-    return () => {active = false; unsubscribe()}
+      finally {if (active) setBusy(false)}
+    })
+    const unsubscribe = api.onEvent(event => {if (event.topic === 'statistics' && (event.data as {instance?: string})?.instance === instance) updater.notify()})
+    return () => {active = false; updater.dispose(); unsubscribe()}
   }, [connection, instance, days, interval, resource, task, offset, refresh])
   /* 物品名、分组与用途来自后端中文，显示前译成界面语言。 */
   const shown = useMemo(() => report?.instance === instance ? localizeFlowReport(report, language) : undefined, [report, instance, language])

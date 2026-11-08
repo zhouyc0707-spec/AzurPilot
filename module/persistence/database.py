@@ -101,6 +101,17 @@ class BusinessDatabase:
                     if not self.marker.exists():
                         logger.info('[存储] 补齐迁移完成标记')
                         self._write_marker(row[0])
+                    has_latest_index = connection.execute(
+                        "SELECT 1 FROM sqlite_master WHERE type='index' AND name='resource_snapshots_latest'"
+                    ).fetchone()
+                # v1 的附加查询索引不改变公开数据结构；已有索引时无需取得写锁。
+                if not has_latest_index:
+                    with closing(sqlite3.connect(self.path, timeout=30)) as connection:
+                        with connection:
+                            connection.execute(
+                                'CREATE INDEX IF NOT EXISTS resource_snapshots_latest '
+                                'ON resource_snapshots(instance,id)'
+                            )
                 logger.info('[存储] 总库 v%s 已完成迁移，无需再次解密旧数据', VERSION)
             else:
                 if self.marker.exists():

@@ -211,8 +211,8 @@ class ApiClient:
             data (dict[str, Any]): 包含 device_id 和统计数据的字典。
             timeout (int): 请求超时时间（秒），默认 10 秒。
         """
-        from module.base.async_executor import async_executor
-        return async_executor.submit(cls._submit_cl1_data, data, timeout)
+        from module.base.async_executor import network_executor
+        return network_executor.submit(cls._submit_cl1_data, dict(data), timeout)
 
     @classmethod
     def get_announcement(cls, timeout: int = 1, current_id: int = None) -> Optional[Dict[str, Any]]:

@@ -27,7 +27,7 @@ class Cl1DataSubmitter:
 
     Attributes:
         _device_id (Optional[str]): 匿名设备标识。
-        _last_submit_time (float): 上次成功提交的时间戳。
+        _last_submit_time (float): 上次提交已入队的时间戳。
         _submit_interval (int): 提交最小时间间隔（秒）。
         project_root (Path): 项目根目录路径。
         _instance_name (str): Alas 配置实例名称。
@@ -80,8 +80,8 @@ class Cl1DataSubmitter:
         
         month_key = f"{year:04d}-{month:02d}"
         
-        # 从数据库读取加密存储的统计数据
-        data = cl1_db.get_stats(self._instance_name, month_key)
+        # 遥测只使用三个原生计数，不展开整月事件和快照。
+        data = cl1_db.get_cl1_totals(self._instance_name, month_key)
         
         return {
             'month': month_key,
@@ -195,6 +195,8 @@ class Cl1DataSubmitter:
         try:
             # 收集数据
             raw_data = self.collect_data()
+            if raw_data.get('battle_count', 0) <= 0:
+                return False
 
             # 计算指标
             metrics = self.calculate_metrics(raw_data)

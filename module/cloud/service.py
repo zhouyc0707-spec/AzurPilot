@@ -33,6 +33,7 @@ class CloudService:
         self._thread_lock = threading.Lock()
         self._stop, self._wake = threading.Event(), threading.Event()
         self._thread = None
+        self._encoded_capture = None
         self._next_sync = self._next_attempt = 0
         self._failures = 0
         self._lock_path = self.root / 'state.json'
@@ -112,11 +113,20 @@ class CloudService:
             return
         if image.shape != (720, 1280, 3) or image.dtype != np.uint8:
             raise ValueError('Expected a complete 1280x720 RGB reward screenshot')
-        ok, png = cv2.imencode('.png', cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
-        if not ok:
-            raise CloudError('Could not encode source screenshot')
-        raw = png.tobytes()
-        digest = hashlib.sha256(raw).hexdigest()
+        # 只缓存最后一帧的不可变内容与编码，不按numpy对象身份复用。
+        # 同一数组被下一帧原地改写时会重新编码；复制出的相同画面则可直接复用。
+        pixels = image.tobytes()
+        cached = self._encoded_capture
+        if cached is not None and cached[0] == pixels:
+            _, raw, digest = cached
+        else:
+            snapshot = np.frombuffer(pixels, dtype=np.uint8).reshape(image.shape)
+            ok, png = cv2.imencode('.png', cv2.cvtColor(snapshot, cv2.COLOR_RGB2BGR))
+            if not ok:
+                raise CloudError('Could not encode source screenshot')
+            raw = png.tobytes()
+            digest = hashlib.sha256(raw).hexdigest()
+            self._encoded_capture = pixels, raw, digest
         with config_transaction(self._lock_path):
             receipts = read_json(self.root / 'uploaded-screenshots.json', {})
             sent = receipts.get(digest, [])
@@ -124,13 +134,18 @@ class CloudService:
             if not pending:
                 return
             path = self.root / 'screenshots' / (digest + '.json')
-            job = read_json(path, {'image_base64': base64.b64encode(raw).decode(),
-                                   'scene': scene, 'observations': []})
-            self._capacity()
+            job = read_json(path)
+            if job is None:
+                job = {'image_base64': base64.b64encode(raw).decode(),
+                       'scene': scene, 'observations': []}
+            changed = False
             for row in pending:
                 if row not in job['observations']:
                     job['observations'].append(row)
-            write_json(path, job)
+                    changed = True
+            if changed:
+                self._capacity()
+                write_json(path, job)
         self.start()
 
     def _upload_screenshots(self):

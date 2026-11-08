@@ -10,6 +10,7 @@ import type { StatisticsReport } from '../api/types'
 import { useApp, useConnection } from '../app/context'
 import { localizeReport } from './statisticsText'
 import type { StatisticsCategory } from '../app/statisticsPrefs'
+import { createStatisticsRefresh } from '../app/statisticsRefresh'
 
 /** 单个页面的取数参数，与该页在布局文档里保存的一致。 */
 interface CategoryParams {
@@ -48,41 +49,23 @@ export function CategorySection({params, revision, onState, render}: {
   useEffect(() => {
     if (connection !== 'ready') return
     let active = true
-    let running = false
-    let pending = false
-    let timer: ReturnType<typeof setTimeout> | undefined
     setData(undefined); setError('')
-    const load = (silent: boolean) => {
-      if (!active) return
-      if (running) {pending = true; return}
-      running = true
-      void request().then(value => {
+    const refresh = createStatisticsRefresh(async silent => {
+      await request().then(value => {
         if (active) {setData(normalizeReport(value)); setError('')}
       }).catch(reason => {
         if (active && !silent) setError(reason.message)
-      }).finally(() => {
-        running = false
-        if (active && pending) {
-          pending = false
-          timer = setTimeout(() => load(true), 300)
-        }
       })
-    }
-    const triggerUpdate = () => {
-      if (running) {pending = true; return}
-      clearTimeout(timer)
-      timer = setTimeout(() => load(true), 300)
-    }
+    })
     const off = api.onEvent(event => {
       const payload = event.data as {instance?: string} | undefined
       if (event.topic === 'statistics') {
-        if (!payload?.instance || payload.instance === instance) triggerUpdate()
+        if (!payload?.instance || payload.instance === instance) refresh.notify()
       }
     })
-    load(false)
     return () => {
       active = false
-      clearTimeout(timer)
+      refresh.dispose()
       off()
     }
   }, [connection, instance, request, revision])

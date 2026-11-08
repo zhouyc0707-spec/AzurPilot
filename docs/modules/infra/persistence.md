@@ -10,6 +10,8 @@
 
 v1 固定为 56 张 `STRICT` 表，建表、约束、触发器和查询索引的完整定义见 [schema_v1.sql](../../../module/persistence/schema_v1.sql)。SQLite 需支持 `STRICT`，运行环境版本由项目依赖环境决定。
 
+资源快照的 `resource_snapshots_latest(instance,id)` 用于按追加顺序继承最近资源值；时间窗口继续使用 `(instance,ts,id)`。已有 v1 总库在初始化锁内按需补齐该附加索引，索引已存在时不取得业务写锁。此更新不改版本号、数据列、记录或迁移完成标记的语义；回退代码可继续读取带有该索引的 v1 库，无需还原统计数据。
+
 ## 2. 模块职责
 
 ### 负责

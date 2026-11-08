@@ -202,10 +202,7 @@ class OpsiHazard1Leveling(CoinTaskMixin, OSMap):
 
                         instance_name = getattr(self.config, "config_name", None)
                         submitter = get_cl1_submitter(instance_name=instance_name)
-                        raw_data = submitter.collect_data()
-                        if raw_data.get("battle_count", 0) > 0:
-                            metrics = submitter.calculate_metrics(raw_data)
-                            submitter.submit_data(metrics)
+                        if submitter.auto_submit():
                             logger.info(
                                 f"侵蚀 1 数据提交已排队，实例名称: {instance_name}"
                             )

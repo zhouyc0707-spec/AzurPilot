@@ -70,6 +70,19 @@ from module.ui.switch import Switch
 from module.ui.ui import UI
 from module.ui_white.assets import REWARD_1_WHITE, REWARD_GOTO_COMMISSION_WHITE
 
+
+def _send_commission_reward_notification(push_config, instance, title, webui_title, content, webui_content):
+    """只发送已经定稿的消息；后台不再读取可变配置或统计。"""
+    try:
+        handle_notify(push_config, title=title, content=content)
+    except Exception as error:
+        logger.warning(f'[委托-收入] 奖励已保存，但推送失败: {type(error).__name__}')
+    try:
+        notify_webui(instance, title=webui_title, content=webui_content)
+    except Exception as error:
+        logger.warning(f'[委托-收入] 奖励已保存，但界面通知失败: {type(error).__name__}')
+
+
 COMMISSION_SWITCH = Switch('Commission_switch', is_selector=True)
 COMMISSION_SWITCH.add_state('daily', COMMISSION_DAILY)
 COMMISSION_SWITCH.add_state('urgent', COMMISSION_URGENT)
@@ -1755,7 +1768,20 @@ class RewardCommission(Dock, UI, InfoHandler):
         grid.similarity = 0.92
         # 先匹配原始字形；OCR 兜底保留 3 倍最近邻与碎片过滤，避免吞位或误读图标白边。
         grid.amount_ocr = CommissionAmount([], threshold=96, name='Amount_ocr')
-        grid.load_template_folder(template_folder)
+        # 仅复用磁盘模板。命中计数、临时未知模板、数量OCR与当前物品仍每组独立，
+        # 避免上一组的动画残影改变下一组的识别候选与未知编号。
+        template_key = os.path.abspath(template_folder)
+        cached = self.__dict__.get('_commission_income_template_cache')
+        if cached is None or cached[0] != template_key:
+            grid.load_template_folder(template_folder)
+            if grid.templates:
+                cached = (template_key, dict(grid.templates), dict(grid.colors), grid.next_template_index)
+                self._commission_income_template_cache = cached
+        else:
+            grid.templates = dict(cached[1])
+            grid.colors = dict(cached[2])
+            grid.templates_hit = dict.fromkeys(grid.templates, 0)
+            grid.next_template_index = cached[3]
 
         if not grid.templates:
             logger.info('[委托-收入] 没有加载模板，跳过')
@@ -1886,7 +1912,7 @@ class RewardCommission(Dock, UI, InfoHandler):
         from module.statistics.cl1_database import db as cl1_db
 
         instance = self.config.config_name
-        if self.config.Commission_CommissionNotifyReward:
+        if self.config.Commission_CommissionNotifyReward and merged_items.get('Gem', 0) > 0:
             reward_stats = None
             if self.config.Commission_CommissionNotifyRewardStatistics:
                 reward_stats = cl1_db.get_commission_reward_stats(instance)
@@ -1932,17 +1958,10 @@ class RewardCommission(Dock, UI, InfoHandler):
                     except Exception as e:
                         logger.warning(f'钻石委托统计生成失败: {e}')
 
-                handle_notify(
-                    self.config.Error_OnePushConfig,
-                    title=title,
-                    content=msg,
-                )
-
-                notify_webui(
-                    instance,
-                    title=webui_title,
-                    content=webui_msg,
-                )
+                from module.base.async_executor import network_executor
+                network_executor.submit(
+                    _send_commission_reward_notification,
+                    self.config.Error_OnePushConfig, instance, title, webui_title, msg, webui_msg)
 
 
     def _save_commission_reward_screenshot(self, image, instance):

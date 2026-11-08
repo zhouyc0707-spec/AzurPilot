@@ -508,29 +508,46 @@ def record_research_drop(images: t.Sequence[np.ndarray], instance: str, imgid: s
     return entry
 
 
-def read_research_identity(image, index=0):
-    """Read the actual reward's card, supporting queue and curved research list layouts."""
+def read_research_identities(image, indices):
+    """同一领奖批次只OCR一次队列，按原分组顺序逐项产出身份。"""
     from module.research.assets import QUEUE_CHECK
     from module.base.utils import crop
     from module.research.series import match_series
 
+    indices = tuple(indices)
+    if not indices:
+        return
     with _parser_lock:
         parser = get_parser()
-        if QUEUE_CHECK.match(image, offset=(10, 10)):
-            if not 0 <= index < 5:
-                return '', 0
-            names = parser.ocr.ocr(image)
+        queued = QUEUE_CHECK.match(image, offset=(10, 10))
+        if queued:
+            names = parser.ocr.ocr(image) if any(0 <= index < 5 for index in indices) else []
             names = names if isinstance(names, list) else [names]
-            code = names[index].strip().upper() if index < len(names) else ''
-            code = code if code in parser.lookup else parser._correct_code(code)
-            offset = QUEUE_CARD_AREAS[index][0] - QUEUE_CARD_AREAS[0][0]
-            area = tuple(value + (offset if n % 2 == 0 else 0)
-                         for n, value in enumerate(SERIES_BADGE_AREA))
-            return code, match_series(crop(image, area), scaling=1.0)
-        from module.research.project import get_research_finished, research_detect
-        finished = get_research_finished(image)
-        projects = research_detect(image)
-        if finished is None or finished >= len(projects):
-            return '', 0
-        project = projects[finished]
-        return project.name, int(str(project.series).removeprefix('S') or 0)
+        else:
+            from module.research.project import get_research_finished, research_detect
+            finished = get_research_finished(image)
+            projects = research_detect(image)
+            identity = ('', 0)
+            if finished is not None and finished < len(projects):
+                project = projects[finished]
+                identity = project.name, int(str(project.series).removeprefix('S') or 0)
+
+    for index in indices:
+        if queued:
+            identity = ('', 0)
+            if 0 <= index < 5:
+                with _parser_lock:
+                    # 逐组读取角标，后组失败不会阻止前组已经确认的掉落入库。
+                    # yield前释放解析锁，不把数据库写入或上传入队放在识别锁内。
+                    code = names[index].strip().upper() if index < len(names) else ''
+                    code = code if code in parser.lookup else parser._correct_code(code)
+                    offset = QUEUE_CARD_AREAS[index][0] - QUEUE_CARD_AREAS[0][0]
+                    area = tuple(value + (offset if n % 2 == 0 else 0)
+                                 for n, value in enumerate(SERIES_BADGE_AREA))
+                    identity = code, match_series(crop(image, area), scaling=1.0)
+        yield identity
+
+
+def read_research_identity(image, index=0):
+    """读取一组奖励的项目身份，保留独立重放的单项接口。"""
+    return next(read_research_identities(image, (index,)))

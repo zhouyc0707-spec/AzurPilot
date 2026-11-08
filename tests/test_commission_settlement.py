@@ -180,10 +180,23 @@ class TestCommissionSettlement(unittest.TestCase):
         self.seed("2025-12", [commission("old")])
         self.seed("2026-01", [commission("new")])
         before = self.rows()
-        self.fail_current_month()
+        # 增量归档不再重建cl1_months，直接在真正的归档写入处注入失败。
+        # 同时检查运行表与历史表原始行，覆盖月度掩码之外的删除/新增回滚。
+        tables = ('running_gem_commissions', 'gem_commission_history')
+        with closing(sqlite3.connect(self.db.db_path)) as conn, conn:
+            children = {table: conn.execute(f'SELECT * FROM {table} ORDER BY id').fetchall()
+                        for table in tables}
+            conn.execute("""
+                CREATE TRIGGER reject_archive BEFORE INSERT ON gem_commission_history
+                WHEN NEW.month = '2026-01'
+                BEGIN SELECT RAISE(ABORT, 'archive rejected'); END
+            """)
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.settle_expired_gem_commissions("test", now=NOW)
         self.assertEqual(self.rows(), before)
+        with closing(sqlite3.connect(self.db.db_path)) as conn:
+            self.assertEqual({table: conn.execute(f'SELECT * FROM {table} ORDER BY id').fetchall()
+                              for table in tables}, children)
 
     def test_concurrent_settlement_archives_running_record_once(self):
         self.seed("2025-12", [commission()])

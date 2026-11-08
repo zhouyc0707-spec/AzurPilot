@@ -1,7 +1,7 @@
 """异步执行器模块。
 
-提供单例模式的 AsyncExecutor，内部维护后台线程运行 asyncio 事件循环。
-用于将存储、推送等阻塞操作投递到后台队列，确保主流程不被阻塞。
+提供分别用于本地存储和网络等待的单例队列，后台线程运行 asyncio 事件循环。
+队列内部保持串行，网络请求不会占用本地统计写入线程。
 """
 
 # -*- coding: utf-8 -*-
@@ -15,7 +15,7 @@ class AsyncExecutor:
     """统一的异步执行器。
 
     内部维护一个后台线程运行 asyncio 事件循环，
-    将所有的存储、推送等阻塞操作投递到该后台队列中，以确保主流程不受阻塞。
+    本地统计交给 async_executor；网络等待交给独立的 network_executor。
     """
     _instance = None
     _lock = threading.Lock()
@@ -29,7 +29,7 @@ class AsyncExecutor:
 
     def _init(self):
         self._loop = asyncio.new_event_loop()
-        self._thread = threading.Thread(target=self._run_loop, daemon=True, name="AsyncExecutorThread")
+        self._thread = threading.Thread(target=self._run_loop, daemon=True, name=f"{type(self).__name__}Thread")
         self._thread.start()
 
     def _run_loop(self):
@@ -81,6 +81,17 @@ class AsyncExecutor:
 # 全局唯一实例
 async_executor = AsyncExecutor()
 
+
+class NetworkExecutor(AsyncExecutor):
+    """网络等待独立排队，不占用本地统计的串行写入线程。"""
+
+    _instance = None
+
+
+network_executor = NetworkExecutor()
+
 import atexit
+atexit.register(network_executor.flush)
+# 退出回调逆序执行：先清本地队列，再等待其中刚排入的网络任务。
 atexit.register(async_executor.flush)
 

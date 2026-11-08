@@ -140,14 +140,16 @@ def get_resource_timeline(
         _ensure_table()
         with _database().transaction(write=False) as conn:
             conn.row_factory = sqlite3.Row
+            conditions = ['instance = ?']
+            parameters = [instance]
+            for boundary, operator in ((since, '>='), (until, '<=')):
+                if boundary is not None:
+                    conditions.append(f'ts {operator} ?')
+                    parameters.append(boundary)
             rows = conn.execute(
-                '''
-                SELECT * FROM resource_snapshots
-                WHERE instance = ? AND (? IS NULL OR ts >= ?) AND (? IS NULL OR ts <= ?)
-                ORDER BY id DESC
-                LIMIT ?
-                ''',
-                (instance, since, since, until, until, limit),
+                'SELECT * FROM resource_snapshots WHERE ' + ' AND '.join(conditions)
+                + ' ORDER BY id DESC LIMIT ?',
+                (*parameters, limit),
             ).fetchall()
             if include_opsi:
                 result = [_overlay_opsi_snapshot(dict(row)) for row in rows]
@@ -240,50 +242,42 @@ def get_resource_interval_summary(
 
     try:
         _ensure_table()
-        with _local_lock:
-            with _database().transaction(write=False) as conn:
-                conn.row_factory = sqlite3.Row
-                rows = conn.execute(
-                    '''
-                    SELECT * FROM resource_snapshots
-                    WHERE instance = ?
-                    ORDER BY id ASC
-                    ''',
-                    (instance,),
-                ).fetchall()
-
-        for row in rows:
-            row_data = _overlay_opsi_snapshot(dict(row))
-            timestamp = _parse_snapshot_timestamp(row_data.get('ts'))
-            if timestamp is None or timestamp >= end:
-                continue
-
-            for resource_name, column_name in RESOURCE_COLUMNS.items():
-                value = row_data.get(column_name)
-                if value is None:
+        # 旧时间允许空格、不同小数精度及乱序，不能直接按文本时间截断。
+        # 使用只读快照流式取数，并缓存已解析时间，避免每个资源重复解析日期。
+        start_times = [None] * len(RESOURCE_COLUMNS)
+        end_times = [None] * len(RESOURCE_COLUMNS)
+        items = list(summary.values())
+        with _database().transaction(write=False) as conn:
+            conn.row_factory = None
+            rows = conn.execute(
+                'SELECT ts,' + ','.join(RESOURCE_COLUMNS.values())
+                + ' FROM resource_snapshots WHERE instance=? ORDER BY id DESC',
+                (instance,),
+            )
+            for row in rows:
+                timestamp = _parse_snapshot_timestamp(row[0])
+                if timestamp is None or timestamp >= end:
                     continue
-                try:
-                    value = int(value)
-                except (TypeError, ValueError):
-                    continue
-
-                item = summary[resource_name]
-                if timestamp <= start:
-                    previous_timestamp = _parse_snapshot_timestamp(
-                        item['start_observed_at']
-                    )
-                    if previous_timestamp is None or timestamp >= previous_timestamp:
-                        item['start'] = value
-                        item['baseline_known'] = True
-                        item['start_observed_at'] = timestamp.isoformat()
-                if start <= timestamp < end:
-                    previous_timestamp = _parse_snapshot_timestamp(
-                        item['end_observed_at']
-                    )
-                    if previous_timestamp is None or timestamp >= previous_timestamp:
-                        item['end'] = value
-                        item['end_known'] = True
-                        item['end_observed_at'] = timestamp.isoformat()
+                at_start = timestamp <= start
+                at_end = timestamp >= start
+                for index, value in enumerate(row[1:]):
+                    if value is None:
+                        continue
+                    update_start = at_start and (start_times[index] is None or timestamp > start_times[index])
+                    update_end = at_end and (end_times[index] is None or timestamp > end_times[index])
+                    if not update_start and not update_end:
+                        continue
+                    try:
+                        value = int(value)
+                    except (TypeError, ValueError):
+                        continue
+                    item = items[index]
+                    if update_start:
+                        start_times[index] = timestamp
+                        item.update(start=value, baseline_known=True, start_observed_at=timestamp.isoformat())
+                    if update_end:
+                        end_times[index] = timestamp
+                        item.update(end=value, end_known=True, end_observed_at=timestamp.isoformat())
 
         for item in summary.values():
             if item['baseline_known'] and item['end_known']:

@@ -772,6 +772,7 @@ CREATE TABLE ship_exp_compat_fields (
 ) STRICT;
 
 CREATE INDEX resource_snapshots_window ON resource_snapshots(instance,ts,id);
+CREATE INDEX resource_snapshots_latest ON resource_snapshots(instance,id);
 
 CREATE INDEX resource_flows_window ON resource_flows(instance,ts,id);
 

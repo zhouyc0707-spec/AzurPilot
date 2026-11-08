@@ -205,6 +205,12 @@ def report(configs, instance: str, category: str, month: str, days: int, period:
            include_series: bool = True) -> dict:
     """生成并获取指定维度的统计报表。"""
     configs.path(instance)
+    if category in ('opsi', 'action', 'commission', 'ships', 'research'):
+        from module.statistics.cl1_database import db
+        # 同一请求只展开一次月度历史；并发请求保持各自的读取范围。
+        with db.request_read_cache():
+            return _report(configs, instance, category, month, days, period,
+                           research_series, research_scope, loot_task, include_series)
     return _report(configs, instance, category, month, days, period,
                    research_series, research_scope, loot_task, include_series)
 
@@ -342,6 +348,8 @@ def _report(configs, instance: str, category: str, month: str, days: int, period
         result['tables'].append(table('短猫运行统计', ['侵蚀等级', '战斗次数', '有效轮数', '平均战斗秒数', '平均每轮秒数', '研究装置', '获取率（%）', '统计来源'], rows))
         # 收获只作卡片渲染：卡片 / 表格两种呈现由前端布局按页切换，后端不另出表。
     elif category == 'action':
+        if not include_series:
+            return result
         from module.statistics.opsi_month import get_ap_timeline, get_coins_timeline
         ap = get_ap_timeline(year, month_number, instance)
         coins = get_coins_timeline(year, month_number, instance)

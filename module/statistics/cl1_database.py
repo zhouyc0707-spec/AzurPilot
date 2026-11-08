@@ -6,7 +6,9 @@
 
 # -*- coding: utf-8 -*-
 import json
+from copy import deepcopy
 from contextlib import contextmanager, suppress
+from contextvars import ContextVar
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Tuple
@@ -145,7 +147,8 @@ class Cl1Database:
         """
         month = datetime.now().strftime("%Y-%m")
         with self._stats_transaction() as conn:
-            data = self._get_stats_in_connection(conn, instance, month)
+            names = ('siren_research_devices', 'siren_research_device_entries')
+            data, original = self._read_mutable_fields(conn, instance, month, names)
 
             devices = self._normalize_siren_research_devices(data)
             if source == "cl1":
@@ -169,7 +172,7 @@ class Cl1Database:
                 entries = entries[-5000:]
             data["siren_research_device_entries"] = entries
 
-            self._save_stats_in_connection(conn, instance, month, data)
+            self._save_mutable_fields(conn, instance, month, data, original, names)
 
     """
     CL1 月度统计存储管理类。
@@ -181,6 +184,7 @@ class Cl1Database:
         self._store = store or (for_legacy_path(db_path, 'cl1') if db_path is not None else None)
         self._read_cache_enabled = False
         self._read_cache = {}
+        self._request_cache = ContextVar('cl1_request_cache', default=())
         self._coins_history_checked = set()
         self._coins_cleanup_checked = set()
 
@@ -215,6 +219,17 @@ class Cl1Database:
     def invalidate_read_cache(self) -> None:
         """清空只读缓存。任何写操作后都必须调用。"""
         self._read_cache.clear()
+        for cache in self._request_cache.get():
+            cache.clear()
+
+    @contextmanager
+    def request_read_cache(self):
+        """同一请求复用月度读取；并发请求、线程与嵌套调用不共用可变缓存。"""
+        token = self._request_cache.set((*self._request_cache.get(), {}))
+        try:
+            yield
+        finally:
+            self._request_cache.reset(token)
 
     def enable_read_cache(self) -> None:
         """开启只读缓存。
@@ -250,20 +265,167 @@ class Cl1Database:
     def get_stats(self, instance: str, month: str) -> Dict[str, Any]:
         """读取原生月度快照，旧版面板保留一次渲染内的短期缓存。"""
         self.store.ensure_ready()
+        request_caches = self._request_cache.get()
+        request_cache = request_caches[-1] if request_caches else None
+        request_key = (str(self.db_path.resolve()), instance, month)
+        if request_cache is not None and request_key in request_cache:
+            return request_cache[request_key]
         cache_key = (instance, month)
         signature = self._db_signature()
         now = datetime.now()
-        if self._read_cache_enabled:
-            cached = self._read_cache.get(cache_key)
+        cache = self._read_cache if request_cache is None and self._read_cache_enabled else None
+        if cache is not None:
+            cached = cache.get(cache_key)
             if cached is not None:
                 previous, timestamp, data = cached
                 if previous == signature and (now - timestamp).total_seconds() < self.READ_CACHE_TTL:
                     return data
         with self.store.transaction(write=False) as connection:
             data = self._get_stats_in_connection(connection, instance, month)
-        if self._read_cache_enabled:
-            self._read_cache[cache_key] = (signature, now, data)
+        if cache is not None:
+            cache[cache_key] = (signature, now, data)
+        if request_cache is not None:
+            request_cache[request_key] = data
         return data
+
+    def get_cl1_totals(self, instance: str, month: str) -> Dict[str, Any]:
+        """仅读取遥测所需的三个累计值，兼容覆盖仍沿用完整还原。"""
+        from module.persistence.snapshots import MONTH_FIELDS
+
+        names = ('battle_count', 'akashi_encounters', 'akashi_ap')
+        with self.store.transaction(write=False) as conn:
+            row = conn.execute('SELECT field_mask,battle_count,akashi_encounters,akashi_ap '
+                               'FROM cl1_months WHERE instance=? AND month=?', (instance, month)).fetchone()
+            overrides = conn.execute(
+                'SELECT 1 FROM cl1_compat_fields WHERE instance=? AND month=? AND name IN (?,?,?) LIMIT 1',
+                (instance, month, *names),
+            ).fetchone()
+            if overrides is not None:
+                data = self._get_stats_in_connection(conn, instance, month)
+                return {name: data.get(name, 0) for name in names}
+            if row is None:
+                return dict.fromkeys(names, 0)
+            return {name: row[name] if row['field_mask'] & (1 << MONTH_FIELDS.index(name)) else 0
+                    for name in names}
+
+    def _read_mutable_fields(self, conn, instance, month, names):
+        """只还原本次修改的短统计族；复杂历史保留完整路径。"""
+        from module.persistence.snapshots import FAMILIES, MONTH_FIELDS, load_row
+
+        row = self._native_month_for_update(conn, instance, month)
+        if row is None:
+            return self._get_stats_in_connection(conn, instance, month), None
+        data, original = {}, {}
+        for name in names:
+            present = row['field_mask'] & (1 << MONTH_FIELDS.index(name))
+            if name in FAMILIES:
+                family = self._native_revenue_family(conn, instance, month, row, name)
+                if family is None:
+                    return self._get_stats_in_connection(conn, instance, month), None
+                table, fields, _ = family
+                rows = conn.execute(f'SELECT * FROM {table} WHERE instance=? AND month=? ORDER BY ordinal',
+                                    (instance, month)).fetchall()
+                records = [load_row(conn, item, fields) for item in rows]
+                original[name] = (rows, tuple(records), deepcopy(records))
+                if present:
+                    data[name] = records
+            elif name == 'last_ap_notification':
+                if present:
+                    data[name] = {key: row[column] for index, (key, column) in enumerate((
+                        ('ts', 'last_ap_notification_ts'), ('ap', 'last_ap_notification_value'),
+                    )) if row['last_ap_notification_mask'] & (1 << index)}
+            elif name == 'siren_research_devices':
+                rows = conn.execute('SELECT * FROM siren_device_counts WHERE instance=? AND month=?',
+                                    (instance, month)).fetchall()
+                if any(item['compat_value_set_id'] is not None or not present
+                       or (item['source'] == 'cl1' and item['hazard_level'] != 0)
+                       or not row['siren_fields_mask'] & (1 if item['source'] == 'cl1' else 2) for item in rows):
+                    return self._get_stats_in_connection(conn, instance, month), None
+                if present:
+                    devices = {}
+                    if row['siren_fields_mask'] & 1:
+                        devices['cl1'] = next((item['device_count'] for item in rows if item['source'] == 'cl1'), None)
+                    if row['siren_fields_mask'] & 2:
+                        devices['meow'] = {str(item['hazard_level']): item['device_count']
+                                           for item in rows if item['source'] == 'meow'}
+                    data[name] = devices
+            else:
+                raise ValueError(f'不支持局部修改的统计族：{name}')
+        return data, original
+
+    def _save_mutable_fields(self, conn, instance, month, data, original, names):
+        """同一事务仅保存被修改的族；追加历史保留旧行，运行列表保留原排序语义。"""
+        from module.persistence.snapshots import FAMILIES, MONTH_FIELDS, canonical_integer, project, save_row
+        from module.persistence.values import scalar
+
+        if original is None:
+            self._save_stats_in_connection(conn, instance, month, data)
+            return
+        notification_fields = (('ts', 'last_ap_notification_ts', 'T'), ('ap', 'last_ap_notification_value', 'I'))
+        for name in names:
+            if name not in data:
+                continue
+            value = data[name]
+            valid = True
+            if name in FAMILIES:
+                valid = type(value) is list and all(type(item) is dict and not project(item, FAMILIES[name][1])[2]
+                                                     for item in value)
+            elif name == 'last_ap_notification':
+                valid = type(value) is dict and not project(value, notification_fields)[2]
+            else:
+                valid = (type(value) is dict and set(value) <= {'cl1', 'meow'}
+                         and scalar(value.get('cl1'), 'I')[0] and type(value.get('meow', {})) is dict
+                         and all(canonical_integer(key) is not None and scalar(number, 'I')[0]
+                                 for key, number in value.get('meow', {}).items()))
+            if not valid:
+                full = self._get_stats_in_connection(conn, instance, month)
+                full.update(data)
+                self._save_stats_in_connection(conn, instance, month, full)
+                return
+        owner = {'instance': instance, 'month': month}
+        for name in names:
+            if name not in data:
+                continue
+            value = data[name]
+            mask = 1 << MONTH_FIELDS.index(name)
+            if name in FAMILIES:
+                table, fields = FAMILIES[name]
+                rows, previous, previous_values = original[name]
+                positions = {id(item): index for index, item in enumerate(previous)}
+                retained = [positions[id(item)] for item in value if id(item) in positions]
+                # 收益历史只追加并裁掉最旧项；不重建仍保留的历史行及其ID。
+                append_only = (retained == list(range(len(previous) - len(retained), len(previous)))
+                               and all(id(item) in positions for item in value[:len(retained)])
+                               and all(item == previous_values[positions[id(item)]]
+                                       for item in value if id(item) in positions))
+                if rows and rows[-1]['ordinal'] > 2 ** 63 - 1 - (len(value) - len(retained)):
+                    append_only = False
+                if append_only:
+                    removed = rows[:len(previous) - len(retained)]
+                    conn.executemany(f'DELETE FROM {table} WHERE id=?', ((item['id'],) for item in removed))
+                    ordinal = rows[-1]['ordinal'] + 1 if rows else 0
+                    additions = value[len(retained):]
+                else:
+                    conn.execute(f'DELETE FROM {table} WHERE instance=? AND month=?', (instance, month))
+                    ordinal, additions = 0, value
+                for offset, item in enumerate(additions):
+                    save_row(conn, table, dict(owner, ordinal=ordinal + offset), item, fields, owner, entry=True)
+            elif name == 'last_ap_notification':
+                columns, field_mask, _ = project(value, notification_fields)
+                conn.execute('UPDATE cl1_months SET last_ap_notification_ts=?, last_ap_notification_value=?, '
+                             'last_ap_notification_mask=? WHERE instance=? AND month=?',
+                             (columns['last_ap_notification_ts'], columns['last_ap_notification_value'], field_mask,
+                              instance, month))
+            else:
+                conn.execute('DELETE FROM siren_device_counts WHERE instance=? AND month=?', (instance, month))
+                counts = [('cl1', 0, value['cl1'])] if 'cl1' in value else []
+                counts.extend(('meow', int(key), number) for key, number in value.get('meow', {}).items())
+                conn.executemany('INSERT INTO siren_device_counts(instance,month,source,hazard_level,device_count) '
+                                 'VALUES(?,?,?,?,?)', ((instance, month, *item) for item in counts))
+                conn.execute('UPDATE cl1_months SET siren_fields_mask=? WHERE instance=? AND month=?',
+                             (int('cl1' in value) + 2 * int('meow' in value), instance, month))
+            conn.execute('UPDATE cl1_months SET field_mask=field_mask | ? WHERE instance=? AND month=?',
+                         (mask, instance, month))
 
     def get_latest_ap_resources(self, instance: str, month: str) -> Dict[str, dict]:
         """只读总览所需的最新海里数、行动力资产，不展开整月统计。
@@ -943,6 +1105,16 @@ class Cl1Database:
         """
         if instance in self._coins_history_checked:
             return
+        from module.persistence.snapshots import MONTH_FIELDS
+
+        # 原生版本列足以证明已补齐；兼容字段可能覆盖它，仍需完整还原。
+        if conn.execute('''SELECT 1 FROM cl1_months AS m
+            WHERE instance=? AND field_mask & ? != 0 AND coins_history_version=?
+              AND NOT EXISTS (SELECT 1 FROM cl1_compat_fields AS f
+                  WHERE f.instance=m.instance AND f.month=m.month AND f.name='coins_history_version')
+            LIMIT 1''', (instance, 1 << MONTH_FIELDS.index('coins_history_version'), COINS_HISTORY_VERSION)).fetchone():
+            self._coins_history_checked.add(instance)
+            return
         try:
             stored: Dict[str, Dict[str, Any]] = {}
             with self.store.transaction(write=False) as reader:
@@ -985,7 +1157,7 @@ class Cl1Database:
     def get_last_ap_snapshot(self, instance: str) -> Optional[Dict[str, Any]]:
         """获取最近一次行动力快照，优先读取当前月份，必要时回退到历史月份。"""
         current_month = datetime.now().strftime("%Y-%m")
-        current_data = self.get_stats(instance, current_month)
+        current_data = self._read_last_fields(instance, current_month, 'ap_snapshots')
         snapshots = current_data.get("ap_snapshots", [])
         if snapshots:
             return snapshots[-1]
@@ -994,7 +1166,7 @@ class Cl1Database:
         for _, month_key in reversed(rows):
             if month_key == current_month:
                 continue
-            data = self.get_stats(instance, month_key)
+            data = self._read_last_fields(instance, month_key, 'ap_snapshots')
             snapshots = data.get("ap_snapshots", [])
             if snapshots:
                 return snapshots[-1]
@@ -1004,7 +1176,7 @@ class Cl1Database:
     def get_last_ap_notification(self, instance: str) -> Optional[Dict[str, Any]]:
         """获取最近一次成功推送时记录的行动力值。"""
         current_month = datetime.now().strftime("%Y-%m")
-        current_data = self.get_stats(instance, current_month)
+        current_data = self._read_last_fields(instance, current_month, 'last_ap_notification')
         last_notification = current_data.get("last_ap_notification")
         if isinstance(last_notification, dict) and "ap" in last_notification:
             return last_notification
@@ -1013,7 +1185,7 @@ class Cl1Database:
         for _, month_key in reversed(rows):
             if month_key == current_month:
                 continue
-            data = self.get_stats(instance, month_key)
+            data = self._read_last_fields(instance, month_key, 'last_ap_notification')
             last_notification = data.get("last_ap_notification")
             if isinstance(last_notification, dict) and "ap" in last_notification:
                 return last_notification
@@ -1024,12 +1196,34 @@ class Cl1Database:
         """记录最近一次成功推送时的行动力值。"""
         month = datetime.now().strftime("%Y-%m")
         with self._stats_transaction() as conn:
-            data = self._get_stats_in_connection(conn, instance, month)
+            names = ('last_ap_notification',)
+            data, original = self._read_mutable_fields(conn, instance, month, names)
             data["last_ap_notification"] = {
                 "ts": datetime.now().isoformat(),
                 "ap": self._coerce_int(ap_current),
             }
-            self._save_stats_in_connection(conn, instance, month, data)
+            self._save_mutable_fields(conn, instance, month, data, original, names)
+
+    def _read_last_fields(self, instance, month, name):
+        """按存在位读取通知或行动力最后一条；复杂兼容历史仍完整还原。"""
+        from module.persistence.snapshots import FAMILIES, MONTH_FIELDS, load_row
+
+        with self.store.transaction(write=False) as conn:
+            row = self._native_month_for_update(conn, instance, month)
+            if row is None:
+                return self._get_stats_in_connection(conn, instance, month)
+            if not row['field_mask'] & (1 << MONTH_FIELDS.index(name)):
+                return {}
+            if name == 'last_ap_notification':
+                return {name: {key: row[column] for index, (key, column) in enumerate((
+                    ('ts', 'last_ap_notification_ts'), ('ap', 'last_ap_notification_value'),
+                )) if row['last_ap_notification_mask'] & (1 << index)}}
+            if self._native_revenue_family(conn, instance, month, row, name) is None:
+                return self._get_stats_in_connection(conn, instance, month)
+            table, fields = FAMILIES[name]
+            item = conn.execute(f'SELECT * FROM {table} WHERE instance=? AND month=? ORDER BY ordinal DESC LIMIT 1',
+                                (instance, month)).fetchone()
+            return {name: [] if item is None else [load_row(conn, item, fields)]}
 
     def _native_month_for_update(self, conn, instance, month):
         """仅允许原生月数据及不覆盖统计族的已知扩展进入增量写路径。"""
@@ -1046,7 +1240,7 @@ class Cl1Database:
             'SELECT name, mode, value_set_id FROM cl1_compat_fields WHERE instance=? AND month=?',
             (instance, month),
         ).fetchall()
-        independent_fields = {'coins_month_start_residue', 'akashi_shop_champion'}
+        independent_fields = {'coins_month_start_residue', 'akashi_shop_champion', 'cloud_commission_entries'}
         if any(field['name'] not in independent_fields or field['mode'] != 'value' for field in compat_fields):
             return None
         # 科研领奖会保存原始物品与分项明细；这些扩展不覆盖明石或凭证统计，
@@ -1075,8 +1269,12 @@ class Cl1Database:
             # 其他兼容值仍由完整路径校验，不能绕过统计族覆盖或未知字段。
             return None
         for field in compat_fields:
-            # 两项档案与原生统计族互不覆盖；逐树校验但不重建，损坏仍向上报错。
-            read_value(conn, field['value_set_id'])
+            # 独立档案与原生统计族互不覆盖；逐树校验但不重建，损坏仍向上报错。
+            value = read_value(conn, field['value_set_id'])
+            if field['name'] == 'cloud_commission_entries' and (
+                    type(value) is not list or any(type(item) is not dict or not isinstance(item.get('record_id'), str)
+                                                  for item in value)):
+                return None
         return month_row
 
     def _try_append_coin_snapshot(self, conn, instance, month, name, snapshot):
@@ -1105,20 +1303,20 @@ class Cl1Database:
 
         valid_masks = (7,) if name == 'yellow_coin_snapshots' else (11, 15)
         marks = ','.join('?' for _ in valid_masks)
-        purple_guard = " OR (field_mask & 4 <> 0 AND purple_type <> 'integer')" if name == 'coins_snapshots' else ''
-        purple_type = ", typeof(purple_coin) AS purple_type" if name == 'coins_snapshots' else ''
+        purple_guard = " OR (field_mask & 4 <> 0 AND typeof(purple_coin) <> 'integer')" if name == 'coins_snapshots' else ''
+        # 仍核对全部历史的格式和相邻时间；用现有序号索引找前项，避免窗口函数物化整月。
+        # 序号可以有缺口，不能用 ordinal - 1 或仅检查末两条代替。
         invalid = conn.execute(
-            f'''SELECT 1 FROM (
-                SELECT ts, entry_kind, field_mask, compat_value_set_id,
-                       typeof(ts) AS ts_type, typeof(source) AS source_type,
-                       typeof(yellow_coin) AS yellow_type {purple_type},
-                       LAG(ts) OVER (ORDER BY ordinal) AS previous_ts
-                FROM {table} WHERE instance=? AND month=?
-            ) WHERE entry_kind <> 'record' OR compat_value_set_id IS NOT NULL
+            f'''SELECT 1 FROM {table} AS current
+            WHERE instance=? AND month=? AND (
+                entry_kind <> 'record' OR compat_value_set_id IS NOT NULL
                 OR field_mask NOT IN ({marks}) OR ts IS NULL
-                OR ts_type <> 'text' OR source_type NOT IN ('text', 'null')
-                OR yellow_type <> 'integer' {purple_guard}
-                OR previous_ts > ts LIMIT 1''',
+                OR typeof(ts) <> 'text' OR typeof(source) NOT IN ('text', 'null')
+                OR typeof(yellow_coin) <> 'integer' {purple_guard}
+                OR (SELECT previous.ts FROM {table} AS previous
+                    WHERE previous.instance=current.instance AND previous.month=current.month
+                      AND previous.ordinal<current.ordinal ORDER BY previous.ordinal DESC LIMIT 1) > ts
+            ) LIMIT 1''',
             (instance, month, *valid_masks),
         ).fetchone()
         if invalid is not None:
@@ -1971,7 +2169,7 @@ class Cl1Database:
 
     @staticmethod
     def _native_revenue_family(conn, instance, month, row, name):
-        """先核验收益族的字段存在性和原生格式，再允许本事务增量写入。"""
+        """月度守卫确认兼容树后，核验目标收益族的存在位和原生格式。"""
         from module.persistence.snapshots import FAMILIES, MONTH_FIELDS
 
         table, fields = FAMILIES[name]
@@ -1981,16 +2179,35 @@ class Cl1Database:
         if last is not None and (not row['field_mask'] & (1 << MONTH_FIELDS.index(name))
                                  or last >= 2 ** 63 - 1):
             return None
+        compatibility = '' if name == 'research_drop_entries' else ' OR compat_value_set_id IS NOT NULL'
         if conn.execute(
             f'''SELECT 1 FROM {table} WHERE instance=? AND month=?
-                AND (entry_kind != 'record' OR compat_value_set_id IS NOT NULL) LIMIT 1''',
+                AND (entry_kind != 'record' {compatibility}) LIMIT 1''',
             (instance, month),
         ).fetchone() is not None:
             return None
         return table, fields, 0 if last is None else last + 1
 
     @staticmethod
-    def _append_native_revenue(conn, instance, month, name, entry, family):
+    def _delete_unreferenced_month_values(conn, value_ids):
+        """删除裁掉事件的兼容树；异常共享引用交由外键保护，不能级联抹掉其他统计。"""
+        import sqlite3
+
+        for value_id in set(value_ids):
+            if value_id is None:
+                continue
+            conn.execute('SAVEPOINT discard_month_value')
+            try:
+                conn.execute('DELETE FROM typed_value_sets WHERE id=?', (value_id,))
+            except sqlite3.IntegrityError as error:
+                conn.execute('ROLLBACK TO discard_month_value')
+                if error.sqlite_errorcode != sqlite3.SQLITE_CONSTRAINT_FOREIGNKEY:
+                    raise
+            finally:
+                conn.execute('RELEASE discard_month_value')
+
+    @classmethod
+    def _append_native_revenue(cls, conn, instance, month, name, entry, family):
         """只追加本次收益及其子项，沿用最后 5000 条的顺序和上限。"""
         from module.persistence.snapshots import MONTH_FIELDS, save_children, save_row
         from module.persistence.values import normalize
@@ -2000,11 +2217,16 @@ class Cl1Database:
         entry = normalize(entry, special=True)
         row_id = save_row(conn, table, dict(owner, ordinal=ordinal), entry, fields, owner, entry=True)
         save_children(conn, table, row_id, entry, owner)
+        discarded = conn.execute(
+            f'''SELECT compat_value_set_id FROM {table} WHERE instance=? AND month=?
+                ORDER BY ordinal DESC LIMIT -1 OFFSET 5000''', (instance, month),
+        ).fetchall()
         conn.execute(
             f'''DELETE FROM {table} WHERE id IN (
                 SELECT id FROM {table} WHERE instance=? AND month=?
                 ORDER BY ordinal DESC LIMIT -1 OFFSET 5000)''', (instance, month),
         )
+        cls._delete_unreferenced_month_values(conn, [row['compat_value_set_id'] for row in discarded])
         conn.execute('UPDATE cl1_months SET field_mask=field_mask | ? WHERE instance=? AND month=?',
                      (1 << MONTH_FIELDS.index(name), instance, month))
 
@@ -2121,11 +2343,22 @@ class Cl1Database:
                 return removed, month
         return None, None
 
-    def _save_commission_months(self, conn, instance, data, months, changed):
+    def _read_commission_months(self, conn, instance, months):
+        names = ('running_gem_commissions', 'gem_commission_entries')
+        data, originals = {}, {}
+        for month in months:
+            data[month], originals[month] = self._read_mutable_fields(conn, instance, month, names)
+        return data, originals
+
+    def _save_commission_months(self, conn, instance, data, months, changed, originals=None):
         # 先写运行记录来源月，后写归档月；两次写入必须共同提交或共同回滚。
         for month in reversed(months):
             if month in changed:
-                self._save_stats_in_connection(conn, instance, month, data[month])
+                if originals is None:
+                    self._save_stats_in_connection(conn, instance, month, data[month])
+                else:
+                    self._save_mutable_fields(conn, instance, month, data[month], originals[month],
+                                              ('running_gem_commissions', 'gem_commission_entries'))
 
     def add_commission_income(
         self,
@@ -2401,10 +2634,31 @@ class Cl1Database:
         return changed
 
     def add_cloud_commission_drop(self, instance, record):
-        """Retain the complete tagged cloud event without changing local resource settlement."""
+        """保留完整云端事件；正常兼容树只替换自身，不重写本地收益。"""
+        from module.persistence.values import read_value, write_value
+
         stamp = datetime.fromisoformat(record['collected_at'])
         month = stamp.strftime('%Y-%m')
         with self._stats_transaction() as connection:
+            parent = self._native_month_for_update(connection, instance, month)
+            if parent is not None:
+                previous = connection.execute(
+                    "SELECT value_set_id FROM cl1_compat_fields WHERE instance=? AND month=? "
+                    "AND name='cloud_commission_entries'", (instance, month),
+                ).fetchone()
+                entries = read_value(connection, previous[0]) if previous else []
+                if any(row['record_id'] == record['record_id'] for row in entries):
+                    return
+                entries.append(record)
+                value_id = write_value(connection, instance, entries, month=month)
+                connection.execute(
+                    'INSERT INTO cl1_compat_fields(instance,month,name,mode,value_set_id) VALUES(?,?,?,?,?) '
+                    'ON CONFLICT(instance,month,name) DO UPDATE SET mode=excluded.mode,value_set_id=excluded.value_set_id',
+                    (instance, month, 'cloud_commission_entries', 'value', value_id),
+                )
+                if previous:
+                    self._delete_unreferenced_month_values(connection, [previous[0]])
+                return
             data = self._get_stats_in_connection(connection, instance, month)
             entries = data.setdefault('cloud_commission_entries', [])
             if any(row['record_id'] == record['record_id'] for row in entries):
@@ -2506,10 +2760,11 @@ class Cl1Database:
         """
         month = datetime.now().strftime("%Y-%m")
         with self._stats_transaction() as conn:
-            data = self._get_stats_in_connection(conn, instance, month)
+            names = ('gem_commission_entries',)
+            data, original = self._read_mutable_fields(conn, instance, month, names)
 
             self._append_gem_commission_entry(data, duration_hour, reward, datetime.now())
-            self._save_stats_in_connection(conn, instance, month, data)
+            self._save_mutable_fields(conn, instance, month, data, original, names)
 
     def get_gem_commissions(
         self,
@@ -2613,9 +2868,10 @@ class Cl1Database:
         """保存运行中的钻石委托列表。"""
         month = datetime.now().strftime("%Y-%m")
         with self._stats_transaction() as conn:
-            data = self._get_stats_in_connection(conn, instance, month)
+            names = ('running_gem_commissions',)
+            data, original = self._read_mutable_fields(conn, instance, month, names)
             data["running_gem_commissions"] = commissions
-            self._save_stats_in_connection(conn, instance, month, data)
+            self._save_mutable_fields(conn, instance, month, data, original, names)
 
     def get_running_gem_commissions(
         self,
@@ -2626,7 +2882,9 @@ class Cl1Database:
         合并当前月和上一个月的列表，覆盖跨月仍在执行的委托。
         """
         months = self._commission_month_keys(datetime.now())
-        data = {month: self.get_stats(instance, month) for month in months}
+        with self.store.transaction(write=False) as conn:
+            data = {month: self._read_mutable_fields(conn, instance, month, ('running_gem_commissions',))[0]
+                    for month in months}
         return self._running_commissions_from_months(data, months)
 
     def add_running_gem_commission(
@@ -2637,7 +2895,8 @@ class Cl1Database:
         """新增一条运行中的钻石委托（仅写入当前月）。"""
         month = datetime.now().strftime("%Y-%m")
         with self._stats_transaction() as conn:
-            data = self._get_stats_in_connection(conn, instance, month)
+            names = ('running_gem_commissions',)
+            data, original = self._read_mutable_fields(conn, instance, month, names)
             commissions = data.get("running_gem_commissions", [])
             # 去重：同 name + create_time 不重复添加
             if not any(
@@ -2648,7 +2907,7 @@ class Cl1Database:
                 commissions.append(commission)
                 commissions.sort(key=lambda item: item.get("finish_time", ""))
                 data["running_gem_commissions"] = commissions
-                self._save_stats_in_connection(conn, instance, month, data)
+                self._save_mutable_fields(conn, instance, month, data, original, names)
 
     def pop_running_gem_commission(
         self,
@@ -2667,7 +2926,8 @@ class Cl1Database:
         months = self._commission_month_keys(datetime.now())
         with self._stats_transaction() as conn:
             for month in months:
-                data = self._get_stats_in_connection(conn, instance, month)
+                names = ('running_gem_commissions',)
+                data, original = self._read_mutable_fields(conn, instance, month, names)
                 commissions = data.get("running_gem_commissions", [])
                 if not isinstance(commissions, list) or not commissions:
                     continue
@@ -2681,7 +2941,7 @@ class Cl1Database:
                         continue
                     removed = commissions.pop(index)
                     data["running_gem_commissions"] = commissions
-                    self._save_stats_in_connection(conn, instance, month, data)
+                    self._save_mutable_fields(conn, instance, month, data, original, names)
                     return removed
         return None
 
@@ -2693,12 +2953,12 @@ class Cl1Database:
         now = datetime.now()
         months = self._commission_month_keys(now)
         with self._stats_transaction() as conn:
-            data = {month: self._get_stats_in_connection(conn, instance, month) for month in months}
+            data, originals = self._read_commission_months(conn, instance, months)
             removed, source_month = self._settle_running_in_months(
                 data, months, now, reward, name, duration_hour, create_time,
             )
             if removed is not None:
-                self._save_commission_months(conn, instance, data, months, {source_month, months[0]})
+                self._save_commission_months(conn, instance, data, months, {source_month, months[0]}, originals)
         return removed
 
     def settle_expired_gem_commissions(
@@ -2713,7 +2973,7 @@ class Cl1Database:
         months = self._commission_month_keys(settled_at)
         settled = 0
         with self._stats_transaction() as conn:
-            data = {month: self._get_stats_in_connection(conn, instance, month) for month in months}
+            data, originals = self._read_commission_months(conn, instance, months)
             changed = set()
             for commission in self._running_commissions_from_months(data, months):
                 try:
@@ -2730,7 +2990,7 @@ class Cl1Database:
                 if removed is not None:
                     changed.update((source_month, months[0]))
                     settled += 1
-            self._save_commission_months(conn, instance, data, months, changed)
+            self._save_commission_months(conn, instance, data, months, changed, originals)
         return settled
 
     def async_add_commission_income(

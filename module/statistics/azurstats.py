@@ -19,6 +19,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from dataclasses import asdict
+from concurrent.futures import Future
 
 import inflection
 import numpy as np
@@ -711,11 +712,7 @@ class AzurStats:
             list[str]: 实际写入的文件路径；未归类时返回空列表。
         """
         source = os.path.join(folder, filename)
-        # 截图由保存线程写入，这里稍等片刻，避免保存略慢时漏归类
-        for _ in range(50):
-            if os.path.exists(source):
-                break
-            time.sleep(0.1)
+        # 调用方只在原图保存成功后归类；缺失文件立即保留原有空结果语义。
         if not os.path.exists(source):
             return []
 
@@ -801,7 +798,7 @@ class AzurStats:
         if saved:
             logger.info(f'发现未识别物品，截图已保存: {", ".join(saved)}')
 
-    def _record_local(self, image, genre, filename, combat_count, save=False, page_count=1):
+    def _record_local(self, image, genre, filename, combat_count, *, classification_items=None):
         # 融合：记录范围采用上游 2026-09-25 的口径（除侵蚀1练级外的全部大世界任务，
         # 「保存」与「上传」都解析入库），本地「仅耄耋相接允许落盘」的保护改由
         # opsi_save_method() 在取值处收口，不再用这里的 genre 白名单实现。
@@ -821,19 +818,8 @@ class AzurStats:
             if genre == 'opsi_meowfficer_farming':
                 self.get_meowofficer_farming(instance=self.config.config_name)
             logger.info(f'本地碧蓝统计解析成功，记录 {inserted} 条')
-            if save:
-                # 按高价值物品把结算截图归入对应文件夹，便于人工查阅；
-                # 归类失败不影响统计入库。滚动补截的多页各归各的
-                try:
-                    folder = os.path.join(str(self.config.DropRecord_SaveFolder), genre)
-                    items = [(row['item'], row['amount']) for row in rows]
-                    for name in self._drop_page_filenames(filename, max(1, int(page_count or 1))):
-                        targets = self.classify_meow_screenshot(folder, name, items)
-                        if targets:
-                            logger.info('结算截图已归类: %s' % ', '.join(
-                                os.path.relpath(target, folder) for target in targets))
-                except Exception as e:
-                    logger.warning(f'结算截图归类失败, {type(e).__name__}')
+            if classification_items is not None:
+                classification_items.extend((row['item'], row['amount']) for row in rows)
             return True
         except Exception as e:
             logger.warning(f'本地碧蓝统计解析失败, {type(e).__name__}')
@@ -879,7 +865,7 @@ class AzurStats:
             return [filename]
         return [filename] + [f'{stem}_p{index + 1}{ext}' for index in range(1, count)]
 
-    def _save_pages(self, frames, genre, filename):
+    def _save_pages(self, frames, genre, filename, classification=None):
         """保存掉落截图的各页。
 
         结算奖励面板放不下时脚本会滚动补截多页，这里逐页落盘：第一页用原
@@ -893,6 +879,7 @@ class AzurStats:
         Returns:
             bool: If success
         """
+        saved = []
         try:
             folder = os.path.join(str(self.config.DropRecord_SaveFolder), genre)
             os.makedirs(folder, exist_ok=True)
@@ -900,10 +887,25 @@ class AzurStats:
             for frame, name in zip(frames, names):
                 file = os.path.join(folder, name)
                 save_image(frame, file)
+                saved.append(name)
                 logger.info(f'图片保存成功，文件: {file}')
             return True
         except Exception as e:
             logger.exception(e)
+        finally:
+            if classification is not None:
+                # 仅保存线程等待识别结果；主循环不等写盘，更不轮询文件存在。
+                # 部分页保存失败时仍归类已成功的页，失败原图保持原有恢复语义。
+                try:
+                    items = classification.result()
+                    if items is not None:
+                        for name in saved:
+                            targets = self.classify_meow_screenshot(folder, name, items)
+                            if targets:
+                                logger.info('结算截图已归类: %s' % ', '.join(
+                                    os.path.relpath(target, folder) for target in targets))
+                except Exception as e:
+                    logger.warning(f'结算截图归类失败, {type(e).__name__}')
 
         return False
 
@@ -986,26 +988,34 @@ class AzurStats:
             filename = f'{now}.png'
 
         frames = self._drop_save_images(images, genre) if save else []
+        classification = Future() if save and local else None
         if save:
             save_thread = threading.Thread(
-                target=self._save_pages, args=(frames, genre, filename))
+                target=self._save_pages, args=(frames, genre, filename, classification))
             save_thread.start()
 
         if local:
             logger.info(f'本地碧蓝统计解析开始，类型={genre}')
-            with self._record_lock:
-                self._record_local(image, genre, filename, combat_count, save=save,
-                                   page_count=len(frames))
+            items = []
+            recorded = False
+            try:
+                with self._record_lock:
+                    recorded = self._record_local(image, genre, filename, combat_count,
+                                                  classification_items=items if classification is not None else None)
+            finally:
+                if classification is not None:
+                    classification.set_result(tuple(items) if recorded else None)
 
         if analyze and genre == 'research':
-            # 同步解析：一次约 1 秒，发生在领奖之后，不打断任何状态循环。
-            # 解析失败只记日志，绝不影响领奖流程本身。
+            # 掉落统计仍同步确认入库；同批队列身份复用，物品校验与项目分组不变。
+            # 解析失败只记日志，不影响已经完成的领奖操作。
             try:
                 from module.statistics.research_drop import record_research_drop
                 if research_groups:
-                    from module.statistics.research_drop import read_research_identity
+                    from module.statistics.research_drop import read_research_identities
+                    identities = read_research_identities(images[0], range(len(research_groups)))
                     for index, (start, end) in enumerate(research_groups):
-                        identity = read_research_identity(images[0], index)
+                        identity = next(identities)
                         record_research_drop(images[start:end], instance=self.config.config_name,
                                              imgid=f'{filename}:{index}', identity=identity,
                                              config=self.config if upload else None,

@@ -55,6 +55,26 @@ class StatisticsReadingTests(unittest.TestCase):
         self.assertTrue(self.database.backfill_meow_stats('inst', 2026, 9))
         self.assertEqual(self.database.get_stats('inst', '2026-09')['meow_battle_raw_count'], result['battle_count'])
 
+    def test_one_request_reuses_month_and_keeps_full_report(self):
+        for category in ('opsi', 'action', 'ships', 'commission', 'research'):
+            with self.subTest(category=category):
+                expected = self.get_report(_report, category)
+                with patch.object(self.database, '_get_stats_in_connection',
+                                  wraps=self.database._get_stats_in_connection) as read:
+                    actual = self.get_report(category=category)
+                self.assertEqual(actual, expected)
+                months = [call.args[1:] for call in read.call_args_list]
+                self.assertEqual(len(months), len(set(months)), months)
+                self.assertTrue(months)
+                self.assertTrue(all(instance == 'inst' for instance, _ in months))
+
+    def test_action_without_series_does_not_read_month(self):
+        with patch.object(self.database, '_get_stats_in_connection',
+                          side_effect=AssertionError('无曲线时不应读取月度统计')):
+            result = report(self.configs, 'inst', 'action', '2026-09', 7, 'month', include_series=False)
+        self.assertEqual(result['series'], [])
+        self.assertEqual(result['tables'], [])
+
     def test_fingerprint_tracks_wal_changes_without_overview_events(self):
         original = get_statistics_fingerprint('inst', self.root / 'config')
         stat = Path.stat

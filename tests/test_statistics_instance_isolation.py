@@ -24,6 +24,7 @@ os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')
 import numpy as np
 
 from module.statistics import opsi_secure
+from module.statistics.cl1_database import Cl1Database
 from tests.opsi_test_support import install_store
 
 
@@ -129,7 +130,8 @@ class TestStatisticsInstanceIsolation(unittest.TestCase):
         })
         self.enterContext(patch.dict(sys.modules, {
             'module.statistics.azurstats': self.module,
-            'module.statistics.cl1_database': module_stub('module.statistics.cl1_database', db=Mock()),
+            'module.statistics.cl1_database': module_stub('module.statistics.cl1_database',
+                                                        db=Mock(), Cl1Database=Cl1Database),
         }))
         self.enterContext(patch.object(self.stats, '_ensure_local_parser', return_value=FakeScene))
         self.configs = SimpleNamespace(directory=Path(self.directory) / 'config', path=Mock(side_effect=lambda name: Path(self.directory) / f'{name}.json'))

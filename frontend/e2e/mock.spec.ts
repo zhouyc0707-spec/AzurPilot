@@ -820,6 +820,50 @@ test('统计慢请求合并更新且概览事件不重复取数', async ({page})
   await page.screenshot({path: test.info().outputPath('statistics-coalesced.png'), fullPage: true})
 })
 
+for (const kind of ['category', 'management'] as const) {
+  test(`统计 ${kind} 隐藏停刷、恢复补查且手动刷新立即生效`, async ({page}) => {
+    const method = kind === 'category' ? 'statistics.report' : 'statistics.resourceFlows'
+    let requests = 0
+    let emit = () => {}
+    await page.routeWebSocket('**/api/v1/ws', socket => {
+      const server = socket.connectToServer()
+      emit = () => socket.send(JSON.stringify({v: 1, type: 'event', topic: 'statistics', seq: 100,
+        data: {instance: 'demo-main'}}))
+      socket.onMessage(message => {
+        if (JSON.parse(String(message)).method === method) requests++
+        server.send(message)
+      })
+      server.onMessage(message => {
+        if (JSON.parse(String(message)).topic !== 'statistics') socket.send(message)
+      })
+    })
+    await page.addInitScript(() => {
+      localStorage.setItem('azurpilot.theme', 'light')
+      localStorage.setItem('azurpilot.statistics', JSON.stringify({category: 'opsi'}))
+    })
+    await page.goto('/#/i/demo-main/statistics' + (kind === 'management' ? '?view=management' : ''))
+    await expect.poll(() => requests).toBe(1)
+    const refresh = page.getByRole('button', {name: '刷新统计', exact: true}).first()
+    await expect(refresh).toBeEnabled()
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'hidden', {configurable: true, value: true})
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    for (let index = 0; index < 20; index++) emit()
+    await page.waitForTimeout(2300)
+    expect(requests).toBe(1)
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'hidden', {configurable: true, value: false})
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    await expect.poll(() => requests).toBe(2)
+    await expect(refresh).toBeEnabled()
+    await refresh.click()
+    await expect.poll(() => requests, {timeout: 1000}).toBe(3)
+    await page.screenshot({path: test.info().outputPath(`statistics-${kind}-visible.png`), fullPage: true})
+  })
+}
+
 test('统计切换分类后丢弃旧响应和旧刷新回调', async ({page}) => {
   let held = ''
   let oldId = ''
