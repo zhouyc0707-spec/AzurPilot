@@ -1585,7 +1585,7 @@ class OpsiScheduling(SmartExploreMixin, CoinTaskMixin, OSMap):
             if postpone_until is not None:
                 task_display = self.TASK_NAMES.get(task_name, task_name)
                 logger.info(
-                    f'[大世界-智能调度] {task_display}已全部清除，跳过本轮检查，'
+                    f'[大世界-智能调度] {task_display}检查尚未到期，跳过本轮检查，'
                     f'下次检查 {postpone_until}'
                 )
                 skipped_tasks.append(task_display)

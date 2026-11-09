@@ -367,20 +367,20 @@ class GlobeCamera(GlobeOperation, ZoneManager):
         zone = self.name_to_zone(zone)
         # 二维地图上红色漩涡中心
         location = zone.location + (-9.5, -12.5)
-        # 二维地图上中心周围区域
-        location = [location - (4, 4), location + (4, 4)]
-        # 屏幕上的对应区域
-        screen = self.globe2screen(location).flatten().round()
-        screen = np.round(screen).astype(int).tolist()
-        # 漩涡中心平均颜色
-        center = self.image_crop(screen, copy=False)
-        center = np.array([[cv2.mean(center), ], ]).astype(np.uint8)
-        h, s, v = rgb2hsv(center)[0][0]
-        # hsv 通常为 (338, 74.9, 100)
-        if 285 < h <= 360 and s > 45 and v > 45:
-            return True
-        else:
+        # 透视定位偏差可能让固定取色点落到旋涡边缘，动画暗帧会漏检。
+        # 在附近寻找同等大小的红色块，保持原颜色门限，之后仍须确认要塞面板。
+        bounds = self.globe2screen([location - (24, 24), location + (24, 24)]).astype(int)
+        window = self.globe2screen([location - (4, 4), location + (4, 4)]).astype(int)
+        width, height = np.maximum(window[1] - window[0], 1)
+        image = self.image_crop(bounds.flatten().tolist(), copy=False)
+        if image.shape[0] < height or image.shape[1] < width:
             return False
+        colors = cv2.boxFilter(image, cv2.CV_32F, (int(width), int(height)), anchor=(0, 0))
+        # 只使用完整窗口，不让边缘填充值参与颜色判断。
+        colors = colors[:image.shape[0] - height + 1, :image.shape[1] - width + 1].astype(np.uint8)
+        hsv = rgb2hsv(colors)
+        h, s, v = hsv[:, :, 0], hsv[:, :, 1], hsv[:, :, 2]
+        return bool(np.any((h > 285) & (h <= 360) & (s > 45) & (v > 45)))
 
     def _find_siren_stronghold(self, zones):
         """在给定的一组海域中搜索塞壬要塞。
@@ -405,18 +405,18 @@ class GlobeCamera(GlobeOperation, ZoneManager):
             self.globe_in_sight(zone, sight=sight)
 
             to_check = zones.filter(lambda z: point_in_area(self.globe2screen([z.location])[0], area=sight))
-            for zone in to_check:
-                if self._globe_predict_stronghold(zone):
-                    logger.info(f'[大世界-地球仪] 区域 {zone.zone_id} 是塞壬要塞')
-                    self.globe_focus_to(zone)
-                    if self.get_zone_pinned_name() == 'STRONGHOLD':
-                        logger.info('[大世界-地球仪] 确认为塞壬要塞')
-                        return zone
-                    else:
-                        logger.warning('[大世界-地球仪] 不是塞壬要塞，继续搜索')
-                        self.ensure_no_zone_pinned()
-                else:
-                    logger.info(f'[大世界-地球仪] 区域 {zone.zone_id} 不是塞壬要塞')
+            # 先在同一视角完成初筛，避免点击或关闭候选面板后，拿旧坐标检查其余海域。
+            candidates = to_check.filter(self._globe_predict_stronghold)
+            for zone in candidates:
+                logger.info(f'[大世界-地球仪] 区域 {zone.zone_id} 存在要塞候选')
+                self.globe_focus_to(zone)
+                zone_type = self.get_zone_pinned_name()
+                if zone_type == 'STRONGHOLD':
+                    logger.info('[大世界-地球仪] 确认为塞壬要塞')
+                    return zone
+                logger.info(f'[大世界-地球仪] 候选 {zone.zone_id} 类型为 {zone_type}，继续搜索')
+                self.ensure_no_zone_pinned()
+                self.globe_update()
 
             zones = zones.delete(to_check)
 

@@ -9,6 +9,7 @@
 """
 
 from module.config.config import TaskEnd
+from module.config.time_source import now as current_time
 from module.exception import RequestHumanTakeover
 from module.logger import logger
 from module.os.fleet import BossFleet
@@ -19,11 +20,33 @@ from module.ui.page import page_os
 
 
 class OpsiStronghold(CoinTaskMixin, OSMap):
+    def _postpone_unconfirmed_stronghold_check(self):
+        """未完成战斗的空扫描只作短期复查；用户指定的延迟天数仍优先。"""
+        try:
+            days = int(self.config.cross_get(
+                self.CONFIG_PATH_STRONGHOLD_CHECK_DELAY, default=0,
+            ) or 0)
+        except (TypeError, ValueError):
+            days = 0
+        if days > 0:
+            self._postpone_stronghold_check('塞壬要塞没有可执行内容')
+            return
+
+        # 单次颜色扫描可能漏过旋涡动画，不能据此认定本周要塞已清空。
+        next_check = min(
+            self._get_next_stronghold_check_time(), current_time() + self.RESET_CHECK_GRACE,
+        )
+        self._set_smart_scheduling_state_value(
+            self.STATE_KEY_STRONGHOLD_NEXT_CHECK, next_check.isoformat(),
+        )
+        logger.info(f'[大世界-智能调度] 本轮未找到塞壬要塞，保留复查，下次允许检查 {next_check}')
+
     def clear_stronghold(self):
         """清理一个塞壬要塞。
 
         在地球仪地图上找到塞壬要塞，进入并清理，完成后在港口修理舰队。
-        若没有找到要塞，会标记本轮无可执行内容。
+        初次搜索无结果时保留短期复查；战后确认无更多要塞才等待刷新。
+        用户显式设置延迟天数时，两种情况均遵循该设置。
 
         Raises:
             ActionPointLimit: 行动力不足。
@@ -44,7 +67,7 @@ class OpsiStronghold(CoinTaskMixin, OSMap):
             zone = self.find_siren_stronghold()
             if zone is None:
                 self.config.OpsiStronghold_HasStronghold = False
-                self._postpone_stronghold_check('塞壬要塞没有可执行内容')
+                self._postpone_unconfirmed_stronghold_check()
                 self.os_globe_goto_map()
                 if self._handle_coin_task_no_content('塞壬要塞', '塞壬要塞没有可执行内容'):
                     return

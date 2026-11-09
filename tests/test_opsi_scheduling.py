@@ -393,7 +393,7 @@ class StrongholdPostponeConfig(SmartSchedulingConfig):
 
 
 class TestStrongholdCheckPostpone(unittest.TestCase):
-    """塞壬要塞全部清除后推迟检查，避免每轮补黄币都重扫全球地图。"""
+    """区分无战斗空扫描与战后清空，同时避免每轮补黄币重扫全球地图。"""
 
     NEXT_CHECK_KEY = OpsiScheduling.STATE_KEY_STRONGHOLD_NEXT_CHECK
 
@@ -569,6 +569,7 @@ class TestStrongholdCheckPostpone(unittest.TestCase):
             patch.object(stronghold, 'handle_fleet_resolve'),
             patch.object(stronghold, '_handle_coin_task_no_content', return_value=True),
             patch('module.os.tasks.scheduling.current_time', return_value=now),
+            patch('module.os.tasks.stronghold.current_time', return_value=now),
             patch(
                 'module.os.tasks.scheduling.get_nearest_weekday_date',
                 return_value=weekly,
@@ -579,6 +580,8 @@ class TestStrongholdCheckPostpone(unittest.TestCase):
 
         expected = (now + timedelta(days=delay_days) if delay_days > 0
                     else min(weekly, monthly) + OpsiScheduling.RESET_CHECK_GRACE)
+        if delay_days <= 0 and zones[0] is None:
+            expected = min(expected, now + OpsiScheduling.RESET_CHECK_GRACE)
         self.assertEqual(self.state_of(stronghold)[self.NEXT_CHECK_KEY], expected.isoformat())
 
     def test_records_postpone_when_no_stronghold_is_found(self):
@@ -591,6 +594,52 @@ class TestStrongholdCheckPostpone(unittest.TestCase):
         for zones in ([None], [Mock(), None]):
             with self.subTest(zones=zones):
                 self.assert_postponed_by_clear_stronghold(zones=zones, delay_days=3)
+
+    def test_unconfirmed_scan_survives_reload_and_becomes_eligible_at_retry_deadline(self):
+        now = datetime(2026, 11, 9, 8, 34)
+        deadline = now + OpsiScheduling.RESET_CHECK_GRACE
+        stronghold = self.make_scheduling(state={'OtherState': True}, cls=OpsiStronghold)
+        with (
+            patch('module.os.tasks.stronghold.current_time', return_value=now),
+            patch.object(stronghold, '_get_next_stronghold_check_time',
+                         return_value=datetime(2026, 11, 16, 2)),
+        ):
+            stronghold._postpone_unconfirmed_stronghold_check()
+
+        reloaded = self.make_scheduling(state=self.state_of(stronghold))
+        with patch('module.os.tasks.scheduling.current_time', return_value=deadline - timedelta(seconds=1)):
+            self.assertEqual(self.dispatch(reloaded), ['OpsiObscure'])
+        self.assertEqual(self.state_of(reloaded)[self.NEXT_CHECK_KEY], deadline.isoformat())
+        with patch('module.os.tasks.scheduling.current_time', return_value=deadline):
+            self.assertEqual(self.dispatch(reloaded), ['OpsiStronghold'])
+        self.assertEqual(self.state_of(reloaded), {'OtherState': True})
+
+    def test_unconfirmed_scan_never_delays_an_earlier_refresh_check(self):
+        now = datetime(2026, 11, 9, 1)
+        refresh_check = now + timedelta(hours=1)
+        stronghold = self.make_scheduling(cls=OpsiStronghold)
+        with (
+            patch('module.os.tasks.stronghold.current_time', return_value=now),
+            patch.object(stronghold, '_get_next_stronghold_check_time', return_value=refresh_check),
+        ):
+            stronghold._postpone_unconfirmed_stronghold_check()
+        self.assertEqual(self.state_of(stronghold)[self.NEXT_CHECK_KEY], refresh_check.isoformat())
+
+    def test_invalid_or_negative_delay_uses_short_retry_for_unconfirmed_scan(self):
+        now = datetime(2026, 11, 9, 8, 34)
+        for value in (None, '', 'invalid', -3):
+            with self.subTest(value=value):
+                stronghold = self.make_scheduling(cls=OpsiStronghold, delay_days=value)
+                with (
+                    patch('module.os.tasks.stronghold.current_time', return_value=now),
+                    patch('module.os.tasks.scheduling.get_nearest_weekday_date',
+                          return_value=datetime(2026, 11, 16)),
+                    patch('module.os.tasks.scheduling.get_os_next_reset',
+                          return_value=datetime(2026, 12, 1)),
+                ):
+                    stronghold._postpone_unconfirmed_stronghold_check()
+                self.assertEqual(self.state_of(stronghold)[self.NEXT_CHECK_KEY],
+                                 (now + OpsiScheduling.RESET_CHECK_GRACE).isoformat())
 
 
 class CoinCheckDelayConfig(StrongholdPostponeConfig):

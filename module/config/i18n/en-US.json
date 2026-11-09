@@ -4488,7 +4488,7 @@
     },
     "StrongholdCheckDelayDays": {
       "name": "Siren Stronghold recheck delay (days)",
-      "help": "After no Siren Strongholds are found, Smart Scheduling skips their checks for the specified number of days. 0 keeps the existing weekly refresh or monthly Operation Siren reset schedule with its original grace period. Positive values wait the full number of days, even across refreshes. Only normal coin replenishment checks in Smart Scheduling are affected; standalone Stronghold tasks and month-end cleanup are unchanged."
+      "help": "Controls when Smart Scheduling rechecks Strongholds during normal coin replenishment after none are found. 0: if the initial search finds none before any Stronghold battle in this run, allow checks again within 2 hours, with actual execution following the normal schedule; if none remain after a battle, wait until the earlier of the next weekly refresh or monthly reset, plus 2 hours. Positive values wait the full specified number of days in both cases, even across refreshes. Changes apply only to new records and do not overwrite an existing next-check time. Standalone Stronghold tasks and month-end cleanup do not skip checks based on this record."
     },
     "MonthEndActionPointCleanupEnable": {
       "name": "Enable month-end action point cleanup",
