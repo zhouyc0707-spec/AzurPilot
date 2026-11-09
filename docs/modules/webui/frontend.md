@@ -7,6 +7,14 @@
 
 > React 控制台（frontend/）：React + TypeScript + Vite 实现的 WebUI，业务通信统一走 `/api/v1/ws`。详细界面设计与协议见 frontend/README.md 与 frontend/API.md。
 
+## 2026-11-09 两族界面融合
+
+经用户确认，`App` 根据主题选择独立 `LegacyApp` / `ModernApp`。本地 `legacy-light` / `legacy-dark` 存储语义保持不变；上游同名现代主题在本地映射为 `modern-light` / `modern-dark`，简约仍为 `minimal`。历史 `light` / `dark` 偏好迁移至对应现代明暗；已退役紧凑主题迁移至现代主题，历史偏好键保留。顶栏的新旧切换恢复上次新版主题，包括简约。
+
+旧版的 `Home`、`InstanceSwitcher`、`TaskNavFlyout`、`OverviewLegacy`、`StatisticsLegacy` 只服务旧版外壳。`legacy-{layout,components,forms,theme-primitives}.css` 是合并前共用样式的旧版专用快照，仅由旧版皮肤按需加载，以免上游公用样式重构改变原排版。现代主题加载上游新版样式并映射主题选择器；简约加载相同基础加上游简约覆盖。原玻璃壳、紧凑壳及其闲置 RightRail / CompactScrollbars 随上游退役。
+
+新版保留上游首次设置、默认实例入口、树形导航、实例标签／侧栏／调度栏拖拽及调度栏左右位置。共用本地换装收藏入口、总览与股票注册页 Activity 缓存、重启确认、实例运行状态和本地业务表单；任务优先级使用上游 CodeMirror 编辑器，同时保留本地中文注释的展示与还原。API 契约继续由后端生成。
+
 ## 1. 模块概述
 
 「换装收藏统计」位于实例侧栏「茗喵证券交易所」下方，路径 `/i/:instance/skin-collection`。`pages/SkinCollection.tsx` 使用同源 iframe 加载 `public/skin-collection/index.html`，由 `InstancePageActivities` 懒加载并保留挂载，独立隔离原网页样式与脚本。页面只使用浏览器存储，各实例共享同一份收藏；不调用游戏或统计 API，不向服务端同步。旧文件页面需通过已有 JSON 导出、导入迁移。宿主隐藏或销毁 iframe 前派发 `azurpilot:collection-save`，同步提交原页防抖保存及查看状态，防止导航时丢失刚提交的记录。完整操作说明见 `frontend/README.md` 的「换装收藏统计」。
@@ -67,11 +75,11 @@ frontend/README.md 与 frontend/API.md 已经是本前端的详细文档：前�
 
 注意：项目中的 **1280×720 是游戏截图识别的约束，不适用于 WebUI 布局**。前端按普通响应式网页开发，支持移动端折叠菜单，e2e 视口为 1440×1100。
 
-任务侧栏由 `TaskNav` 按设备布局分流，旧版和新版主题一致：宽度大于 950px 且支持悬停时，分类的二级任务使用 `TaskNavFlyout` 在主侧栏右侧展开，选中任务、点击外部或按 Escape 收起；窄屏和触屏使用 `TaskNavTree` 内嵌折叠。旧版保留自身配色、圆角与选中样式，树状高度动画仅作用于 `.task-group` 内，避免右侧浮层内容被隐藏。
+旧版任务侧栏由 `TaskNav` 按设备布局分流：宽度大于 950px 且支持悬停时，分类的二级任务使用 `TaskNavFlyout` 在主侧栏右侧展开，选中任务、点击外部或按 Escape 收起；窄屏和触屏使用 `TaskNavTree` 内嵌折叠。旧版保留自身配色、圆角与选中样式，树状高度动画仅作用于 `.task-group` 内，避免右侧浮层内容被隐藏。
 
 任务队列在旧版左列、新版右栏及配置页共用 `TaskQueue`：已启用的待运行和等待中任务提供「执行一次」，单次运行的任务提供「停止」。操作按钮与配置导航分开，点击不会进入配置页；启动前等待当前实例的配置保存完成，断线或请求处理中禁用操作，同实例运行时禁用其他任务的启动。调度器卡片按 `singleTask` 区分单次执行，单次任务结束后不连带启动调度器。
 
-移动端在 950px 及以下使用导航与调度抽屉。新版主题的调度栏必须使用固定定位，桌面 L 形容器中的相对定位仅限 951px 及以上，隐藏抽屉不得占用正文高度；看图模式把手也仅在桌面显示。新版首页在窄屏按公告、实例列表顺序单列排列，由首页内容区整体滚动。480px 及以下，新版总览的日志工具栏独占一行，避免覆盖日志与截图切换入口；统计表格搜索也另起一行，保留标题和导出操作的可读宽度。新版分类统计在 950px 及以下统一使用下拉菜单，完整列出分类名称，不裁切横排标签；编辑模式的合并页面开关保留在下拉旁边。桌面仍使用分段分类栏，紧凑主题按可用宽度改用下拉。相关回归位于 `frontend/e2e/mobile/mock.spec.ts`，使用触摸移动视口检查正文可见性、滚动可达性、抽屉与桌面断点切换，运行 `npm run test:e2e:mock --prefix frontend -- e2e/mobile/mock.spec.ts`。
+旧版移动端在 950px 及以下使用导航抽屉。新版使用上游的移动导航及总览调度栏布局。新版主题的调度栏必须使用固定定位，桌面 L 形容器中的相对定位仅限 951px 及以上，隐藏抽屉不得占用正文高度；看图模式把手也仅在桌面显示。旧版首页在窄屏按公告、实例列表顺序单列排列，由首页内容区整体滚动。新版无首页，有实例时进入总览，没有实例时进入首次设置。480px 及以下，新版总览的日志工具栏独占一行，避免覆盖日志与截图切换入口；统计表格搜索也另起一行，保留标题和导出操作的可读宽度。新版分类统计在 950px 及以下统一使用下拉菜单，完整列出分类名称，不裁切横排标签；编辑模式的合并页面开关保留在下拉旁边。桌面仍使用分段分类栏，紧凑主题按可用宽度改用下拉。相关回归位于 `frontend/e2e/mobile/mock.spec.ts`，使用触摸移动视口检查正文可见性、滚动可达性、抽屉与桌面断点切换，运行 `npm run test:e2e:mock --prefix frontend -- e2e/mobile/mock.spec.ts`。
 
 统计页各分类均保留历史展示与筛选，并提供导出入口：页面可导出本类数据，表格有各自的导出明细按钮，图表支持保存为图片。
 
@@ -151,7 +159,7 @@ Node.js >= 22.12（推荐 24），首次准备用 `npm ci --prefix frontend`。
 
 - 开发联调：`uv run python gui.py` 起后端（默认端口见 config/deploy.yaml 的 `WebuiPort`），另开 `npm run dev`，Vite 将 `/api`（含 WebSocket）与 `/healthz` 代理到后端，`AZURPILOT_BACKEND` 可换目标；代理保留 Host，浏览器来源校验仍然有效。
 - 纯前端开发：`npm run dev:mock`，模拟服务只读公开的 args.json、menu.json、翻译与 template.json，所有数据在内存，重启即重置。
-- 构建部署：`npm run build` 产出 `dist/`。gui.py 启动时检查前端源码摘要，缺产物或源码变化时自动执行 `npm ci` 与构建；Docker 多阶段构建预装静态产物。
+- 构建部署：`npm run build` 产出 `dist/`。gui.py 启动时检查前端源码摘要，缺产物或源码变化时自动执行 `npm ci` 与构建。
 - 构建使用相对 base（`base: './'`）：远程访问经 `/<peer_id>/` 前缀式反代加载，绝对路径会 404。
 
 ## 16. 修改注意事项

@@ -5,7 +5,7 @@
 import { palettes, paletteColors, paletteTokens, readCustomPalettes, colorModes, fixedColorModes, type Palette, type ColorMode, type ResolvedMode, type CustomPalette } from './palettes'
 import { applyFamilyCustom } from './themeCustom'
 export type Theme = 'light' | 'dark' | 'minimal' | 'extreme'
-  | 'legacy-light' | 'legacy-dark'
+  | 'legacy-light' | 'legacy-dark' | 'modern-light' | 'modern-dark'
 export { palettes } from './palettes'
 export type { Palette, ColorMode, CustomPalette } from './palettes'
 
@@ -23,9 +23,9 @@ type Preference = {
   material: Material
 }
 const defaults: Preference = {
-  theme: 'light', palette: 'ocean', colorMode: 'auto', customPalettes: [],
+  theme: 'modern-light', palette: 'ocean', colorMode: 'auto', customPalettes: [],
   compactRailSide: COMPACT_RAIL_DEFAULT_SIDE, compactRailWidth: COMPACT_RAIL_DEFAULT_WIDTH,
-  material: 'glass',
+  material: 'plain',
 }
 
 /** 走 Apple 玻璃/壁纸/装饰动画一档的主题；旧版浅色与深色是朴素风格，不在此列。 */
@@ -33,7 +33,7 @@ const MATERIAL_THEMES: readonly Theme[] = ['light', 'dark']
 export const usesMaterial = (theme: Theme) => MATERIAL_THEMES.includes(theme)
 
 /** 有材质轴（玻璃 / 普通）的家族：新版与旧版。简洁与紧凑的风格即「非透明」，没有材质轴。 */
-const MATERIAL_AXIS_THEMES: readonly Theme[] = ['light', 'dark', 'legacy-light', 'legacy-dark']
+const MATERIAL_AXIS_THEMES: readonly Theme[] = ['light', 'dark', 'legacy-light', 'legacy-dark', 'modern-light', 'modern-dark']
 export const hasMaterialAxis = (theme: Theme) => MATERIAL_AXIS_THEMES.includes(theme)
 
 /** 是否支持自定义背景：两个有材质轴的家族都支持，普通材质同样可开。 */
@@ -43,6 +43,7 @@ export const supportsBackground = (theme: Theme) => hasMaterialAxis(theme)
 export const showsWallpaper = (theme: Theme, source: 'off' | 'default' | 'url' | 'upload') =>
   supportsBackground(theme) && source !== 'off'
 
+export const THEME_FAMILY = 'new'
 export type Material = 'glass' | 'plain'
 export const MATERIALS: readonly Material[] = ['glass', 'plain']
 
@@ -55,7 +56,7 @@ export const usesGlassLayer = (theme: Theme, material: Material) => hasMaterialA
 /** 一级主题大类。家族内切换材质或明暗不改变已存的其他自定义项。 */
 export type Family = 'new' | 'legacy' | 'minimal' | 'extreme'
 export const familyOf = (theme: Theme): Family =>
-  theme === 'light' || theme === 'dark' ? 'new'
+  theme === 'light' || theme === 'dark' || theme === 'modern-light' || theme === 'modern-dark' ? 'new'
     : theme === 'legacy-light' || theme === 'legacy-dark' ? 'legacy'
       : theme === 'extreme' ? 'extreme' : 'minimal'
 
@@ -74,7 +75,7 @@ export const usesLegacyShell = (theme: Theme, instance?: string) => Boolean(inst
 export const showsRightRail = (theme: Theme, instance?: string) => Boolean(instance) && !usesLegacyLayout(theme)
 
 const VALID_THEMES: readonly string[] = ['light', 'dark', 'minimal', 'extreme',
-  'legacy-light', 'legacy-dark']
+  'legacy-light', 'legacy-dark', 'modern-light', 'modern-dark']
 
 export function readThemePreference(): Preference {
   try {
@@ -85,7 +86,7 @@ export function readThemePreference(): Preference {
     const railSide = localStorage.getItem('azurpilot.compact-rail-side')
     const railWidth = Number(localStorage.getItem('azurpilot.compact-rail-width'))
     const storedMaterial = localStorage.getItem('azurpilot.material')
-    const resolvedTheme = VALID_THEMES.includes(theme ?? '') ? theme as Theme : 'light'
+    const resolvedTheme: Theme = theme === 'light' ? 'modern-light' : theme === 'dark' ? 'modern-dark' : theme === 'extreme' ? (colorMode === 'dark' || colorMode === 'terminal' ? 'modern-dark' : 'modern-light') : VALID_THEMES.includes(theme ?? '') ? theme as Theme : 'modern-light'
     return {
       theme: resolvedTheme,
       material: MATERIALS.includes(storedMaterial as Material) ? storedMaterial as Material : defaultMaterial(resolvedTheme),
@@ -108,7 +109,7 @@ let managedTokens: string[] = []
 let customTokens: string[] = []
 
 /** 有材质轴的家族由主题 id 定明暗（浅色/深色各是一个主题值），配色方案的自动与固定档位不适用于它们。 */
-const modeOfTheme = (theme: Theme): ResolvedMode => theme === 'dark' || theme === 'legacy-dark' ? 'dark' : 'light'
+const modeOfTheme = (theme: Theme): ResolvedMode => theme === 'dark' || theme === 'legacy-dark' || theme === 'modern-dark' ? 'dark' : 'light'
 
 /** 用户改动自定义旋钮或品牌配色后立即下发：先清上一套再写当前大类的一套（主题与皮肤都不动）。 */
 export function applyCustomLayer() {
@@ -138,7 +139,7 @@ function applyColorMode(next: Preference) {
   }
   const resolvedMode: ResolvedMode = fixed ? fixed.mode
     : themed ? (next.colorMode === 'auto' ? (systemQuery?.matches ? 'dark' : 'light') : next.colorMode as ResolvedMode)
-      : next.theme === 'dark' ? 'dark' : 'light'
+      : next.theme === 'dark' || next.theme === 'legacy-dark' || next.theme === 'modern-dark' ? 'dark' : 'light'
   if (themed) {
     const tokens = fixed ? fixed.tokens
       : paletteTokens(paletteColors(next.palette, next.customPalettes, resolvedMode), resolvedMode)
@@ -177,9 +178,12 @@ function applyCompactLayout(root: HTMLElement, next: Preference) {
 
 /** Vite 要求 import 路径静态可分析，所以用显式映射表而不是变量拼接。 */
 const skinLoaders = {
-  minimal: () => import('../styles/minimal.css?inline'),
+  minimal: async () => {
+    const [base, skin] = await Promise.all([import('../styles/modern.css?inline'), import('../styles/minimal.css?inline')])
+    return {default: base.default + '\n' + skin.default}
+  },
   legacy: () => import('../styles/legacy.css?inline'),
-  classic: () => import('../styles/classic.css?inline'),
+  modern: () => import('../styles/modern.css?inline'),
 } as const
 type Skin = keyof typeof skinLoaders
 
@@ -187,16 +191,18 @@ type Skin = keyof typeof skinLoaders
 function skinFor(theme: Theme): Skin {
   if (theme === 'minimal' || theme === 'extreme') return 'minimal'
   if (theme === 'legacy-light' || theme === 'legacy-dark') return 'legacy'
-  return 'classic'
+  return 'modern'
 }
 
 /** 样式作为惰性文本模块加载，切换时替换唯一节点，避免旧主题规则驻留。 */
-export async function applyTheme(next: Preference) {  const request = ++revision
+export async function applyTheme(next: Preference) {
+  const request = ++revision
   const skin = skinFor(next.theme)
   let css: string | undefined
   if (activeSkin !== skin) {
     const module = await skinLoaders[skin]()
     css = module.default
+    if (skin === 'modern') css = css.replaceAll('legacy-light', 'modern-light').replaceAll('legacy-dark', 'modern-dark')
   }
   // 快速切换时只提交最后一次选择，较早返回的请求不能覆盖新主题。
   if (request !== revision) return
@@ -230,6 +236,7 @@ export async function applyTheme(next: Preference) {  const request = ++revision
   } else delete root.dataset.material
   const resolvedMode = applyColorMode(next)
   applyCompactLayout(root, next)
+  preference = {...next, resolvedMode}
   applyCustomLayer()
   try {
     localStorage.setItem('azurpilot.theme', next.theme)
@@ -240,24 +247,23 @@ export async function applyTheme(next: Preference) {  const request = ++revision
     localStorage.setItem('azurpilot.compact-rail-width', String(next.compactRailWidth))
     localStorage.setItem('azurpilot.material', next.material)
   } catch { /* 存储不可用时仍允许切换，本次会话内生效。 */ }
-  preference = {...next, resolvedMode}
   listeners.forEach(listener => listener())
 }
 
-/** 顶部快捷按钮用「上次用的新版主题」键：从旧版切回来时保持原来的新版主题（简约/紧凑不丢）。 */
+/** 顶部快捷按钮用「上次用的新版主题」键：从旧版切回来时保持原来的现代或简约主题。 */
 const NEW_FAMILY_KEY = 'azurpilot.theme.new-family'
 
 /**
  * 计算「新旧 UI 切换」的目标主题（纯函数，便于测试）。
  *
  * - 新版 → 旧版：按当前解析出的明暗切到 `legacy-light` / `legacy-dark`；
- * - 旧版 → 新版：优先回到记住的那个新版主题（简约、紧凑都能还原），
- *   没有记录时按明暗回退到 `light` / `dark`。
+ * - 旧版 → 新版：优先回到记住的现代或简约主题，
+ *   没有记录时按明暗回退到 `modern-light` / `modern-dark`。
  */
 export function themeFamilyTarget(current: {theme: Theme; resolvedMode: ResolvedMode}, remembered?: Theme): Theme {
   const dark = current.resolvedMode === 'dark'
   if (usesLegacyLayout(current.theme)) {
-    return remembered && !usesLegacyLayout(remembered) ? remembered : (dark ? 'dark' : 'light')
+    return remembered && !usesLegacyLayout(remembered) ? (remembered === 'dark' ? 'modern-dark' : remembered === 'light' || remembered === 'extreme' ? 'modern-light' : remembered) : (dark ? 'modern-dark' : 'modern-light')
   }
   return dark ? 'legacy-dark' : 'legacy-light'
 }

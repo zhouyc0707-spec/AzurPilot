@@ -62,7 +62,7 @@ class RemoteClientParams(Params):
 
 
 class MindShip(Params):
-    """导入的舰船字段与核对状态。"""
+    """导入的舰船字段与核对状态；导出文件可原样导回，底账内部序号除外。"""
     name: StrictStr = Field(min_length=1, max_length=100)
     level: StrictInt = Field(ge=0, le=125)
     rarity: Literal['', 'N', 'R', 'SR', 'SSR', 'UR'] = ''
@@ -70,6 +70,9 @@ class MindShip(Params):
     extra_exp: StrictInt | None = Field(default=None, ge=0)
     review: StrictBool = False
     source: StrictStr = Field(default='', max_length=200)
+    group_type: StrictInt | None = Field(default=None, ge=1)
+    full_star: StrictBool | None = None
+    form: Literal['base', 'retrofit'] | None = None
 
 
 class Request(Params):
@@ -209,11 +212,20 @@ class StockRebuildParams(InstanceParams):
     scope: Literal['instance', 'all'] = 'instance'
 
 
+class CreateEmulatorParams(Params):
+    """首次设置随实例一起保存的模拟器参数。"""
+
+    serial: StrictStr = Field(min_length=1, max_length=256)
+    package_name: StrictStr = Field(min_length=1, max_length=128)
+    server_name: StrictStr = Field(min_length=1, max_length=64)
+
+
 class CreateParams(Params):
     """新建实例请求参数模型。"""
     name: StrictStr = Field(min_length=1, max_length=64)
     source: StrictStr | None = None
     import_file: StrictStr | None = None
+    emulator: CreateEmulatorParams | None = None
 
 
 class ImportParams(Params):

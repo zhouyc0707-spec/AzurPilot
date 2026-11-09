@@ -13,7 +13,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from module.api.app import create_app
 from module.api.config_service import ConfigService, ROOT
-from module.api.protocol import ApiError, ConfigChange
+from module.api.protocol import ApiError, ConfigChange, CreateEmulatorParams
 from module.api.runtime_service import RuntimeService
 from module.api.socket import Gateway, Session
 from tests.platform_capabilities import supports_symlinks
@@ -37,6 +37,27 @@ class ConfigApiTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.configs = ConfigService(fixture(self.temp.name))
+
+    def test_setup_emulator_values_are_saved_with_new_instance(self):
+        defaults = self.configs.template['Alas']['Emulator']
+        settings = CreateEmulatorParams(serial='127.0.0.1:5555',
+                                        package_name=defaults['PackageName'],
+                                        server_name=defaults['ServerName'])
+        self.configs.create('setup_new', emulator=settings)
+        saved = self.configs.read('setup_new')[0]['Alas']['Emulator']
+        self.assertEqual(saved['Serial'], settings.serial)
+        self.assertEqual(saved['PackageName'], settings.package_name)
+        self.assertEqual(saved['ServerName'], settings.server_name)
+
+    def test_setup_rejects_emulator_override_when_copying_without_writing(self):
+        before = self.configs.path('testpilot').read_bytes()
+        settings = CreateEmulatorParams(serial='127.0.0.1:5555',
+                                        package_name='com.bilibili.azurlane', server_name='disabled')
+        with self.assertRaises(ApiError) as caught:
+            self.configs.create('setup_copy', source='testpilot', emulator=settings)
+        self.assertEqual(caught.exception.code, 'INVALID_PARAMS')
+        self.assertFalse(self.configs.path('setup_copy', exists=False).exists())
+        self.assertEqual(self.configs.path('testpilot').read_bytes(), before)
 
     @unittest.skipUnless(supports_symlinks(), 'OS does not grant symbolic-link creation privileges')
     def test_importable_excludes_symbolic_links(self):

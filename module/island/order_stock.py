@@ -19,7 +19,7 @@ BUSINESS_MENU_ITEMS = {
     601: ('double_bamboo_shoots', 'tofu_meat', 'tofu_combo', 'hearty_meal', 'fo_tiao',
           'amaranth_rice_ball', 'matsutake_chicken_soup', 'persimmon_cake',
           'shiitake_chicken_soup', 'green_jujube_porridge'),
-    602: ('spring_flower_tea', 'strawberry_lemon', 'strawberry_honey', 'floral_fruity',
+    602: ('spring_flower_tea', 'banana_mango', 'strawberry_lemon', 'strawberry_honey', 'floral_fruity',
           'fruit_paradise', 'lavender_tea', 'sunny_honey', 'watermelon_juice',
           'chrysanthemum_tea', 'carrot_pear_juice'),
     603: ('orchard_duo', 'succulently_sweet', 'berry_orange', 'strawberry_charlotte', 'seafood_rice',

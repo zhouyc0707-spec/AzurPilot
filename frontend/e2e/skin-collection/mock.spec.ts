@@ -137,14 +137,13 @@ test('立即离开收藏页与切换实例均保存编辑，返回保留查询�
   await expect(frame.locator('#search-input')).toHaveValue('测试未拥有')
   await expect(count).toHaveValue('7')
 
-  await page.locator('.instance-toggle').click()
-  await expect(page.getByRole('menuitemradio', {name: 'demo-alt', exact: true})).toBeVisible()
+  await expect(page.getByRole('tab', {name: 'demo-alt', exact: true})).toBeVisible()
   await page.evaluate(() => {
     const doc = document.querySelector<HTMLIFrameElement>('iframe[title="换装收藏统计"]')!.contentDocument!
     const input = doc.querySelector<HTMLInputElement>('#collection-progress-container input[data-character-id="fixture_unowned"]')!
     input.value = '8'
     input.dispatchEvent(new Event('change', {bubbles: true}))
-    const target = [...document.querySelectorAll<HTMLButtonElement>('#instance-menu [role="menuitemradio"]')].find(button => button.textContent === 'demo-alt')!
+    const target = document.querySelector<HTMLElement>('[role="tab"][aria-label="demo-alt"]')!
     target.click()
   })
   await expect(page).toHaveURL(/#\/i\/demo-alt\/skin-collection$/)
@@ -308,7 +307,7 @@ for (const theme of ['legacy-light', 'light']) {
 
     // 通过主页真正卸载实例 iframe，再返回，验证 sessionStorage 恢复路径。
     await page.locator('.brand-title').first().click()
-    await expect(page).toHaveURL(/#\/$/)
+    await expect(page).toHaveURL(theme.startsWith('legacy') ? /#\/$/ : /#\/settings$/)
     await expect(page.locator('iframe[title="换装收藏统计"]')).toHaveCount(0)
     await page.evaluate(() => { location.hash = '#/i/demo-main/skin-collection' })
     await expect(frame.locator('#stat-characters')).toHaveText(String(scrollCharacters.length))

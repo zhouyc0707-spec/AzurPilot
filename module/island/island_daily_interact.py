@@ -51,16 +51,16 @@ class IslandDailyInteract(Island):
         """
         from module.island_daily_interact.assets import PET_CAT_FARM_INTERACT
 
-        logger.hr('撸猫', level=2)
+        logger.hr('抚摸猫咪', level=2)
         if not self.island_map_goto('farm'):
-            logger.warning('[岛屿-每日周任务] 前往晨露农场失败，跳过摸猫任务')
+            logger.warning('[岛屿-每日周任务] 前往晨露农场失败，跳过抚摸猫咪任务')
             return False
         self.move_for_morningdew_farm()
 
         if self._click_optional_interact(PET_CAT_FARM_INTERACT, '摸猫互动'):
             self._handle_island_reward_optional()
         else:
-            logger.info('[岛屿-每日周任务] 未检测到摸猫互动按钮，跳过')
+            logger.info('[岛屿-每日周任务] 未检测到抚摸猫咪互动按钮，跳过')
 
     def juu_express(self):
         """
@@ -76,7 +76,7 @@ class IslandDailyInteract(Island):
             TEMPLATE_JUU_EXPRESS_TASK_ICON,
         )
 
-        logger.hr('JUU快递', level=2)
+        logger.hr('JUU速运', level=2)
         task_state = self._detect_development_plan_template_task(
                 task_template=TEMPLATE_JUU_EXPRESS_TASK_ICON,
                 tab_button=DEVELOPMENT_PLAN_DAILY_TAB,
@@ -123,7 +123,7 @@ class IslandDailyInteract(Island):
             TEMPLATE_BUSINESS_DELIVERY_TASK_ICON,
         )
 
-        logger.hr('商业配送', level=2)
+        logger.hr('商区外送服务', level=2)
         task_state = self._detect_development_plan_template_task(
                 task_template=TEMPLATE_BUSINESS_DELIVERY_TASK_ICON,
                 tab_button=DEVELOPMENT_PLAN_DAILY_TAB,
@@ -193,7 +193,7 @@ class IslandDailyInteract(Island):
                 break
 
             if not self._run_weekly_photo_once():
-                logger.warning('[岛屿-每日周任务] 每周照相任务单轮流程未完整完成，结束循环')
+                logger.warning('[岛屿-每日周任务] 每周拍照任务单轮流程未完整完成，结束循环')
                 completed = False
                 break
 
@@ -563,7 +563,7 @@ class IslandDailyInteract(Island):
                     break
                 # 点击后照相按钮仍在，说明本次点击未生效，间隔后补点
                 if not shot_pending or camera_timer.reached():
-                    logger.info(f'[岛屿-每日周任务] 每周照相第{photo_count + 1}轮，点击照相按钮')
+                    logger.info(f'[岛屿-每日周任务] 每周拍照第{photo_count + 1}轮，点击拍照按钮')
                     self.device.click(WEEKLY_PHOTO_CAMERA)
                     shot_pending = True
                     camera_timer.reset()
@@ -579,7 +579,7 @@ class IslandDailyInteract(Island):
                 idle_timer.reset()
                 continue
         else:
-            logger.warning(f'[岛屿-每日周任务] 每周照相拍照超时，已拍摄 {photo_count} 张')
+            logger.warning(f'[岛屿-每日周任务] 每周拍照超时，已拍摄 {photo_count} 张')
             return False
 
         back_timer = Timer(2)

@@ -9,6 +9,7 @@
 """
 
 from datetime import datetime, timedelta
+from contextlib import nullcontext
 import importlib.util
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -87,6 +88,10 @@ class FakeDb:
 
     def __init__(self, entries):
         self.entries = entries
+
+    def request_read_cache(self):
+        # 内存夹具无需SQL缓存，但需遵守统计服务的请求级上下文契约。
+        return nullcontext()
 
     def get_research_drop(self, instance, year, month):
         prefix = f'{year:04d}-{month:02d}'

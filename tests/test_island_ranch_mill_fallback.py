@@ -16,6 +16,7 @@ class RanchMillFallbackTests(unittest.TestCase):
         self.enterContext(patch('module.island.island_rancher.logger'))
         self.flow = FrameFlow([[ISLAND_WORKING]] * 4, task_class=IslandRancher)
         self.task = task = self.flow.task
+        task.ranch_feed_map = {}  # 此入口夹具仅验证面粉后备路线。
         task.posts_ranch = {f'post{i}': f'post{i}' for i in range(1, 5)}
         task.check_mill_supplement_needs = Mock(return_value=[('wheat_flour', 7)])
         task._item_cn = lambda name: name
@@ -31,7 +32,7 @@ class RanchMillFallbackTests(unittest.TestCase):
         self.assertEqual(result, ['wheat_flour'])
         self.assertEqual(self.task.post_open.call_args_list, [call(f'post{i}') for i in range(1, 5)])
         self.task.goto_mill.assert_called_once_with()
-        self.task.process_mill_item_with_inventory.assert_called_once_with('wheat_flour', 7)
+        self.task.process_mill_item_with_inventory.assert_called_once_with('wheat_flour', 7, fallback_quantity=None)
         self.assertEqual(self.flow.names(), [POST_CLOSE.name] * 4)
         self.task.post_manage_swipe.assert_not_called()
         self.task.select_character.assert_not_called()
@@ -41,7 +42,7 @@ class RanchMillFallbackTests(unittest.TestCase):
         self.task.goto_mill_from_any_ranch_post = Mock(return_value=True)
         self.assertEqual(self.task.process_mill_supplements(), ['wheat_flour'])
         self.task.goto_mill.assert_not_called()
-        self.task.process_mill_item_with_inventory.assert_called_once_with('wheat_flour', 7)
+        self.task.process_mill_item_with_inventory.assert_called_once_with('wheat_flour', 7, fallback_quantity=None)
         self.task.post_manage_swipe.assert_not_called()
 
     def test_sufficient_stock_needs_no_navigation(self):
@@ -84,6 +85,7 @@ class SharedMillShortcutTests(unittest.TestCase):
         self.task = task = IslandRancher.__new__(IslandRancher)
         task.device = SimpleNamespace(image=object())
         task.island_round = IslandRoundInventory()
+        task.ranch_feed_map = {}  # 此入口夹具仅验证面粉后备路线。
         task.posts_ranch = {
             f'post{i}': SimpleNamespace(name=f'post{i}', button=(400, 300, 480, 380)) for i in range(1, 5)
         }

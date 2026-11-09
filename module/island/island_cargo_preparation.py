@@ -379,6 +379,8 @@ class IslandCargoPreparation(IslandUI):
     EARLY_MORNING_DELAY_HOUR = 3
     REPLACE_REFRESH_TRIALS = 2
     REPLACE_ROUNDS = 3
+    # 刷新确认弹窗的确认按钮相对列表底部确认按钮约右移 46、上移 105 像素
+    REFRESH_POPUP_CONFIRM_OFFSET = (20, -130, 80, -80)
 
     @cached_property
     def blacklist(self):
@@ -394,7 +396,7 @@ class IslandCargoPreparation(IslandUI):
         return blacklist
 
     def run(self):
-        logger.hr('岛屿货物准备运行', level=1)
+        logger.hr('岛屿货物筹备运行', level=1)
 
         self.ui_ensure(page_island)
         self.ui_goto(page_island_phone, get_ship=False)
@@ -442,7 +444,7 @@ class IslandCargoPreparation(IslandUI):
                 self.transport_receive()
                 commissions = self.transport_detect(trial=5, skip_first_screenshot=False)
 
-        logger.hr('货物准备状态', level=2)
+        logger.hr('货物筹备状态', level=2)
         for comm in commissions:
             logger.attr('货运委托', comm)
 
@@ -456,7 +458,7 @@ class IslandCargoPreparation(IslandUI):
         列表中没有可完成的委托时刷新一次，仍没有就保留原委托，避免为换成
         另一个同样无法完成的委托而白白扣除运输次数。
         """
-        logger.info('货物准备替换委托')
+        logger.info('货物筹备替换委托')
         self.interval_clear([TRANSPORT_REFRESH, CARGO_PREPARATION_REPLACE_CONFIRM])
 
         if not self._open_replace_page(comm):
@@ -491,11 +493,11 @@ class IslandCargoPreparation(IslandUI):
 
     def _transport_detect(self):
         """从当前截图中检测所有货运委托。"""
-        logger.hr('运输委托检测')
+        logger.hr('货运委托检测')
         commissions = []
         for index in range(3):
             comm = CargoPreparationTransport(main=self, index=index, blacklist=self.blacklist)
-            logger.attr('运输委托', comm)
+            logger.attr('货运委托', comm)
             for item in comm.items:
                 logger.attr(item.button, item)
             commissions.append(comm)
@@ -696,9 +698,22 @@ class IslandCargoPreparation(IslandUI):
         return 'failed'
 
     def _wait_replace_refresh(self):
-        """等待更换列表刷新完成。"""
+        """等待更换列表刷新完成。
+
+        点击刷新后会弹出「是否刷新所有显示的委托？」确认框，需点确认才会真正刷新；
+        不处理时弹窗文字会被当成一行委托，列表从未刷新。弹窗确认按钮与列表底部
+        确认按钮文字相同，只在弹窗按钮所在的偏移位置搜索，避免点到列表本身的确认。
+        """
+        self.interval_clear(CARGO_PREPARATION_REPLACE_CONFIRM)
         wait_timer = Timer(5, count=10).start()
-        for _ in self.loop(timeout=6, skip_first=False):
+        for _ in self.loop(timeout=12, skip_first=False):
+            if self.appear_then_click(CARGO_PREPARATION_REPLACE_CONFIRM,
+                                      offset=self.REFRESH_POPUP_CONFIRM_OFFSET, interval=2):
+                wait_timer.reset()
+                continue
+            if self.handle_popup_confirm('CARGO_PREPARATION_REFRESH', offset=(30, 30)):
+                wait_timer.reset()
+                continue
             if wait_timer.reached():
                 break
 

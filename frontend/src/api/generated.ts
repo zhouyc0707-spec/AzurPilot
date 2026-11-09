@@ -7,7 +7,7 @@ export interface Parameters {
   "schema.get": { language?: "zh-CN" | "zh-MIAO" | "en-US" | "ja-JP" | "zh-TW" }
   "search.content": { query: string }
   "instances.list": Record<string, never>
-  "instances.create": { name: string; source?: string | null; import_file?: string | null }
+  "instances.create": { name: string; source?: string | null; import_file?: string | null; emulator?: { serial: string; package_name: string; server_name: string } | null }
   "instances.importable": Record<string, never>
   "instances.importConfig": { name: string; content: string }
   "instances.delete": { instance: string; revision: string }
@@ -21,7 +21,7 @@ export interface Parameters {
   "dock.importLegacy": { instance: string; revision: string }
   "dock.configure": { instance: string; min_level: number; max_level: number }
   "dock.patch": { instance: string; revision: string; changes: Array<{ id?: number | null; delete?: boolean; group_type?: number | null; name?: string; level?: number; rarity?: "" | "N" | "R" | "SR" | "SSR" | "UR"; base_rarity?: "" | "N" | "R" | "SR" | "SSR" | "UR"; extra_exp?: number | null; full_star?: boolean | null; form?: "base" | "retrofit" | null; review?: boolean; source?: string }> }
-  "dock.stageImport": { instance: string; revision: string; ships: Array<{ name: string; level: number; rarity?: "" | "N" | "R" | "SR" | "SSR" | "UR"; base_rarity?: "" | "N" | "R" | "SR" | "SSR" | "UR"; extra_exp?: number | null; review?: boolean; source?: string }> }
+  "dock.stageImport": { instance: string; revision: string; ships: Array<{ name: string; level: number; rarity?: "" | "N" | "R" | "SR" | "SSR" | "UR"; base_rarity?: "" | "N" | "R" | "SR" | "SSR" | "UR"; extra_exp?: number | null; review?: boolean; source?: string; group_type?: number | null; full_star?: boolean | null; form?: "base" | "retrofit" | null }> }
   "dock.review": { instance: string; revision: string; pending_revision: string; decisions: Array<{ id: string; accept: boolean; ship_id?: number | null }> }
   "mind.catalog": { instance: string }
   "fleetTech.catalog": { instance: string }

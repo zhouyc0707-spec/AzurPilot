@@ -51,7 +51,7 @@ describe('浏览器任务通知', () => {
     push()
     const notification = FakeNotification.instances[0]
     expect(notification.title).toBe('任务结束')
-    expect(notification.options).toMatchObject({body: '正文', icon: '/azurpilot.svg'})
+    expect(notification.options).toMatchObject({body: '正文', icon: '/azurpilot.webp'})
     expect(FakeNotification.requestPermission).not.toHaveBeenCalled()
     notification.onclick?.()
     expect(window.focus).toHaveBeenCalledOnce()

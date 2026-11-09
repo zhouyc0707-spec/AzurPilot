@@ -1,14 +1,12 @@
 /**
  * @fileoverview 预设与自定义配色方案计算、对比度判定与 CSS 变量生成。
  */
-import type { Family } from './theme'
-
 export const palettes = ['ocean', 'forest', 'violet', 'sand', 'slate'] as const
 export type PresetPalette = typeof palettes[number]
 export type Palette = PresetPalette | `custom:${string}`
 export const colorModes = ['auto', 'light', 'dark', 'terminal', 'retro-gray', 'retro-blue', 'retro-red'] as const
 export type ColorMode = typeof colorModes[number]
-/** 实际生效的明暗。自带色值的档位各自固定一个，其余由主题与系统决定。 */
+
 export type ResolvedMode = 'light' | 'dark'
 export type BrandColors = {primary: string; secondary: string}
 export type CustomPalette = {id: `custom:${string}`; primary: string; secondary: string}
@@ -23,8 +21,7 @@ export const presetColors: Record<PresetPalette, Record<ResolvedMode, BrandColor
 
 type FixedMode = {mode: ResolvedMode; tokens: Record<string, string>}
 
-/** 主题模式里「自带整套色值」的档位：选中时忽略配色方案，明暗也由这里固定。
-    加新档位只要往这张表补一条 —— 界面下拉与偏好校验都会从 colorModes 自动跟上。 */
+/** 固定主题模式自带整套色值和明暗，优先于所选配色方案。 */
 export const fixedColorModes: Partial<Record<ColorMode, FixedMode>> = {
   /* 程序员：黑灰白六级，模拟终端。 */
   terminal: {
@@ -174,25 +171,26 @@ const brandBases = (mode: ResolvedMode) => ({
   mutedSurface: mode === 'dark' ? '#282f39' : '#edf2f7',
 })
 
-/** 只写强调色这一族：强调色、悬停、浅底与前景字色。 */
+/** 只写强调色这一族：强调色、悬停、按压、浅底与前景字色。 */
 function accentTokensOn(colors: BrandColors, surface: string, mutedSurface: string, mode: ResolvedMode): Record<string, string> {
   const dark = mode === 'dark'
   const primary = readableColor(colors.primary, mutedSurface, mode)
   const secondary = readableColor(colors.secondary, mutedSurface, mode)
   return {
-    '--accent': primary, '--accent-hover': mixColor(primary, dark ? '#ffffff' : '#000000', .85),
+    '--accent': primary,
+    '--accent-hover': mixColor(primary, dark ? '#ffffff' : '#000000', .85),
+    '--accent-pressed': dark ? mixColor(primary, '#000000', .82) : mixColor(primary, '#000000', .70),
     '--accent-soft': mixColor(primary, surface, dark ? .12 : .07),
-    '--secondary': secondary, '--secondary-soft': mixColor(secondary, surface, dark ? .12 : .07),
+    '--secondary': secondary,
+    '--secondary-soft': mixColor(secondary, surface, dark ? .12 : .07),
     '--theme-on-accent': contrastRatio(primary, '#ffffff') >= contrastRatio(primary, '#17202b') ? '#ffffff' : '#17202b',
   }
 }
 
-/** 各大类的原版强调色：色板列表的第一项就是它，选了等于跟随主题。 */
-export const stockBrands: Record<Family, Record<ResolvedMode, BrandColors>> = {
-  new: {light: {primary: '#0071e3', secondary: '#64aaff'}, dark: {primary: '#64aaff', secondary: '#0071e3'}},
-  legacy: {light: {primary: '#4e4c97', secondary: '#7a77bb'}, dark: {primary: '#b4b1e5', secondary: '#928fcf'}},
-  minimal: {light: {primary: '#245dbe', secondary: '#147d83'}, dark: {primary: '#245dbe', secondary: '#147d83'}},
-  extreme: {light: {primary: '#245dbe', secondary: '#147d83'}, dark: {primary: '#245dbe', secondary: '#147d83'}},
+/** 色板第一项跟随经典主题的原版强调色。 */
+export const stockBrands: Record<ResolvedMode, BrandColors> = {
+  light: {primary: '#005fb8', secondary: '#0078d4'},
+  dark: {primary: '#60cdff', secondary: '#4cc2ff'},
 }
 
 /** 只改强调色一族，不碰中性色（表面/文字/边框归主题自己管）——材质与旧版要的就是这一份。 */

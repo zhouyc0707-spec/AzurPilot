@@ -59,6 +59,8 @@ PLATFORM_SKIP = {
 # 注：曾将 module.os_simulator.simulator 列为已知失败（本地环境 numba 缺
 # _version），但该现象源于本地 .venv 损坏；在全新 `uv sync` 环境（CI）下
 # numba==0.66.0 可正常导入，故已从白名单移除，避免"过期白名单"误报。
+# 曾列有 deploy.{docker,headless,AidLux}.requirements_generator（依赖生成器
+# 已弃用、模块故意 raise），相关遗留部署已删除，条目一并移除。
 KNOWN_FAILURES: dict[str, str] = {}
 
 

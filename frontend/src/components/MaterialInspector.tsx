@@ -28,31 +28,31 @@ import {
   toggleMaterialInspectorDocked,
   toggleMaterialInspectorMinimized,
 } from '../app/materialInspectorState'
-import { familyOf, showsWallpaper } from '../app/theme'
+import { familyOf, getThemePreference } from '../app/theme'
 import {
   clearFamilyKnob,
   clearFamilyRegion,
   resetFamilyCustom,
   writeFamilyCustom,
 } from '../app/themeCustom'
-import { familyRegions } from '../app/themeKnobs'
+import { REGIONS } from '../app/themeKnobs'
 import { useFamilyCustom, useSampleLayers } from '../app/useMaterialInspector'
 import { MaterialDetailPanel } from './ThemeCustomPreference'
 
 export function MaterialInspector() {
   const inspector = useSyncExternalStore(subscribeMaterialInspector, getMaterialInspector, getMaterialInspector)
   const background = useSyncExternalStore(subscribeBackground, getBackground, getBackground)
-  const { ui, theme } = useApp()
+  const { ui } = useApp()
   const location = useLocation()
   const navigate = useNavigate()
 
-  const family = familyOf(theme)
+  const family = familyOf(getThemePreference().theme)
   const {custom, refresh} = useFamilyCustom(family)
   const {region: activeRegion, showModal, showMenu, select: handleRegionSelect, setShowModal, setShowMenu} = useSampleLayers()
 
   if (!inspector.open) return null
 
-  const wallpaperActive = showsWallpaper(theme, background.source)
+  const wallpaperActive = background.source !== 'off'
 
   const isDocked = inspector.docked
   const isMinimized = inspector.minimized
@@ -83,7 +83,7 @@ export function MaterialInspector() {
                 <Sliders size={16} />
                 <span className="inspector-title">{ui('settings.materialDetail')}</span>
                 <span>
-                  {family === 'new' ? 'Apple HIG' : 'Google M3'}
+                  Google M3
                 </span>
               </div>
               <div>
@@ -198,7 +198,7 @@ export function MaterialInspector() {
               </div>
 
               <MaterialDetailPanel
-                regions={familyRegions[family]}
+                regions={REGIONS}
                 custom={custom}
                 ui={ui}
                 initialRegion={activeRegion}
@@ -245,7 +245,7 @@ export function MaterialInspector() {
             right: isDocked && !isMinimized ? '435px' : '30px',
             zIndex: 140,
             minWidth: '220px',
-            borderRadius: 'var(--theme-menu-radius, 14px)',
+            borderRadius: 'var(--theme-menu-radius, 8px)',
             background: 'var(--theme-menu-bg, var(--surface))',
             WebkitBackdropFilter: 'var(--theme-menu-filter, blur(28px))',
             backdropFilter: 'var(--theme-menu-filter, blur(28px))',
@@ -348,7 +348,7 @@ export function MaterialInspector() {
               margin: 'auto',
               background: 'var(--theme-modal-bg, var(--surface))',
               color: 'var(--theme-text)',
-              borderRadius: 'var(--theme-modal-radius, 24px)',
+              borderRadius: 'var(--theme-modal-radius, 8px)',
               boxShadow: 'var(--theme-modal-shadow, 0 24px 64px rgba(0,0,0,0.36))',
               WebkitBackdropFilter: 'var(--theme-modal-filter, blur(28px))',
               backdropFilter: 'var(--theme-modal-filter, blur(28px))',

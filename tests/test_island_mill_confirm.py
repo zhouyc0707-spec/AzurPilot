@@ -35,6 +35,10 @@ BUY_POPUP_FRAME = build_frame(ISLAND_SHOPPING_CHECK, ISLAND_SHOP_CONFIRM)
 SUCCESS_FRAME = build_frame(ISLAND_SHOP_GET, ISLAND_SHOP_CONFIRM, ISLAND_MILL_CHECK)
 # 已回到磨坊页面
 MILL_FRAME = build_frame(ISLAND_MILL_CHECK)
+# 磨坊页面（可见加工按钮）
+MILL_BUTTON_FRAME = build_frame(ISLAND_MILL_CHECK, MILL_WHEAT_FLOUR)
+# 上一项加工后迟到的"获得物品"弹窗，盖住了加工按钮
+MILL_GET_POPUP_FRAME = build_frame(ISLAND_MILL_CHECK, ISLAND_SHOP_GET)
 
 
 class FakeClock:
@@ -152,6 +156,30 @@ class MillConfirmTest(unittest.TestCase):
         timestamps = [stamp for stamp, _ in device.clicks]
         for previous, current in zip(timestamps, timestamps[1:]):
             self.assertGreaterEqual(current - previous, 2)
+
+    def test_late_get_popup_from_previous_item_is_closed(self):
+        """上一项的"获得物品"弹窗还在时，先关闭弹窗再打开本项加工。"""
+        device = FakeDevice(self.clock, lambda t: MILL_GET_POPUP_FRAME)
+        names = lambda: [name for _, name in device.clicks]
+
+        def timeline(t):
+            clicks = names()
+            if "ISLAND_SHOP_CONFIRM" not in clicks:
+                return MILL_GET_POPUP_FRAME
+            if "MILL_WHEAT_FLOUR" not in clicks:
+                return MILL_BUTTON_FRAME
+            if clicks.count("ISLAND_SHOP_CONFIRM") < 2:
+                return BUY_POPUP_FRAME
+            return MILL_FRAME
+
+        device.timeline = timeline
+        stub = StubRancher(device)
+
+        result = stub.process_mill_item("wheat_flour", quantity=5)
+
+        self.assertTrue(result)
+        self.assertEqual(names(), ["ISLAND_SHOP_CONFIRM", "MILL_WHEAT_FLOUR", "ISLAND_SHOP_CONFIRM"])
+        self.assertEqual(stub.buy_numbers, [5])
 
 
 if __name__ == "__main__":

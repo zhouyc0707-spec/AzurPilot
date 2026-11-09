@@ -203,6 +203,7 @@ class IslandBusiness(Island):
             ],
             '白熊饮品': [
                 {'name': 'spring_flower_tea', 'button': TEMPLATE_BUSINESS_PRODUCT_TEAHOUSE_SPRING_FLOWER_TEA},
+                {'name': 'banana_mango', 'button': TEMPLATE_BUSINESS_PRODUCT_TEAHOUSE_BANANA_MANGO},
                 {'name': 'strawberry_lemon', 'button': TEMPLATE_BUSINESS_PRODUCT_TEAHOUSE_STRAWBERRY_LEMON},
                 {'name': 'strawberry_honey', 'button': TEMPLATE_BUSINESS_PRODUCT_TEAHOUSE_STRAWBERRY_HONEY},
                 {'name': 'floral_fruity', 'button': TEMPLATE_BUSINESS_PRODUCT_TEAHOUSE_FLORAL_FRUITY},
@@ -256,6 +257,7 @@ class IslandBusiness(Island):
             ],
             '白熊饮品': [
                 {'name': 'spring_flower_tea', 'template': TEMPLATE_BUSINESS_PRODUCT_TEAHOUSE_SPRING_FLOWER_TEA_CROPPED},
+                {'name': 'banana_mango', 'template': TEMPLATE_BUSINESS_PRODUCT_TEAHOUSE_BANANA_MANGO_CROPPED},
                 {'name': 'strawberry_lemon', 'template': TEMPLATE_BUSINESS_PRODUCT_TEAHOUSE_STRAWBERRY_LEMON_CROPPED},
                 {'name': 'strawberry_honey', 'template': TEMPLATE_BUSINESS_PRODUCT_TEAHOUSE_STRAWBERRY_HONEY_CROPPED},
                 {'name': 'floral_fruity', 'template': TEMPLATE_BUSINESS_PRODUCT_TEAHOUSE_FLORAL_FRUITY_CROPPED},
@@ -1229,6 +1231,8 @@ class IslandBusiness(Island):
     _SHOP_BUTTON_TO_REMAIN_TIME_OFFSET_Y = (-79, -59)
     # 经营商店列表的可视区域
     _BUSINESS_LIST_SEARCH_AREA = (50, 80, 1200, 640)
+    # 店名标签纵向距离小于此值视为同一行（相邻两行约相距 177 像素）
+    _SHOP_SAME_ROW_Y = 60
     # 商店行高（经验值，适用于各行）
     _BUSINESS_ROW_HEIGHT = 160
 
@@ -1319,7 +1323,9 @@ class IslandBusiness(Island):
         if color_similar(area_color, (230, 192, 71), threshold=80):
             return 'yellow'
         # 深蓝 (60, 67, 84) - 经营中
-        if color_similar(area_color, (60, 67, 84), threshold=80):
+        # 阈值不能放宽到 80：当日次数用完的灰色「休息中 (0/1)」按钮平均色约 (133, 133, 131)，
+        # 与深蓝差值约 73，会被误判为经营中，进而去 OCR 并不存在的倒计时
+        if color_similar(area_color, (60, 67, 84), threshold=40):
             return 'darkblue'
 
         # 以上都不是 → 灰色不可经营
@@ -1357,9 +1363,20 @@ class IslandBusiness(Island):
                     'similarity': found['similarity'],
                 })
 
+        # 同一行只保留相似度最高的商店：店名相近时（国际服 "Manjuu Eatery" 与 "Café Manjuu"），
+        # 另一家商店的模板也可能在这一行过阈值，按它点击会进错店
+        results.sort(key=lambda r: -r['similarity'])
+        kept = []
+        for r in results:
+            if any(abs(r['label_rect'][1] - k['label_rect'][1]) < self._SHOP_SAME_ROW_Y for k in kept):
+                logger.info(f"[岛屿-经营] {r['shop']['name']} 与其他商店识别在同一行"
+                            f"（相似度 {r['similarity']:.2f}），忽略")
+                continue
+            kept.append(r)
+
         # 按标签的 Y 坐标从上到下排序
-        results.sort(key=lambda r: r['label_rect'][1])
-        return results
+        kept.sort(key=lambda r: r['label_rect'][1])
+        return kept
 
     def _scroll_business_down(self):
         """在经营商店列表中向下滑动一页"""
@@ -1477,6 +1494,9 @@ class IslandBusiness(Island):
         claimed_shop_names = set()  # 已领取过奖励的商店，仍需在后续扫描中复检是否变为可经营
         started_shop_names = set()  # 本批次实际开始经营的商店
         seen_shop_names = set()  # 跨滚动位置累积看到过的商店（用于判断是否已遍历全部）
+        # 记录误识别位置 (商店名, 从顶部的滑动次数, 标签 Y)。原位返回时保留滑动次数，
+        # 真正回顶才归零；只排除这一处误识别，不屏蔽其他位置的真实商店。
+        rejected_rows = []
         max_scrolls = 8  # 最大滑动次数
 
         # 先回到列表顶部
@@ -1491,6 +1511,14 @@ class IslandBusiness(Island):
                 # 只复用刚返回后截取的这一帧；中间没有其他游戏操作。
                 visible_shops = returned_view
                 returned_view = None
+            visible_shops = [
+                r for r in visible_shops
+                if not any(
+                    name == r['shop']['name'] and attempt == scroll_attempt
+                    and abs(y - r['label_rect'][1]) < self._SHOP_SAME_ROW_Y
+                    for name, attempt, y in rejected_rows
+                )
+            ]
 
             if not visible_shops:
                 logger.info("[岛屿-经营] 当前视野中无本批次商店，尝试向下滑动")
@@ -1542,6 +1570,8 @@ class IslandBusiness(Island):
                             started_shop_names.add(shop_name)
                         processed_shop_names.add(shop_name)
                     else:
+                        # 记下这处误识别：否则回到顶部重新扫描后会点同一位置，无限进错店
+                        rejected_rows.append((shop_name, scroll_attempt, shop_info['label_rect'][1]))
                         logger.warning(f"[岛屿-经营] 进入商店后识别到的不是 {shop_name}，返回后跳过")
                         self.device.click(ISLAND_BACK)
                         self.device.sleep(1)
@@ -1551,7 +1581,8 @@ class IslandBusiness(Island):
                     # 返回后先在新截图定位当前待办，找不到才恢复原回顶搜索。
                     returned_view = self._batch_view_after_return(
                         batch_shops, processed_shop_names, claimed_shop_names)
-                    scroll_attempt = 0
+                    if returned_view is None:
+                        scroll_attempt = 0
                     break  # 重新扫描
 
                 elif status == 'yellow':
@@ -1574,7 +1605,8 @@ class IslandBusiness(Island):
 
                     returned_view = self._batch_view_after_return(
                         batch_shops, processed_shop_names, claimed_shop_names)
-                    scroll_attempt = 0
+                    if returned_view is None:
+                        scroll_attempt = 0
                     break  # 重新扫描
 
                 elif status == 'darkblue':

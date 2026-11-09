@@ -3966,7 +3966,7 @@
   "OpsiAshBeacon": {
     "_info": {
       "name": "META作战",
-      "help": ""
+      "help": "使用此功能前必须通关大世界主线。"
     },
     "AttackMode": {
       "name": "META作战模式喵",
@@ -4007,7 +4007,7 @@
   "OpsiFleetFilter": {
     "_info": {
       "name": "出击舰队过滤",
-      "help": ""
+      "help": "使用此功能前必须通关大世界主线。"
     },
     "Filter": {
       "name": "出击舰队过滤器喵",
@@ -4017,7 +4017,7 @@
   "OpsiFleet": {
     "_info": {
       "name": "舰队设置板",
-      "help": ""
+      "help": "使用此功能前必须通关大世界主线。"
     },
     "Fleet": {
       "name": "出击舰队喵",
@@ -4268,7 +4268,7 @@
   "OpsiTarget": {
     "_info": {
       "name": "海域成就",
-      "help": ""
+      "help": "使用此功能前必须通关大世界主线。"
     },
     "TargetFarming": {
       "name": "刷取安全海域成就",
@@ -6680,6 +6680,7 @@
       "help": "",
       "None": "None",
       "spring_flower_tea": "迎春花茶",
+      "banana_mango": "香蕉芒果汁",
       "strawberry_lemon": "草莓蜜沁",
       "strawberry_honey": "草莓蜂蜜冰沙",
       "floral_fruity": "花香果韵",
@@ -6695,6 +6696,7 @@
       "help": "",
       "None": "None",
       "spring_flower_tea": "迎春花茶",
+      "banana_mango": "香蕉芒果汁",
       "strawberry_lemon": "草莓蜜沁",
       "strawberry_honey": "草莓蜂蜜冰沙",
       "floral_fruity": "花香果韵",
@@ -6710,6 +6712,7 @@
       "help": "",
       "None": "None",
       "spring_flower_tea": "迎春花茶",
+      "banana_mango": "香蕉芒果汁",
       "strawberry_lemon": "草莓蜜沁",
       "strawberry_honey": "草莓蜂蜜冰沙",
       "floral_fruity": "花香果韵",
@@ -6725,6 +6728,7 @@
       "help": "",
       "None": "None",
       "spring_flower_tea": "迎春花茶",
+      "banana_mango": "香蕉芒果汁",
       "strawberry_lemon": "草莓蜜沁",
       "strawberry_honey": "草莓蜂蜜冰沙",
       "floral_fruity": "花香果韵",
@@ -6740,6 +6744,7 @@
       "help": "",
       "None": "None",
       "spring_flower_tea": "迎春花茶",
+      "banana_mango": "香蕉芒果汁",
       "strawberry_lemon": "草莓蜜沁",
       "strawberry_honey": "草莓蜂蜜冰沙",
       "floral_fruity": "花香果韵",
@@ -6755,6 +6760,7 @@
       "help": "白熊饮品当前季节饮品库存不足时替换成该饮品喵",
       "None": "None",
       "spring_flower_tea": "迎春花茶",
+      "banana_mango": "香蕉芒果汁",
       "strawberry_lemon": "草莓蜜沁",
       "strawberry_honey": "草莓蜂蜜冰沙",
       "floral_fruity": "花香果韵",
@@ -7829,7 +7835,7 @@
   "OpsiSimulatorParameters": {
     "_info": {
       "name": "大世界模拟器参数设置",
-      "help": ""
+      "help": "使用此功能前必须通关大世界主线。"
     },
     "Samples": {
       "name": "采样数喵",

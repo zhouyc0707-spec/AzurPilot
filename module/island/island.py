@@ -1004,7 +1004,7 @@ class Island(SelectCharacter):
         Returns:
             bool: 始终返回 False。
         """
-        logger.warning(f"[岛屿] select_product 失败：未能找到产品 {self._item_cn(product)} 的选择项")
+        logger.warning(f"[岛屿] select_product 失败：未能找到产物 {self._item_cn(product)} 的选择项")
         # 此时停在产品选择页，岗位详情的关闭按钮不在画面上；
         # 直接点 POST_CLOSE 会无效并导致后续岗位打开卡死，改为逐层退回岗位管理页
         self.back_to_postmanage_from_dispatch()
@@ -1196,7 +1196,7 @@ class Island(SelectCharacter):
                         self.back_to_postmanage_from_dispatch()
                         return False
                 else:
-                    logger.warning("[岛屿] 岗位追加派遣无可用角色")
+                    logger.warning("[岛屿] 岗位追加委派无可用角色")
                     self.back_to_postmanage_from_dispatch()
                     return False
                 continue
@@ -1223,7 +1223,7 @@ class Island(SelectCharacter):
                     and not self.is_post_detail_visible()
             ):
                 return True
-        logger.warning("[岛屿] 收取并追加岗位派遣超时")
+        logger.warning("[岛屿] 收取并追加岗位委派超时")
         return False
 
     def back_to_postmanage_from_dispatch(self):
@@ -1259,7 +1259,7 @@ class Island(SelectCharacter):
                 self.device.click(POST_CLOSE)
                 continue
 
-        logger.warning("[岛屿] 从派遣流程返回岗位管理页超时")
+        logger.warning("[岛屿] 从委派流程返回岗位管理页超时")
         return False
 
     def confirm_post_add_order(self, context="岗位派遣", preserve_quantity=False, max_batches=None):
@@ -1308,7 +1308,7 @@ class Island(SelectCharacter):
                 unavailable_timer.reset()
                 if not clicked or retry_confirm_timer.reached():
                     if clicked:
-                        logger.info(f"[岛屿] {context}确认后仍停留在产品选择页，重试确认")
+                        logger.info(f"[岛屿] {context}确认后仍停留在产物选择页，重试确认")
                     self.device.click(POST_ADD_ORDER)
                     clicked = True
                     retry_confirm_timer.reset()
@@ -1323,7 +1323,7 @@ class Island(SelectCharacter):
                 return False
 
         if clicked or button_seen:
-            logger.warning(f"[岛屿] {context}确认后仍停留在产品选择页")
+            logger.warning(f"[岛屿] {context}确认后仍停留在产物选择页")
             return False
 
         current, required = self.ocr_select_product_material_counter()
@@ -1786,6 +1786,15 @@ class Island(SelectCharacter):
             self.device.screenshot()
             if self.appear(ISLAND_FARM_POST1, offset=100):
                 return True
+            # 岗位管理页会停留在上次使用的页签。经营任务结束后再进入时停在经营页签，
+            # 列表里没有农田行，怎么滑都到不了“顶部”；先切回生产页签再判断
+            if i == 0 and (self.appear(POST_MANAGE_BUSINESS)
+                           or self.appear(ISLAND_GATHER_COLLECT_CHECK, offset=30)):
+                logger.info("[岛屿] 岗位管理页不在生产页签，先切回生产页签")
+                self.post_manage_mode(POST_MANAGE_PRODUCTION)
+                self.device.screenshot()
+                if self.appear(ISLAND_FARM_POST1, offset=100):
+                    return True
             if i == max_swipes:
                 break
             self.post_manage_down_swipe(ISLAND_POST_SWIPE_DISTANCE)
@@ -2193,7 +2202,7 @@ class Island(SelectCharacter):
                 if (cancel_unaffordable and not success_seen and payment_clicked
                         and not purchase_failed and confirm_timer.reached()):
                     purchase_failed = True
-                    logger.warning(f"[岛屿] 点击购买后弹窗仍未关闭，可能岛币不足，放弃购买: {context}")
+                    logger.warning(f"[岛屿] 点击购买后弹窗仍未关闭，可能开发资金不足，放弃购买: {context}")
                 if purchase_failed:
                     if close_timer.reached():
                         self.device.click(ISLAND_SHOPPING_CLOSE)
@@ -2272,7 +2281,7 @@ class Island(SelectCharacter):
                     seed_timer.reset()
                 continue
 
-        logger.warning("[岛屿] 从岗位产品选择页进入补货商店超时")
+        logger.warning("[岛屿] 从岗位产物选择页进入补货商店超时")
         return False
 
     @staticmethod
@@ -2389,7 +2398,7 @@ class Island(SelectCharacter):
         current, result = self.ocr_select_product_material_detail()
         parsed = self.parse_select_product_material_counter(result)
         if parsed is None or current != parsed[0]:
-            logger.warning(f"[岛屿] 岗位派遣页材料数量识别失败: {result}")
+            logger.warning(f"[岛屿] 岗位委派页材料数量识别失败: {result}")
             return None, 0
         return current, parsed[1]
 
@@ -2420,7 +2429,7 @@ class Island(SelectCharacter):
             if self.appear_then_click(back_button, offset=(20, 20), interval=1):
                 continue
 
-        logger.warning("[岛屿] 从补货商店返回岗位产品选择页超时")
+        logger.warning("[岛屿] 从补货商店返回岗位产物选择页超时")
         return False
 
     def ensure_select_product_material(self, item_button, required_quantity, shop_check,
@@ -2500,7 +2509,7 @@ class Island(SelectCharacter):
             return MATERIAL_RESTOCKED
 
         failed_quantities[display_name] = min(buy_quantity, failed_quantity or buy_quantity)
-        logger.warning(f"[岛屿] {cn_name}补买 {buy_quantity} 个失败，返回产品选择页按现有库存处理")
+        logger.warning(f"[岛屿] {cn_name}补买 {buy_quantity} 个失败，返回产物选择页按现有库存处理")
         self.back_to_select_product_after_shop()
         return MATERIAL_RESTOCKED
 

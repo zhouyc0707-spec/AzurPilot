@@ -1,0 +1,56 @@
+ffc6a75d0442ff04fee60a67fa26b72e62604bbb feat(island): 支持香蕉芒果汁经营并修复开发季任务页识别 (#1490)
+43ed4b90aa2fd10dd1e2b3c70ae88d1ba4207c04 调度器位置
+a9f7741095b1b19f48ed46680fd936371c3bb27f feat(frontend): 恢复简约主题
+dd8401e4d317b150b225955645a6de4dacb60d08 feat(login): 登录时关闭 MuMu 模拟器全屏广告 / Close the MuMu emulator's full-screen ad during login (#1473)
+c3188a83ff8d9dc281ccb8540228bdfd89f31d44 fix(island): 岗位列表回顶部前先切回生产页签 / Switch back to the Production tab before scrolling the post list to the top (#1488)
+accf62ef10863bfa87c65fdb97d662095e0e397f fix(api): 舰船数据导出文件可直接导入
+3fe276ba7ae2e16b5bb478c1d0b71d3380ed7f56 fix(scheduler): 隔离资源观测的 SQLite 写锁冲突
+0d631a41021e234515e00ac8b69ec8db7dcd7951 docs: 清理 Docker 与 AidLux 部署的文档引用
+f0f3bb34f04c02f98b87f9b753ef86777638c9ce chore(deploy): 移除 AidLux 与 headless 废弃部署
+f384a8004ff003feefbb6dd9c15c7047b1686a57 chore(deploy): 移除 Docker 部署体系
+12b8ae83041b89b20ae3ff7e11e78cd6184cd5bf fix(campaign): 换船后心情仍不足时延后出击
+d1122ccb8aece5e5d5b8fd413228ba3fa9807d74 fix(island): 经营列表「休息中」灰色按钮不再误判为经营中 / Don't treat the grey "On Break" shop button as running  (#1480)
+f70cb54832aacc798f895445525469a603b96112 feat(i18n): 大世界功能 help 统一补充通关大世界主线前置要求
+2943abb9e378ec13b4f9558fa232fd7f50fc8746 perf(frontend): 启动时复用依赖并按需干净重装
+19a2a8952d3e97a39a661c548a858202a6d173f5 chore(frontend): 升级 Vite 至 8.3.6
+2c73fa85f57cfbc85dcec5ef07a18045b01905e8 perf(frontend): 清理废弃界面代码并优化生产构建
+234acbe2fbb9ec25d612dd5cbc4d46dd4ae3cd9c chore(merge): record master squash ancestry after PR #1486
+3a607a920f30d43d69454f9403b719d8b660cb76 Fix (#1486)
+799e397764d918d4f4714358ceab58bf7e24e35c fix(frontend): 补充首次设置向导的 Lottie 依赖
+65a570fd81e6143e55d4d7199c8a32aefa1f6d1f chore(merge): record master squash ancestry after PR #1484
+1aecbba4afc0629cf83357f94322de50e78b9cd1 chore(release): merge dev into master (#1484)
+2148ecd28bcf395c0bc92f70bba7b4e4c0b90c3c Merge branches 'dev' and 'dev' of https://github.com/wess09/AzurPilot into dev
+793b7df43911b2ed57443cc8319a336db92c6222 fix(logger): 在保存错误日志前显示水印并移除开关 (#1483)
+ef0a5a8f6ae6795371744a01e1b7fbd42e87813e fix(logger): 在保存错误日志前显示水印并移除开关
+6e065aaa6903f5b99c3e157e5e391291b67c8dec feat(logger): 添加默认开启的日志来源文字水印 (#1482)
+86ea5bee99b2a4302e2b1d1dcad3ac3a2182a3d7 feat(logger): 添加默认开启的日志来源文字水印
+620a0bac3e31043f3a0a8920d9ca1622dc59e39e fix(opsi): 按智能开荒进度临时调整大世界任务顺序 (#1477)
+5d3b157b43d9881a847e773230dd0b997d3a2f26 test(e2e): 更新 E2E 测试以匹配新版界面结构与路由
+d33dc88c9dff58ba78f8e90846afa145e2f76029 feat(setup): 移除旧主页并重构首次初始化向导 InstanceSetup
+64b6bdec414e483097bbea69e715ae220c12a346 feat(layout): 支持侧栏、标签栏及调度器栏拖拽调整尺寸
+3ede1e665014f69a6a6fc5fc86c4a165159d20c5 refactor(theme): 精简主题体系并移除冗余皮肤样式
+3ad5461e42fcbe8ccc575e3535f76f2b90081cec feat(editor): 引入基于 CodeMirror 6 的过滤器高亮编辑器
+cbecd6106a866c48dc8072bed0d94d5a8eb63630 feat(branding): 升级应用图标为 WebP 并统一 ProjectLogo 组件
+16762e71d6edfc84a45ca4364ec85689310d0463 feat(api): 支持新建实例时预设模拟器配置与导入配置
+09f6373c351e1c4f8e293760a2f1cbdf95247bcc fix(os): 规范大世界海域未解锁异常处理与延期调度
+44dada356d5cfc3f6a2c4ebec736a80fbc854683 fix(opsi): 按智能开荒进度临时调整大世界任务顺序
+fba9373d7ec02f094e9e222cf1cfd2a08e0e74a2 fix(island): 磨坊连续加工时先关闭上一项迟到的获得物品弹窗 / Close the previous item's late "items obtained" popup between mill jobs (#1475)
+e0fe4a043ffc0ffee4c341e0ce2d11c84707859f fix(island): 修复经营任务进错店后无限重试（含国际服啾啾简餐列表模板） / Fix Island Business endless wrong-shop retries (incl. EN Manjuu Eatery template) (#1472)
+ec014149752fbf0f00ea9ef745e783d84513f90b fix(island_planner): 库存目标按绝对需求量写入，货运缺口只用于 LP (#1468)
+70cd4bde3f97f3d5f57b9d487bcaced3ce44ac48 fix: 同步英文自动搜索字体兼容与中文选项空格修复 (#1476)
+3e52e029413e944965c65137164678e5a2031435 Merge remote-tracking branch 'lme/master' into dev
+61a5861f92fe97114ebb8124ab94fb701d0c5f86 fix(handler): 支持英文自动搜索第二字体并清理中文选项空格
+46a11ff600b36b989fc368f6d50d62001c70abb5 fix(dock): 修复中文路径模板加载与船坞误判为空 (#1474)
+4188d6f2e471cc49af511213c4e5e87b50f909d7 fix(dock): 修复中文路径模板加载与船坞误判为空
+5932c8bd63bf23820f6cb06e6b7332d86c316158 MCP
+737c92353ee944a469ade6792daec25977369c81 fix(logs): 以官方术语修正代码日志正文的机翻与措辞不一致
+87e6a81ccf38d3e87012895a76057337673b457a Merge branch 'dev' of https://github.com/wess09/AzurPilot into dev
+1e250f6e34605bc92582637861cc14e8fdad481e gui 热重载 MCP 更新
+2575647b6fb926fc5d273681fadbfed6a4974835 fix(i18n): 以官方解包术语修正四语翻译的机翻与语义错误
+8f83b597b467385b17227a797af5e793729782e5 Merge pull request #6123 from LmeSzinc/bug_fix
+94dff6855931f914bb40173f175b9a6335e27992 Fix: [EN] support both Auto-Search title fonts (#6122)
+1425bc8416926e5a47f1f3f0800845524d4c35f2 I18n: cleanup trailing spaces in options
+e118928e87efd796756c0d3a7632d426c3024b27 Fix: [JP] Opsi strategic search
+a3203fd60165ec25d4fc34ee9a6fe3eb99509b17 Merge pull request #6120 from LmeSzinc/bug_fix
+94853105308e97fe91f3b02afb1272f74c8f6336 Upd: [CN, EN, JP] island extractor for season 5
+4225af609bfa43eb684c992b8e48ad884525ca95 Upd: island dock templates

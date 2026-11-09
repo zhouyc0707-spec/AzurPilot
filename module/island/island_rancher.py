@@ -124,6 +124,11 @@ class IslandRancher(Island, WarehouseOCR, LoginHandler):
         for _ in self.loop(timeout=10, skip_first=False):
             if self.appear(ISLAND_SHOPPING_CHECK, offset=(1, 1)):
                 break
+            # 上一项加工确认后，"获得物品"弹窗会比磨坊界面晚一点弹出，
+            # 上一项已按磨坊界面判定完成退出，弹窗留到这里盖住加工按钮，需先关掉
+            if self.appear(ISLAND_SHOP_GET, offset=(1, 1)):
+                self.handle_island_shop_reward_popup()
+                continue
             if self.appear_then_click(mill_button, interval=0.3):
                 continue
         else:
@@ -291,7 +296,8 @@ class IslandRancher(Island, WarehouseOCR, LoginHandler):
 
         processed_items = []
         for mill_item, quantity in mill_needs:
-            if self.process_mill_item_with_inventory(mill_item, quantity):
+            fallback = self.feed_groups_to_target(mill_item, quantity, feed_target_quantity)
+            if self.process_mill_item_with_inventory(mill_item, quantity, fallback_quantity=fallback):
                 processed_items.append(mill_item)
                 continue
             logger.warning(f"[岛屿-牧场] {self._item_cn(mill_item)}补充失败，跳过")
@@ -301,12 +307,42 @@ class IslandRancher(Island, WarehouseOCR, LoginHandler):
 
         return processed_items
 
-    def process_mill_item_with_inventory(self, mill_item, quantity):
+    def feed_groups_to_target(self, mill_item, quantity, feed_target_quantity):
+        """原料不够加工整批饲料时，补到派遣门槛所需的最少组数。
+
+        牧场岗位要求饲料库存达到门槛（默认 50）才派遣。原料不够固定组数但
+        足以补齐门槛时，只补齐门槛，给其他饲料保留共用原料。
+        面粉不使用这个门槛；其可用小麦仍先扣除本地饲料预留量。
+        不足最低饲料门槛时，执行端继续沿用本地已知现货的整批缩量。
+
+        Args:
+            mill_item (str): 加工品内部名称。
+            quantity (int): 原计划加工组数。
+            feed_target_quantity (int): 饲料派遣门槛。
+
+        Returns:
+            int | None: 补到门槛所需组数；不适用或无需减少时返回 None。
+        """
+        if mill_item not in self.ranch_feed_map.values():
+            return None
+        ledger = getattr(self, 'island_round', None)
+        current = ledger.get(mill_item) if ledger is not None else self.inventory_counts['mill'].get(mill_item)
+        if current is None:
+            return None
+        per_group = self.mill_output_quantity(mill_item, 1)
+        groups = -(-(feed_target_quantity - current) // per_group)
+        if 0 < groups < quantity:
+            return groups
+        return None
+
+    def process_mill_item_with_inventory(self, mill_item, quantity, fallback_quantity=None):
         """结合当前原料库存检查并执行磨坊加工。
 
         Args:
             mill_item (str): 加工品内部名称。
             quantity (int): 加工数量。
+            fallback_quantity (int, optional): 原料不足整批但足够补至饲料门槛时的组数；
+                仍不够时保留本地按已知现货整批缩量的规则。
 
         Returns:
             bool: 是否成功完成加工并更新库存。
@@ -326,7 +362,13 @@ class IslandRancher(Island, WarehouseOCR, LoginHandler):
             logger.warning(f'[岛屿-牧场] {required_material} 现货未观测，暂不加工 {mill_item}')
             return False
         unit_cost = self.mill_material_needed(mill_item, 1)
-        quantity = min(quantity, max(current_material, 0) // unit_cost)
+        available_batches = max(current_material, 0) // unit_cost
+        if available_batches < quantity and fallback_quantity and available_batches >= fallback_quantity:
+            # 原料有限时先让更多牧场跨过门槛，不让第一种饲料耗尽共用原料。
+            logger.info(f'[岛屿-牧场] {self._item_cn(mill_item)} 改为 {fallback_quantity} 组补至派遣门槛')
+            quantity = fallback_quantity
+        else:
+            quantity = min(quantity, available_batches)
         if quantity <= 0:
             return False
         material_needed = self.mill_material_needed(mill_item, quantity)

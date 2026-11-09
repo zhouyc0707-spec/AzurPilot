@@ -2,15 +2,15 @@
    与简约主题一样复用共享骨架，但不导入玻璃、壁纸与外部 theme.css。
    结构性规则（布局、尺寸、层级）必须自带 —— 共享层不提供，平时由 apple.css 承担。 */
 @import './tokens.css';
-@import './layout.css';
-@import './components.css';
+@import './legacy-layout.css';
+@import './legacy-components.css';
 @import './insights.css';
 @import './home.css';
 @import './dev.css';
 @import './legacy-palette.css';
 @import './theme-material.css';
-@import './theme-primitives.css';
-@import './forms.css';
+@import './legacy-theme-primitives.css';
+@import './legacy-forms.css';
 @import './legacy-fonts.css';
 @import './motion.css';
 
@@ -20,7 +20,8 @@
 body {background-attachment: scroll}
 
 /* MD3 输入框：底部强调指示线与浅色容器背景，聚焦时底线加粗变主色 */
-:root {--form-shadow: none}
+:root {--form-shadow: none; --theme-segment-indicator: var(--accent-soft)}
+:root[data-theme='legacy-dark'] {--theme-segment-indicator: #3e3b6a}
 input:where(:not([type='checkbox']):not([type='radio']):not([type='range'])),
 textarea, .select-trigger, .input-icon {
   border: 0;

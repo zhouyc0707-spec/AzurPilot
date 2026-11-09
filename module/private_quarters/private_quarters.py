@@ -245,7 +245,7 @@ class PrivateQuarters(PQInteract, PQShop):
             if count is None:
                 logger.warning('[私人休息室] 未能可靠确认每日互动次数，继续尝试互动')
             elif count == 0:
-                logger.info('每日亲密度次数耗尽，退出子任务')
+                logger.info('每日互动次数耗尽，退出子任务')
                 return
 
             # 执行互动

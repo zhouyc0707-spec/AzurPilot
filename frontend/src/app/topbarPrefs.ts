@@ -40,7 +40,7 @@ const tabSizeListeners = new Set<() => void>()
 export function readTabSize(): TabSize {
   try {
     const stored = localStorage.getItem(TAB_SIZE_KEY)
-    return TAB_SIZE_ORDER.find(size => size === stored) ?? 'md'
+    return TAB_SIZE_ORDER.find(size => size === stored) ?? (localStorage.getItem('azurpilot.theme')?.startsWith('legacy-') ? 'md' : 'lg')
   } catch { return 'md' }
 }
 
@@ -70,3 +70,6 @@ export function readLastPath(): string {
 export function writeLastPath(path: string) {
   try { localStorage.setItem(LAST_PATH_KEY, path) } catch { /* 存储不可用只影响下次启动的落点。 */ }
 }
+
+export const TAB_SIZES = ['sm', 'md', 'lg', 'xl'] as const
+export function setTabSize(size: TabSize) {applyTabSize(size); try {localStorage.setItem(TAB_SIZE_KEY, size)} catch {} ; tabSizeListeners.forEach(listener => listener())}

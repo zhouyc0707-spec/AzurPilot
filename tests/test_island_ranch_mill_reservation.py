@@ -44,21 +44,21 @@ class RanchMillReservationTests(unittest.TestCase):
         return task
 
     def test_logged_wheat_balances_leave_feed_before_processing_flour(self):
-        for wheat, flour, feed_batches in ((1136, 134, 11), (326, 4, 10)):
+        for wheat, flour, feed_batches in ((1136, 134, 11), (326, 4, 5)):
             with self.subTest(wheat=wheat):
                 task = self.make_task(wheat)
                 config_before = deepcopy(vars(task.config))
                 self.assertEqual(task.process_mill_supplements(), ['wheat_flour', 'chicken_feed'])
                 self.assertEqual(task.process_mill_item.call_args_list, [
                     call('wheat_flour', quantity=flour), call('chicken_feed', quantity=feed_batches)])
-                self.assertEqual(task.island_round.get('wheat'), 2)
+                self.assertEqual(task.island_round.get('wheat'), wheat - flour * 6 - feed_batches * 30)
                 self.assertEqual(task.island_round.get('wheat_flour'), flour)
                 self.assertEqual(task.island_round.get('chicken_feed'), feed_batches * 10)
                 self.assertEqual(vars(task.config), config_before)
                 task.warehouse_filter.assert_not_called()
 
     def test_standalone_entry_processes_reserved_feed_with_both_logged_balances(self):
-        for wheat, flour, feed_batches in ((1136, 134, 11), (326, 4, 10)):
+        for wheat, flour, feed_batches in ((1136, 134, 11), (326, 4, 5)):
             with self.subTest(wheat=wheat):
                 task = self.make_task(wheat)
                 del task.island_round
@@ -66,7 +66,7 @@ class RanchMillReservationTests(unittest.TestCase):
                 self.assertEqual(task.process_mill_supplements(), ['wheat_flour', 'chicken_feed'])
                 self.assertEqual(task.process_mill_item.call_args_list, [
                     call('wheat_flour', quantity=flour), call('chicken_feed', quantity=feed_batches)])
-                self.assertEqual(task.inventory_counts['farm']['wheat'], 2)
+                self.assertEqual(task.inventory_counts['farm']['wheat'], wheat - flour * 6 - feed_batches * 30)
                 self.assertEqual(task.inventory_counts['mill']['wheat_flour'], flour)
                 self.assertEqual(task.inventory_counts['mill']['chicken_feed'], feed_batches * 10)
                 self.assertEqual(vars(task.config), config_before)
@@ -76,10 +76,10 @@ class RanchMillReservationTests(unittest.TestCase):
         task = self.make_task(326, wheat_flour=150)
         del task.island_round
         self.assertEqual(task.process_mill_supplements(), ['chicken_feed'])
-        task.process_mill_item.assert_called_once_with('chicken_feed', quantity=10)
-        self.assertEqual(task.inventory_counts['farm']['wheat'], 26)
+        task.process_mill_item.assert_called_once_with('chicken_feed', quantity=5)
+        self.assertEqual(task.inventory_counts['farm']['wheat'], 176)
         self.assertEqual(task.inventory_counts['mill']['wheat_flour'], 150)
-        self.assertEqual(task.inventory_counts['mill']['chicken_feed'], 100)
+        self.assertEqual(task.inventory_counts['mill']['chicken_feed'], 50)
 
     def test_standalone_unknown_and_zero_material_never_buy_or_change_observation(self):
         for wheat in (None, 0):

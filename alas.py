@@ -1266,6 +1266,7 @@ class AzurLaneAutoScript:
         command = inflection.underscore(command)
         self._storage_statistics_failed = False
         self._fleet_management_failed = False
+        self._os_zone_locked_failed = False
         set_task(inflection.camelize(command))
         # 会话按任务隔离；换船入口恢复持久扫描计时，不因任务重开而重扫。
         rotation_context = self.__dict__.setdefault('_fleet_rotation_context', {})
@@ -1307,6 +1308,11 @@ class AzurLaneAutoScript:
         except StorageStatisticsError as e:
             logger.error(str(e))
             self._storage_statistics_failed = True
+            return False
+        except OSZoneLockedError:
+            logger.warning(f'[AzurPilot] 任务 `{command}` 遇到海域未解锁: 未完成开荒，请使用每月开荒')
+            self._os_zone_locked_failed = True
+            self.config.task_delay(server_update=True)
             return False
         except (MindCalculatorScanError, FleetManagementError) as e:
             self._fleet_management_failed = isinstance(e, FleetManagementError)
@@ -1660,6 +1666,14 @@ class AzurLaneAutoScript:
                 f'（{method}），备份目录 log/error/{self.config_name}/bak')
         return handled
 
+    def _log_source_watermark(self, cached=False):
+        """来源标记始终启用；导入或线程启动失败均不影响原流程。"""
+        try:
+            from module.base.log_watermark import start_log_watermark
+            start_log_watermark(cached=cached)
+        except Exception:
+            logger.debug('[来源水印] 无法启动，已跳过')
+
     def save_error_log(self):
         """
         保存错误现场：最近截图和日志文件到 ./log/error/<config-name>/<timestamp>/。
@@ -1692,6 +1706,7 @@ class AzurLaneAutoScript:
             config_folder = pathlib.Path(f"./log/error/{self.config_name}")
             folder = config_folder.joinpath(str(int(time.time() * 1000)))
             folder.mkdir(parents=True, exist_ok=True)
+            self._log_source_watermark(cached=True)
             logger.warning(f'[AzurPilot] 保存错误日志: {folder}')
 
             try:
@@ -2697,6 +2712,7 @@ class AzurLaneAutoScript:
 
         # 调度器本身需要先加载配置；日报关闭时不创建任何附加线程或服务。
         config = self.config
+        self._log_source_watermark()
         if config.DailySummary_Enable:
             self._start_daily_summary_scheduler(config)
 
@@ -2885,6 +2901,12 @@ class AzurLaneAutoScript:
                 # 仓库识别不确定已由任务设置失败间隔；重启无法修复模板或数字。
                 if success is False and getattr(self, '_storage_statistics_failed', False):
                     logger.info('[AzurPilot] 仓库统计已延后，继续其他任务，保留上次完整快照')
+                    del_cached_property(self, 'config')
+                    continue
+
+                # 海域未解锁已由任务延期到次日服务器更新；未完成开荒无需重启模拟器。
+                if success is False and getattr(self, '_os_zone_locked_failed', False):
+                    logger.info('[AzurPilot] 任务因海域未解锁已延期，继续其他任务')
                     del_cached_property(self, 'config')
                     continue
 

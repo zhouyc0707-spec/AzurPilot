@@ -26,6 +26,8 @@ vi.mock('../app/useDeploySettings', () => ({
 
 function createMockContext(): AppContextValue {
   return {
+    palette: 'ocean', setPalette: () => {}, colorMode: 'auto', setColorMode: () => {},
+    compactRailSide: 'right', setCompactRailSide: () => {}, compactRailWidth: 244, setCompactRailWidth: () => {},
     instancesLoaded: true,
     instances: [],
     refresh: async () => {},
@@ -36,22 +38,14 @@ function createMockContext(): AppContextValue {
     setPreviewEnabled: () => {},
     devMode: false,
     setDevMode: () => {},
-    theme: 'light',
+    theme: 'modern-light',
     setTheme: () => {},
     material: 'glass',
     setMaterial: () => {},
-    palette: 'ocean',
-    setPalette: () => {},
-    colorMode: 'auto',
     resolvedMode: 'light',
-    setColorMode: () => {},
     customPalettes: [],
     saveCustomPalette: () => {},
     deleteCustomPalette: () => {},
-    compactRailSide: 'right',
-    setCompactRailSide: () => {},
-    compactRailWidth: 244,
-    setCompactRailWidth: () => {},
     language: 'zh-CN',
     setLanguage: () => {},
   }

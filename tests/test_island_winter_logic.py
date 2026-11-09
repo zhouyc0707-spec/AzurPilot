@@ -50,7 +50,7 @@ def make_config(season='winter', seasonal=True):
         IslandJuuEatery_ChefFilter='WorkerJuu',
         IslandRestaurant_DoubleBambooShoots=seasonal,
         IslandTeahouse_Seasonal=seasonal,
-        cross_get=Mock(return_value=season),
+        cross_get=Mock(side_effect=lambda path, default=None: season if path == 'IslandPlan.IslandPlan.Season' else default),
         task_delay=Mock(),
     )
 
@@ -95,7 +95,7 @@ def make_farm(season='winter'):
         IslandOrchard_AmagiChanRubber=False,
         IslandNursery_PlantLavender=0,
         IslandNursery_DefaultCrop='lavender',
-        cross_get=Mock(return_value=season),
+        cross_get=Mock(side_effect=lambda path, default=None: season if path == 'IslandPlan.IslandPlan.Season' else default),
         task_delay=Mock(),
     )
 
@@ -113,7 +113,7 @@ def make_manufacture(season='winter'):
         ElectronicProcessing_Positions=0,
         Industrial_Positions=0,
         Handmade_Positions=1,
-        cross_get=Mock(return_value=season),
+        cross_get=Mock(side_effect=lambda path, default=None: season if path == 'IslandPlan.IslandPlan.Season' else default),
     )
 
     def init_base(shop, config, device=None, task=None):
@@ -135,7 +135,7 @@ def make_business(season='winter'):
         IslandBusiness_Batch2Shops=[],
         IslandBusiness_SeasonalReplaceEnabled=True,
         IslandBusiness_SeasonalThreshold=7,
-        cross_get=Mock(return_value=season),
+        cross_get=Mock(side_effect=lambda path, default=None: season if path == 'IslandPlan.IslandPlan.Season' else default),
     )
 
     def init_island(business, config, device=None, task=None):
@@ -358,8 +358,10 @@ class WinterBusinessTests(unittest.TestCase):
     def test_new_products_and_warehouse_templates_are_registered(self):
         business = make_business()
         restaurant = {item['name'] for item in business.shop_products['有鱼餐馆']}
+        teahouse = {item['name'] for item in business.shop_products['白熊饮品']}
         eatery = {item['name'] for item in business.shop_products['啾啾简餐']}
         self.assertTrue({'shiitake_chicken_soup', 'green_jujube_porridge'} <= restaurant)
+        self.assertIn('banana_mango', teahouse)
         self.assertTrue({'water_chestnut_cake', 'sugar_tangerine_daifuku'} <= eatery)
         for product in ('shiitake_chicken_soup', 'green_jujube_porridge'):
             self.assertIsNotNone(business._get_seasonal_warehouse_template(product))
@@ -368,12 +370,29 @@ class WinterBusinessTests(unittest.TestCase):
         business = make_business()
         for shop_name, product_names in {
             '有鱼餐馆': ('shiitake_chicken_soup', 'green_jujube_porridge'),
+            '白熊饮品': ('banana_mango',),
             '啾啾简餐': ('water_chestnut_cake', 'sugar_tangerine_daifuku'),
         }.items():
             products = {item['name']: item['button'] for item in business.shop_products[shop_name]}
             for product_name in product_names:
                 image_path = Path(products[product_name].file)
                 self.assertTrue(image_path.is_file(), image_path)
+
+        teahouse_products = {item['name'] for item in business.shop_products['白熊饮品']}
+        teahouse_boost_products = {
+            item['name']: item['template'] for item in business.boost_product_templates['白熊饮品']
+        }
+        self.assertEqual(teahouse_products, set(teahouse_boost_products))
+        self.assertTrue(Path(teahouse_boost_products['banana_mango'].file).is_file())
+
+    def test_banana_mango_is_loaded_from_business_product_config(self):
+        business = make_business()
+        business.config.IslandBusinessShop2_Product4 = 'banana_mango'
+
+        business._load_shop_configs()
+
+        products = business.active_products['白熊饮品']
+        self.assertEqual([item['name'] for item in products], ['banana_mango'])
 
 
 class WinterPlannerDataTests(unittest.TestCase):

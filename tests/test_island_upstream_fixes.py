@@ -18,7 +18,7 @@ class RanchSwitchMergeTests(unittest.TestCase):
     def setUp(self):
         self.enterContext(patch('module.island.island_rancher.logger'))
         self.task = IslandRancher.__new__(IslandRancher)
-        self.task.config = SimpleNamespace()
+        self.task.config = SimpleNamespace(cross_get=lambda path, default=None: default)
         self.task.config.IslandRancher_Milk = False
         self.task.config.IslandRancher_Wool = False
         self.task.ranch_chicken_threshold = self.task.ranch_pork_threshold = 100

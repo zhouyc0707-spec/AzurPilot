@@ -30,7 +30,7 @@ class DataKey(UI):
             in: page_archives
             out: page_archives, DATA_KEY_COLLECTED
         """
-        logger.hr('数据钥匙收集')
+        logger.hr('档案秘钥收集')
         while 1:
             if skip_first_screenshot:
                 skip_first_screenshot = False
@@ -52,7 +52,7 @@ class DataKey(UI):
             # 非原生截图的宽松模板阈值会混淆「领取」与「已领」，必须同时核验颜色。
             if self.appear(WAR_ARCHIVES_CHECK, offset=(20, 20)) and self.match_template_color(
                     DATA_KEY_COLLECTED, offset=(20, 20)):
-                logger.info('[免费福利-钥匙] 数据钥匙收集完成')
+                logger.info('[免费福利-钥匙] 档案秘钥收集完成')
                 break
 
             if self.match_template_color(DATA_KEY_COLLECT, offset=(20, 20), interval=3):
@@ -70,13 +70,13 @@ class DataKey(UI):
             in: page_archives
         """
         if self.match_template_color(DATA_KEY_COLLECTED, offset=(20, 20)):
-            logger.info('[免费福利-钥匙] 数据钥匙已收集')
+            logger.info('[免费福利-钥匙] 档案秘钥已收集')
             return False
 
         current, remain, total = DATA_KEY.ocr(self.device.image)
         logger.info(f'[免费福利-钥匙] 背包: {current} / {total}, 剩余: {remain}')
         if not self.config.DataKey_ForceCollect and remain <= 0:
-            logger.info('[免费福利-钥匙] 没有更多空间存放数据钥匙')
+            logger.info('[免费福利-钥匙] 没有更多空间存放档案秘钥')
             return False
 
         self._data_key_collect()

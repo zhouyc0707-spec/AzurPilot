@@ -1,21 +1,25 @@
+import {usesLegacyLayout} from '../app/theme'
 /**
  * @fileoverview 实例运行总览页面（资源卡、调度器计划与实时日志）。
  */
 
-import { Activity, useEffect, useState, useSyncExternalStore } from 'react'
+import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from 'react'
 import { useParams } from 'react-router-dom'
 import { api } from '../api/client'
 import type { Overview as OverviewData } from '../api/types'
 import { useApp, useConnection } from '../app/context'
-import { usesLegacyLayout } from '../app/theme'
-import { ErrorBox, Loading, PageTitle } from '../components/ui'
+import { getLayout, subscribeLayout } from '../app/layout'
+import { readSchedulerPosition, subscribeSchedulerPosition } from '../app/schedulerPositionPrefs'
+import { ErrorBox, Loading } from '../components/ui'
 import { MonitorPanel } from '../components/MonitorPanel'
 import { defaultResourceKeys, ResourceCards } from '../components/ResourceCards'
 import { InstanceActions } from '../components/InstanceActions'
 import { LegacyRail } from '../components/LegacyRail'
-import { MaintenanceWeekday } from '../components/MaintenanceWeekday'
-import { Statistics } from './Statistics'
+import { LegacyRailResizeHandle } from '../components/LegacyRailResizeHandle'
 import { readOverviewPanel, setOverviewPanel, subscribeOverviewPanel } from '../app/overviewPanelPrefs'
+
+const OverviewLegacy = lazy(() => import('./OverviewLegacy').then(module => ({default: module.OverviewLegacy})))
+const Statistics = lazy(() => import('./Statistics').then(module => ({default: module.Statistics})))
 
 function loadResourceSelection(instance: string) {
   try {
@@ -25,32 +29,16 @@ function loadResourceSelection(instance: string) {
   return defaultResourceKeys
 }
 
-/** 首次访问才加载面板；隐藏时暂停副作用，往返时保留筛选、图表和滚动状态。 */
-function LegacyOverviewPanels({instance, panel}: {instance: string; panel: 'logs' | 'stats'}) {
-  const [visited, setVisited] = useState({logs: panel === 'logs', stats: panel === 'stats'})
-  if (!visited[panel]) setVisited({...visited, [panel]: true})
-  return <>
-    {visited.logs && <Activity name="总览日志" mode={panel === 'logs' ? 'visible' : 'hidden'}>
-      <div className={`instance-page-panel ${panel === 'logs' ? 'panel-rise' : ''}`}>
-        <MonitorPanel instance={instance}/>
-      </div>
-    </Activity>}
-    {visited.stats && <Activity name="总览统计" mode={panel === 'stats' ? 'visible' : 'hidden'}>
-      <div className={`instance-page-panel ${panel === 'stats' ? 'panel-drop' : ''}`}>
-        <div className="instance-panel-stats"><Statistics embedded/></div>
-      </div>
-    </Activity>}
-  </>
-}
-
-export function Overview() {
+function ModernOverview() {
   const {instance = ''} = useParams()
-  const {theme, ui} = useApp()
+  const {ui} = useApp()
   const [data, setData] = useState<OverviewData>()
   const [error, setError] = useState('')
   const [selectedResources, setSelectedResources] = useState<string[]>(() => loadResourceSelection(instance))
   const connection = useConnection()
   const panel = useSyncExternalStore(subscribeOverviewPanel, readOverviewPanel, readOverviewPanel)
+  const layout = useSyncExternalStore(subscribeLayout, getLayout, getLayout)
+  const schedulerPosition = useSyncExternalStore(subscribeSchedulerPosition, readSchedulerPosition, readSchedulerPosition)
 
   useEffect(() => setSelectedResources(loadResourceSelection(instance)), [instance])
 
@@ -76,36 +64,39 @@ export function Overview() {
   if (error) return <ErrorBox message={error}/>
   if (!data) return <Loading/>
 
-  // 紧凑主题省略与面包屑重复的标题行，设置按钮改挂日志面板工具栏。
-  const condensed = theme === 'extreme'
-  const actions = <InstanceActions resources={data.resources} selectedResources={selectedResources} onResourcesChange={updateResourceSelection} showLabel={condensed}/>
+  const actions = <InstanceActions resources={data.resources} selectedResources={selectedResources} onResourcesChange={updateResourceSelection}/>
 
-  // 旧版版式：左列调度器与任务计划，右列资源卡与日志；右栏在旧版主题下不渲染。
-  if (usesLegacyLayout(theme)) return <div className="instance-page-grid">
+  // 旧版版式：调度器在左列或右列，另一侧是资源卡与日志；右栏在旧版主题下不渲染。
+  return <div
+    className={`instance-page-grid ${schedulerPosition === 'right' ? 'rail-right' : 'rail-left'}`}
+    data-scheduler-position={schedulerPosition}
+    style={layout.legacyRailWidth ? ({'--legacy-rail-width': `${layout.legacyRailWidth}px`} as React.CSSProperties) : undefined}
+  >
     <h1 className="legacy-sr-title">{instance}</h1>
-    <LegacyRail instance={instance} data={data} onData={setData}>
-      {/* 标题即切换主区显示日志还是统计的按钮。 */}
-      <section className="panel legacy-stat-card">
-        <button type="button" className="legacy-stat-title" aria-pressed={panel === 'stats'}
-          aria-label={ui(panel === 'stats' ? 'overview.showLogs' : 'overview.showStats')}
-          title={ui(panel === 'stats' ? 'overview.showLogs' : 'overview.showStats')}
-          onClick={() => {setOverviewPanel(panel === 'stats' ? 'logs' : 'stats')}}
-        >{ui(panel === 'stats' ? 'monitor.logs' : 'overview.statCard')}</button>
-        <MaintenanceWeekday instance={instance}/>
-        {actions}
-      </section>
-    </LegacyRail>
+    <div className="instance-page-rail-wrap">
+      <LegacyRail instance={instance} data={data} onData={setData}>
+        {/* 标题即切换主区显示日志还是统计的按钮。 */}
+        <section className="panel legacy-stat-card">
+          <button type="button" className="legacy-stat-title" aria-pressed={panel === 'stats'}
+            aria-label={ui(panel === 'stats' ? 'overview.showLogs' : 'overview.showStats')}
+            title={ui(panel === 'stats' ? 'overview.showLogs' : 'overview.showStats')}
+            onClick={() => {setOverviewPanel(panel === 'stats' ? 'logs' : 'stats')}}
+          >{ui(panel === 'stats' ? 'monitor.logs' : 'overview.statCard')}</button>
+          {actions}
+        </section>
+      </LegacyRail>
+      <LegacyRailResizeHandle side={schedulerPosition} />
+    </div>
     <div className="instance-page-main">
       <ResourceCards resources={data.resources} selected={selectedResources}/>
-      <LegacyOverviewPanels key={instance} instance={instance} panel={panel}/>
-    </div>
-  </div>
-
-  return <div className="overview-page">
-    {!condensed && <PageTitle className="instance-page-title" title={instance} actions={actions}/>}
-    <ResourceCards resources={data.resources} selected={selectedResources}/>
-    <div className="overview-main">
-      <MonitorPanel instance={instance} actions={condensed ? actions : undefined}/>
+      {/* 换面板时重挂一次，让内容列的淡入重放；方向类决定从哪一侧滑入。 */}
+      <div className={`instance-page-panel ${panel === 'stats' ? 'panel-drop' : 'panel-rise'}`} key={panel}>
+        {panel === 'stats'
+          ? <div className="instance-panel-stats"><Suspense fallback={<Loading/>}><Statistics/></Suspense></div>
+          : <MonitorPanel instance={instance}/>}
+      </div>
     </div>
   </div>
 }
+
+export function Overview() {return usesLegacyLayout(useApp().theme) ? <Suspense fallback={<Loading/>}><OverviewLegacy/></Suspense> : <ModernOverview/>}

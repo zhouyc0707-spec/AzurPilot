@@ -20,6 +20,8 @@ vi.mock('../api/client', () => ({
 
 function createMockContext(language: AppContextValue['language'] = 'zh-CN'): AppContextValue {
   return {
+    palette: 'ocean', setPalette: () => {}, colorMode: 'auto', setColorMode: () => {},
+    compactRailSide: 'right', setCompactRailSide: () => {}, compactRailWidth: 244, setCompactRailWidth: () => {},
     instancesLoaded: true,
     instances: [],
     refresh: async () => {},
@@ -30,22 +32,14 @@ function createMockContext(language: AppContextValue['language'] = 'zh-CN'): App
     setPreviewEnabled: () => {},
     devMode: false,
     setDevMode: () => {},
-    theme: 'light',
+    theme: 'modern-light',
     setTheme: () => {},
     material: 'glass',
     setMaterial: () => {},
-    palette: 'ocean',
-    setPalette: () => {},
-    colorMode: 'auto',
     resolvedMode: 'light',
-    setColorMode: () => {},
     customPalettes: [],
     saveCustomPalette: () => {},
     deleteCustomPalette: () => {},
-    compactRailSide: 'right',
-    setCompactRailSide: () => {},
-    compactRailWidth: 244,
-    setCompactRailWidth: () => {},
     language,
     setLanguage: () => {},
   }
