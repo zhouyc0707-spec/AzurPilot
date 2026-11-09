@@ -28,7 +28,7 @@ from module.base.decorator import run_once
 from module.base.timer import Timer
 from module.combat.assets import GET_ITEMS_1, GET_ITEMS_2, GET_SHIP
 from module.config.deep import deep_get
-from module.exception import (GameNotRunningError, GamePageUnknownError,
+from module.exception import (GameNotRunningError, GamePageUnknownError, GameStuckError,
                               RequestHumanTakeover)
 from module.exercise.assets import EXERCISE_PREPARATION
 from module.handler.assets import (AUTO_SEARCH_MENU_EXIT, BATTLE_PASS_NEW_SEASON, BATTLE_PASS_NOTICE,
@@ -381,6 +381,22 @@ class UI(InfoHandler):
         logger.hr(f"UI 导航到 {destination}")
         # 导航超时计时器：长时间无法识别页面时触发恢复
         nav_timeout = Timer(30, count=60).start()
+        # 生活区导航只有到达更靠近目标的页面才算推进，点击和关提示不能续期。
+        progress_timeout = Timer(30).start() if dorm_entry_navigation else None
+        closest_distance = None
+
+        def record_progress(page):
+            nonlocal closest_distance
+            distance, current = 0, page
+            while current.parent is not None:
+                distance += 1
+                current = current.parent
+            if closest_distance is None or distance < closest_distance:
+                closest_distance = distance
+                progress_timeout.reset()
+                return True
+            return False
+
         island_entry_confirm = Timer(1, count=2)
         last_navigation_page = None
         navigation_retry_page = None
@@ -397,6 +413,31 @@ class UI(InfoHandler):
 
             # 提示仍可见时，不能识别其背后的目标页或点击生活区入口。
             tips_button = self.game_tips_appear() if dorm_entry_navigation else None
+            # 到达目标页面
+            if tips_button is None and self.ui_page_appear(page=destination, offset=offset):
+                logger.info(f'[UI] 到达页面: {destination}')
+                break
+            # 主界面新旧主题互为等价：目标为任一主界面时，
+            # 检测到另一主题也视为到达
+            if tips_button is None and destination in (page_main, page_main_white) and self.is_in_main():
+                logger.info(f'[UI] 到达页面: {destination}')
+                break
+
+            if progress_timeout is not None and progress_timeout.reached():
+                # 只在超时帧补查进展，不能因源页点击冷却错过刚加载的更近页面。
+                progressed = False
+                guild_modal = (self.appear(GUILD_POPUP_CONFIRM, offset=self._popup_offset)
+                               and self.appear(GUILD_POPUP_CANCEL, offset=self._popup_offset))
+                if tips_button is None and not guild_modal:
+                    for page in Page.iter_pages():
+                        if page.parent is not None and page.check_button is not None:
+                            if self.appear(page.check_button, offset=offset):
+                                progressed = record_progress(page)
+                                break
+                if not progressed:
+                    Page.clear_connection()
+                    raise GameStuckError(f'[UI] 生活区导航连续30秒没有页面进展：{destination}')
+
             if tips_button is not None:
                 if self.handle_game_tips(button=tips_button):
                     nav_timeout.reset()
@@ -415,16 +456,6 @@ class UI(InfoHandler):
                 # 未能关闭时仍走既有超时恢复；不能因按钮冷却而穿透提示背景。
                 if not nav_timeout.reached():
                     continue
-
-            # 到达目标页面
-            if tips_button is None and self.ui_page_appear(page=destination, offset=offset):
-                logger.info(f'[UI] 到达页面: {destination}')
-                break
-            # 主界面新旧主题互为等价：目标为任一主界面时，
-            # 检测到另一主题也视为到达
-            if tips_button is None and destination in (page_main, page_main_white) and self.is_in_main():
-                logger.info(f'[UI] 到达页面: {destination}')
-                break
 
             # 大舰队弹窗是模态弹窗，会吃掉导航点击（表现为反复点击却毫无反应），
             # 因此必须优先关闭，而不是等页面分支都没命中后才走 ui_additional
@@ -491,6 +522,8 @@ class UI(InfoHandler):
                         navigation_retry_page = None
                         logger.info(f'[UI] 源页入口持续就绪，提前重试: {page} -> {page.parent}')
                 if self.appear(page.check_button, offset=offset, interval=5):
+                    if progress_timeout is not None:
+                        record_progress(page)
                     logger.info(f'[UI] 页面切换: {page} -> {page.parent}')
                     button = page.links[page.parent]
                     if page in (page_main, page_main_white) and page.parent is page_dormmenu:

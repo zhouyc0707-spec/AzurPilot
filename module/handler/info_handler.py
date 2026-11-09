@@ -955,9 +955,16 @@ class InfoHandler(ModuleBase):
     def game_tips_appear(self):
         """识别仍可见的游戏提示，不受关闭按钮的点击冷却影响。"""
         for button in (GAME_TIPS, GAME_TIPS3, GAME_TIPS4):
-            if self.appear(button, offset=(20, 20)) and self.image_color_count(
-                    button.button, color=(40, 40, 40), threshold=15, count=50):
+            if not self.match_template_color(button, offset=(20, 20)):
+                continue
+            # 3/4 的 button 是页码位置；背景检查须对应真正关闭提示的点击区。
+            offset = np.subtract(button.button, button._button)[:2]
+            confirm_area = area_offset(GAME_TIPS._button, offset)
+            if self.image_color_count(confirm_area, color=(40, 40, 40), threshold=15, count=50):
                 return button
+        # 失败的模板匹配也会写入偏移，不能留给后续关闭操作使用。
+        for button in (GAME_TIPS, GAME_TIPS3, GAME_TIPS4):
+            button.clear_offset()
         return None
 
     def handle_game_tips(self, button=None):
@@ -972,6 +979,7 @@ class InfoHandler(ModuleBase):
         if button is None:
             button = self.game_tips_appear()
         if button is not None and self.get_interval_timer(button, interval=2).reached():
+            GAME_TIPS.load_offset(button)
             self.device.click(GAME_TIPS)
             # 同一提示可命中多个版本，统一限频，避免转场中换模板连点。
             for tips_button in (GAME_TIPS, GAME_TIPS3, GAME_TIPS4):
