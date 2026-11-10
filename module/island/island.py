@@ -1262,20 +1262,23 @@ class Island(SelectCharacter):
         logger.warning("[岛屿] 从委派流程返回岗位管理页超时")
         return False
 
-    def confirm_post_add_order(self, context="岗位派遣", preserve_quantity=False, max_batches=None):
+    def confirm_post_add_order(self, context="岗位派遣", preserve_quantity=False, max_batches=None,
+                               retry_product_check=None):
         """材料确认足够后确认派遣，默认选最大数量。
 
         Args:
             context (str): 操作上下文描述（用于日志记录）。
             preserve_quantity (bool): 保留调用方已设置的次数，不再次点击最大数量。
             max_batches (int | None): 共享轮下单次数上限，实际次数超限时不提交。
+            retry_product_check (Button | None): 渔场原选中产品，允许材料不变时补点一次。
 
         Returns:
             bool: 确认派遣是否成功。
         """
         if getattr(self, 'island_round', None) is not None:
             return self._confirm_round_post_add_order(
-                context, preserve_quantity=preserve_quantity, max_batches=max_batches)
+                context, preserve_quantity=preserve_quantity, max_batches=max_batches,
+                retry_product_check=retry_product_check)
         clicked = False
         max_clicked = preserve_quantity
         button_seen = False
@@ -1352,8 +1355,21 @@ class Island(SelectCharacter):
             return None
         return int(batches), stock, parsed[1]
 
-    def _confirm_round_post_add_order(self, context, preserve_quantity=False, max_batches=None):
-        """本轮派遣只确认一次，正向确认工作/管理页后提交实际耗料。"""
+    def _round_dispatch_retry_ready(self, product_check):
+        """原选品页和产品均明确、开始按钮正常且无奖励遮挡，才可复核补点。"""
+        return (
+            self.match_template_color(ISLAND_SELECT_PRODUCT_CHECK, offset=(20, 20))
+            and self.match_template_color(product_check, offset=20, similarity=0.85, threshold=10)
+            # 开始按钮包含动态预计时间，沿用严格蓝色判断，不能套整块文字模板。
+            and self.appear(POST_ADD_ORDER, threshold=10)
+            and not self.appear(ISLAND_GET, offset=(30, 30))
+            and not self.appear(GET_ITEMS_ISLAND, offset=(30, 30))
+            and not self.appear(ISLAND_WORKING)
+        )
+
+    def _confirm_round_post_add_order(self, context, preserve_quantity=False, max_batches=None,
+                                     retry_product_check=None):
+        """正向确认后提交耗料；渔场仅在原页面与材料持续不变时补点一次。"""
         from module.exception import GameBugError
 
         self._round_dispatch_batches = None
@@ -1363,6 +1379,9 @@ class Island(SelectCharacter):
         previous = None
         amounts = None
         receipt = getattr(self, '_round_material_receipt', None)
+        retry_allowed = receipt is not None and retry_product_check is not None
+        retry_previous = None
+        retry_timer = Timer(2)
         for _ in self.loop(timeout=15, skip_first=False):
             if self.appear(ERROR1, offset=30):
                 raise GameBugError(f'{context}出现岛屿错误')
@@ -1379,7 +1398,20 @@ class Island(SelectCharacter):
                 self._round_material_receipt = None
                 return True
             if clicked:
-                # 确认结果不明时只观察；重复点击可能新增一笔生产。
+                if retry_allowed:
+                    if not self._round_dispatch_retry_ready(retry_product_check):
+                        retry_allowed = False
+                        continue
+                    candidate = self._read_round_dispatch_amounts()
+                    if candidate != amounts:
+                        # 一旦可能已经受理或状态未知，本次不再恢复补点资格。
+                        retry_allowed = False
+                        continue
+                    if candidate == retry_previous and retry_timer.reached():
+                        logger.info(f'[岛屿单轮] {context}原产品、次数和材料未变化，补点确认一次')
+                        self.device.click(POST_ADD_ORDER)
+                        retry_allowed = False
+                    retry_previous = candidate
                 continue
             if not self.appear(ISLAND_SELECT_PRODUCT_CHECK, offset=1):
                 previous = None
@@ -1404,8 +1436,11 @@ class Island(SelectCharacter):
                 logger.warning(f'[岛屿单轮] {context}材料不足：{stock}/{required}')
                 return False
             amounts = candidate
+            if retry_allowed:
+                retry_allowed = self._round_dispatch_retry_ready(retry_product_check)
             self.device.click(POST_ADD_ORDER)
             clicked = True
+            retry_timer.reset()
         if clicked:
             raise GameStuckError(f'{context}派遣结果未确认，丢弃本轮库存后恢复')
         logger.warning(f'[岛屿单轮] {context}次数或耗料未确认，保留材料并跳过')

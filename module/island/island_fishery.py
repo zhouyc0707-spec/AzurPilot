@@ -559,7 +559,8 @@ class IslandFishery(Island, WarehouseOCR, LoginHandler, IslandFishMeatExchange):
                         self.back_to_postmanage_from_dispatch()
                         return False
                     self.device.sleep(0.3)
-                    if not self.confirm_post_add_order(f"{product}养殖派遣"):
+                    if not self.confirm_post_add_order(
+                            f"{product}养殖派遣", retry_product_check=selection_check):
                         self.back_to_postmanage_from_dispatch()
                         return False
                     break

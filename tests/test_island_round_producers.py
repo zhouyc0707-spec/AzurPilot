@@ -108,8 +108,10 @@ class RoundProducerTests(unittest.TestCase):
         fishery.run_fish_meat_targets = Mock()
         fishery.island_round = IslandRoundInventory({'bass': 0} if stocks is None else stocks)
 
-        def confirm(context):
-            confirmed = ui.confirm(context)
+        def confirm(context, retry_product_check=None):
+            self.assertIs(retry_product_check,
+                          fishery.name_to_config[ui.current_product]['selection_check'])
+            confirmed = ui.confirm(context, retry_product_check=retry_product_check)
             if confirmed:
                 fishery._round_dispatch_batches = ui.actual_runs
                 item = fishery._round_material_receipt['item_id']

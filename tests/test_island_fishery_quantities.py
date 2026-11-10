@@ -94,7 +94,10 @@ class FisheryUI:
         self.stock[self.current_product] = self.stock.get(self.current_product, 0) + quantity
         return True
 
-    def confirm(self, context):
+    def confirm(self, context, retry_product_check=None):
+        expected_check = self.fishery.name_to_config[self.current_product]['selection_check']
+        if retry_product_check is not expected_check:
+            raise AssertionError('渔场派遣必须传入当前鱼种的选中检查')
         self.targets.append((self.current_product, self.target_quantity))
         if self.current_post in self.failed_posts:
             return False
