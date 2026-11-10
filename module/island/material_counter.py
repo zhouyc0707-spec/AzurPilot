@@ -1,5 +1,7 @@
 """定位选品页材料计数的灰底标签，保留白色和橙色耗料数字。"""
 
+import re
+
 import cv2
 import numpy as np
 
@@ -48,14 +50,20 @@ def material_counter_images(image):
 
 
 def read_material_counter_text(image):
-    """两个亮度阈值读数一致才接受，不从缺少斜杠的数字重建计数。"""
+    """两路读数须一致；仅允许完整需求括号在另一路漏掉一个。"""
     images = material_counter_images(image)
     if not images:
         logger.warning('[岛屿] 未定位到完整的材料计数标签')
         return ''
     reader = _MaterialCounterOcr([], alphabet='0123456789/+()IDSB', name='ISLAND_MATERIAL_COUNTER')
     texts = reader.ocr(images, direct_ocr=True)
-    if len(texts) != 2 or texts[0] != texts[1]:
-        logger.warning(f'[岛屿] 材料计数交叉识别不一致: {texts!r}')
-        return ''
-    return texts[0]
+    if len(texts) == 2:
+        if texts[0] == texts[1]:
+            return texts[0]
+        for complete, partial in (texts, texts[::-1]):
+            # 必须已有完整文本，且数字、斜杠、加号逐字相同，不能拼补数字。
+            matched = re.fullmatch(r'([0-9]+/)\(([0-9]+(?:\+[0-9]+)*)\)', complete)
+            if matched and partial in (f'{matched[1]}{matched[2]})', f'{matched[1]}({matched[2]}'):
+                return complete
+    logger.warning(f'[岛屿] 材料计数交叉识别不一致: {texts!r}')
+    return ''
