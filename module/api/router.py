@@ -106,6 +106,7 @@ class Router:
             'system.restart': Method(p.Params, self.system_restart, True),
             # 本地定制：岛屿计划全局配置的「一键关闭/恢复全部岛屿任务」
             'island.suspend.state': Method(p.InstanceParams, lambda x: self.island_suspend.state(x.instance)),
+            'island.seasonProgress': Method(p.InstanceParams, self.island_season_progress),
             'island.suspend.toggle': Method(p.InstanceParams, lambda x: self.island_suspend.toggle(x.instance), True),
             'tasks.run': Method(p.TaskParams, lambda x: runtime.start(x.instance, x.task), True),
             'tasks.runOnce': Method(p.TaskParams, lambda x: runtime.run_once(x.instance, x.task), True),
@@ -152,6 +153,10 @@ class Router:
                                                     lambda x: {'removed': background.gallery_remove(x.id)}, True),
             'background.gallery.open': Method(p.Params, lambda _: background.gallery_open(), True),
         }
+
+    def island_season_progress(self, params):
+        from module.api.island_progress import season_progress
+        return season_progress(self.configs, params.instance)
 
     @property
     def dock(self):

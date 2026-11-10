@@ -1,0 +1,10 @@
+.island-target-progress {display: grid; gap: 5px; margin-top: 9px; text-align: left; font-size: 12px; line-height: 1.6; color: var(--theme-muted, var(--muted)); overflow-wrap: anywhere}
+.island-target-progress > strong {color: var(--theme-text, var(--text)); font-weight: 500}
+.island-target-progress progress {display: block; width: 100%; height: 5px; border: 0; border-radius: 4px; overflow: hidden; accent-color: var(--theme-accent, var(--accent)); background: var(--theme-accent-soft, var(--accent-soft))}
+.island-target-progress progress::-webkit-progress-bar {background: var(--theme-accent-soft, var(--accent-soft))}
+.island-target-progress progress::-webkit-progress-value {background: var(--theme-accent, var(--accent))}
+.island-target-progress progress::-moz-progress-bar {background: var(--theme-accent, var(--accent))}
+.island-target-progress-counts {display: flex; flex-wrap: wrap; gap: 4px 12px}
+.island-progress-summary {padding: 14px 22px; margin-bottom: 18px; font-size: 12px; line-height: 1.7; color: var(--theme-muted, var(--muted))}
+.island-progress-summary strong {color: var(--theme-text, var(--text)); font-weight: 500}
+.island-progress-summary time {font-variant-numeric: tabular-nums}

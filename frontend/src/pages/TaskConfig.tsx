@@ -27,6 +27,8 @@ import { AccountPanel } from '../components/AccountPanel'
 import { IslandSuspendControl } from '../components/IslandSuspendControl'
 import { IslandSeasonTargetScan, SEASON_SCAN_TASK } from '../components/IslandSeasonTargetScan'
 import { IslandImportedTargets } from '../components/IslandImportedTargets'
+import { IslandProgressSummary, IslandTargetProgress } from '../components/IslandTargetProgress'
+import { useIslandSeasonProgress } from '../components/useIslandSeasonProgress'
 import { EmulatorRuntimeStatus } from '../components/EmulatorRuntimeStatus'
 import { isFieldVisible, isSeasonGroupVisible } from './configVisibility'
 import { FleetInfoPage } from './FleetInfoPage'
@@ -124,6 +126,8 @@ export function TaskConfig() {
   const islandSeason = edits['IslandPlan.IslandPlan.Season']?.value
     ?? config?.values.IslandPlan?.IslandPlan?.Season
     ?? schema?.args.IslandPlan?.IslandPlan?.Season?.value ?? null
+  const seasonProgress = useIslandSeasonProgress(instance, typeof islandSeason === 'string' ? islandSeason : '', task === 'IslandSeasonalProduction')
+  const seasonObservations = Object.fromEntries((seasonProgress.data?.items ?? []).map(item => [item.itemId, item]))
   const visibleGroups = Object.entries(groups ?? {})
     .filter(([group]) => isSeasonGroupVisible(task, group, islandSeason))
     .map(([group, fields]) => {
@@ -225,6 +229,7 @@ export function TaskConfig() {
           <div className="field-row"><div className="field-label"><strong>{label}</strong><p>{htmlToPlainText(help)}</p></div>
             <EditStatus id={path} edit={edit} retry={queue.retry} queue={queue}/></div>
           <IslandImportedTargets id={path} value={value} disabled={importedTargetsLocked}
+            observations={seasonObservations} progressStatus={seasonProgress.status}
             onChange={(next, error) => queue.change(path, next, next, error)}/>
         </div>
 
@@ -282,6 +287,8 @@ export function TaskConfig() {
                 </div>
               )}
               {!isMultiline && <EditStatus id={path} edit={edit} retry={queue.retry} queue={queue} />}
+              {task === 'IslandSeasonalProduction' && <IslandTargetProgress target={value} status={seasonProgress.status}
+                observation={seasonProgress.data?.items.find(item => item.key === arg)}/>}
             </div>
           </div>
         )
@@ -335,6 +342,7 @@ export function TaskConfig() {
   const groupCardsBlock = <div className="config-groups">{taskHelpBlock}{startupPanel}
     {task === 'IslandSeasonalProduction' && <div hidden={!!search}><IslandSeasonTargetScan key={instance} instance={instance}
       beforeStart={() => queue.settled()} onFinished={refreshConfig} onBusyChange={setSeasonScanBusy}/></div>}
+    {task === 'IslandSeasonalProduction' && <IslandProgressSummary status={seasonProgress.status} updatedAt={seasonProgress.data?.updatedAt}/>}
     {task === 'Alas' && !search && <AccountPanel key={instance} instance={instance}/>} {groupCards}</div>
   const groupNav = <nav className="group-nav">
     {visibleGroups.map(({group}) => (

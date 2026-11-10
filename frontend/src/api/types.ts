@@ -251,7 +251,15 @@ export interface DockReport {
   ships: DockCard[]; complete: boolean; review_count: number; source: string
 }
 
+export interface IslandSeasonProgress {
+  season: string
+  updatedAt: string | null
+  status: 'missing' | 'observed' | 'invalidated'
+  items: Array<{itemId: number; key: string; stock: number | null; inProduction: number | null}>
+}
+
 export interface Results {
+  'island.seasonProgress': IslandSeasonProgress
   'emulator.status': EmulatorStatus
   'dock.report': DockReport
   'dock.configure': DockReport

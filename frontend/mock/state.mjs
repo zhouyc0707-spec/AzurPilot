@@ -528,6 +528,10 @@ export function createMockState({ empty = false } = {}) {
         instances.delete(name); startup.delete(name); programs.delete(name); simulations.delete(name); fleetStates.delete(name)
         return { deleted: name }
       case 'config.get': return snapshot(name)
+      case 'island.seasonProgress': return {
+        season: get(name).values.IslandPlan?.IslandPlan?.Season ?? 'spring',
+        updatedAt: null, status: 'missing', items: [],
+      }
       case 'fleetTraining.reset': {
         if (get(name).status === 'running') fail('INSTANCE_RUNNING', '请先停止实例，再刷新换船状态')
         const current = snapshot(name)

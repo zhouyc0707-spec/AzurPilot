@@ -3,6 +3,7 @@ import type {Value} from '../api/types'
 import {prepareValue} from '../config/editors'
 import {FieldInput} from './FieldInput'
 import {islandSeasonText} from './islandSeasonText'
+import {IslandTargetProgress, type StockObservation, type StockRecordStatus} from './IslandTargetProgress'
 
 const quantity = {type: 'input', value: 0, valuetype: 'int', validate: [0, Number.MAX_SAFE_INTEGER]}
 
@@ -20,8 +21,9 @@ export function validImportedTargetCount(value: number | string) {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
 }
 
-export function IslandImportedTargets({id, value, disabled, onChange}: {
+export function IslandImportedTargets({id, value, disabled, onChange, observations, progressStatus}: {
   id: string; value: Value; disabled?: boolean; onChange: (value: string, error?: string) => void
+  observations?: Record<number, StockObservation>; progressStatus?: StockRecordStatus
 }) {
   const {language} = useApp()
   const text = islandSeasonText(language)
@@ -39,7 +41,8 @@ export function IslandImportedTargets({id, value, disabled, onChange}: {
   }
   if (!Object.keys(rows).length) return <div className="field-row"><p className="muted">{text.empty}</p></div>
   return <>{Object.entries(rows).map(([key, count]) => {
-    const fieldId = `${id}.${key.match(/\((\d+)\)$/)![1]}`
+    const itemId = Number(key.match(/\((\d+)\)$/)![1])
+    const fieldId = `${id}.${itemId}`
     const name = key.replace(/\s+\(\d+\)$/, '')
     return <div className="field-row" key={key}><div className="field-label"><label htmlFor={fieldId}>{name}</label></div>
       <div className="field-control"><FieldInput id={fieldId} value={count} label={name} type="int" preserveText
@@ -48,6 +51,6 @@ export function IslandImportedTargets({id, value, disabled, onChange}: {
           const result = prepareValue(next, quantity)
           const updated = {...rows, [key]: result.payload as number | string}
           onChange(JSON.stringify(updated), result.error ?? (Object.values(updated).every(validImportedTargetCount) ? undefined : text.invalid))
-        }}/></div></div>
+        }}/>{progressStatus && <IslandTargetProgress target={count} status={progressStatus} observation={observations?.[itemId]}/>}</div></div>
   })}</>
 }

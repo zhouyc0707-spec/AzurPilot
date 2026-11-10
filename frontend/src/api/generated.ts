@@ -45,6 +45,7 @@ export interface Parameters {
   "scheduler.program.state": { instance: string }
   "system.restart": Record<string, never>
   "island.suspend.state": { instance: string }
+  "island.seasonProgress": { instance: string }
   "island.suspend.toggle": { instance: string }
   "tasks.run": { instance: string; task: string }
   "tasks.runOnce": { instance: string; task: string }

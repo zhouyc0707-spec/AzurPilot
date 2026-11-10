@@ -9,6 +9,7 @@ from module.config.config import TaskEnd, _round_up_half_hour, _round_up_hour, n
 from module.config.utils import ensure_time
 from module.exception import GamePageUnknownError, GameStuckError, GameTooManyClickError, IslandFishExchangeError
 from module.island.round_inventory import IslandRoundInventory
+from module.island.seasonal_progress import invalidate_progress, publish_round_progress
 from module.logger import logger
 
 
@@ -180,6 +181,7 @@ class IslandProductionRound:
     """保留尚未完成的本轮任务，允许委托科研插队后继续，不持久化到磁盘。"""
 
     def __init__(self, config, device, task):
+        invalidate_progress(getattr(config, 'config_name', None), reason='开始新一轮收获盘点')
         self.signature = round_config_signature(config)
         self.started_at = current_time()
         self.runners = {}
@@ -231,6 +233,7 @@ class IslandProductionRound:
                 if name != task and not task_due(config, name, self.started_at):
                     config.cross_set(f'{name}.Scheduler.NextRun', self.started_at)
         self.ready = True
+        publish_round_progress(config, self)
         logger.attr('岛屿本轮任务', sorted(self.pending))
         logger.attr('岛屿本轮明确库存', len(observed))
 
@@ -260,6 +263,7 @@ class IslandProductionRound:
         runner.config = config
         runner.run()
         self.pending.remove(task)
+        publish_round_progress(config, self)
 
 
 def run_production_task(owner, task, cls):
@@ -288,6 +292,7 @@ def run_production_task(owner, task, cls):
             delay_failed_preparation(owner, task, reason='鱼肉兑换未确认，已丢弃本轮库存')
             raise
     except BaseException as exc:
+        invalidate_progress(getattr(owner.config, 'config_name', None), reason='生产轮执行中断')
         if getattr(owner, '_island_production_round', None) is not None:
             logger.info(f'[岛屿单轮] 丢弃本轮：{task} 执行中断（{type(exc).__name__}）')
         owner._island_production_round = None

@@ -26,4 +26,12 @@ describe('扫描导入目标编辑', () => {
     expect(change.mock.lastCall?.[0]).toBe('{"茶叶 (2014)":"-1","柑橘 (2017)":100}')
     expect(change.mock.lastCall?.[1]).toBeTruthy()
   })
+
+  it('按官方ID显示库存进度，不把在制加入已完成', () => {
+    render(<IslandImportedTargets id="targets" value={'{"茶叶 (2014)":500,"柑橘 (2017)":100}'} onChange={vi.fn()}
+      progressStatus="observed" observations={{2014: {stock: 300, inProduction: 100}, 2017: {stock: null, inProduction: null}}}/>)
+    expect(screen.getByText('已完成 300/500')).toBeTruthy()
+    expect(screen.getByText('在制：100')).toBeTruthy()
+    expect(screen.getByText('库存待确认')).toBeTruthy()
+  })
 })
