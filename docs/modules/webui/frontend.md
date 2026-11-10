@@ -9,7 +9,7 @@
 
 ## 2026-11-09 两族界面融合
 
-经用户确认，`App` 根据主题选择独立 `LegacyApp` / `ModernApp`。本地 `legacy-light` / `legacy-dark` 存储语义保持不变；上游同名现代主题在本地映射为 `modern-light` / `modern-dark`，简约仍为 `minimal`。历史 `light` / `dark` 偏好迁移至对应现代明暗；已退役紧凑主题迁移至现代主题，历史偏好键保留。顶栏的新旧切换恢复上次新版主题，包括简约。
+经用户确认，`App` 根据主题选择独立 `LegacyApp` / `ModernApp`。本地 `legacy-light` / `legacy-dark` 存储语义保持不变；上游同名现代主题在本地映射为 `modern-light` / `modern-dark`，简约仍为 `minimal`。历史 `light` / `dark` 偏好迁移至对应现代明暗；已退役紧凑主题迁移至现代主题，历史偏好键保留。顶栏的新旧切换恢复上次新版主题，包括简约。旧版浅色／深色侧栏不显示一级「资源统计」入口；总览内嵌统计及独立统计页旧链接仍可用，新版侧栏保留该入口。
 
 旧版的 `Home`、`InstanceSwitcher`、`TaskNavFlyout`、`OverviewLegacy`、`StatisticsLegacy` 只服务旧版外壳。`legacy-{layout,components,forms,theme-primitives}.css` 是合并前共用样式的旧版专用快照，仅由旧版皮肤按需加载，以免上游公用样式重构改变原排版。现代主题加载上游新版样式并映射主题选择器；简约加载相同基础加上游简约覆盖。原玻璃壳、紧凑壳及其闲置 RightRail / CompactScrollbars 随上游退役。
 
@@ -134,7 +134,7 @@ frontend/
 
 追代码从 `src/main.tsx` 开始：hash 路由表、顶层 ErrorBoundary 与主题加载流程都在这里。
 
-茗交所入口为 `src/pages/StockExchange.tsx`，侧栏导航位于「资源统计」下方，沿用 AzurPilot 主题与布局。页面只负责实例股票告知确认、用户名注册、群内绑定命令、删除状态及本地恢复计划；注册并绑定后在新标签页打开 `https://stock.azurpilot.com`，浏览器拦截时提供直接按钮。交易、教程、行情与登录改由独立站点提供，旧 `src/stock/` 与交易代理按用户确认退役，原实现保留在 Git 历史。`src/components/StockExchangeBoundary.tsx` 提供加载及渲染错误兜底。Mock 完全本地，不依赖外部交易所或验证码。详情见 [前端 README](../../../frontend/README.md#茗喵证券交易所)。
+茗交所入口为 `src/pages/StockExchange.tsx`，侧栏导航在新版位于「资源统计」下方，旧版位于「运行总览」下方，沿用 AzurPilot 主题与布局。页面只负责实例股票告知确认、用户名注册、群内绑定命令、删除状态及本地恢复计划；注册并绑定后在新标签页打开 `https://stock.azurpilot.com`，浏览器拦截时提供直接按钮。交易、教程、行情与登录改由独立站点提供，旧 `src/stock/` 与交易代理按用户确认退役，原实现保留在 Git 历史。`src/components/StockExchangeBoundary.tsx` 提供加载及渲染错误兜底。Mock 完全本地，不依赖外部交易所或验证码。详情见 [前端 README](../../../frontend/README.md#茗喵证券交易所)。
 
 `src/app/InstancePageActivities.tsx` 按实例保留总览和本地股票接入页，两个独立 main 位于同一普通外壳内，分别使用 `main-content` 和 `stock-main-content` 保留滚动。`App` 在总览及股票路由下保持同一总览节点，股票路由的 `Outlet` 留空；接入代码首次访问才加载。隐藏分支使用 React Activity 保留 DOM 与状态并清理副作用，返回时先显示已有内容再恢复订阅和静默刷新。日志、旧版统计和股票接入页的初始化需区分实例变化和同实例恢复，后者不清空已有内容及注册输入。切实例、刷新或进入登录页后缓存销毁，不持久缓存账号数据。旧内嵌行情的搜索、周期与缩放缓存已按用户决定随终端退役，不能承诺外站继承。回归见 `e2e/stock-overview-navigation.spec.ts`。
 

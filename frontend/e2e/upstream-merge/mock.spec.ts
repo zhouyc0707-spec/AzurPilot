@@ -55,7 +55,13 @@ for (const theme of ['legacy-light', 'legacy-dark', 'modern-light', 'modern-dark
       await page.keyboard.press('Home')
       await expect(tabs).toHaveAttribute('aria-valuenow', '1')
     }
-    await page.getByRole('link', {name: '资源统计', exact: true}).click()
+    const statisticsLink = page.locator('.primary-nav').getByRole('link', {name: '资源统计', exact: true})
+    if (theme.startsWith('legacy')) {
+      await expect(statisticsLink).toHaveCount(0)
+      await page.goto('/#/i/demo-main/statistics')
+    } else {
+      await statisticsLink.click()
+    }
     await expect(page.locator('main')).toBeVisible()
     if (theme.startsWith('legacy')) await expect(page.locator('.legacy-statistics-navigation')).toBeVisible()
     else await expect(page.locator('.statistics-category-control')).toBeVisible()
