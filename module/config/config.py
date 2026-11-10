@@ -351,11 +351,16 @@ class AzurLaneConfig(ConfigUpdater, ManualConfig, GeneratedConfig, ConfigWatcher
         pending = []
         waiting = []
         error = []
+        seasonal_manufacture_enabled = None
         now = current_time()
         if AzurLaneConfig.is_hoarding_task:
             now -= self.hoarding
+        from module.island.seasonal_scheduler import effective_task_enabled
         for func in self.data.values():
             func = Function(func)
+            if func.command == 'IslandManufacture':
+                func.enable = effective_task_enabled(self.data, func.command, self.config_name)
+                seasonal_manufacture_enabled = func.enable
             if not func.enable:
                 continue
             if not isinstance(func.next_run, datetime):
@@ -381,6 +386,20 @@ class AzurLaneConfig(ConfigUpdater, ManualConfig, GeneratedConfig, ConfigWatcher
 
         self.pending_task = pending
         self.waiting_task = waiting
+        self._seasonal_manufacture_enabled = seasonal_manufacture_enabled
+
+    def should_reload(self):
+        """虚拟制造暂停只改旁路记录，也应在原等待检查点重新选择任务。"""
+        if super().should_reload():
+            return True
+        previous = self.__dict__.get('_seasonal_manufacture_enabled')
+        if previous is not None:
+            from module.island.seasonal_scheduler import effective_task_enabled
+
+            if previous != effective_task_enabled(self.data, 'IslandManufacture', self.config_name):
+                logger.info('[配置-监视] 季节制造补产资格改变，重新选择任务')
+                return True
+        return False
 
     def get_next(self):
         """获取下一个待运行的任务。

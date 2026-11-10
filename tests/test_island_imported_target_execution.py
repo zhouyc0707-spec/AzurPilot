@@ -170,13 +170,47 @@ class ImportedCropTargetsTests(unittest.TestCase):
         self.assertEqual(farm.to_plant_lists['nursery'], ['tea'])
         self.assertEqual(set(farm.to_plant_lists['orchard']), {'citrus', 'avocado'})
 
-    def test_regular_shortage_precedes_imported_crop_and_ignores_explicit_disabled_crop(self):
+    def test_regular_shortage_precedes_imported_crop_and_seasonal_avocado_overrides_ignore(self):
         farm = self.farm({2017: 200, 2021: 200, 2019: 200},
                          {'apple': 99, 'citrus': 150, 'avocado': 150, 'mango': 150})
         farm.ignore_avocado = True
         farm.check_inventory_and_prepare_lists()
         self.assertEqual(farm.to_plant_lists['orchard'][0], 'apple')
-        self.assertEqual(set(farm.to_plant_lists['orchard'][1:]), {'citrus', 'mango'})
+        self.assertEqual(set(farm.to_plant_lists['orchard'][1:]), {'citrus', 'mango', 'avocado'})
+        self.assertTrue(farm.ignore_avocado)
+
+    def test_ignored_avocado_only_follows_seasonal_target_not_higher_regular_floor(self):
+        farm = self.farm({2021: 50}, {'avocado': 80})
+        farm.ignore_avocado = True
+        farm.check_inventory_and_prepare_lists()
+        self.assertNotIn('avocado', farm.to_plant_lists['orchard'])
+        farm.island_round.observe('avocado', 49)
+        farm.check_inventory_and_prepare_lists()
+        self.assertEqual(farm.to_plant_lists['orchard'], ['avocado'])
+        farm.island_round.observe('avocado', 50)
+        farm.check_inventory_and_prepare_lists()
+        self.assertNotIn('avocado', farm.to_plant_lists['orchard'])
+
+    def test_zero_or_inactive_target_keeps_avocado_ignored(self):
+        for target, season in ((0, 'winter'), (100, 'summer')):
+            with self.subTest(target=target, season=season):
+                farm = self.farm({2021: target}, {'avocado': 0})
+                farm.ignore_avocado = True
+                original_get = farm.config.cross_get
+                farm.config.cross_get = lambda path, default=None: (
+                    season if path == 'IslandPlan.IslandPlan.Season' else original_get(path, default))
+                farm.check_inventory_and_prepare_lists()
+                self.assertNotIn('avocado', farm.to_plant_lists['orchard'])
+
+    def test_seasonal_avocado_override_still_requires_known_stock_and_working_identity(self):
+        farm = self.farm({2021: 100}, {'avocado': 0})
+        farm.ignore_avocado = True
+        farm.island_round.observe('avocado', None)
+        farm.check_inventory_and_prepare_lists()
+        self.assertNotIn('avocado', farm.to_plant_lists['orchard'])
+        farm.island_round.observe('avocado', 0)
+        farm.posts = {'ISLAND_ORCHARD_POST1': {'state': 'working', 'crop': None}}
+        farm.check_inventory_and_prepare_lists()
         self.assertNotIn('avocado', farm.to_plant_lists['orchard'])
 
 

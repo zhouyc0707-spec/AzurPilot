@@ -30,14 +30,16 @@ def simulation_plan(data, tasks, instant):
             'nativeDeadline': (min(waiting) if waiting else instant + timedelta(minutes=5)).isoformat(sep=' ')}
 
 
-def snapshot(data, observations, now):
+def snapshot(data, observations, now, instance=None):
+    from module.island.seasonal_scheduler import effective_task_enabled
+
     tasks = []
     for name, groups in data.items():
         if not isinstance(groups, dict):
             continue
         scheduler = groups.get('Scheduler', {})
         if scheduler.get('Command') and name not in ('Alas', 'Restart', 'General'):
-            tasks.append({'name': name, 'enabled': bool(scheduler.get('Enable')),
+            tasks.append({'name': name, 'enabled': effective_task_enabled(data, name, instance),
                           'nextRun': str(scheduler.get('NextRun', '')), 'command': scheduler['Command']})
     resources = {}
     for name in RESOURCES:

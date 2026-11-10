@@ -344,7 +344,11 @@ class IslandFarm(Island, WarehouseOCR, LoginHandler):
             }
             regular = plan_crops_to_restock(
                 inventory, targets, config['threshold'], skip=skip)
-            extra = plan_crops_to_restock(inventory, seasonal, 0, skip=skip | set(regular))
+            seasonal_skip = set(skip)
+            # 正数季节目标明确要求补牛油果；忽略开关仍阻止普通底线补种。
+            if category == 'orchard' and seasonal.get('avocado', 0) > 0:
+                seasonal_skip.discard('avocado')
+            extra = plan_crops_to_restock(inventory, seasonal, 0, skip=seasonal_skip | set(regular))
             # 无模板的在制品不能猜成其他作物；等本区身份明确后再补季节数量。
             if any(info.get('state') == 'working' and not info.get('crop')
                    for post, info in getattr(self, 'posts', {}).items()

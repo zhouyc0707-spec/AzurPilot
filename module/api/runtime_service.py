@@ -153,12 +153,13 @@ class RuntimeService:
             started_func = getattr(manager, 'started_func', None)
         if single_task:
             running = single_task['name']
+        from module.island.seasonal_scheduler import effective_task_enabled
         for task, groups in data.items():
             # 根节点也包含实例身份等内部元数据，只有参数组字典才属于任务。
             if not isinstance(groups, dict):
                 continue
             scheduler = groups.get('Scheduler', {})
-            if scheduler.get('Enable') or task == running:
+            if effective_task_enabled(data, task, instance) or task == running:
                 next_run = str(scheduler.get('NextRun', ''))
                 tasks.append({'name': task, 'nextRun': next_run, 'pending': next_run.replace('T', ' ') <= now,
                               'runOnceAllowed': is_run_once_allowed(data, getattr(self.configs, 'template', {}), task),

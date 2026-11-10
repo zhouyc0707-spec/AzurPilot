@@ -26,7 +26,7 @@ class SchedulerService:
         return {'cards': [c.model_dump() for c in CARDS], 'resources': [
             {'name': name, 'label': self.configs.translate(f'{name}._info.name') if not name.startswith('Emotion') else f'舰队 {name[-1]} 心情',
              'refreshable': name in REFRESHABLE} for name in RESOURCES],
-            'tasks': snapshot(data, {}, datetime.now())['tasks'], 'overrides': OVERRIDES,
+            'tasks': snapshot(data, {}, datetime.now(), instance)['tasks'], 'overrides': OVERRIDES,
             'builtins': [s.model_dump() for s in builtins()],
             'templates': {'takeover': default_program().model_dump(), 'enhance': enhance_program().model_dump(),
                           'all': all_cards_program().model_dump()}}
@@ -34,7 +34,7 @@ class SchedulerService:
     def validation(self, instance, document, mode='takeover'):
         data, _ = self.configs.read(instance)
         from module.config.time_source import now
-        tasks = {t['name'] for t in snapshot(data, {}, now())['tasks']}
+        tasks = {t['name'] for t in snapshot(data, {}, now(), instance)['tasks']}
         return validate(document, tasks, mode)
 
     def save(self, instance, revision, document):
@@ -64,7 +64,7 @@ class SchedulerService:
             return {**result, 'state': {'status': 'error', 'trace': []}, 'effects': []}
         data, _ = self.configs.read(instance)
         from module.config.time_source import now
-        state = snapshot(data, self.store.observations(instance), now())
+        state = snapshot(data, self.store.observations(instance), now(), instance)
         # 模拟输入只存在于本次调用，不能修改真实任务目录或持久变量。
         supplied = copy.deepcopy(context)
         if ('tasks' in supplied and not isinstance(supplied['tasks'], list)) or ('resources' in supplied and not isinstance(supplied['resources'], dict)):

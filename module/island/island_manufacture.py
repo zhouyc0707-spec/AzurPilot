@@ -570,8 +570,13 @@ class IslandManufacture(IslandShopBase):
             logger.warning(f"[岛屿-制造业] {line}.Products 中的未知产品已忽略: {unknown}")
         return [items[name] for name in order if name in items]
 
-    def schedule_manufacture(self):
-        """安排制造业四大门类的生产排期。"""
+    def schedule_manufacture(self, *, seasonal_only=False):
+        """安排四条产线；关闭常规制造时仅补当季有限目标。"""
+        if seasonal_only:
+            logger.info('[岛屿-制造业] 常规制造已关闭，本轮只补季节目标，不安排常驻或默认产品')
+            for category in PRODUCT_LINES.values():
+                self._schedule_seasonal_production(category)
+            return
         self.schedule_wood_processing()
 
         self.schedule_electronic_processing()
@@ -841,7 +846,9 @@ class IslandManufacture(IslandShopBase):
             logger.info(f"[岛屿-制造业] 有 {len(idle_posts)} 个空闲岗位，开始安排生产")
 
             # 安排生产
-            self.schedule_manufacture()
+            # 调度器可临时放行季节补产，但保存的常规开关仍决定是否允许无限候选。
+            seasonal_only = self.config.cross_get('IslandManufacture.Scheduler.Enable', default=True) is False
+            self.schedule_manufacture(seasonal_only=seasonal_only)
         else:
             logger.info("[岛屿-制造业] 没有空闲岗位，跳过生产安排")
 

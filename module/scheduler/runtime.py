@@ -51,7 +51,7 @@ class SchedulerRuntime:
         self.engine = None
         if self.mode != 'native':
             document = ProgramDocument.model_validate(current['active'])
-            all_tasks = snapshot(self.script.config.data, {}, now())['tasks']
+            all_tasks = snapshot(self.script.config.data, {}, now(), self.script.config_name)['tasks']
             result = validate(document, {t['name'] for t in all_tasks}, self.mode)
             if not result['valid']:
                 raise ProgramError(result['diagnostics'][0]['message'])
@@ -77,7 +77,7 @@ class SchedulerRuntime:
 
     def context(self, config=None):
         config = config or self.script.config
-        context = snapshot(config.data, self.store.observations(self.script.config_name), now())
+        context = snapshot(config.data, self.store.observations(self.script.config_name), now(), self.script.config_name)
         context['requests'] = copy.deepcopy(self.requests)
         # 复用原队列实现，保留固定优先级与囤积等待的语义。
         config.get_next_task()

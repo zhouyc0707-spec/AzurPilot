@@ -324,7 +324,7 @@
     },
     "IslandSeasonalProduction": {
       "name": "Seasonal Item Production",
-      "help": "Uses the season selected in Global Settings. Current-season exclusive items and imported task items are shown; each season keeps its own targets. Quantities are stock targets, not amounts per dispatch. Set 0 to add no demand here. Each production area handles regular stock targets, then seasonal targets, then fallback products. Disabled production tasks stay disabled. These targets are saved independently and are not overwritten by the island production planner."
+      "help": "Uses the season selected in Global Settings. Current-season exclusive items and imported task items are shown; each season keeps its own targets. Quantities are stock targets, not amounts per dispatch. Set 0 to add no demand here. Each production area handles regular stock targets, then seasonal targets, then fallback products. \nWhen Manufacturing is disabled, it may only replenish positive targets for the current season; the switch stays off and regular or fallback production does not run. Other disabled tasks and zero-slot areas remain inactive. A positive current-season avocado target takes precedence over Ignore avocado until the target is met.\n These targets are saved independently and are not overwritten by the island production planner."
     },
     "IslandBusiness": {
       "name": "Business Module",
@@ -364,7 +364,7 @@
     },
     "IslandManufacture": {
       "name": "Manufacturing",
-      "help": ""
+      "help": "When enabled, follows the existing manufacturing settings. When disabled, configured slots may still replenish positive targets on the current season item page, without running Products or other fallback production; the enable switch stays off. Zero targets, zero slots, unknown stock or production quantities, and missing materials do not force a dispatch."
     },
     "IslandDailyGather": {
       "name": "Daily Gathering",
@@ -4610,15 +4610,15 @@
     },
     "shepherd_purse": {
       "name": "Dried Shepherd's Purse",
-      "help": "Target stock; 0 adds no demand here. Handicrafts workshop replenishes this item after its regular targets."
+      "help": "Target stock; 0 adds no demand here. Handicrafts workshop replenishes this item after its regular targets. Disabled Manufacturing may still replenish positive current-season targets, without fallback production; zero-slot areas remain inactive."
     },
     "spring_bouquet": {
       "name": "Spring Bouquet",
-      "help": "Target stock; 0 adds no demand here. Handicrafts workshop replenishes this item after its regular targets."
+      "help": "Target stock; 0 adds no demand here. Handicrafts workshop replenishes this item after its regular targets. Disabled Manufacturing may still replenish positive current-season targets, without fallback production; zero-slot areas remain inactive."
     },
     "ImportedTargets": {
       "name": "Imported season task targets",
-      "help": "Use Read season targets above to import unsubmitted tasks, including those ready to submit, without submitting items or claiming rewards. Quantities are stock targets; the higher of the existing and scanned value is kept. Regular production targets run first. Saved targets are not removed when a task is completed; set them to 0 when no longer needed. Production tasks and slots must be enabled; missing materials must be supplied."
+      "help": "Use Read season targets above to import unsubmitted tasks, including those ready to submit, without submitting items or claiming rewards. Quantities are stock targets; the higher of the existing and scanned value is kept. Regular production targets run first. Saved targets are not removed when a task is completed; set them to 0 when no longer needed. Available slots are required; missing materials must be supplied. Disabled Manufacturing may only replenish positive current-season targets, without fallback production. Other disabled tasks and zero-slot areas remain inactive. Positive avocado targets take precedence over Ignore avocado until met."
     }
   },
   "IslandSeasonSummer": {
@@ -4652,15 +4652,15 @@
     },
     "jasmine_oil": {
       "name": "Jasmine Essential Oil",
-      "help": "Target stock; 0 adds no demand here. Handicrafts workshop replenishes this item after its regular targets."
+      "help": "Target stock; 0 adds no demand here. Handicrafts workshop replenishes this item after its regular targets. Disabled Manufacturing may still replenish positive current-season targets, without fallback production; zero-slot areas remain inactive."
     },
     "summer_bouquet": {
       "name": "Summery Bouquet",
-      "help": "Target stock; 0 adds no demand here. Handicrafts workshop replenishes this item after its regular targets."
+      "help": "Target stock; 0 adds no demand here. Handicrafts workshop replenishes this item after its regular targets. Disabled Manufacturing may still replenish positive current-season targets, without fallback production; zero-slot areas remain inactive."
     },
     "ImportedTargets": {
       "name": "Imported season task targets",
-      "help": "Use Read season targets above to import unsubmitted tasks, including those ready to submit, without submitting items or claiming rewards. Quantities are stock targets; the higher of the existing and scanned value is kept. Regular production targets run first. Saved targets are not removed when a task is completed; set them to 0 when no longer needed. Production tasks and slots must be enabled; missing materials must be supplied."
+      "help": "Use Read season targets above to import unsubmitted tasks, including those ready to submit, without submitting items or claiming rewards. Quantities are stock targets; the higher of the existing and scanned value is kept. Regular production targets run first. Saved targets are not removed when a task is completed; set them to 0 when no longer needed. Available slots are required; missing materials must be supplied. Disabled Manufacturing may only replenish positive current-season targets, without fallback production. Other disabled tasks and zero-slot areas remain inactive. Positive avocado targets take precedence over Ignore avocado until met."
     }
   },
   "IslandSeasonAutumn": {
@@ -4694,15 +4694,15 @@
     },
     "peanut_oil": {
       "name": "Peanut Oil",
-      "help": "Target stock; 0 adds no demand here. Handicrafts workshop replenishes this item after its regular targets."
+      "help": "Target stock; 0 adds no demand here. Handicrafts workshop replenishes this item after its regular targets. Disabled Manufacturing may still replenish positive current-season targets, without fallback production; zero-slot areas remain inactive."
     },
     "autumn_bouquet": {
       "name": "Autumn Bouquet",
-      "help": "Target stock; 0 adds no demand here. Handicrafts workshop replenishes this item after its regular targets."
+      "help": "Target stock; 0 adds no demand here. Handicrafts workshop replenishes this item after its regular targets. Disabled Manufacturing may still replenish positive current-season targets, without fallback production; zero-slot areas remain inactive."
     },
     "ImportedTargets": {
       "name": "Imported season task targets",
-      "help": "Use Read season targets above to import unsubmitted tasks, including those ready to submit, without submitting items or claiming rewards. Quantities are stock targets; the higher of the existing and scanned value is kept. Regular production targets run first. Saved targets are not removed when a task is completed; set them to 0 when no longer needed. Production tasks and slots must be enabled; missing materials must be supplied."
+      "help": "Use Read season targets above to import unsubmitted tasks, including those ready to submit, without submitting items or claiming rewards. Quantities are stock targets; the higher of the existing and scanned value is kept. Regular production targets run first. Saved targets are not removed when a task is completed; set them to 0 when no longer needed. Available slots are required; missing materials must be supplied. Disabled Manufacturing may only replenish positive current-season targets, without fallback production. Other disabled tasks and zero-slot areas remain inactive. Positive avocado targets take precedence over Ignore avocado until met."
     }
   },
   "IslandSeasonWinter": {
@@ -4736,15 +4736,15 @@
     },
     "plum_blossom_sachet": {
       "name": "Plum-Scented Sachet",
-      "help": "Target stock; 0 adds no demand here. Handicrafts workshop replenishes this item after its regular targets."
+      "help": "Target stock; 0 adds no demand here. Handicrafts workshop replenishes this item after its regular targets. Disabled Manufacturing may still replenish positive current-season targets, without fallback production; zero-slot areas remain inactive."
     },
     "winter_bouquet": {
       "name": "Brumal Bouquet",
-      "help": "Target stock; 0 adds no demand here. Handicrafts workshop replenishes this item after its regular targets."
+      "help": "Target stock; 0 adds no demand here. Handicrafts workshop replenishes this item after its regular targets. Disabled Manufacturing may still replenish positive current-season targets, without fallback production; zero-slot areas remain inactive."
     },
     "ImportedTargets": {
       "name": "Imported season task targets",
-      "help": "Use Read season targets above to import unsubmitted tasks, including those ready to submit, without submitting items or claiming rewards. Quantities are stock targets; the higher of the existing and scanned value is kept. Regular production targets run first. Saved targets are not removed when a task is completed; set them to 0 when no longer needed. Production tasks and slots must be enabled; missing materials must be supplied."
+      "help": "Use Read season targets above to import unsubmitted tasks, including those ready to submit, without submitting items or claiming rewards. Quantities are stock targets; the higher of the existing and scanned value is kept. Regular production targets run first. Saved targets are not removed when a task is completed; set them to 0 when no longer needed. Available slots are required; missing materials must be supplied. Disabled Manufacturing may only replenish positive current-season targets, without fallback production. Other disabled tasks and zero-slot areas remain inactive. Positive avocado targets take precedence over Ignore avocado until met."
     }
   },
   "IslandFarm": {
@@ -4821,7 +4821,7 @@
     },
     "IgnoreAvocado": {
       "name": "Ignore avocado",
-      "help": ""
+      "help": "Ignores avocado during regular replanting. A positive avocado target on the current season item page takes precedence until met, then avocado is ignored again. A zero target or another season does not override this switch. The Farmland task and available orchard slots are still required."
     },
     "DefaultCrop": {
       "name": "Default crop",

@@ -10,6 +10,7 @@ from module.config.utils import ensure_time
 from module.exception import GamePageUnknownError, GameStuckError, GameTooManyClickError, IslandFishExchangeError
 from module.island.round_inventory import IslandRoundInventory
 from module.island.seasonal_progress import invalidate_progress, publish_round_progress
+from module.island.seasonal_scheduler import effective_task_enabled
 from module.logger import logger
 
 
@@ -66,7 +67,7 @@ def delay_failed_preparation(owner, task, *, reason='共享准备失败'):
     with config.multi_set():
         for name in PRODUCTION_TASKS:
             scheduler = config.data.get(name, {}).get('Scheduler', {})
-            if name != task and not scheduler.get('Enable', False):
+            if name != task and not effective_task_enabled(config.data, name, getattr(config, 'config_name', None)):
                 continue
             tasks.append(name)
             previous = scheduler.get('NextRun')
@@ -100,6 +101,8 @@ def round_config_signature(config):
         values.pop('Storage', None)
         values.get('Scheduler', {}).pop('NextRun', None)
         result[name] = values
+    result['seasonal_manufacture_enabled'] = effective_task_enabled(
+        config.data, 'IslandManufacture', getattr(config, 'config_name', None))
     return result
 
 
@@ -211,7 +214,7 @@ class IslandProductionRound:
         if collect_by_row:
             collect_cn_posts(self.runners, lambda: self._check_stop(config))
         for name, runner in self.runners.items():
-            enabled = config.data.get(name, {}).get('Scheduler', {}).get('Enable', False)
+            enabled = effective_task_enabled(config.data, name, getattr(config, 'config_name', None))
             if name == task or (enabled and (task_due(config, name, self.started_at) or has_idle_posts(runner))):
                 self.pending.add(name)
 

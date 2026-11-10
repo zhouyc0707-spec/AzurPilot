@@ -9,6 +9,7 @@
   恢复后按原计划继续；
 - 记录写在实例配置同目录的 `island_suspend_<实例>.json`（`config/*.json` 已被 gitignore），
   文件丢失时降级为「没有暂停记录」，不会误开用户自己关掉的任务。
+- 仅由季节目标触发的制造业也参与暂停；恢复只恢复补产资格，不打开原关闭开关。
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from deploy.atomic import atomic_write
 from module.api.protocol import ConfigChange
 from module.config.utils import filepath_config
 from module.logger import logger
@@ -39,7 +41,7 @@ def read_state(instance: str) -> dict:
         instance (str): 实例名。
 
     Returns:
-        dict: {'suspended': [任务名…], 'at': 记录时间}；无记录或文件损坏时为空记录。
+        dict: 暂停任务、仅季节补产任务和记录时间；旧记录没有 seasonal_only 字段。
     """
     path = _state_path(instance)
     if not path.is_file():
@@ -50,19 +52,21 @@ def read_state(instance: str) -> dict:
         logger.warning(f'[岛屿计划] 暂停记录读取失败，按无记录处理: {path}')
         return {'suspended': [], 'at': ''}
     suspended = [item for item in data.get('suspended', []) if isinstance(item, str)]
-    return {'suspended': suspended, 'at': str(data.get('at', ''))}
+    seasonal_only = [item for item in data.get('seasonal_only', []) if item == 'IslandManufacture']
+    return {'suspended': suspended, 'seasonal_only': seasonal_only, 'at': str(data.get('at', ''))}
 
 
-def write_state(instance: str, suspended: list, at: str) -> None:
+def write_state(instance: str, suspended: list, at: str, seasonal_only=()) -> None:
     """写入暂停记录；列表为空时删除文件（表示没有暂停中的任务）。"""
     path = _state_path(instance)
     try:
         if not suspended:
             path.unlink(missing_ok=True)
             return
-        path.write_text(
-            json.dumps({'suspended': suspended, 'at': at}, ensure_ascii=False, indent=2),
-            encoding='utf-8',
+        atomic_write(
+            str(path),
+            json.dumps({'suspended': suspended, 'seasonal_only': list(seasonal_only), 'at': at},
+                       ensure_ascii=False, indent=2),
         )
     except OSError as error:
         logger.warning(f'[岛屿计划] 暂停记录写入失败: {error}')
@@ -100,12 +104,14 @@ class IslandSuspendService:
         data, _ = self.configs.read(instance)
         tasks = self._island_tasks(data)
         state = read_state(instance)
+        from module.island.seasonal_scheduler import effective_task_enabled
         return {
             'data': data,
             'tasks': tasks,
-            'enabled': [task for task in tasks if self._enabled(data, task)],
+            'enabled': [task for task in tasks if effective_task_enabled(data, task, instance)],
             # 记录里已被删除的任务（例如上游改名）不再参与恢复，避免误开同名新任务
             'suspended': [task for task in state['suspended'] if task in tasks],
+            'seasonal_only': state.get('seasonal_only', []),
             'at': state['at'],
         }
 
@@ -144,20 +150,24 @@ class IslandSuspendService:
     def _suspend(self, instance: str, snapshot: dict) -> dict:
         """关闭当前所有已启用的岛屿任务，并记录被关掉的任务。"""
         targets = list(snapshot['enabled'])
-        if targets:
+        enabled = [task for task in targets if self._enabled(snapshot['data'], task)]
+        seasonal_only = [task for task in targets if task not in enabled]
+        if enabled:
             self.configs.patch(instance, None, [
-                ConfigChange(path=f'{task}.Scheduler.Enable', value=False) for task in targets
+                ConfigChange(path=f'{task}.Scheduler.Enable', value=False) for task in enabled
             ])
+        if targets:
             logger.info(f'[岛屿计划] 一键关闭 {len(targets)} 个已启用任务: {", ".join(targets)}')
         else:
             logger.info('[岛屿计划] 当前没有处于启用状态的岛屿任务，无需关闭')
-        write_state(instance, targets, datetime.now().isoformat(sep=' ', timespec='seconds'))
+        write_state(instance, targets, datetime.now().isoformat(sep=' ', timespec='seconds'), seasonal_only)
         return self.state(instance)
 
     def _restore(self, instance: str, snapshot: dict) -> dict:
         """恢复仍处于关闭状态的记录任务；手动打开过的保持不动。"""
-        targets = [task for task in snapshot['suspended'] if not self._enabled(snapshot['data'], task)]
-        skipped = [task for task in snapshot['suspended'] if task not in targets]
+        original = [task for task in snapshot['suspended'] if task not in snapshot['seasonal_only']]
+        targets = [task for task in original if not self._enabled(snapshot['data'], task)]
+        skipped = [task for task in original if task not in targets]
         if targets:
             self.configs.patch(instance, None, [
                 ConfigChange(path=f'{task}.Scheduler.Enable', value=True) for task in targets
