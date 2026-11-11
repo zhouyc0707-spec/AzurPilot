@@ -212,6 +212,7 @@
 .legacy-commission-cards {
   display: flex;
   flex-wrap: wrap;
+  align-items: flex-start;
   gap: 10px;
   margin: 10px 0 16px;
 }
@@ -220,8 +221,8 @@
   display: flex;
   flex: 1 1 130px;
   min-width: 0;
-  flex-direction: column;
-  gap: 4px;
+  flex-direction: row;
+  gap: 14px;
   padding: 12px 14px;
   border: 1px solid var(--border, var(--theme-border));
   border-radius: 10px;
@@ -229,7 +230,6 @@
 }
 
 .legacy-commission-card.is-gem {flex: 0 1 auto}
-.legacy-commission-card-body {display: flex; align-items: center; gap: 14px}
 .legacy-commission-primary {display: flex; flex: 0 1 auto; flex-direction: column; gap: 4px}
 .legacy-commission-gem-success {
   display: flex;
@@ -239,7 +239,7 @@
   padding-left: 14px;
   border-left: 1px solid var(--border, var(--theme-border));
 }
-.legacy-commission-success-label {font-size: 12px; color: var(--muted, var(--theme-muted))}
+.legacy-commission-success-label {display: flex; align-items: center; min-height: 22px; font-size: 12px; color: var(--muted, var(--theme-muted))}
 
 .legacy-commission-card-head {display: flex; align-items: center; gap: 8px; font-size: 13px}
 .legacy-commission-icon {

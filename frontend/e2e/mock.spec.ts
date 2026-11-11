@@ -45,14 +45,32 @@ test('旧主题委托显示全月记录、钻石截图筛选及月成功率', as
   })
   const desktopLayout = await compactLayout()
   expect(desktopLayout.primaryWidth - desktopLayout.contentWidth).toBeLessThan(1)
+  const checkCardHeights = async () => {
+    const bottomSpacing = await panel.locator('.legacy-commission-card:not(.is-gem)').evaluateAll(cards => cards.map(card => {
+      const stat = card.querySelector('.legacy-commission-primary > .legacy-commission-stat')!
+      const style = getComputedStyle(card)
+      return {actual: card.getBoundingClientRect().bottom - stat.getBoundingClientRect().bottom,
+        expected: parseFloat(style.paddingBottom) + parseFloat(style.borderBottomWidth)}
+    }))
+    for (const spacing of bottomSpacing) expect(Math.abs(spacing.actual - spacing.expected)).toBeLessThan(1)
+    const totalRowOffset = await gemCard.evaluate(card => {
+      const total = card.querySelector('.legacy-commission-primary > .legacy-commission-total')!
+      const success = card.querySelector('.legacy-commission-gem-success > .legacy-commission-total')!
+      return success.getBoundingClientRect().top - total.getBoundingClientRect().top
+    })
+    expect(Math.abs(totalRowOffset)).toBeLessThan(1)
+  }
+  await checkCardHeights()
   await page.setViewportSize({width: 1920, height: 1100})
   const wideLayout = await compactLayout()
   expect(wideLayout.cardWidth).toBeCloseTo(desktopLayout.cardWidth, 0)
   expect(wideLayout.primaryWidth - wideLayout.contentWidth).toBeLessThan(1)
+  await checkCardHeights()
   await page.setViewportSize({width: 1440, height: 1100})
   await panel.screenshot({path: test.info().outputPath('commission-desktop.png'), animations: 'disabled'})
   await page.setViewportSize({width: 412, height: 950})
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await checkCardHeights()
   await page.evaluate(() => {
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
     window.scrollTo(0, 0)

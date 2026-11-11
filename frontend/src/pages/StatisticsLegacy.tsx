@@ -412,24 +412,22 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
         </div>
         <div className="legacy-commission-cards">
           {(periodSummary?.cards ?? []).map(card => <div className={`legacy-commission-card${card.name === 'Gem' ? ' is-gem' : ''}`} key={card.name}>
-            <div className="legacy-commission-card-head">
-              <span className="legacy-commission-icon" style={{background: `${card.color}1a`}}>
-                <img src={commissionIcons[card.name] ?? '/gui-icons/icon_3.png'} alt="" width={16} height={16}
-                  onError={event => {(event.currentTarget as HTMLImageElement).style.visibility = 'hidden'}}/>
-              </span>
-              <span className="legacy-commission-name">{text(card.labelKey)}</span>
-            </div>
-            <div className="legacy-commission-card-body">
-              <div className="legacy-commission-primary">
-                <strong className="legacy-commission-total" style={{color: card.color}}>{card.total > 0 ? `+${card.total.toLocaleString()}` : '0'}</strong>
-                <span className="legacy-commission-stat">{text('Gui.Stat.CommissionIncomeCardStat', {count: card.count.toLocaleString(), avg: card.avg.toFixed(1)})}</span>
+            <div className="legacy-commission-primary">
+              <div className="legacy-commission-card-head">
+                <span className="legacy-commission-icon" style={{background: `${card.color}1a`}}>
+                  <img src={commissionIcons[card.name] ?? '/gui-icons/icon_3.png'} alt="" width={16} height={16}
+                    onError={event => {(event.currentTarget as HTMLImageElement).style.visibility = 'hidden'}}/>
+                </span>
+                <span className="legacy-commission-name">{text(card.labelKey)}</span>
               </div>
-              {card.name === 'Gem' && <div className="legacy-commission-gem-success" title={text('Gui.Stat.CommissionIncomeGemSuccessHint')}>
-                <span className="legacy-commission-success-label">{text('Gui.Stat.CommissionIncomeGemSuccessRate')}</span>
-                <strong className="legacy-commission-total" style={{color: card.color}}>{gemSuccess?.rate == null ? '-' : `${gemSuccess.rate.toFixed(2)}%`}</strong>
-                <span className="legacy-commission-stat">{text('Gui.Stat.CommissionIncomeGemSuccessCount', {successes: gemSuccess?.successes ?? 0, completed: gemSuccess?.completed ?? 0})}</span>
-              </div>}
+              <strong className="legacy-commission-total" style={{color: card.color}}>{card.total > 0 ? `+${card.total.toLocaleString()}` : '0'}</strong>
+              <span className="legacy-commission-stat">{text('Gui.Stat.CommissionIncomeCardStat', {count: card.count.toLocaleString(), avg: card.avg.toFixed(1)})}</span>
             </div>
+            {card.name === 'Gem' && <div className="legacy-commission-gem-success" title={text('Gui.Stat.CommissionIncomeGemSuccessHint')}>
+              <span className="legacy-commission-success-label">{text('Gui.Stat.CommissionIncomeGemSuccessRate')}</span>
+              <strong className="legacy-commission-total" style={{color: card.color}}>{gemSuccess?.rate == null ? '-' : `${gemSuccess.rate.toFixed(2)}%`}</strong>
+              <span className="legacy-commission-stat">{text('Gui.Stat.CommissionIncomeGemSuccessCount', {successes: gemSuccess?.successes ?? 0, completed: gemSuccess?.completed ?? 0})}</span>
+            </div>}
           </div>)}
         </div>
 
