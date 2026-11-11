@@ -2,6 +2,57 @@ import { expect, test } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import type { EmulatorStatus, MeowfficerCat, MeowfficerLockAction, MeowfficerScoreReport } from '../src/api/types'
 
+test('旧主题委托显示全月记录、钻石截图筛选及月成功率', async ({page}) => {
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  await page.addInitScript(() => {
+    localStorage.setItem('azurpilot.theme', 'legacy-light')
+    localStorage.setItem('azurpilot.language', 'zh-CN')
+    localStorage.setItem('azurpilot.background', JSON.stringify({source: 'off'}))
+  })
+  await page.goto('/#/i/demo-main/statistics')
+  const panel = page.locator('.legacy-commission')
+  await expect(panel.getByText('本月钻石委托成功率')).toBeVisible()
+  await expect(panel.locator('.legacy-commission-gem-success')).toContainText('65.00%')
+  await expect(panel.locator('.legacy-commission-gem-success')).toContainText('成功 13 / 已完成 20')
+  await expect(panel.locator('.legacy-recent-row')).toHaveCount(10)
+  await expect(panel.getByRole('link', {name: '查看截图', exact: true})).toHaveCount(1)
+  await panel.getByRole('button', {name: '7', exact: true}).click()
+  await expect(panel.locator('.legacy-recent-row')).toHaveCount(5)
+  await panel.getByRole('button', {name: '一键查看所有钻石截图', exact: true}).click()
+  await expect(panel.locator('.legacy-recent-row')).toHaveCount(10)
+  await expect(panel.getByRole('link', {name: '查看截图', exact: true})).toHaveCount(10)
+  await expect(panel.getByRole('button', {name: '1', exact: true})).toHaveAttribute('aria-pressed', 'true')
+  await panel.getByRole('button', {name: '2', exact: true}).click()
+  await expect(panel.locator('.legacy-recent-row')).toHaveCount(2)
+  await expect(panel.getByRole('link', {name: '查看截图', exact: true})).toHaveCount(2)
+  await panel.getByRole('button', {name: '查看本月全部记录', exact: true}).click()
+  await expect(panel.locator('.legacy-recent-row')).toHaveCount(10)
+  await panel.getByRole('button', {name: '今日', exact: true}).click()
+  await expect(panel.locator('.legacy-commission-gem-success')).toContainText('65.00%')
+  await panel.getByRole('button', {name: '本月', exact: true}).click()
+  await panel.screenshot({path: test.info().outputPath('commission-desktop.png'), animations: 'disabled'})
+  await page.setViewportSize({width: 412, height: 950})
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+    window.scrollTo(0, 0)
+  })
+  await page.screenshot({path: test.info().outputPath('commission-mobile.png'), fullPage: true, animations: 'disabled'})
+  expect(errors).toEqual([])
+})
+
+test('旧主题零完成钻石委托显示空成功率', async ({page}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('azurpilot.theme', 'legacy-light')
+    localStorage.setItem('azurpilot.language', 'zh-CN')
+  })
+  await page.goto('/#/i/demo-alt/statistics')
+  const panel = page.locator('.legacy-commission')
+  await expect(panel.locator('.legacy-commission-gem-success')).toContainText('成功 0 / 已完成 0')
+  await expect(panel.locator('.legacy-commission-gem-success .legacy-commission-total')).toHaveText('-')
+})
+
 for (const theme of ['modern-light', 'legacy-light']) {
   test(`${theme} 模拟器运行状态实时更新、失败提示与窄屏布局`, async ({page}) => {
     test.setTimeout(60000)

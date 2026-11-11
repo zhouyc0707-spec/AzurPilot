@@ -43,6 +43,7 @@ def _income_data(rows=None):
     return {
         "period": "month",
         "summary": {"total_commissions": 749, "detail_rows": rows},
+        "gem_success": {"successes": 21, "completed": 61, "rate": 34.43},
         "recent": [],
         "item_name_map": {
             "Gem": "钻石",
@@ -132,6 +133,16 @@ class TestCommissionIncomeCards(unittest.TestCase):
         )
         self.assertEqual([], self._cards(summary_html))
 
+    def test_monthly_gem_success_is_inside_gem_card(self):
+        cards = self._cards(self.summary_html)
+        gem_card = next(card for card in cards if "icon_1.png" in card)
+        self.assertIn("34.43%", gem_card)
+        self.assertIn("本月钻石委托成功率", gem_card)
+        self.assertIn("21", gem_card)
+        self.assertIn("61", gem_card)
+        for card in cards[1:]:
+            self.assertNotIn("commission-gem-success", card)
+
 
 class TestCommissionRecentScreenshotButton(unittest.TestCase):
     """一条委托记录只对应一次收获，因此只渲染一张截图。"""
@@ -140,7 +151,7 @@ class TestCommissionRecentScreenshotButton(unittest.TestCase):
     def setUpClass(cls):
         lang.reload()
 
-    def _recent_html(self, screenshots):
+    def _recent_html(self, screenshots, items=None, name=None):
         harness = _CardHarness()
         data = _income_data()
         data["item_name_lookup"] = {}
@@ -148,13 +159,38 @@ class TestCommissionRecentScreenshotButton(unittest.TestCase):
         data["recent"] = [
             {
                 "ts": "2026-09-14T21:26:50.845000",
-                "items": {"Oil": 282},
+                "items": {"Gem": 10} if items is None else items,
+                "commission_name": name,
                 "commission_count": 1,
                 "screenshots": screenshots,
             }
         ]
         _, recent_html = harness._build_commission_income_html(data)
         return recent_html
+
+    def test_non_gem_record_has_no_screenshot_button(self):
+        html = self._recent_html(["alas/2026-09/oil.png"], items={"Oil": 282})
+        self.assertNotIn("查看截图", html)
+        self.assertNotIn("/static/commission_rewards/", html)
+
+    def test_legacy_gem_alias_and_invalid_amounts_keep_valid_rewards_visible(self):
+        html = self._recent_html(["alas/2026-09/gem.png"], items={"Gem": "bad", "Gems": "10", "Oil": 100})
+        self.assertEqual(1, html.count("查看截图"))
+        self.assertIn("x100", html)
+
+    def test_negative_alias_does_not_hide_a_positive_gem_reward(self):
+        html = self._recent_html(["alas/2026-09/gem.png"], items={"Gem": 10, "Gems": -20})
+        self.assertEqual(1, html.count("查看截图"))
+
+    def test_screenshot_attribute_quotes_are_escaped(self):
+        html = self._recent_html(['alas/2026-09/a" onmouseover="x.png'])
+        self.assertIn('a&quot; onmouseover=&quot;x.png', html)
+        self.assertNotIn(' onmouseover="', html)
+
+    def test_commission_name_is_escaped(self):
+        html = self._recent_html([], name="<委托>")
+        self.assertIn("&lt;委托&gt;", html)
+        self.assertNotIn("<委托>", html)
 
     def test_one_screenshot_renders_one_button(self):
         html = self._recent_html(["alas/2026-09/shot_a_0.png"])
@@ -172,6 +208,112 @@ class TestCommissionRecentScreenshotButton(unittest.TestCase):
         self.assertNotIn("查看截图2", html)
         self.assertIn("legacy_0.png", html)
         self.assertNotIn("legacy_1.png", html)
+
+
+class TestCommissionIncomeLoadingAndFilters(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        lang.reload()
+
+    def setUp(self):
+        self.harness = _CardHarness()
+        self.harness.alas_name = "alas"
+        self.harness._commission_income_period = "day"
+
+    def _load(self, entries):
+        with patch("module.statistics.commission_income_stats.get_recent_commission_entries",
+                   return_value=entries) as recent, \
+                patch("module.statistics.commission_income_stats.get_commission_income_summary",
+                      return_value={"detail_rows": []}) as summary, \
+                patch("module.statistics.commission_income_stats.get_monthly_gem_commission_success",
+                      return_value={"successes": 21, "completed": 61, "rate": 34.43}) as gem_success, \
+                patch.object(self.harness, "_load_running_commissions", return_value=None):
+            data = self.harness._load_commission_income_data()
+        recent.assert_called_once_with("alas", limit=None)
+        summary.assert_called_once_with("alas", period="day")
+        gem_success.assert_called_once_with("alas")
+        return data
+
+    def test_day_summary_keeps_all_monthly_records_and_monthly_gem_rate(self):
+        entries = [{"items": {"Coin": 100}, "screenshots": []} for _ in range(61)]
+        data = self._load(entries)
+
+        self.assertEqual(data["period"], "day")
+        self.assertEqual(len(data["recent"]), 61)
+        self.assertEqual(data["gem_success"]["rate"], 34.43)
+
+    def test_gem_filter_accepts_positive_alias_with_screenshot_and_skips_bad_values(self):
+        self.harness._commission_gem_screenshots_only = True
+        entries = [
+            {"items": {"Gem": 10}, "screenshots": ["one.png"]},
+            {"items": {"Gems": "20"}, "screenshots": ["two.png"]},
+            {"items": {"Gem": 10}, "screenshots": []},
+            {"items": {"Gem": "bad"}, "screenshots": ["bad.png"]},
+            {"items": {"Gem": 0}, "screenshots": ["zero.png"]},
+            {"items": {"Oil": 100}, "screenshots": ["oil.png"]},
+            {"items": None, "screenshots": ["unknown.png"]},
+        ]
+
+        data = self._load(entries)
+
+        self.assertEqual(data["recent"], entries[:2])
+
+    def test_filter_callback_resets_page_and_renders_in_reserved_scope(self):
+        self.harness._commission_recent_page = 6
+        with patch("module.webui.app_stat_commission.use_scope", side_effect=lambda *a, **k: nullcontext()) as scope, \
+                patch("module.webui.app_stat_commission.put_html"), \
+                patch("module.webui.app_stat_commission.put_buttons") as periods, \
+                patch("module.webui.app_stat_commission.put_button") as filter_button, \
+                patch.object(self.harness, "_put_refresh_icon_button"), \
+                patch.object(self.harness, "_render_commission_income") as render:
+            self.harness._output_commission_income("summary", "recent", "day", 0)
+            scope.assert_any_call("commission_income_gem_filter", clear=True)
+            toggle = filter_button.call_args.kwargs["onclick"]
+            toggle()
+            self.assertTrue(self.harness._commission_gem_screenshots_only)
+            self.assertEqual(self.harness._commission_recent_page, 0)
+            self.harness._commission_recent_page = 6
+            toggle()
+            self.assertFalse(self.harness._commission_gem_screenshots_only)
+            self.assertEqual(self.harness._commission_recent_page, 0)
+            self.harness._commission_recent_page = 6
+            periods.call_args.kwargs["onclick"]("week")
+            self.assertEqual(self.harness._commission_income_period, "week")
+            self.assertEqual(self.harness._commission_recent_page, 0)
+            self.assertEqual(render.call_count, 3)
+
+    def test_last_page_after_fifth_page_renders_and_clamps_correctly(self):
+        self.harness._commission_recent_page = 99
+        data = _income_data()
+        data["recent"] = [
+            {"ts": "2026-09-14T21:26:50", "commission_name": f"委托{index}", "items": {}}
+            for index in range(61)
+        ]
+
+        _, html = self.harness._build_commission_income_html(data)
+
+        self.assertEqual(self.harness._commission_recent_page, 6)
+        self.assertIn("委托60", html)
+        self.assertNotIn("委托59", html)
+
+    def test_pagination_window_reaches_pages_after_fifth_and_callbacks_clamp(self):
+        self.harness._commission_recent_page = 5
+        with patch("module.webui.app_stat_commission.put_buttons", return_value=_Stub()) as buttons, \
+                patch.object(self.harness, "_render_commission_income") as render:
+            self.harness._output_recent_pagination(61)
+            definitions = buttons.call_args.args[0]
+            self.assertEqual([button["label"] for button in definitions], ["上一页", "3", "4", "5", "6", "7", "下一页"])
+            self.assertEqual(next(button["color"] for button in definitions if button["label"] == "6"), "primary")
+            paginate = buttons.call_args.kwargs["onclick"]
+            paginate("next")
+            self.assertEqual(self.harness._commission_recent_page, 6)
+            paginate("next")
+            self.assertEqual(self.harness._commission_recent_page, 6)
+            paginate("prev")
+            self.assertEqual(self.harness._commission_recent_page, 5)
+            paginate(2)
+            self.assertEqual(self.harness._commission_recent_page, 2)
+            self.assertEqual(render.call_count, 4)
 
 
 class TestCommissionTitleRefreshIcon(unittest.TestCase):

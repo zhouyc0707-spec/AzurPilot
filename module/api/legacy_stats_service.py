@@ -35,10 +35,8 @@ HAZARD_ROW_ORDER = (1, 5, 3)
 # 该格无数据时的占位，与旧界面一致的 ASCII 短横。
 DASH = '-'
 
-# 委托收益「最近记录」的分页口径（旧界面：最多 50 条、每页 10 条、最多 5 页）。
-COMMISSION_RECENT_LIMIT = 50
+# 委托领取记录显示当月全部数据，每页 10 条。
 COMMISSION_PAGE_SIZE = 10
-COMMISSION_MAX_PAGES = 5
 
 # 面板列描述：key 是 i18n 键，format 决定前端的数值格式。
 def _column(key, fmt='text'):
@@ -469,7 +467,7 @@ def _commission_periods(instance):
 
 
 def _commission_recent(instance):
-    """「最近委托记录」：最新 50 条，10 条一页，含收益截图链接。
+    """「当月领取记录」：当月全部记录，10 条一页，出钻记录可查看截图。
 
     旧界面每条记录是一行「时间 + 物品胶囊 + 查看截图」，不是表格：时间取
     ``MM-DD HH:MM``；只显示被统计的五种资源（数量 > 0），其余物品不显示；
@@ -482,7 +480,7 @@ def _commission_recent(instance):
         COMMISSION_TRACKED_ITEMS,
     )
 
-    entries = get_recent_commission_entries(instance, limit=COMMISSION_RECENT_LIMIT)
+    entries = get_recent_commission_entries(instance, limit=None)
     rows = []
     for entry in entries:
         raw_ts = str(entry.get('ts', ''))
@@ -493,7 +491,11 @@ def _commission_recent(instance):
 
         items = []
         for raw_name, amount in (entry.get('items') or {}).items():
-            if not amount or int(amount) <= 0:
+            try:
+                amount = int(amount)
+            except (TypeError, ValueError):
+                continue
+            if amount <= 0:
                 continue
             name = COMMISSION_ITEM_NAME_MAP.get(raw_name, raw_name)
             if name not in COMMISSION_TRACKED_ITEMS:
@@ -503,20 +505,23 @@ def _commission_recent(instance):
                 'labelKey': f'Gui.Stat.CommissionIncomeItem{name}',
                 'color': (COMMISSION_ITEM_META.get(name) or {}).get('color', '#888'),
                 'icon': COMMISSION_TRACKED_ITEMS.index(name) + 1,
-                'amount': int(amount),
+                'amount': amount,
             })
-        # 旧界面一条记录只对应一次收获，因此只渲染第一张截图
+        # 每条收获对应一张奖励截图，只向出钻记录提供查看入口。
         screenshots = [str(path) for path in (entry.get('screenshots') or [])]
+        has_gem = any(item['name'] == 'Gem' for item in items)
+        commission_name = entry.get('commission_name')
         rows.append({
             'time': time_text,
+            'name': commission_name if isinstance(commission_name, str) and commission_name.strip() else None,
             'items': items,
-            'screenshot': f'/static/commission_rewards/{screenshots[0]}' if screenshots else None,
+            'screenshot': f'/static/commission_rewards/{screenshots[0]}' if has_gem and screenshots else None,
         })
     return {
         'rows': rows,
         'pageSize': COMMISSION_PAGE_SIZE,
-        'maxPages': COMMISSION_MAX_PAGES,
-        'limit': COMMISSION_RECENT_LIMIT,
+        'maxPages': max(1, (len(rows) + COMMISSION_PAGE_SIZE - 1) // COMMISSION_PAGE_SIZE),
+        'limit': None,
     }
 
 
@@ -552,6 +557,7 @@ def report(configs, instance, month=None):
 
     # 旧界面同样读取本次调用绑定的原生总库，一轮渲染共用月度快照缓存。
     from module.statistics.cl1_database import db as cl1_db
+    from module.statistics.commission_income_stats import get_monthly_gem_commission_success
     with cl1_db.read_cache():
         now = datetime.now()
         # 数据收集按当前实例，收获保留全局历史口径；二者不能共用存在判断。
@@ -567,6 +573,7 @@ def report(configs, instance, month=None):
             'shipExp': _ship_panel(instance),
             'commission': {
                 'periods': _commission_periods(instance),
+                'gemSuccess': get_monthly_gem_commission_success(instance),
                 'recent': _commission_recent(instance),
                 'running': _commission_running(instance),
             },

@@ -40,6 +40,31 @@ describe('刷新智能换船状态', () => {
 })
 
 describe('前端模拟服务', () => {
+  it('五语言包含全部新增委托统计文案及次数占位符', () => {
+    const keys = ['CommissionIncomeGemSuccessRate', 'CommissionIncomeGemSuccessCount', 'CommissionIncomeGemSuccessHint',
+      'CommissionIncomeGemScreenshots', 'CommissionIncomeAllRecords', 'CommissionIncomeGemScreenshotsEmpty']
+    for (const language of ['zh-CN', 'zh-TW', 'en-US', 'ja-JP', 'zh-MIAO']) {
+      const dictionary = JSON.parse(readFileSync(new URL(`../../module/config/i18n/${language}.json`, import.meta.url), 'utf8')).Gui.Stat
+      for (const key of keys) expect(dictionary[key]).toBeTruthy()
+      expect(dictionary.CommissionIncomeGemSuccessCount).toContain('{successes}')
+      expect(dictionary.CommissionIncomeGemSuccessCount).toContain('{completed}')
+    }
+  })
+
+  it('旧主题委托模拟包含完整月度记录、钻石截图和独立月成功率', () => {
+    const {dispatch} = createMockState()
+    const report = dispatch('statistics.legacy', {instance: 'demo-main'})
+    expect(report.commission.recent.rows).toHaveLength(65)
+    expect(report.commission.recent).toMatchObject({pageSize: 10, maxPages: 7, limit: null})
+    expect(report.commission.gemSuccess).toEqual({successes: 13, completed: 20, rate: 65})
+    for (const row of report.commission.recent.rows) {
+      if (!row.items.some(item => item.name === 'Gem' && item.amount > 0)) expect(row.screenshot).toBeNull()
+    }
+    const empty = dispatch('statistics.legacy', {instance: 'demo-alt'})
+    expect(empty.commission.gemSuccess).toEqual({successes: 0, completed: 0, rate: null})
+    expect(empty.commission.recent.rows).toEqual([])
+  })
+
   it('队列任务独立运行且再次停止保留原计划，不启动调度器', () => {
     const {dispatch} = createMockState()
     const before = dispatch('overview.get', {instance: 'demo-main'})

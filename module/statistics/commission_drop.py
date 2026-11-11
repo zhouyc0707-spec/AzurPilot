@@ -43,6 +43,16 @@ def resolve_name(value, server):
     return matches[0]
 
 
+def read_commission_name(image, server):
+    """从完成状态页读取已收录的委托名称，供本地收获与上传共用目录。"""
+    from module.azur_stats.assets import COMMISSION_NAME
+    from module.ocr.ocr import Ocr
+
+    server = 'cn' if server.startswith('cn') else server
+    ocr = Ocr(COMMISSION_NAME, lang={'cn': 'cnocr', 'en': 'ppocr_v6', 'jp': 'jp', 'tw': 'tw'}[server])
+    return resolve_name(ocr.ocr(image), server)['name']
+
+
 def revise_identity(code, items):
     """Disambiguate published names using reward ranges, without guessing OCR digits."""
     night = [('Small Merchant Escort', 'Coins', 260, 450),

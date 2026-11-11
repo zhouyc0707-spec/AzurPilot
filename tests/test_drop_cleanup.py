@@ -12,6 +12,7 @@ import threading
 import time
 import unittest
 import zipfile
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -103,6 +104,15 @@ class TestRetentionSetting(DropCleanupTestCase):
 
 
 class TestCleanupDropScreenshots(DropCleanupTestCase):
+    def test_current_month_commission_screenshots_survive_day_retention(self):
+        month = datetime.now().strftime('%Y-%m')
+        current = self.make_file(os.path.join(self.commission_folder, 'alas', month, 'gem.png'), 40 * 86400)
+        previous = self.reward_image('20200101_000000_000000_0.png', 40 * 86400)
+
+        self.assertEqual(drop_cleanup.cleanup_drop_screenshots(self.config(1), 1), 1)
+        self.assertTrue(os.path.isfile(current))
+        self.assertFalse(os.path.exists(previous))
+
     def test_zero_retention_keeps_screenshots(self):
         old = self.drop_image('1704067200000.png', 400 * 86400)
         self.assertEqual(
@@ -387,6 +397,19 @@ class TestCommissionCountCapSkipsBackup(unittest.TestCase):
 
         self.assertTrue(os.path.isfile(backup))
         self.assertTrue(os.path.isdir(bak))
+
+    def test_current_month_keeps_all_screenshots_above_count_cap(self):
+        base = self.make_base()
+        month = datetime.now().strftime('%Y-%m')
+        folder = os.path.join(base, month)
+        os.makedirs(folder)
+        for index in range(205):
+            with open(os.path.join(folder, f'gem_{index}.png'), 'wb') as file:
+                file.write(b'x')
+
+        self.prune(base, max_keep=5)
+
+        self.assertEqual(len(os.listdir(folder)), 205)
 
     def test_normal_screenshots_still_pruned(self):
         base = self.make_base()

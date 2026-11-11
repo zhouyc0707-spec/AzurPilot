@@ -298,10 +298,11 @@ class TestCommissionIncomePersistence(unittest.TestCase):
             path.write_bytes(b"old screenshot")
             os.utime(path, (index + 1, index + 1))
 
+        self.reward._recognize_commission_income.return_value[0]['Gem'] = 12
         self.assertTrue(self.reward._record_commission_income())
 
-        self.assert_saved_income({"Oil": 367})
-        self.assertEqual(len(list((folder.parent).rglob("*.png"))), 5)
+        self.assert_saved_income({"Oil": 367, "Gem": 12})
+        self.assertEqual(len(list((folder.parent).rglob("*.png"))), 6)
         self.assertFalse((folder / "20251201_000000_000000_0.png").exists())
         self.assertTrue((folder / "20251201_000000_000000_5.png").exists())
 
@@ -310,15 +311,15 @@ class TestCommissionIncomePersistence(unittest.TestCase):
 
         self.assertTrue(self.reward._record_commission_income())
 
-        self.assert_saved_income({"Oil": 367})
+        self.assert_saved_income({"Oil": 367}, screenshots=False)
 
     def test_local_harvests_keep_separate_screenshots_and_income_after_cleanup(self):
         """本地逐弹窗记录与上游清理修复共用真实截图、数据库和聚合路径。"""
         images = [np.zeros((720, 1280, 3), dtype=np.uint8) for _ in range(2)]
         self.reward._commission_income_harvests = [
-            ({"Oil": 100}, images[0]), ({"Oil": 267}, images[1]),
+            ({"Oil": 100, "Gem": 12}, images[0]), ({"Oil": 267, "Gem": 28}, images[1]),
         ]
-        self.reward._recognize_commission_income.return_value = ({"Oil": 367}, images)
+        self.reward._recognize_commission_income.return_value = ({"Oil": 367, "Gem": 40}, images)
 
         ticks = iter(range(20))
         with patch.object(self.module, "current_time",
@@ -326,7 +327,7 @@ class TestCommissionIncomePersistence(unittest.TestCase):
             self.assertTrue(self.reward._record_commission_income())
 
         entries = self.db.get_commission_income("test", NOW.year, NOW.month)
-        self.assertEqual([entry["items"] for entry in entries], [{"Oil": 100}, {"Oil": 267}])
+        self.assertEqual([entry["items"] for entry in entries], [{"Oil": 100, "Gem": 12}, {"Oil": 267, "Gem": 28}])
         self.assertEqual([entry["commission_count"] for entry in entries], [1, 1])
         paths = [entry["screenshots"][0] for entry in entries]
         self.assertEqual(len(set(paths)), 2)
@@ -337,14 +338,14 @@ class TestCommissionIncomePersistence(unittest.TestCase):
         )
         self.assertEqual(summary["total_commissions"], 2)
         self.assertEqual(summary["items"]["Oil"]["total"], 367)
-        self.reward._notify_commission_income.assert_called_once_with({"Oil": 367})
+        self.reward._notify_commission_income.assert_called_once_with({"Oil": 367, "Gem": 40})
 
     def test_day_retention_still_records_income(self):
         self.reward.config.DropRecord_RetentionDays = 7
 
         self.assertTrue(self.reward._record_commission_income())
 
-        self.assert_saved_income({"Oil": 367})
+        self.assert_saved_income({"Oil": 367}, screenshots=False)
 
     def test_disabled_screenshots_still_record_income(self):
         self.reward.config.DropRecord_CommissionIncomeScreenshot = "do_not"
@@ -355,10 +356,11 @@ class TestCommissionIncomePersistence(unittest.TestCase):
         self.assertFalse((self.root / "log" / "commission_rewards").exists())
 
     def test_screenshot_write_failure_still_records_income(self):
+        self.reward._recognize_commission_income.return_value[0]['Gem'] = 12
         with patch.object(self.module, "save_image", side_effect=OSError("截图写入失败")):
             self.assertTrue(self.reward._record_commission_income())
 
-        self.assert_saved_income({"Oil": 367}, screenshots=False)
+        self.assert_saved_income({"Oil": 367, "Gem": 12}, screenshots=False)
 
     def test_saved_screenshot_and_cross_month_gem_settlement_commit_together(self):
         entry = commission()
@@ -448,7 +450,8 @@ class TestCommissionIncomeBoundary(unittest.TestCase):
         def timer(limit):
             return Mock(reached=Mock(return_value=limit < 1))
 
-        with patch.object(module, "Timer", side_effect=timer), patch.object(database, "db") as db:
+        with (patch.object(module, "Timer", side_effect=timer), patch.object(database, "db") as db,
+              patch('module.statistics.commission_drop.classify_frame', return_value='other')):
             self.assertTrue(self.reward_class._commission_receive(handler))
         self.assertEqual(handler._record_commission_income.call_count, 2)
         db.settle_expired_gem_commissions.assert_not_called()

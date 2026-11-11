@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { FolderOpen, RefreshCw } from 'lucide-react'
 import { api } from '../api/client'
-import type { LegacyColumn, LegacyStatisticsReport, Overview } from '../api/types'
+import type { LegacyColumn, LegacyCommissionRecent, LegacyStatisticsReport, Overview } from '../api/types'
 import { useApp, useConnection } from '../app/context'
 import { ErrorBox, Loading, Modal } from '../components/ui'
 import { LegacyApChart } from '../components/LegacyApChart'
@@ -44,6 +44,10 @@ const commissionIcons: Record<string, string> = {
   Coin: '/gui-icons/icon_5.png',
 }
 type Cell = number | string
+
+function hasGemScreenshot(row: LegacyCommissionRecent) {
+  return Boolean(row.screenshot) && row.items.some(item => item.name === 'Gem' && item.amount > 0)
+}
 
 /** 旧界面的 `t()` 支持 `{name}` 占位符；前端 schema 翻译表只给原文，这里补上替换。 */
 function useLegacyText() {
@@ -152,6 +156,7 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
   const openingFolderRef = useRef(false)
   const [commissionPeriod, setCommissionPeriod] = useState<'day' | 'week' | 'month'>('month')
   const [recentPage, setRecentPage] = useState(0)
+  const [gemScreenshotsOnly, setGemScreenshotsOnly] = useState(false)
 
   // 切实例的这一帧不沿用上一实例的历史月份，旧查询的回调由清理函数失效。
   const requestMonth = loadedInstance.current === instance ? meowMonth : undefined
@@ -178,6 +183,8 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
     setOverview(undefined)
     setError('')
     setMeowMonth(undefined)
+    setRecentPage(0)
+    setGemScreenshotsOnly(false)
   }, [instance])
 
   useEffect(() => {
@@ -260,11 +267,15 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
 
   const commission = data?.commission
   const periodSummary = commission?.periods[commissionPeriod]
-  const recentRows = commission?.recent.rows ?? []
+  const allRecentRows = commission?.recent.rows ?? []
+  const recentRows = gemScreenshotsOnly ? allRecentRows.filter(hasGemScreenshot) : allRecentRows
   const pageSize = commission?.recent.pageSize ?? 10
-  const pages = Math.max(1, Math.min(commission?.recent.maxPages ?? 5, Math.ceil(recentRows.length / pageSize)))
+  const pages = Math.max(1, Math.ceil(recentRows.length / pageSize))
   const currentPage = Math.min(recentPage, pages - 1)
+  const pageIndexes = Array.from({length: pages}, (_, index) => index)
+    .filter(index => index === 0 || index === pages - 1 || Math.abs(index - currentPage) <= 2)
   const pageRows = recentRows.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
+  const gemSuccess = commission?.gemSuccess
   const historyMonths = useMemo(
     () => (data?.meowLoot.availableMonths ?? []).slice(0, HISTORY_MONTH_LIMIT), [data])
 
@@ -400,7 +411,7 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
           </button>)}
         </div>
         <div className="legacy-commission-cards">
-          {(periodSummary?.cards ?? []).map(card => <div className="legacy-commission-card" key={card.name}>
+          {(periodSummary?.cards ?? []).map(card => <div className={`legacy-commission-card${card.name === 'Gem' ? ' is-gem' : ''}`} key={card.name}>
             <div className="legacy-commission-card-head">
               <span className="legacy-commission-icon" style={{background: `${card.color}1a`}}>
                 <img src={commissionIcons[card.name] ?? '/gui-icons/icon_3.png'} alt="" width={16} height={16}
@@ -408,8 +419,17 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
               </span>
               <span className="legacy-commission-name">{text(card.labelKey)}</span>
             </div>
-            <strong className="legacy-commission-total" style={{color: card.color}}>{card.total > 0 ? `+${card.total.toLocaleString()}` : '0'}</strong>
-            <span className="legacy-commission-stat">{text('Gui.Stat.CommissionIncomeCardStat', {count: card.count.toLocaleString(), avg: card.avg.toFixed(1)})}</span>
+            <div className="legacy-commission-card-body">
+              <div className="legacy-commission-primary">
+                <strong className="legacy-commission-total" style={{color: card.color}}>{card.total > 0 ? `+${card.total.toLocaleString()}` : '0'}</strong>
+                <span className="legacy-commission-stat">{text('Gui.Stat.CommissionIncomeCardStat', {count: card.count.toLocaleString(), avg: card.avg.toFixed(1)})}</span>
+              </div>
+              {card.name === 'Gem' && <div className="legacy-commission-gem-success" title={text('Gui.Stat.CommissionIncomeGemSuccessHint')}>
+                <span className="legacy-commission-success-label">{text('Gui.Stat.CommissionIncomeGemSuccessRate')}</span>
+                <strong className="legacy-commission-total" style={{color: card.color}}>{gemSuccess?.rate == null ? '-' : `${gemSuccess.rate.toFixed(2)}%`}</strong>
+                <span className="legacy-commission-stat">{text('Gui.Stat.CommissionIncomeGemSuccessCount', {successes: gemSuccess?.successes ?? 0, completed: gemSuccess?.completed ?? 0})}</span>
+              </div>}
+            </div>
           </div>)}
         </div>
 
@@ -429,12 +449,20 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
                   </div>)}
                 </div>}
 
-          {!!recentRows.length && <>
+          {!!allRecentRows.length && <>
             <div className="legacy-recent-divider"/>
-            <div className="legacy-recent-title">{text('Gui.Stat.CommissionIncomeRecentTitle')}</div>
+            <div className="legacy-recent-head">
+              <div className="legacy-recent-title">{text('Gui.Stat.CommissionIncomeRecentTitle')}</div>
+              <button type="button" className={`legacy-button${gemScreenshotsOnly ? ' is-primary' : ''}`}
+                aria-pressed={gemScreenshotsOnly} onClick={() => {setGemScreenshotsOnly(!gemScreenshotsOnly); setRecentPage(0)}}>
+                {text(gemScreenshotsOnly ? 'Gui.Stat.CommissionIncomeAllRecords' : 'Gui.Stat.CommissionIncomeGemScreenshots')}
+              </button>
+            </div>
+            {gemScreenshotsOnly && !recentRows.length && <p className="legacy-muted">{text('Gui.Stat.CommissionIncomeGemScreenshotsEmpty')}</p>}
             <div className="legacy-recent-list">
               {pageRows.map((row, index) => <div className="legacy-recent-row" key={`${row.time}-${index}`}>
                 <span className="legacy-recent-time">{row.time}</span>
+                {row.name && <span className="legacy-recent-name" title={row.name}>{row.name}</span>}
                 <span className="legacy-recent-items">
                   {row.items.length
                     ? row.items.map(item => <span className="legacy-recent-item" key={item.name}>
@@ -451,19 +479,20 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
                       </span>)
                     : <span className="legacy-recent-empty">--</span>}
                 </span>
-                {row.screenshot && <a className="legacy-shot-link" href={row.screenshot} target="_blank" rel="noopener">{text('Gui.Stat.ViewScreenshot')}</a>}
+                {hasGemScreenshot(row) && <a className="legacy-shot-link" href={row.screenshot!} target="_blank" rel="noopener">{text('Gui.Stat.ViewScreenshot')}</a>}
               </div>)}
             </div>
           </>}
 
           {recentRows.length > pageSize && <div className="legacy-pagination">
             <button type="button" className="legacy-button" disabled={!currentPage} onClick={() => setRecentPage(Math.max(0, currentPage - 1))}>上一页</button>
-            {Array.from({length: pages}, (_, index) => <button
-              key={index}
-              type="button"
-              className={`legacy-button${index === currentPage ? ' is-primary' : ''}`}
-              aria-pressed={index === currentPage}
-              onClick={() => setRecentPage(index)}>{index + 1}</button>)}
+            {pageIndexes.map((page, index) => <Fragment key={page}>
+              {index > 0 && page > pageIndexes[index - 1] + 1 && <span aria-hidden="true">…</span>}
+              <button type="button"
+                className={`legacy-button${page === currentPage ? ' is-primary' : ''}`}
+                aria-pressed={page === currentPage}
+                onClick={() => setRecentPage(page)}>{page + 1}</button>
+            </Fragment>)}
             <button type="button" className="legacy-button" disabled={currentPage + 1 >= pages} onClick={() => setRecentPage(Math.min(pages - 1, currentPage + 1))}>下一页</button>
           </div>}
 

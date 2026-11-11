@@ -164,15 +164,17 @@ class MonthlyLocalUpdatesTests(unittest.TestCase):
             self.assertIsNone(conn.execute('SELECT 1 FROM typed_value_sets WHERE id=?', (old_tree,)).fetchone())
             self.assertIsNotNone(self.db._native_month_for_update(conn, 'fast', MONTH))
 
-    def test_gem_history_cap_and_ordinal_overflow_reset_preserve_snapshot(self):
+    def test_full_month_gem_history_and_ordinal_overflow_reset_preserve_snapshot(self):
         entries = [{'ts': NOW.isoformat(), 'duration': 2, 'reward': i, 'success': True} for i in range(5000)]
         for instance in ('fast', 'legacy'):
             self.seed(instance, extra={'gem_commission_entries': entries})
         self.compare_call('add_gem_commission', 4, 20)
+        self.assertEqual(len(self.db.get_gem_commissions('fast', NOW.year, NOW.month)), 5001)
         with self.store.transaction() as conn:
             conn.execute("UPDATE gem_commission_history SET ordinal=9223372036854775806 "
                          "WHERE instance='fast' AND ordinal=(SELECT MAX(ordinal) FROM gem_commission_history WHERE instance='fast')")
         self.compare_call('add_gem_commission', 2, 10)
+        self.assertEqual(len(self.db.get_gem_commissions('fast', NOW.year, NOW.month)), 5002)
 
     def test_last_ap_uses_list_order_not_timestamp_and_falls_back_across_months(self):
         self.seed('fast', extra={'last_ap_notification': {'ts': NOW.isoformat(), 'ap': 100}})

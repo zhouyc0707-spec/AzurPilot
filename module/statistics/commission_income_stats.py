@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+from collections import Counter
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Tuple
 
@@ -279,10 +280,10 @@ def get_commission_income_interval_summary(
 
 def get_recent_commission_entries(
     instance: str,
-    limit: int = 10,
+    limit: Optional[int] = 10,
     cross_month: bool = False,
 ) -> List[Dict[str, Any]]:
-    """获取最近 N 条委托收益记录（按时间倒序）。
+    """获取委托收益记录（按时间倒序），可读取当月全部条目。
 
     旧界面（PyWebIO 与 React 旧版统计页）原本会依次读「当前月」「32 天前所在月」
     「64 天前所在月」三个归档桶来补足条数，于是新月份开始后仍会显示上个月的记录
@@ -292,7 +293,7 @@ def get_recent_commission_entries(
 
     Args:
         instance: 实例名称。
-        limit: 返回条数上限，默认 10。
+        limit: 返回条数上限，默认 10，None 表示不限制条数。
         cross_month: 是否回溯前两个月的归档桶补足条数（旧界面行为，默认关闭）。
 
     Returns:
@@ -308,8 +309,80 @@ def get_recent_commission_entries(
             ts = _parse_ts(entry.get('ts', ''))
             if ts is not None:
                 all_entries.append(entry)
-        if len(all_entries) >= limit:
+        if limit is not None and len(all_entries) >= limit:
             break
 
     all_entries.sort(key=lambda e: e.get('ts', ''), reverse=True)
     return all_entries[:limit]
+
+
+def get_monthly_gem_commission_success(
+    instance: str,
+    year: int = None,
+    month: int = None,
+) -> Dict[str, Any]:
+    """汇总当月已结算可出钻委托的成功率。
+
+    成功记录由正钻石收益和钻石委托结算历史合并，同一时间及数量的记录
+    按两侧最大出现次数去重，补足已获钻石但未匹配到运行委托的历史收获。
+    失败只使用已结算的 2/4/8 小时钻石委托；普通领取次数无法补全漏记的失败。
+
+    Args:
+        instance: 实例名称。
+        year: 年份，默认当前年。
+        month: 月份，默认当前月。
+
+    Returns:
+        successes 为出钻委托数，completed 为已完成可出钻委托数，
+        rate 为 0 到 100 的百分数，无已完成记录时为 None。
+    """
+    now = datetime.now()
+    year = now.year if year is None else year
+    month = now.month if month is None else month
+    income_successes = Counter()
+    history_successes = Counter()
+    failures = 0
+    for entry in cl1_db.get_commission_income(instance, year, month):
+        timestamp = _parse_ts(entry.get('ts', ''))
+        if timestamp is None or (timestamp.year, timestamp.month) != (year, month):
+            continue
+        items = entry.get('items')
+        if not isinstance(items, dict):
+            continue
+        gem_amount = 0
+        for name, amount in items.items():
+            if COMMISSION_ITEM_NAME_MAP.get(name, name) != 'Gem':
+                continue
+            try:
+                amount = int(amount)
+            except (TypeError, ValueError):
+                continue
+            if amount > 0:
+                gem_amount += amount
+        if gem_amount > 0:
+            income_successes[(timestamp, gem_amount)] += 1
+
+    for entry in cl1_db.get_gem_commissions(instance, year, month):
+        timestamp = _parse_ts(entry.get('ts', ''))
+        if timestamp is None or (timestamp.year, timestamp.month) != (year, month):
+            continue
+        try:
+            reward = int(entry['reward'])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if reward > 0:
+            history_successes[(timestamp, reward)] += 1
+        elif reward == 0:
+            try:
+                duration = int(entry.get('duration', 0))
+            except (TypeError, ValueError):
+                continue
+            if duration in (2, 4, 8):
+                failures += 1
+    successes = sum((income_successes | history_successes).values())
+    completed = successes + failures
+    return {
+        'successes': successes,
+        'completed': completed,
+        'rate': round(successes * 100 / completed, 2) if completed else None,
+    }

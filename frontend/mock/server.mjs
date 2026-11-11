@@ -9,6 +9,7 @@ import { createMockState, fail } from './state.mjs'
 // 物品图标与真实后端 module/api/app.py 一致：优先专用图标，缺失时使用同名领奖模板。
 // mock 也照挂，否则统计页的图标列全是裂图，看不出图标布局对不对。
 const ICON_DIRS = {
+  '/gui-icons/': [fileURLToPath(new URL('../../assets/gui/icon/', import.meta.url))],
   '/research-items/': ['../../assets/stats/research_items/', '../../assets/stats_basic/'].map(relative => fileURLToPath(new URL(relative, import.meta.url))),
   '/opsi-items/': ['../../assets/stats/opsi_reward_items/', '../../assets/stats/opsi_items/'].map(relative => fileURLToPath(new URL(relative, import.meta.url))),
   '/storage-items/': [fileURLToPath(new URL('../../assets/stats/', import.meta.url))],

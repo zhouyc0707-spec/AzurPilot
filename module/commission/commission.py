@@ -1710,14 +1710,14 @@ class RewardCommission(Dock, UI, InfoHandler):
     def _record_commission_income(self) -> bool:
         """识别并保存一组奖励；只有持久化成功后才发送通知。
 
-        一个「获得道具」弹窗就是一次委托收获：每张通过校验的截图单独写一条记录、
-        单独落盘这一张截图，不做跨截图的合并累加（`merged_items` 只用于本次领取的
+        一个「获得道具」弹窗就是一次委托收获：每张通过校验的截图单独写一条记录，
+        含钻石的收获同时保存该截图（`merged_items` 只用于本次领取的
         推送通知汇总与钻石委托结算）。
         """
         try:
             merged_items, reward_images = self._recognize_commission_income()
             if not merged_items:
-                # 未确认数量不写入收益，但保留原图供核对。
+                # 未确认数量的页面保留原图，供后续核对可能包含的钻石奖励。
                 for image in reward_images:
                     self._save_commission_reward_screenshot(image, self.config.config_name)
                 logger.info('[委托-收入] 所有截图都没有识别到已知物品')
@@ -1860,7 +1860,7 @@ class RewardCommission(Dock, UI, InfoHandler):
 
         本仓库保留「一次收获一条记录」的粒度（见定制化修改清单）：识别阶段把每次
         收获的明细暂存在 ``self._commission_income_harvests``，这里按明细各写一条
-        记录、各带自己那张截图；明细缺失时（识别阶段被替换的调用方）退回上游的
+        记录，含钻石的收获关联该张截图。明细缺失时（识别阶段被替换的调用方）退回上游的
         整次结算单条记录写法。
         钻石委托沿用上游做法：随记录提交在同一事务里，由第一条含钻石的记录完成结算。
         """
@@ -1870,11 +1870,12 @@ class RewardCommission(Dock, UI, InfoHandler):
         harvests = getattr(self, '_commission_income_harvests', None)
         fallback_screenshots = []
         if not harvests:
-            fallback_screenshots = self._save_commission_reward_screenshots(
-                reward_images, instance)
+            if merged_items.get('Gem', 0) > 0:
+                fallback_screenshots = self._save_commission_reward_screenshots(
+                    reward_images, instance)
             harvests = [(merged_items, None)]
         else:
-            # 逐次记录只关联本次收获截图；识别失败的其他页独立存档，不增加收获次数。
+            # 未确认页面独立留作诊断，成功识别的收获按物品类型决定截图保存。
             for image in reward_images:
                 if not any(image is harvest_image for _, harvest_image in harvests):
                     path = self._save_commission_reward_screenshot(image, instance)
@@ -1890,9 +1891,11 @@ class RewardCommission(Dock, UI, InfoHandler):
         for items, image in harvests:
             if image is None:
                 screenshots = fallback_screenshots
-            else:
+            elif items.get('Gem', 0) > 0:
                 screenshot = self._save_commission_reward_screenshot(image, instance)
                 screenshots = [screenshot] if screenshot else []
+            else:
+                screenshots = []
 
             gem_duration = None
             if not settled and items.get("Gem", 0) > 0 and target_duration is not None:
@@ -1903,6 +1906,7 @@ class RewardCommission(Dock, UI, InfoHandler):
             commission = cl1_db.add_commission_income(
                 instance, items, commission_count=1, screenshots=screenshots,
                 gem_duration=gem_duration, completed_at=current_time(),
+                commission_name=getattr(self, '_commission_reward_names', {}).get(id(image)),
             )
             if gem_duration is not None and commission is None:
                 logger.warning(f'钻石委托 {gem_duration}h 在运行列表中未找到记录')
@@ -1965,7 +1969,7 @@ class RewardCommission(Dock, UI, InfoHandler):
 
 
     def _save_commission_reward_screenshot(self, image, instance):
-        """保存一次委托收获的收益截图。
+        """保存钻石收获或待核对奖励页面的截图。
 
         一个「获得道具」弹窗只对应一张截图，因此这里只接收单张图像。截图落盘到
         ``./log/commission_rewards/<instance>/<YYYY-MM>/`` 目录，文件名使用毫秒
@@ -2067,11 +2071,11 @@ class RewardCommission(Dock, UI, InfoHandler):
         return paths
 
     def _prune_commission_reward_screenshots(self, instance, max_keep=None, base=None):
-        """清理实例目录下超量的委托收益截图，仅保留最近 max_keep 张。
+        """清理往月超量委托截图，完整保留当月收获截图。
 
-        实例保存入口按运行参数传入张数上限；独立调用也读取实例参数，
-        配置缺省时保留 50 张。
-        超过保留数量的旧截图按修改时间排序删除，并移除清空后的
+        实例保存入口按运行参数传入往月截图张数上限，独立调用也读取实例参数，
+        配置缺省时保留50张往月截图。
+        往月超过保留数量的旧截图按修改时间排序删除，并移除清空后的
         空月份目录。清理在每次保存截图后顺带执行。
         ``bak/`` 下的备份不计入张数上限，也不会被删除。
 
@@ -2095,8 +2099,9 @@ class RewardCommission(Dock, UI, InfoHandler):
         if not os.path.isdir(base):
             return
         files = []
+        current_month = current_time().strftime('%Y-%m')
         for folder, dirs, names in os.walk(base):
-            dirs[:] = [d for d in dirs if d != BAK_FOLDER]
+            dirs[:] = [d for d in dirs if d not in (BAK_FOLDER, current_month)]
             for name in names:
                 if not name.endswith('.png'):
                     continue
@@ -2165,8 +2170,14 @@ class RewardCommission(Dock, UI, InfoHandler):
         reward_click_timer = Timer(0.3)
         pending_reward = None
         self._commission_reward_images = []
+        self._commission_reward_names = {}
+        commission_name = None
+        commission_frame_kind = None
+        commission_reward_image = None
         completed_commission_count = 0
         income_recorded = True
+
+        from module.statistics.commission_drop import classify_frame, read_commission_name
 
         try:
             with self.stat.new(
@@ -2180,6 +2191,20 @@ class RewardCommission(Dock, UI, InfoHandler):
 
                     if drop and hasattr(drop, 'capture_commission_status'):
                         drop.capture_commission_status(self.device.image)
+
+                    # 名称采集独立于上传开关，以完成页与奖励页的实际顺序关联收获。
+                    kind = classify_frame(self.device.image)
+                    if kind in ('done', 'perfect'):
+                        if kind != commission_frame_kind or commission_name is None:
+                            try:
+                                commission_name = read_commission_name(self.device.image, self.config.SERVER)
+                            except Exception:
+                                commission_name = None
+                            commission_reward_image = None
+                    elif kind in ('exp', 'ship', 'exit'):
+                        commission_name = None
+                        commission_reward_image = None
+                    commission_frame_kind = kind
 
                     if self.ui_page_appear(page_commission, offset=(20, 20)):
                         break
@@ -2220,8 +2245,16 @@ class RewardCommission(Dock, UI, InfoHandler):
                             if self._commission_reward_images:
                                 income_recorded = self._record_commission_income() and income_recorded
                                 self._commission_reward_images = []
+                                self._commission_reward_names = {}
                         else:
-                            self._commission_reward_images.append(self.device.image.copy())
+                            image = self.device.image.copy()
+                            if commission_reward_image is not None:
+                                # 多个奖励页缺少明确委托边界，保留收益并将名称标为未知。
+                                self._commission_reward_names[id(commission_reward_image)] = None
+                                commission_name = None
+                            self._commission_reward_images.append(image)
+                            self._commission_reward_names[id(image)] = commission_name
+                            commission_reward_image = image
                             logger.info(f'[委托-收入] 收集奖励截图 (触发按钮={button.name})')
 
                         REWARD_SAVE_CLICK.name = button.name

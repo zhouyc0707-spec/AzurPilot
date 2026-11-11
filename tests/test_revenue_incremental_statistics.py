@@ -123,7 +123,7 @@ class RevenueIncrementalStatisticsTests(unittest.TestCase):
         self.assertIsNotNone(actual)
         self.assertEqual(self.db.get_stats('fast', MONTH), self.db.get_stats('legacy', MONTH))
 
-    def test_native_caps_keep_last_five_thousand_and_delete_old_children(self):
+    def test_commission_keeps_full_month_and_research_keeps_its_cap(self):
         for kind, field in (('research', 'research_drop_entries'), ('commission', 'commission_income_entries')):
             with self.subTest(kind=kind):
                 history = [self.research(index) if kind == 'research' else
@@ -131,8 +131,8 @@ class RevenueIncrementalStatisticsTests(unittest.TestCase):
                             'screenshots': [f'{index}.png']} for index in range(5002)]
                 self.assert_equivalent(kind, current={field: history})
                 entries = self.db.get_stats('fast', MONTH)[field]
-                self.assertEqual(len(entries), 5000)
-                self.assertEqual(entries[0], history[3])
+                self.assertEqual(len(entries), 5000 if kind == 'research' else 5003)
+                self.assertEqual(entries[0], history[3] if kind == 'research' else history[0])
                 with closing(sqlite3.connect(self.path)) as conn:
                     self.assertEqual(conn.execute('PRAGMA foreign_key_check').fetchall(), [])
                     table, parent, key = (('research_drop_items', 'research_drops', 'drop_id') if kind == 'research'
@@ -169,16 +169,26 @@ class RevenueIncrementalStatisticsTests(unittest.TestCase):
         self.assertEqual(self.db.get_stats('fast', PREVIOUS)['running_gem_commissions'], [duplicate_previous])
         self.assertEqual(self.db.get_stats('fast', MONTH)['running_gem_commissions'], [earlier, later])
 
-    def test_previous_month_match_preserves_absent_current_running_field_and_caps_gem_history(self):
+    def test_previous_month_match_keeps_full_month_gem_history(self):
         history = [{'ts': str(i), 'duration': 8, 'reward': 1, 'success': True} for i in range(5000)]
         actual = self.assert_equivalent('commission', current={'gem_commission_entries': history},
                                        previous={'running_gem_commissions': [self.running()]}, gem_duration=8)
         self.assertEqual(actual, self.running())
         current = self.db.get_stats('fast', MONTH)
         self.assertNotIn('running_gem_commissions', current)
-        self.assertEqual(len(current['gem_commission_entries']), 5000)
-        self.assertEqual(current['gem_commission_entries'][0], history[1])
+        self.assertEqual(len(current['gem_commission_entries']), 5001)
+        self.assertEqual(current['gem_commission_entries'][0], history[0])
         self.assertEqual(self.db.get_stats('fast', PREVIOUS)['running_gem_commissions'], [])
+
+    def test_commission_name_survives_native_and_complete_paths(self):
+        old = {'ts': '2026-10-23', 'items': {'Oil': 79}, 'commission_count': 1, 'screenshots': []}
+        named = {**old, 'commission_name': 'BIW要员护卫'}
+        self.assert_equivalent('commission', current={'commission_income_entries': [old, named]},
+                               commission_name='BIW巡视护卫')
+        entries = self.db.get_stats('fast', MONTH)['commission_income_entries']
+        self.assertNotIn('commission_name', entries[0])
+        self.assertEqual(entries[1], named)
+        self.assertEqual(entries[-1]['commission_name'], 'BIW巡视护卫')
 
     def test_no_due_match_does_not_sort_or_create_gem_history(self):
         running = [self.running('future', finish='2026-10-25T00:00:00'), self.running('bad', finish='invalid')]

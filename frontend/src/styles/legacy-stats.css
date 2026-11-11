@@ -210,14 +210,16 @@
 }
 
 .legacy-commission-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   margin: 10px 0 16px;
 }
 
 .legacy-commission-card {
   display: flex;
+  flex: 1 1 130px;
+  min-width: 0;
   flex-direction: column;
   gap: 4px;
   padding: 12px 14px;
@@ -225,6 +227,19 @@
   border-radius: 10px;
   background: transparent;
 }
+
+.legacy-commission-card.is-gem {flex: 2 1 300px}
+.legacy-commission-card-body {display: flex; align-items: center; gap: 14px}
+.legacy-commission-primary {display: flex; flex: 1 1 auto; flex-direction: column; gap: 4px}
+.legacy-commission-gem-success {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 14px;
+  border-left: 1px solid var(--border, var(--theme-border));
+}
+.legacy-commission-success-label {font-size: 12px; color: var(--muted, var(--theme-muted))}
 
 .legacy-commission-card-head {display: flex; align-items: center; gap: 8px; font-size: 13px}
 .legacy-commission-icon {
@@ -267,16 +282,19 @@
 .legacy-running-finish {font-size: 12px; opacity: .6}
 
 .legacy-recent-divider {height: 1px; margin: 12px 0; background: color-mix(in srgb, var(--border, var(--theme-border)) 70%, transparent)}
-.legacy-recent-title {font-size: 13.5px; font-weight: 500; margin-bottom: 8px}
+.legacy-recent-head {display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 8px}
+.legacy-recent-title {font-size: 13.5px; font-weight: 500}
 .legacy-recent-list {font-size: 13px}
 .legacy-recent-row {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
+  gap: 4px 10px;
   padding: 6px 0;
   border-bottom: 1px solid color-mix(in srgb, var(--border, var(--theme-border)) 50%, transparent);
 }
 .legacy-recent-time {flex: 0 0 auto; min-width: 84px; font-size: 12.5px; opacity: .65}
+.legacy-recent-name {flex: 0 1 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap}
 .legacy-recent-items {display: flex; flex-wrap: wrap; align-items: center; min-width: 0}
 .legacy-recent-item {display: inline-flex; align-items: center; height: 24px; margin-right: 12px}
 /* 「最近记录」的物品图标（替代原来的纯色圆点）：图标用旧界面那套道具图，

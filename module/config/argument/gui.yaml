@@ -477,6 +477,12 @@ Stat:
   CommissionIncomeCardStat:
   CommissionIncomeTotalCommissions:
   CommissionIncomeRecentTitle:
+  CommissionIncomeGemSuccessRate:
+  CommissionIncomeGemSuccessCount:
+  CommissionIncomeGemSuccessHint:
+  CommissionIncomeGemScreenshots:
+  CommissionIncomeAllRecords:
+  CommissionIncomeGemScreenshotsEmpty:
   RunningCommissionTitle:
   RunningCommissionScannedAt:
   RunningCommissionFinish:

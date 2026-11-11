@@ -261,7 +261,7 @@ Windows 的目录打开由 `module/api/windows_directory.py` 处理：在调用�
 | `meow_battle_raw_count` / `meow_battle_count` | 耄耋真实战斗场次 / 有效轮数（侵蚀 2-3 每轮 2 场、4-6 每轮 3 场折算） |
 | `meow_hazard_stats` | 按侵蚀等级拆分的桶（次数、耗时样本、明石） |
 | `siren_research_devices` | 塞壬研究装置（吊机）计数，cl1 与 meow 分源 |
-| `commission_income_entries` / `running_gem_commissions` | 委托收益明细（上限 5000）与运行中钻石委托（跨月合并） |
+| `commission_income_entries` / `running_gem_commissions` | 完整月度委托收益明细与运行中钻石委托（跨月合并） |
 | `research_drop_entries` | 科研掉落明细：项目代号、期数、物品（上限 5000，imgid 去重） |
 
 关键机制：`_stats_transaction()` 用 `BEGIN IMMEDIATE` 取写锁，跨线程/进程串行化整个「读-改-写」，避免并发覆盖；`save_stats` 只做整体替换，增量修改必须走事务内方法。数据库优先，旧 JSON 仅补缺失月份。样本与列表的裁剪、旧计数回填及金币清理版本保留原规则；跨月委托收益、钻石结算和运行记录移除在同一个总库事务内提交。
@@ -488,7 +488,7 @@ stateDiagram-v2
 | `config/azurpilot.db` | 日报任务事件、周期状态、采集缺口 | 任务前后、战斗结束、日报流程 | `cleanup()` 保留 35 天 |
 | `config/azurpilot.db` 的 `farming_aggregates` | 全局/实例 farming 汇总 | 显式刷新或实例缓存缺失重算 | 事务更新六等级，读取不刷新时间 |
 | `config/azurpilot.db` 的六张 `ship_exp_*` 表 | 战斗耗时、每日经验及升级进度 | 显式保存或业务更新 | 样本 100 条 / 日统计 30 天 |
-| `screenshots/<genre>/`、`log/commission_rewards/<instance>/<月份>/` | 掉落与委托截图 | commit / 委托结算 | `DropRecord_RetentionDays` 天数清理（节流 1 小时、后台线程执行），过期后按 `DropRecord_BackUpMethod` 删除 / 拷贝备份 / 压缩备份到 `bak/` |
+| `screenshots/<genre>/`、`log/commission_rewards/<instance>/<月份>/` | 掉落与委托截图 | commit / 委托结算 | 当月出钻委托截图完整保留，其他截图沿用 `DropRecord_RetentionDays` 天数清理（节流 1 小时、后台线程执行），过期后按 `DropRecord_BackUpMethod` 删除 / 拷贝备份 / 压缩备份到 `bak/` |
 
 首次迁移可读取旧位置 `log/cl1/cl1_data.db`，保留旧库、JSON、CSV 和 `.bak`。后续只访问总库。每日备份使用 SQLite 备份接口保存总库，并按专用保护机制备份安全数据库、注册信息与密钥材料。
 
@@ -540,6 +540,8 @@ stateDiagram-v2
 - 旧版「大世界数据收集」与月度耄耋收获只显示对应月份有记录的侵蚀等级。存在未取整轮次、战斗、事件或掉落记录时保留该行，不能以展示轮次取整为零或高价值物品收益全零判断无记录。大世界数据收集沿用当前实例范围，月度收获沿用本设备不限实例的旧口径。历月累计独立返回，PyWebIO 历史弹窗也有独立累计表，不因所选月份无记录而隐藏历史数据。
 - `AzurStats.get_meow_loot_monthly_totals` / `get_meow_loot_available_months` 在本地旧版统计接口与 PyWebIO 导出中仍有调用，不能按上游的“无调用预留接口”判断删除。
 - 委托收益条目没有「已检查但零结算」的心跳记录，日报侧只能把空列表标为 `available=False` 而非零收益（`commission_income_stats` 有注释说明）。
+- 旧主题与 PyWebIO 的委托记录读取当前实例当月全部收益，按每页10条分页。截图入口仅提供正钻石收益记录，可一键筛选当月全部钻石截图。可选委托名称来自领取时的明确配对，旧数据保留空值。
+- 钻石卡的本月成功率由 `get_monthly_gem_commission_success()` 汇总。成功事件合并正钻石收益与钻石委托成功历史，按本地时间戳及钻石数量取多重集合并集，避免同一次事务写入的两份记录重复计数。分母为这些成功事件加上已完成且奖励为零的2、4、8小时钻石委托历史，无已完成记录时显示占位符。该指标覆盖已保存的结算证据，旧运行未跟踪或手动领取的失败记录存在历史缺口。
 - 遥测域名 `ApiClient.PRIMARY_DOMAIN` 与 `FALLBACK_DOMAIN` 当前相同，故障转移实际未生效。
 - farming 汇总表（`farming_aggregates`）使用 SQL 全量重算而非增量，明细库很大时刷新会变慢。
 - `drop_statistics.py` 离线分析依赖手动重命名模板与改脚本常量，没有命令行参数化。

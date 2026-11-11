@@ -3,6 +3,18 @@ import { WebSocket } from 'ws'
 import { expect, it } from 'vitest'
 import { createMockServer } from './server.mjs'
 
+it('旧主题委托图标沿用后端的静态路径', async () => {
+  const mock = createMockServer()
+  mock.server.listen(0, '127.0.0.1')
+  await once(mock.server, 'listening')
+  try {
+    const response = await fetch(`http://127.0.0.1:${mock.server.address().port}/gui-icons/icon_1.png`)
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-type')).toBe('image/png')
+    expect((await response.arrayBuffer()).byteLength).toBeGreaterThan(8)
+  } finally {await mock.close()}
+})
+
 it('WebSocket 认证、实例订阅替换与空订阅按协议工作', async () => {
   const mock = createMockServer({password: 'mock-password'})
   mock.server.listen(0, '127.0.0.1')

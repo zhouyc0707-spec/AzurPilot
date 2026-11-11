@@ -513,6 +513,7 @@ class CommissionRecentTests(unittest.TestCase):
     def test_only_tracked_items_and_single_screenshot(self):
         entries = [
             {'ts': '2026-09-24T09:56:00', 'commission_count': 1,
+             'commission_name': '大型油田开发',
              'items': {'Gem': 10, 'Oil': 0, 'Unknown': 5},
              'screenshots': ['alas/2026-09/a_0.png', 'alas/2026-09/a_1.png']},
             {'ts': 'bad-timestamp', 'items': {}, 'screenshots': []},
@@ -523,6 +524,8 @@ class CommissionRecentTests(unittest.TestCase):
 
         first, second = panel['rows']
         self.assertEqual(first['time'], '09-24 09:56')
+        self.assertEqual(first['name'], '大型油田开发')
+        self.assertIsNone(second['name'])
         # 0 值与未统计的物品都不显示
         self.assertEqual([item['name'] for item in first['items']], ['Gem'])
         self.assertEqual(first['items'][0]['icon'], 1)
@@ -531,7 +534,45 @@ class CommissionRecentTests(unittest.TestCase):
         self.assertEqual(second['time'], 'bad-timestamp')
         self.assertIsNone(second['screenshot'])
         self.assertEqual(panel['pageSize'], 10)
-        self.assertEqual(panel['maxPages'], 5)
+        self.assertEqual(panel['maxPages'], 1)
+        self.assertIsNone(panel['limit'])
+
+    def test_all_monthly_records_use_real_page_count(self):
+        entries = [{'ts': '2026-09-24T09:56:00', 'items': {'Coin': 100}} for _ in range(61)]
+        with patch('module.statistics.commission_income_stats.get_recent_commission_entries',
+                   return_value=entries) as recent:
+            panel = _commission_recent('alas')
+
+        recent.assert_called_once_with('alas', limit=None)
+        self.assertEqual(len(panel['rows']), 61)
+        self.assertEqual(panel['maxPages'], 7)
+
+    def test_only_positive_gem_rewards_expose_screenshots(self):
+        entries = [
+            {'items': {'Gem': 0, 'Coin': 100}},
+            {'items': {'Gems': '5', 'Cube': 2}},
+            {'items': {'Gem': -1}},
+            {'items': {'Gem': 'bad', 'Oil': 100}},
+            {'items': {'Gem': 1}, 'commission_name': ' '},
+        ]
+        for entry in entries:
+            entry.update({'ts': '2026-09-24T09:56:00', 'screenshots': ['alas/2026-09/reward.png']})
+        with patch('module.statistics.commission_income_stats.get_recent_commission_entries',
+                   return_value=entries):
+            panel = _commission_recent('alas')
+
+        rows = panel['rows']
+        self.assertEqual([bool(row['screenshot']) for row in rows], [False, True, False, False, True])
+        self.assertEqual([item['name'] for item in rows[1]['items']], ['Gem', 'Cube'])
+        self.assertEqual([item['name'] for item in rows[3]['items']], ['Oil'])
+        self.assertIsNone(rows[4]['name'])
+
+    def test_empty_month_keeps_one_empty_page(self):
+        with patch('module.statistics.commission_income_stats.get_recent_commission_entries', return_value=[]):
+            panel = _commission_recent('alas')
+
+        self.assertEqual(panel['rows'], [])
+        self.assertEqual(panel['maxPages'], 1)
 
 
 if __name__ == '__main__':

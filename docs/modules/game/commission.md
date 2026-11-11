@@ -125,6 +125,10 @@ run() 先处理一个已知 bug：卡在战术课堂界面（`TACTICAL_CLASS_STA
 
 物品弹窗标题出现后，父循环持续截图至少 0.5 秒，且同一弹窗仍正向可见时才保存新帧，避免把刚出现的空白奖励动画入账。每次确认经验或物品后继续截图，至少 0.3 秒后才处理下一次操作；不在领取循环中固定休眠。弹窗类型变化时丢弃待截标记、重新识别，不把新画面归入旧弹窗。逐弹窗收益、经验弹窗分批及保存失败时不结算到期钻石委托的保护保持不变；回归见 `tests/test_reward_render_capture.py` 和 `tests/test_commission_settlement.py`。
 
+本地收获名称复用 `commission_drop` 的名称目录与 OCR，从完成或大成功画面读取，再沿明确的结算边界关联到对应奖励。确认的名称随普通收益保存为可选 `commission_name`，历史记录或配对不明确时保留空值。本地名称采集独立于云端上传开关。
+
+物品或数量尚未确认的奖励页继续保存诊断原图，供核对潜在出钻收获。统计页截图入口依据已确认的正钻石收益提供。
+
 **扫描**（`_commission_scan_all`）：紧急列表是懒加载的，先切到 urgent 强制刷新；再分别切到 daily/urgent，滚动条翻页（上限 15 页）逐屏 `commission_detect`。检测用 `lines_detect` 找委托卡片底部白色分割线（scipy `find_peaks`），对每条分割线裁剪出 `(188, y-119, 1199, y)` 区域交给 `Commission` 解析；发现无效委托（通常 info_bar 未消失）时重试。紧急列表中的 `extra_*` 委托统一 `convert_to_night` 归类为 `night_*`，与 21:00~次日 02:00 生效的 `_night` 过滤预设对应。
 
 **选择**（`_commission_choose`，按 `Commission_DynamicProgramming` 分派）：
@@ -219,7 +223,7 @@ stateDiagram-v2
 
 关联配置：
 
-- `DropRecord_CommissionRecord`（do_not/save/upload/save_and_upload）控制委托掉落图的保存与上传；`DropRecord_CommissionIncomeScreenshot` 控制收益截图落盘；`DropRecord_RetentionDays` 大于 0 时截图按天数由掉落清理模块统一处理（按 `DropRecord_BackUpMethod` 删除 / 拷贝备份 / 压缩备份到 `bak/`），否则保留最近 50 张（与统计页记录上限对应，`bak/` 内的备份不计入这 50 张）。
+- `DropRecord_CommissionRecord`（do_not/save/upload/save_and_upload）控制委托掉落图的保存与上传。`DropRecord_CommissionIncomeScreenshot` 控制出钻收获截图落盘，当月钻石截图完整保留。收益记录按月完整保存，统计页以每页10条展示当月全部记录，并提供钻石截图筛选。其他月份截图继续遵循 `DropRecord_RetentionDays` 与 `DropRecord_BackUpMethod` 的过期归置方式。
 - `<task>.GemsFarming.CommissionLimit`、`HighValueCommissionFilterCount`（默认 32）、`HighValueCommissionReserve`（默认 2）：GemsFarming 与 ThreeOilLowCost 任务共用 GemsFarming 配置组。run() 末尾用过滤器前 N 条规则统计 pending 的高价值委托，数量达到保留量时说明「抢委托的时机未到」，把这两个任务延迟到最近的委托完成时刻（无运行中委托则延迟 120 分钟）。
 
 ## 11. 异常与错误处理

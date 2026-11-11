@@ -20,6 +20,7 @@ import os
 import re
 import threading
 import time
+from datetime import datetime
 
 from module.base import archive
 from module.logger import logger
@@ -58,7 +59,7 @@ def drop_screenshot_retention_days(config):
     return archive.read_days(config, 'DropRecord_RetentionDays', default=0)
 
 
-def _collect_expired(folder, deadline, now, pattern=None):
+def _collect_expired(folder, deadline, now, pattern=None, protected_month=None):
     """收集文件夹下的过期截图，按所在目录分组。
 
     ``bak`` 目录不参与扫描：拷贝备份会保留原文件的修改时间，
@@ -69,6 +70,7 @@ def _collect_expired(folder, deadline, now, pattern=None):
         deadline (float): 保留时长（秒），文件年龄超过它即视为过期。
         now (float): 当前时间戳。
         pattern (re.Pattern): 文件名过滤器，None 表示所有 .png 都算。
+        protected_month (str | None): 需要完整保留的月份目录。
 
     Returns:
         dict[str, list[str]]: 所在目录 → 过期文件路径列表。
@@ -79,7 +81,7 @@ def _collect_expired(folder, deadline, now, pattern=None):
 
     for path, dirs, names in os.walk(folder):
         # topdown 时裁剪 dirs 才能真正跳过整个 bak 子树
-        dirs[:] = [d for d in dirs if d != BAK_FOLDER]
+        dirs[:] = [d for d in dirs if d not in (BAK_FOLDER, protected_month)]
         expired = []
         for name in names:
             if not name.endswith('.png'):
@@ -115,7 +117,7 @@ def _remove_empty_folders(folder):
 
 
 def _expire_folder(folder, deadline, now, method, zip_method, name,
-                   pattern=None, prefix=''):
+                   pattern=None, prefix='', protected_month=None):
     """按配置清理一个来源目录，返回处理的文件数。
 
     Args:
@@ -127,11 +129,12 @@ def _expire_folder(folder, deadline, now, method, zip_method, name,
         name (str): 分组目录名为空时的备用来源标识。
         pattern (re.Pattern): 文件名过滤器。
         prefix (str): 来源标识前缀，用于区分同级的多个来源。
+        protected_month (str | None): 需要完整保留的月份目录。
 
     Returns:
         int: 处理的文件数。
     """
-    groups = _collect_expired(folder, deadline, now, pattern)
+    groups = _collect_expired(folder, deadline, now, pattern, protected_month)
     if not groups:
         return 0
 
@@ -175,7 +178,8 @@ def cleanup_drop_screenshots(config, retention_days):
     if instance:
         handled += _expire_folder(
             os.path.join(COMMISSION_REWARD_FOLDER, str(instance)), deadline, now,
-            method, zip_method, name=str(instance), prefix=f'{instance}_')
+            method, zip_method, name=str(instance), prefix=f'{instance}_',
+            protected_month=datetime.fromtimestamp(now).strftime('%Y-%m'))
 
     if handled:
         logger.info(

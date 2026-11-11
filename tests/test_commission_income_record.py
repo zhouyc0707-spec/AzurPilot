@@ -1,4 +1,4 @@
-"""委托收益记录：一次委托收获 = 一条记录 = 一张截图。
+"""委托收益记录按次保存，含钻石的收获附带截图。
 
 回归点：一个「获得道具」弹窗就是一次收获，必须单独成条；绝不能把多次收获
 （多张截图）合并进同一条记录，也不能给一条记录塞两张截图。
@@ -6,7 +6,9 @@
 
 import unittest
 from types import MethodType, SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
+
+import numpy as np
 
 # WebUI 测试会往 sys.modules 注入假的 PIL 模块；同进程混跑时先摘掉它，
 # 否则下面导入真实图像库的模块会报 ImportError
@@ -47,7 +49,7 @@ class _RecognitionStub:
 class CommissionIncomeRecordHarness(unittest.TestCase):
     """直接驱动 _record_commission_income，只替换识别与落盘。"""
 
-    def _run(self, images, results, page_hits=None, screenshot_paths=None):
+    def _run(self, images, results, page_hits=None, screenshot_paths=None, names=None):
         """
         Args:
             images: 本次领取收集到的截图列表。
@@ -76,6 +78,7 @@ class CommissionIncomeRecordHarness(unittest.TestCase):
                 Commission_CommissionNotifyReward=False,
             ),
             _commission_reward_images=list(images),
+            _commission_reward_names={id(image): name for image, name in zip(images, names or [])},
             _save_commission_reward_screenshot=save_screenshot,
         )
         stub.saved_screenshots = saved
@@ -143,13 +146,13 @@ class CommissionIncomeRecordHarness(unittest.TestCase):
 
         self.assertEqual(
             [
-                ({"Oil": 282}, 1, ["alas/2026-09/shot_0.png"]),
-                ({"Oil": 79}, 1, ["alas/2026-09/shot_1.png"]),
+                ({"Oil": 282}, 1, []),
+                ({"Oil": 79}, 1, []),
             ],
             self._records(db),
         )
 
-    def test_every_record_carries_exactly_one_screenshot(self):
+    def test_only_gem_harvest_carries_screenshot(self):
         stub, db = self._run(
             images=[object(), object(), object()],
             results=[[_item("Gem", 2)], [_item("Oil", 30)], [_item("Coin", 60)]],
@@ -157,9 +160,17 @@ class CommissionIncomeRecordHarness(unittest.TestCase):
 
         records = self._records(db)
         self.assertEqual(3, len(records))
-        for _, commission_count, screenshots in records:
+        self.assertEqual([len(row[2]) for row in records], [1, 0, 0])
+        for _, commission_count, _ in records:
             self.assertEqual(1, commission_count)
-            self.assertEqual(1, len(screenshots))
+
+    def test_each_harvest_keeps_its_confirmed_name(self):
+        _, db = self._run(
+            images=[object(), object()], results=[[_item('Gem', 12)], [_item('Oil', 79)]],
+            names=['BIW要员护卫', None],
+        )
+        self.assertEqual([call.kwargs['commission_name'] for call in db.add_commission_income.call_args_list],
+                         ['BIW要员护卫', None])
 
     def test_invalid_frame_is_dropped_and_writes_no_record(self):
         """没通过「获取物品」页面校验的帧既不落盘也不写记录。"""
@@ -169,8 +180,8 @@ class CommissionIncomeRecordHarness(unittest.TestCase):
             page_hits=[True, False],
         )
 
-        self.assertEqual([({"Oil": 282}, 1, ["alas/2026-09/shot_0.png"])], self._records(db))
-        self.assertEqual(1, len(stub.saved_screenshots))
+        self.assertEqual([({"Oil": 282}, 1, [])], self._records(db))
+        self.assertEqual([], stub.saved_screenshots)
 
     def test_frame_without_tracked_item_writes_no_record(self):
         """只识别到未跟踪物品（如家具币）时不留空记录。"""
@@ -183,11 +194,11 @@ class CommissionIncomeRecordHarness(unittest.TestCase):
         """截图落盘失败时记录仍要写，且不带截图路径。"""
         stub, db = self._run(
             images=[object()],
-            results=[[_item("Oil", 282)]],
+            results=[[_item("Gem", 12)]],
             screenshot_paths=[None],
         )
 
-        self.assertEqual([({"Oil": 282}, 1, [])], self._records(db))
+        self.assertEqual([({"Gem": 12}, 1, [])], self._records(db))
 
     def test_uncertain_quantity_is_archived_without_an_empty_record(self):
         image = object()
@@ -198,8 +209,95 @@ class CommissionIncomeRecordHarness(unittest.TestCase):
     def test_bad_quantity_does_not_merge_or_lose_another_harvest(self):
         bad, good = object(), object()
         stub, db = self._run(images=[bad, good], results=[[_item("Oil", 0)], [_item("Oil", 79)]])
-        self.assertEqual([({"Oil": 79}, 1, ["alas/2026-09/shot_1.png"])], self._records(db))
-        self.assertEqual([(bad, "alas"), (good, "alas")], stub.saved_screenshots)
+        self.assertEqual([({"Oil": 79}, 1, [])], self._records(db))
+        self.assertEqual([(bad, "alas")], stub.saved_screenshots)
+
+
+class TestCommissionIncomeNameCollection(unittest.TestCase):
+    """通过真实领取状态循环核对完成页、奖励页与名称的关联。"""
+
+    def test_name_reader_uses_existing_catalog_and_server_alias(self):
+        from module.statistics.commission_drop import read_commission_name
+
+        with patch('module.ocr.ocr.Ocr') as ocr:
+            ocr.return_value.ocr.return_value = 'BIW巡视护卫'
+            self.assertEqual(read_commission_name(object(), 'cn_ios'), 'BIW巡视护卫')
+        self.assertEqual(ocr.call_args.kwargs['lang'], 'cnocr')
+
+    def collect(self, kinds, names):
+        from module.commission import commission as module
+
+        images = [np.full((1, 1, 3), index, dtype=np.uint8) for index in range(len(kinds))]
+        handler = MagicMock()
+        handler.config = SimpleNamespace(
+            config_name='test', SERVER='cn', DropRecord_CommissionRecord='do_not',
+            DropRecord_CloudUpload=False, Commission_DetectShipDrop=False,
+        )
+        handler.stat.new.return_value.__enter__.return_value = None
+        handler.device.image = images[0]
+        position = 0
+
+        def screenshot():
+            nonlocal position
+            position += 1
+            handler.device.image = images[position]
+
+        def frame_kind(image):
+            return kinds[int(image[0, 0, 0])]
+
+        def read_name(image, server):
+            self.assertEqual(server, 'cn')
+            name = names.get(int(image[0, 0, 0]))
+            if name is None:
+                raise ValueError('无法确认委托名')
+            return name
+
+        def appear(button, **kwargs):
+            kind = frame_kind(handler.device.image)
+            return ((kind in ('done', 'perfect', 'exp') and button is module.EXP_INFO_S_REWARD)
+                    or (kind == 'reward' and button is module.GET_ITEMS_1))
+
+        collected = []
+
+        def record():
+            collected.extend(handler._commission_reward_names.get(id(image))
+                             for image in handler._commission_reward_images)
+            return True
+
+        handler.device.screenshot.side_effect = screenshot
+        handler.ui_page_appear.side_effect = lambda *args, **kwargs: frame_kind(handler.device.image) == 'exit'
+        handler.appear.side_effect = appear
+        handler.appear_then_click.return_value = False
+        handler.ui_main_appear_then_click.return_value = False
+        handler.ui_additional.return_value = False
+        handler._record_commission_income.side_effect = record
+        with (
+            patch.object(module, 'Timer', side_effect=lambda *args: Mock(reached=Mock(return_value=True))),
+            patch('module.statistics.cl1_database.db'),
+            patch('module.statistics.commission_drop.classify_frame', side_effect=frame_kind),
+            patch('module.statistics.commission_drop.read_commission_name', side_effect=read_name) as name_reader,
+        ):
+            self.assertTrue(RewardCommission._commission_receive(handler))
+        return collected, name_reader.call_count
+
+    def test_same_name_consecutive_commissions_are_each_collected_without_upload(self):
+        result, reads = self.collect(
+            ['done', 'reward', 'reward', 'done', 'reward', 'reward', 'exit'],
+            {0: 'BIW要员护卫', 3: 'BIW要员护卫'},
+        )
+        self.assertEqual(result, ['BIW要员护卫', 'BIW要员护卫'])
+        self.assertEqual(reads, 2)
+
+    def test_unknown_or_missing_status_keeps_name_unknown(self):
+        for kinds in (['done', 'reward', 'reward', 'exit'], ['reward', 'reward', 'exit']):
+            with self.subTest(kinds=kinds):
+                result, _ = self.collect(kinds, {})
+                self.assertEqual(result, [None])
+
+    def test_multiple_reward_pages_without_boundary_have_unknown_names(self):
+        result, _ = self.collect(
+            ['done', 'reward', 'reward', 'reward', 'reward', 'exit'], {0: 'BIW要员护卫'})
+        self.assertEqual(result, [None, None])
 
 
 class TestCommissionIncomeScreenshotInvariant(unittest.TestCase):

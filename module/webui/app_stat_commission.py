@@ -21,12 +21,27 @@ from module.webui.app_types import WebUIMixinBase
 
 
 _COMMISSION_RECENT_PAGE_SIZE = 10
-_COMMISSION_RECENT_TOTAL = 50
+_GEM_FILTER_SCOPE = "commission_income_gem_filter"
 
 # 标题旁的刷新图标按钮作用域名，与 entry-alas.css 里 #pywebio-scope-<name> 的规则配套
 _REFRESH_BTN_SCOPE = "commission_income_refresh"
 # 标题与物品卡片之间的时间范围按钮作用域名
 _PERIOD_BTN_SCOPE = "commission_income_period"
+
+
+def _has_gem_screenshot(entry):
+    """确认记录含正钻石收益和可查看截图，兼容旧物品别名。"""
+    items = entry.get("items")
+    if not entry.get("screenshots") or not isinstance(items, dict):
+        return False
+    for name in ("Gem", "Gems"):
+        try:
+            amount = int(items.get(name, 0))
+        except (TypeError, ValueError):
+            continue
+        if amount > 0:
+            return True
+    return False
 
 
 class CommissionIncomeStatisticsMixin(WebUIMixinBase):
@@ -56,6 +71,7 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
         from module.statistics.commission_income_stats import (
             get_commission_income_summary,
             get_recent_commission_entries,
+            get_monthly_gem_commission_success,
             COMMISSION_ITEM_META,
             COMMISSION_ITEM_NAME_MAP,
             COMMISSION_TRACKED_ITEMS,
@@ -85,13 +101,15 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
             "Coin": "static/assets/gui/icon/icon_5.png",
         }
         period = self._commission_income_period
+        recent = get_recent_commission_entries(instance_name, limit=None)
+        if getattr(self, "_commission_gem_screenshots_only", False):
+            recent = [entry for entry in recent if _has_gem_screenshot(entry)]
 
         return {
             "period": period,
             "summary": get_commission_income_summary(instance_name, period=period),
-            "recent": get_recent_commission_entries(
-                instance_name, limit=_COMMISSION_RECENT_TOTAL
-            ),
+            "recent": recent,
+            "gem_success": get_monthly_gem_commission_success(instance_name),
             "running": self._load_running_commissions(instance_name),
             "item_name_map": item_name_map,
             "item_icon_map": item_icon_map,
@@ -126,7 +144,7 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
         item_name_map = income_data["item_name_map"]
         item_icon_map = income_data["item_icon_map"]
         return (
-            self._build_commission_summary_html(rows, item_name_map, item_icon_map),
+            self._build_commission_summary_html(rows, item_name_map, item_icon_map, income_data.get("gem_success")),
             self._build_commission_recent_html(
                 income_data["recent"],
                 summary,
@@ -140,7 +158,7 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
             ),
         )
 
-    def _build_commission_summary_html(self, rows, item_name_map, item_icon_map):
+    def _build_commission_summary_html(self, rows, item_name_map, item_icon_map, gem_success=None):
         html = """
                 <style>
                     #commission_income_container > div,
@@ -190,6 +208,20 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
                 else f'<div style="width: 12px; height: 12px; border-radius: 50%; background: {row["color"]}; flex-shrink: 0;"></div>'
             )
 
+            success_html = ""
+            if row["name"] == "Gem":
+                success = gem_success or {"successes": 0, "completed": 0, "rate": None}
+                rate = f"{success['rate']:.2f}%" if success["rate"] is not None else "—"
+                counts = t("Gui.Stat.CommissionIncomeGemSuccessCount",
+                           successes=success["successes"], completed=success["completed"])
+                success_html = (
+                    f'<div class="commission-gem-success" title="{escape(t("Gui.Stat.CommissionIncomeGemSuccessHint"), quote=True)}" '
+                    'style="margin-left: auto; text-align: right; min-width: 0;">'
+                    f'<div style="font-size: 0.7rem; opacity: 0.65;">{escape(t("Gui.Stat.CommissionIncomeGemSuccessRate"))}</div>'
+                    f'<div style="font-size: 1rem;">{rate}</div>'
+                    f'<div style="font-size: 0.65rem; opacity: 0.55;">{escape(counts)}</div></div>'
+                )
+
             html += f"""
                     <div class="commission-income-metric-card" style="display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: rgba(128, 128, 128, 0.05); border-radius: 6px; border: 1px solid rgba(128, 128, 128, 0.15);">
                         {icon_html}
@@ -198,6 +230,7 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
                             <span style="font-size: 1.15rem; font-weight: 400; color: inherit;">{total_str}</span>
                             <span style="font-size: 0.72rem; opacity: 0.55;">{stat_line}</span>
                         </div>
+                        {success_html}
                     </div>"""
         return html + "</div>"
 
@@ -323,23 +356,31 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
         # 「正在进行」放在最近委托记录上方。它显示的是当前状态，与所选时间范围
         # （今日/本周/本月）无关，所以即使没有最近记录也要渲染。
         html += self._build_running_commissions_html(running, datetime_class)
+        html += '<div style="height: 1px; background: rgba(128, 128, 128, 0.2); margin: 12px 0;"></div>'
+        html += (
+            '<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px;">'
+            f'<span style="font-size: 0.9rem; font-weight: 500;">{t("Gui.Stat.CommissionIncomeRecentTitle")}</span>'
+            f'<div id="pywebio-scope-{_GEM_FILTER_SCOPE}"></div></div>'
+        )
         if recent_page:
             # 分隔线上下留白收紧：原来 24px/24px 与物品卡片网格的 20px 下边距
             # 叠加后，标题上方有 49px 空白，占了近半屏的一行高
-            html += f'<div style="height: 1px; background: rgba(128, 128, 128, 0.2); margin: 12px 0;"></div>'
-            html += f'<div style="font-size: 0.9rem; font-weight: 500; color: inherit; margin-bottom: 8px;">{t("Gui.Stat.CommissionIncomeRecentTitle")}</div>'
             html += '<div style="font-size: 13px; width: 100%;">'
             for entry in recent_page:
-                ts = entry.get("ts", "")
+                ts = str(entry.get("ts") or "")
                 try:
                     dt = datetime_class.fromisoformat(ts)
                     time_str = dt.strftime("%m-%d %H:%M")
                 except Exception:
                     time_str = ts[:16] if ts else "--"
-                items = entry.get("items", {})
+                items = entry.get("items") or {}
                 item_parts = []
                 for raw_name, amount in items.items():
-                    if not amount or int(amount) <= 0:
+                    try:
+                        amount = int(amount)
+                    except (TypeError, ValueError):
+                        continue
+                    if amount <= 0:
                         continue
                     mapped_name = item_name_lookup.get(raw_name, raw_name)
                     if mapped_name not in tracked_items:
@@ -376,21 +417,27 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
                 # 行内只保留布局用的 flex-shrink / margin-left
                 shots = entry.get("screenshots") or []
                 shot_links = ""
-                if shots:
+                if _has_gem_screenshot(entry):
                     shot_links = (
-                        f'<a href="/static/commission_rewards/{escape(shots[0], quote=True)}" '
+                        f'<a href="/static/commission_rewards/{escape(str(shots[0]), quote=True)}" '
                         f'target="_blank" rel="noopener" class="alas-shot-link" '
                         f'style="flex-shrink: 0; margin-left: 8px;">{t("Gui.Stat.ViewScreenshot")}</a>'
                     )
 
+                name = entry.get("commission_name")
+                name_html = (f'<span style="margin-right: 12px;">{escape(name)}</span>'
+                             if isinstance(name, str) and name.strip() else "")
                 html += (
                     f'<div class="commission-income-recent-row" style="display: flex; align-items: center; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid rgba(128, 128, 128, 0.1);">'
-                    f'<span style="opacity: 0.65; min-width: 80px; font-size: 12px; flex-shrink: 0;">{time_str}</span>'
+                    f'<span style="opacity: 0.65; min-width: 80px; font-size: 12px; flex-shrink: 0;">{escape(time_str)}</span>'
+                    f"{name_html}"
                     f'<span>{items_str}</span>'
                     f"{shot_links}"
                     f"</div>"
                 )
             html += "</div>"
+        elif getattr(self, "_commission_gem_screenshots_only", False):
+            html += f'<p style="opacity: 0.6;">{t("Gui.Stat.CommissionIncomeGemScreenshotsEmpty")}</p>'
 
         html += f'<p style="font-size: 0.75rem; opacity: 0.5; margin-top: 10px;">{t("Gui.Stat.CommissionIncomeTotalCommissions", value=summary["total_commissions"])}</p>'
         return html + "</div>"
@@ -436,6 +483,17 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
                     group=True,
                 )
             put_html(recent_html, scope="commission_income")
+
+            def toggle_gem_screenshots():
+                self._commission_gem_screenshots_only = not getattr(self, "_commission_gem_screenshots_only", False)
+                self._commission_recent_page = 0
+                self._render_commission_income()
+
+            filter_key = ("Gui.Stat.CommissionIncomeAllRecords"
+                          if getattr(self, "_commission_gem_screenshots_only", False)
+                          else "Gui.Stat.CommissionIncomeGemScreenshots")
+            with use_scope(_GEM_FILTER_SCOPE, clear=True):
+                put_button(t(filter_key), onclick=toggle_gem_screenshots, color="off")
             if recent_count > _COMMISSION_RECENT_PAGE_SIZE:
                 self._output_recent_pagination(recent_count)
 
@@ -478,7 +536,8 @@ class CommissionIncomeStatisticsMixin(WebUIMixinBase):
         pagination_buttons = [
             {"label": "上一页", "value": "prev", "color": "off"},
         ]
-        for index in range(1, min(5, total_pages) + 1):
+        first_page = max(0, min(page - 2, total_pages - 5))
+        for index in range(first_page + 1, min(first_page + 5, total_pages) + 1):
             pagination_buttons.append(
                 {
                     "label": str(index),

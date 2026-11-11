@@ -727,6 +727,44 @@ export function createMockState({ empty = false } = {}) {
         return { instance: name, generatedAt: timestamp(new Date()), count: cats.length, cats: cats.slice(-(params.limit ?? 100)) }
       }
       case 'statistics.resourceFlows': return resourceFlows(params, snapshot(name), storageCatalog, name === 'demo-alt')
+      case 'statistics.legacy': {
+        const currentMonth = timestamp(new Date()).slice(0, 7)
+        const month = params.month ?? currentMonth
+        const noData = name === 'demo-alt'
+        const itemInfo = [
+          ['Gem', '#d762ad'], ['Cube', '#38a3b4'], ['Chip', '#7a80bc'], ['Oil', '#658ca2'], ['Coin', '#d3a443'],
+        ]
+        const recent = noData ? [] : Array.from({length: 65}, (_, index) => {
+          const gem = index % 5 === 0
+          const item = gem ? itemInfo[0] : itemInfo[4]
+          return {
+            time: `${currentMonth.slice(5)}-${String(11 - Math.floor(index / 10)).padStart(2, '0')} ${String(23 - index % 10).padStart(2, '0')}:30`,
+            name: index % 7 === 0 ? null : gem ? '要员护卫' : '日常资源开发',
+            items: [{name: item[0], labelKey: `Gui.Stat.CommissionIncomeItem${item[0]}`, color: item[1], icon: gem ? 1 : 5, amount: gem ? 30 : 200}],
+            screenshot: gem && index !== 5 ? '/research-items/Gem.png' : null,
+          }
+        })
+        const periods = Object.fromEntries(['day', 'week', 'month'].map((period, index) => [period, {
+          totalCommissions: noData ? 0 : [8, 30, 65][index],
+          cards: itemInfo.map(([key, color], cardIndex) => ({
+            name: key, index: cardIndex + 1, color, labelKey: `Gui.Stat.CommissionIncomeItem${key}`,
+            total: noData ? 0 : key === 'Gem' ? [30, 180, 390][index] : (index + 1) * 400,
+            count: noData ? 0 : key === 'Gem' ? [1, 6, 13][index] : (index + 1) * 5,
+            avg: noData ? 0 : key === 'Gem' ? 30 : 80,
+          })),
+        }]))
+        return {
+          instance: name, month: currentMonth, dashboardKeys: [], apChart: {series: []},
+          opsi: {summary: [], columns: [], rows: []},
+          meowLoot: {month, isCurrentMonth: month === currentMonth, availableMonths: [], lastRecord: '-', columns: [], rows: []},
+          shipExp: {hasData: false, columns: [], rows: []},
+          commission: {
+            periods, gemSuccess: noData ? {successes: 0, completed: 0, rate: null} : {successes: 13, completed: 20, rate: 65},
+            recent: {rows: recent, pageSize: 10, maxPages: Math.max(1, Math.ceil(recent.length / 10)), limit: null},
+            running: {available: true, scannedAt: timestamp(new Date()), items: []},
+          },
+        }
+      }
       case 'statistics.report': {
         const makePoints = (res, days = 7) => {
           if (name === 'demo-alt') return []

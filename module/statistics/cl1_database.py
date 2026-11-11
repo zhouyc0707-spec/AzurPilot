@@ -1261,6 +1261,22 @@ class Cl1Database:
                     or any(type(value) is not list for value in extra.values())):
                 return None
             allowed_values.add(row['compat_value_set_id'])
+        # 委托名是逐次收获的独立属性，原地追加时保留既有名称扩展。
+        commission_rows = conn.execute(
+            '''SELECT entry_kind, compat_value_set_id FROM commission_income
+            WHERE instance=? AND month=? AND compat_value_set_id IS NOT NULL''',
+            (instance, month),
+        ).fetchall()
+        if commission_rows and not month_row['field_mask'] & (1 << MONTH_FIELDS.index('commission_income_entries')):
+            return None
+        for row in commission_rows:
+            if row['entry_kind'] != 'record':
+                return None
+            extra = read_value(conn, row['compat_value_set_id'])
+            if (type(extra) is not dict or not extra.keys() <= {'commission_name'}
+                    or any(value is not None and not isinstance(value, str) for value in extra.values())):
+                return None
+            allowed_values.add(row['compat_value_set_id'])
         typed_values = conn.execute(
             'SELECT id FROM typed_value_sets WHERE instance=? AND month=?',
             (instance, month),
@@ -2179,7 +2195,8 @@ class Cl1Database:
         if last is not None and (not row['field_mask'] & (1 << MONTH_FIELDS.index(name))
                                  or last >= 2 ** 63 - 1):
             return None
-        compatibility = '' if name == 'research_drop_entries' else ' OR compat_value_set_id IS NOT NULL'
+        compatibility = ('' if name in ('research_drop_entries', 'commission_income_entries')
+                         else ' OR compat_value_set_id IS NOT NULL')
         if conn.execute(
             f'''SELECT 1 FROM {table} WHERE instance=? AND month=?
                 AND (entry_kind != 'record' {compatibility}) LIMIT 1''',
@@ -2208,7 +2225,7 @@ class Cl1Database:
 
     @classmethod
     def _append_native_revenue(cls, conn, instance, month, name, entry, family):
-        """只追加本次收益及其子项，沿用最后 5000 条的顺序和上限。"""
+        """只追加本次收益及子项，委托收获保留整月，其它收益沿用条数上限。"""
         from module.persistence.snapshots import MONTH_FIELDS, save_children, save_row
         from module.persistence.values import normalize
 
@@ -2217,16 +2234,17 @@ class Cl1Database:
         entry = normalize(entry, special=True)
         row_id = save_row(conn, table, dict(owner, ordinal=ordinal), entry, fields, owner, entry=True)
         save_children(conn, table, row_id, entry, owner)
-        discarded = conn.execute(
-            f'''SELECT compat_value_set_id FROM {table} WHERE instance=? AND month=?
-                ORDER BY ordinal DESC LIMIT -1 OFFSET 5000''', (instance, month),
-        ).fetchall()
-        conn.execute(
-            f'''DELETE FROM {table} WHERE id IN (
-                SELECT id FROM {table} WHERE instance=? AND month=?
-                ORDER BY ordinal DESC LIMIT -1 OFFSET 5000)''', (instance, month),
-        )
-        cls._delete_unreferenced_month_values(conn, [row['compat_value_set_id'] for row in discarded])
+        if name not in ('commission_income_entries', 'gem_commission_entries'):
+            discarded = conn.execute(
+                f'''SELECT compat_value_set_id FROM {table} WHERE instance=? AND month=?
+                    ORDER BY ordinal DESC LIMIT -1 OFFSET 5000''', (instance, month),
+            ).fetchall()
+            conn.execute(
+                f'''DELETE FROM {table} WHERE id IN (
+                    SELECT id FROM {table} WHERE instance=? AND month=?
+                    ORDER BY ordinal DESC LIMIT -1 OFFSET 5000)''', (instance, month),
+            )
+            cls._delete_unreferenced_month_values(conn, [row['compat_value_set_id'] for row in discarded])
         conn.execute('UPDATE cl1_months SET field_mask=field_mask | ? WHERE instance=? AND month=?',
                      (1 << MONTH_FIELDS.index(name), instance, month))
 
@@ -2319,7 +2337,7 @@ class Cl1Database:
         }
         entries = data.get("gem_commission_entries", [])
         entries.append(entry)
-        data["gem_commission_entries"] = entries[-5000:]
+        data["gem_commission_entries"] = entries
 
     def _settle_running_in_months(
         self, data, months, now, reward, name=None, duration_hour=None, create_time=None,
@@ -2369,10 +2387,11 @@ class Cl1Database:
         *,
         gem_duration: Optional[int] = None,
         completed_at: Optional[datetime] = None,
+        commission_name: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """记录收益，并在同一事务中结算匹配的钻石委托。
 
-        截图仍保存相对路径；记录格式、5000 条上限和当前月归档不变。
+        截图保存相对路径，逐次收益按当前月完整归档。
         gem_duration 来自奖励识别，匹配最早到期的同时间长度委托。
         返回已结算的运行记录，未匹配到时仅保存收益并返回 None。
 
@@ -2394,6 +2413,8 @@ class Cl1Database:
             "commission_count": self._coerce_int(commission_count),
             "screenshots": paths,
         }
+        if isinstance(commission_name, str) and commission_name.strip():
+            entry["commission_name"] = commission_name.strip()
         removed = None
         with self._stats_transaction() as conn:
             handled, removed = self._try_add_commission_income(
@@ -2405,7 +2426,7 @@ class Cl1Database:
             data = {month: self._get_stats_in_connection(conn, instance, month) for month in read_months}
             entries = data[months[0]].get("commission_income_entries", [])
             entries.append(entry)
-            data[months[0]]["commission_income_entries"] = entries[-5000:]
+            data[months[0]]["commission_income_entries"] = entries
             changed = {months[0]}
             if gem_duration is not None:
                 for commission in self._running_commissions_from_months(data, months):
@@ -2516,7 +2537,8 @@ class Cl1Database:
             month: 月份，默认当前月
 
         Returns:
-            委托收益条目列表，每个条目包含 ts, items, commission_count
+            委托收益条目列表，包含 ts、items、commission_count、screenshots，
+            确认名称的收获另含 commission_name。
         """
         if year is None or month is None:
             now = datetime.now()
@@ -2999,12 +3021,15 @@ class Cl1Database:
         items: Dict[str, int],
         commission_count: int = 1,
         screenshots: Optional[List[str]] = None,
+        *,
+        commission_name: Optional[str] = None,
     ):
         """异步记录委托收益。"""
         from module.base.async_executor import async_executor
 
         return async_executor.submit(
-            self.add_commission_income, instance, items, commission_count, screenshots
+            self.add_commission_income, instance, items, commission_count, screenshots,
+            commission_name=commission_name,
         )
 
     def async_get_commission_income(

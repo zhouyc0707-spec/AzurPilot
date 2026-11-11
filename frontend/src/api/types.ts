@@ -179,7 +179,7 @@ export interface LegacyShipPanel {
 }
 export interface LegacyCommissionCard {name: string; index: number; color: string; labelKey: string; total: number; count: number; avg: number}
 export interface LegacyCommissionItem {name: string; labelKey: string; color: string; icon: number; amount: number}
-export interface LegacyCommissionRecent {time: string; items: LegacyCommissionItem[]; screenshot: string | null}
+export interface LegacyCommissionRecent {time: string; name?: string | null; items: LegacyCommissionItem[]; screenshot: string | null}
 export interface LegacyCommissionRunning {name: string; finish: number; rare: boolean}
 /**
  * 旧版统计页（旧版主题整页还原）的整页数据，见后端
@@ -193,7 +193,8 @@ export interface LegacyStatisticsReport {
   shipExp: LegacyShipPanel
   commission: {
     periods: Record<'day' | 'week' | 'month', {cards: LegacyCommissionCard[]; totalCommissions: number}>
-    recent: {rows: LegacyCommissionRecent[]; pageSize: number; maxPages: number; limit: number}
+    gemSuccess?: {successes: number; completed: number; rate: number | null}
+    recent: {rows: LegacyCommissionRecent[]; pageSize: number; maxPages: number; limit: number | null}
     running: {available: boolean; scannedAt: string | null; items: LegacyCommissionRunning[]}
   }
 }
