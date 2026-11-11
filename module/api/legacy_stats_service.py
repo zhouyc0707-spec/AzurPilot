@@ -176,6 +176,12 @@ def _opsi_panel(instance, record_levels=None):
 
     has_cl1 = has_cl1_records(summary, getattr(exp_stats, 'data', None))
 
+    # 与新版舰船经验共用最近100场短猫均值，不按月份或侵蚀等级拆分。
+    try:
+        avg_meow_battle = _float_or_dash(exp_stats.get_average_meow_battle_time())
+    except Exception:
+        avg_meow_battle = DASH
+
     cl1_values = {
         'Gui.Stat.Month': month,
         'Gui.Stat.BattleCount': battles,
@@ -201,7 +207,6 @@ def _opsi_panel(instance, record_levels=None):
             meow_encounters = int(data.get('akashi_encounters', 0) or 0)
             meow_ap = int(data.get('akashi_ap', 0) or 0)
             meow_devices = int(data.get('siren_research_devices', 0) or 0)
-            avg_battle_time = float(data.get('avg_battle_time', 0.0) or 0)
             avg_round_time = float(data.get('avg_round_time', 0.0) or 0)
             meow[hazard_level] = {
                 'hasRecords': has_meow_records(data, hazard_level, summary.get('raw')),
@@ -212,7 +217,7 @@ def _opsi_panel(instance, record_levels=None):
                 'avg_ap': str(int(meow_ap / meow_encounters + 0.5)) if meow_encounters > 0 else DASH,
                 'siren_devices': meow_devices,
                 'siren_rate': round(meow_devices / meow_rounds * 100, 2) if meow_rounds > 0 else DASH,
-                'avg_battle_time': _float_or_dash(avg_battle_time) if avg_battle_time > 0 else DASH,
+                'avg_battle_time': avg_meow_battle,
                 'avg_round_time': _float_or_dash(avg_round_time) if avg_round_time > 0 else DASH,
             }
     except Exception:

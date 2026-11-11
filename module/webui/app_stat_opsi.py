@@ -354,6 +354,15 @@ class OpsiStatisticsMixin(WebUIMixinBase):
         Returns:
             dict: ``{侵蚀等级: 指标字典}``，取不到数据时返回空字典。
         """
+        # 与新版舰船经验共用最近100场短猫均值，不按月份或侵蚀等级拆分。
+        try:
+            from module.statistics.ship_exp_stats import get_ship_exp_stats
+
+            avg_battle_time = get_ship_exp_stats(instance_name=instance_name).get_average_meow_battle_time()
+            avg_battle_str = f"{avg_battle_time:.1f}{t('Gui.Stat.SecondUnit')}"
+        except Exception:
+            avg_battle_str = "-"
+
         stats = {}
         try:
             from module.statistics.legacy_display import has_meow_records, monthly_meow_record_levels
@@ -378,7 +387,6 @@ class OpsiStatisticsMixin(WebUIMixinBase):
                 encounters = int(data.get("akashi_encounters", 0) or 0)
                 akashi_ap = int(data.get("akashi_ap", 0) or 0)
                 battles = int(data.get("battle_count", 0) or 0)
-                avg_battle_time = float(data.get("avg_battle_time", 0.0) or 0)
                 avg_round_time = float(data.get("avg_round_time", 0.0) or 0)
                 siren_count = int(data.get("siren_research_devices", 0) or 0)
                 stats[hazard_level] = {
@@ -399,11 +407,7 @@ class OpsiStatisticsMixin(WebUIMixinBase):
                     "siren_rate": (
                         f"{siren_count / rounds * 100:.2f}%" if rounds > 0 else "-"
                     ),
-                    "avg_battle_time": (
-                        f"{avg_battle_time:.1f}{t('Gui.Stat.SecondUnit')}"
-                        if avg_battle_time > 0
-                        else "-"
-                    ),
+                    "avg_battle_time": avg_battle_str,
                     "avg_round_time": (
                         f"{avg_round_time:.1f}{t('Gui.Stat.SecondUnit')}"
                         if avg_round_time > 0

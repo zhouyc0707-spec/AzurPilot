@@ -96,7 +96,8 @@ def patch_sources(ship_exp=None, meow=None, summary=None, ap_bought=0, ap_rows=N
     summary = summary or {'month': '2026-09', 'total_battles': 0}
     now = datetime.now()
     exp_stats = ship_exp or SimpleNamespace(
-        get_average_battle_time=lambda: 0.0, get_average_round_time=lambda: 0.0)
+        get_average_battle_time=lambda: 0.0, get_average_round_time=lambda: 0.0,
+        get_average_meow_battle_time=lambda: 11.57)
     cl1_db = MagicMock()
     if meow_raises:
         cl1_db.get_meow_stats.side_effect = RuntimeError('读取失败')
@@ -142,7 +143,8 @@ class OpsiPanelTests(unittest.TestCase):
                 'avg_battle_time': 0.0, 'avg_round_time': 0.0},
         }
         with patched(ship_exp=SimpleNamespace(
-                get_average_battle_time=lambda: 11.66, get_average_round_time=lambda: 35.44),
+                get_average_battle_time=lambda: 11.66, get_average_round_time=lambda: 35.44,
+                get_average_meow_battle_time=lambda: 11.57),
                 meow=meow, summary=summary, ap_bought=1500):
             panel = _opsi_panel('alas')
 
@@ -162,8 +164,9 @@ class OpsiPanelTests(unittest.TestCase):
         # 侵蚀3：无数据的列给占位符
         self.assertEqual(row_three[3], int(round(20.4)))
         self.assertEqual(row_three[4], int(round(20.4 * 15)))
-        self.assertEqual(row_three[10], 12.3)
-        self.assertEqual(row_five[10], DASH)
+        # 短猫战斗耗时与新版舰船经验一致，两行共享最近100场样本。
+        self.assertEqual(row_three[10], 11.6)
+        self.assertEqual(row_five[10], 11.6)
         # 汇总行：净赚 = 购买 − 消耗、循环效率 = 净赚 / 消耗，只有后两项带正负色
         summary_items = {item['key'].split('.')[-1]: item for item in panel['summary']}
         self.assertEqual(summary_items['MonthlyPurchasedAP']['value'], 1500)
@@ -172,6 +175,21 @@ class OpsiPanelTests(unittest.TestCase):
         self.assertEqual(summary_items['MonthlyNetAP']['sign'], 'gain')
         self.assertEqual(summary_items['MonthlyLoopEfficiency']['sign'], 'gain')
         self.assertEqual(summary_items['MonthlyPurchasedAP']['sign'], '')
+
+    def test_meow_time_read_failure_keeps_other_statistics(self):
+        stats = SimpleNamespace(
+            get_average_battle_time=lambda: 10.7,
+            get_average_round_time=lambda: 39.4,
+            get_average_meow_battle_time=MagicMock(side_effect=RuntimeError('读取失败')),
+        )
+        with patched(ship_exp=stats, summary={'month': '2026-09', 'total_battles': 1}, meow={5: {
+                'battle_count': 60, 'effective_rounds': 20,
+                'avg_battle_time': 21, 'avg_round_time': 107.7}}):
+            panel = _opsi_panel('alas')
+        rows = {row[1]: row for row in panel['rows']}
+        self.assertEqual(rows[1][10:], [10.7, 39.4])
+        self.assertEqual(rows[5][2], 60)
+        self.assertEqual(rows[5][10:], [DASH, 107.7])
 
     def test_zero_filled_defaults_have_no_record_and_are_hidden(self):
         """数据库的默认全零桶不是记录，默认耗时也不应使空行出现。"""
