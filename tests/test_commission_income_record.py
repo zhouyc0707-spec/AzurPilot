@@ -224,8 +224,20 @@ class TestCommissionIncomeNameCollection(unittest.TestCase):
             self.assertEqual(read_commission_name(object(), 'cn_ios'), 'BIW巡视护卫')
         self.assertEqual(ocr.call_args.kwargs['lang'], 'cnocr')
 
-    def collect(self, kinds, names):
+    def test_name_reader_rejects_bad_roman_ocr_and_accepts_stable_roman(self):
+        from module.statistics.commission_drop import read_commission_name
+
+        with patch('module.ocr.ocr.Ocr') as ocr:
+            ocr.return_value.ocr.return_value = '-----------中型油田开发上------------'
+            with self.assertRaises(ValueError):
+                read_commission_name(object(), 'cn')
+            for raw in ('中型油田开发I', '中型油田开发Ⅰ'):
+                ocr.return_value.ocr.return_value = raw
+                self.assertEqual(read_commission_name(object(), 'cn'), '中型油田开发I')
+
+    def collect(self, kinds, names, stable_frames=None, blocked_exp_frames=()):
         from module.commission import commission as module
+        from module.statistics.commission_drop import read_commission_name
 
         images = [np.full((1, 1, 3), index, dtype=np.uint8) for index in range(len(kinds))]
         handler = MagicMock()
@@ -247,14 +259,18 @@ class TestCommissionIncomeNameCollection(unittest.TestCase):
 
         def read_name(image, server):
             self.assertEqual(server, 'cn')
-            name = names.get(int(image[0, 0, 0]))
-            if name is None:
-                raise ValueError('无法确认委托名')
-            return name
+            ocr.return_value.ocr.return_value = names.get(int(image[0, 0, 0]), '')
+            return read_commission_name(image, server)
+
+        def stable_frame(**kwargs):
+            stable = (stable_frames or {}).get(position)
+            if stable is not None:
+                handler.device.image = np.full((1, 1, 3), stable, dtype=np.uint8)
 
         def appear(button, **kwargs):
             kind = frame_kind(handler.device.image)
-            return ((kind in ('done', 'perfect', 'exp') and button is module.EXP_INFO_S_REWARD)
+            return ((kind in ('done', 'perfect', 'exp') and button is module.EXP_INFO_S_REWARD
+                     and position not in blocked_exp_frames)
                     or (kind == 'reward' and button is module.GET_ITEMS_1))
 
         collected = []
@@ -271,9 +287,11 @@ class TestCommissionIncomeNameCollection(unittest.TestCase):
         handler.ui_main_appear_then_click.return_value = False
         handler.ui_additional.return_value = False
         handler._record_commission_income.side_effect = record
+        handler.ensure_no_info_bar.side_effect = stable_frame
         with (
             patch.object(module, 'Timer', side_effect=lambda *args: Mock(reached=Mock(return_value=True))),
             patch('module.statistics.cl1_database.db'),
+            patch('module.ocr.ocr.Ocr') as ocr,
             patch('module.statistics.commission_drop.classify_frame', side_effect=frame_kind),
             patch('module.statistics.commission_drop.read_commission_name', side_effect=read_name) as name_reader,
         ):
@@ -286,7 +304,50 @@ class TestCommissionIncomeNameCollection(unittest.TestCase):
             {0: 'BIW要员护卫', 3: 'BIW要员护卫'},
         )
         self.assertEqual(result, ['BIW要员护卫', 'BIW要员护卫'])
+        self.assertEqual(reads, 4)
+
+    def test_bad_initial_name_is_rechecked_from_stable_frame_before_click(self):
+        result, reads = self.collect(
+            ['done', 'reward', 'reward', 'exit'],
+            {0: '-----------中型油田开发上------------', 127: '中型油田开发Ⅰ'},
+            stable_frames={0: 127},
+        )
+        self.assertEqual(result, ['中型油田开发I'])
         self.assertEqual(reads, 2)
+
+    def test_done_to_exp_keeps_confirmed_name_when_stable_read_fails(self):
+        result, _ = self.collect(
+            ['done', 'exp', 'reward', 'reward', 'exit'],
+            {0: 'NYB要员护卫', 127: '无法确认'}, stable_frames={1: 127}, blocked_exp_frames={0},
+        )
+        self.assertEqual(result, ['NYB要员护卫'])
+
+    def test_different_valid_initial_and_stable_names_are_unknown(self):
+        result, _ = self.collect(
+            ['done', 'reward', 'reward', 'exit'],
+            {0: 'BIW要员护卫', 127: 'NYB要员护卫'}, stable_frames={0: 127},
+        )
+        self.assertEqual(result, [None])
+
+    def test_next_exp_without_intermediate_reward_cannot_reuse_previous_name(self):
+        result, _ = self.collect(
+            ['done', 'exp', 'reward', 'reward', 'exit'], {0: 'NYB要员护卫'},
+        )
+        self.assertEqual(result, [None])
+
+    def test_residual_completed_frame_does_not_restore_consumed_candidate(self):
+        result, reads = self.collect(
+            ['done', 'done', 'exp', 'reward', 'reward', 'exit'],
+            {0: 'NYB要员护卫', 1: 'NYB要员护卫'}, blocked_exp_frames={1},
+        )
+        self.assertEqual(result, [None])
+        self.assertEqual(reads, 3)
+
+    def test_next_exp_after_reward_cannot_reuse_previous_name(self):
+        result, _ = self.collect(
+            ['done', 'reward', 'reward', 'exp', 'reward', 'reward', 'exit'], {0: 'NYB要员护卫'},
+        )
+        self.assertEqual(result, ['NYB要员护卫', None])
 
     def test_unknown_or_missing_status_keeps_name_unknown(self):
         for kinds in (['done', 'reward', 'reward', 'exit'], ['reward', 'reward', 'exit']):

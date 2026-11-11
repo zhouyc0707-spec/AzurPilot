@@ -46,8 +46,10 @@ class TestCommissionRenderCapture(unittest.TestCase):
         drop.add.side_effect = lambda image: saved.append(int(image[0, 0, 0]))
         clicks = []
         handler.device.click.side_effect = lambda button: clicks.append(state["frame"])
-        with patch.object(timer, "time", side_effect=lambda: 10 + state["frame"] * .26), \
-                patch("module.statistics.cl1_database.db") as db:
+        with (patch.object(timer, "time", side_effect=lambda: 10 + state["frame"] * .26),
+              patch("module.statistics.cl1_database.db") as db,
+              patch("module.statistics.commission_drop.classify_frame", return_value='other'),
+              patch("module.statistics.commission_drop.read_commission_name", side_effect=ValueError('无名称夹具'))):
             result = commission.RewardCommission._commission_receive(handler)
         handler.device.sleep.assert_not_called()
         return handler, db, result, saved, clicks

@@ -2172,7 +2172,9 @@ class RewardCommission(Dock, UI, InfoHandler):
         self._commission_reward_images = []
         self._commission_reward_names = {}
         commission_name = None
-        commission_frame_kind = None
+        commission_name_candidates = set()
+        commission_name_attempted = False
+        commission_name_error = None
         commission_reward_image = None
         completed_commission_count = 0
         income_recorded = True
@@ -2194,17 +2196,27 @@ class RewardCommission(Dock, UI, InfoHandler):
 
                     # 名称采集独立于上传开关，以完成页与奖励页的实际顺序关联收获。
                     kind = classify_frame(self.device.image)
-                    if kind in ('done', 'perfect'):
-                        if kind != commission_frame_kind or commission_name is None:
-                            try:
-                                commission_name = read_commission_name(self.device.image, self.config.SERVER)
-                            except Exception:
-                                commission_name = None
+                    if kind in ('done', 'perfect', 'exp'):
+                        if commission_reward_image is not None:
+                            # 奖励后的完成页属于下一次结算，清除上一条的名称候选。
+                            commission_name = None
+                            commission_name_candidates.clear()
+                            commission_name_attempted = False
+                            commission_name_error = None
                             commission_reward_image = None
-                    elif kind in ('exp', 'ship', 'exit'):
+                        if kind in ('done', 'perfect') and not commission_name_attempted:
+                            commission_name_attempted = True
+                            try:
+                                commission_name_candidates.add(read_commission_name(
+                                    self.device.image, self.config.SERVER))
+                            except Exception as error:
+                                commission_name_error = f'{type(error).__name__} {error}'
+                    elif kind in ('ship', 'exit'):
                         commission_name = None
+                        commission_name_candidates.clear()
+                        commission_name_attempted = False
+                        commission_name_error = None
                         commission_reward_image = None
-                    commission_frame_kind = kind
 
                     if self.ui_page_appear(page_commission, offset=(20, 20)):
                         break
@@ -2241,6 +2253,29 @@ class RewardCommission(Dock, UI, InfoHandler):
                             drop.add(self.device.image)
 
                         if button is EXP_INFO_S_REWARD:
+                            # 信息栏处理已持续截图，点击完成页前用当前稳定帧复核名称。
+                            stable_error = None
+                            try:
+                                commission_name_candidates.add(read_commission_name(
+                                    self.device.image, self.config.SERVER))
+                            except Exception as error:
+                                stable_error = f'{type(error).__name__} {error}'
+                            if len(commission_name_candidates) == 1:
+                                commission_name = next(iter(commission_name_candidates))
+                                detail = commission_name
+                                if stable_error:
+                                    detail += f'，稳定帧复核失败，沿用本次已确认名称，原因 {stable_error}'
+                                logger.attr('委托名称确认', detail)
+                            else:
+                                commission_name = None
+                                reason = (f'有效候选冲突 {sorted(commission_name_candidates)}'
+                                          if commission_name_candidates else
+                                          f'初帧 {commission_name_error or "无已确认候选"}，稳定帧 {stable_error}')
+                                logger.warning(f'[委托-名称] 本次收获名称未确认，{reason}')
+                            # 保留本次奖励身份，清空已消费候选，残留完成页只做点击前复核。
+                            commission_name_candidates.clear()
+                            commission_name_attempted = True
+                            commission_name_error = None
                             completed_commission_count += 1
                             if self._commission_reward_images:
                                 income_recorded = self._record_commission_income() and income_recorded
