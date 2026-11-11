@@ -31,6 +31,25 @@ test('旧主题委托显示全月记录、钻石截图筛选及月成功率', as
   await panel.getByRole('button', {name: '今日', exact: true}).click()
   await expect(panel.locator('.legacy-commission-gem-success')).toContainText('65.00%')
   await panel.getByRole('button', {name: '本月', exact: true}).click()
+  await page.evaluate(() => document.fonts.ready)
+  const gemCard = panel.locator('.legacy-commission-card.is-gem')
+  const compactLayout = () => gemCard.evaluate(card => {
+    const primary = card.querySelector('.legacy-commission-primary')!
+    const contentWidths = Array.from(primary.children).map(child => {
+      const range = document.createRange()
+      range.selectNodeContents(child)
+      return range.getBoundingClientRect().width
+    })
+    return {cardWidth: card.getBoundingClientRect().width,
+      primaryWidth: primary.getBoundingClientRect().width, contentWidth: Math.max(...contentWidths)}
+  })
+  const desktopLayout = await compactLayout()
+  expect(desktopLayout.primaryWidth - desktopLayout.contentWidth).toBeLessThan(1)
+  await page.setViewportSize({width: 1920, height: 1100})
+  const wideLayout = await compactLayout()
+  expect(wideLayout.cardWidth).toBeCloseTo(desktopLayout.cardWidth, 0)
+  expect(wideLayout.primaryWidth - wideLayout.contentWidth).toBeLessThan(1)
+  await page.setViewportSize({width: 1440, height: 1100})
   await panel.screenshot({path: test.info().outputPath('commission-desktop.png'), animations: 'disabled'})
   await page.setViewportSize({width: 412, height: 950})
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)

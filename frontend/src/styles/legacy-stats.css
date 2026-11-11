@@ -228,9 +228,9 @@
   background: transparent;
 }
 
-.legacy-commission-card.is-gem {flex: 2 1 300px}
+.legacy-commission-card.is-gem {flex: 0 1 auto}
 .legacy-commission-card-body {display: flex; align-items: center; gap: 14px}
-.legacy-commission-primary {display: flex; flex: 1 1 auto; flex-direction: column; gap: 4px}
+.legacy-commission-primary {display: flex; flex: 0 1 auto; flex-direction: column; gap: 4px}
 .legacy-commission-gem-success {
   display: flex;
   flex: 0 1 auto;
@@ -342,6 +342,8 @@
 .legacy-month-note {margin: 0 0 12px; font-size: 13px; line-height: 1.6; color: var(--muted, var(--theme-muted))}
 
 @media (max-width: 768px) {
+  .legacy-commission-card.is-gem {flex-basis: 100%}
+
   .legacy-stats-dashboard {
     position: sticky;
     top: 0;
