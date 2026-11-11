@@ -1,6 +1,7 @@
 """工作啾按身份选择的离线回归：真实资源、虚拟截图与时间线。"""
 
 import unittest
+from itertools import cycle
 from pathlib import Path
 from types import MethodType
 from unittest.mock import Mock, patch
@@ -8,7 +9,7 @@ from unittest.mock import Mock, patch
 import numpy as np
 
 import module.base.timer as timer_module
-from module.base.utils import load_image
+from module.base.utils import load_image, random_rectangle_point
 from module.island.assets import ISLAND_SELECT_CHARACTER_CHECK, SELECT_UI_CONFIRM
 from module.island.island_select_character import SelectCharacter, UI, _match_sort_arrow
 from module.island_select_character.assets import (
@@ -39,14 +40,15 @@ WORKER_FIXTURES = Path(__file__).parent / 'fixtures/island_worker_selection'
 
 
 def character_frame(arrow=None, arrow_shift=(0, 0), characters=(), selected=()):
-    """用已存在的资源模拟角色页；头像元组为（列、角色名、是否工作中）。"""
+    """用已有资源模拟角色页；位置可用首行列号或（列、行）表示。"""
     frame = CHARACTER_PAGE.copy()
     if arrow is not None:
         arrow_image = load_image(arrow.file)
         dx, dy = arrow_shift
         frame = np.maximum(frame, np.roll(arrow_image, (dy, dx), axis=(0, 1)))
-    for column, name, working in characters:
-        x, y = 58 + 140 * column, 112
+    for position, name, working in characters:
+        column, row = position if isinstance(position, tuple) else (position, 0)
+        x, y = 58 + 140 * column, 112 + 180 * row
         template = {
             "WorkerJuu": TEMPLATE_WORKERJUU,
             "NewJersey": TEMPLATE_NEWJERSEY,
@@ -59,8 +61,9 @@ def character_frame(arrow=None, arrow_shift=(0, 0), characters=(), selected=()):
             mark = load_image(TEMPLATE_CHARACTER_WORKING.file)
             height, width = mark.shape[:2]
             frame[y + 94:y + 94 + height, x + 18:x + 18 + width] = mark
-    for column in selected:
-        x, y = 58 + 140 * column, 112
+    for position in selected:
+        column, row = position if isinstance(position, tuple) else (position, 0)
+        x, y = 58 + 140 * column, 112 + 180 * row
         frame[y + 26:y + 42, x + 86:x + 119] = (19, 182, 234)
     return frame
 
@@ -102,7 +105,10 @@ class SelectionDevice(FakeDevice):
 
 
 class CharacterSelectionDevice(FakeDevice):
-    """头像与选中状态分别渲染，点击角色只能改变该角色的选中状态。"""
+    """头像与选中状态分别渲染，按实际随机坐标判断角色卡是否命中。
+
+    使用既有截图的白卡框模拟命中，不将修复后的安全内框当成游戏热区边界。
+    """
 
     def __init__(self, clock, *, characters=None, selected=(), accept_click=True):
         self.characters = characters if characters is not None else [(0, "WorkerJuu", False)]
@@ -127,11 +133,14 @@ class CharacterSelectionDevice(FakeDevice):
         if button.name == SELECT_CHARACTER_SORT_CLICK.name:
             self.ascending = not self.ascending
         if button.name.startswith('SELECT_CHARACTER_GRID_'):
-            column = int(button.name.split('_')[-2])
-            if self.accept_click:
-                self.selected = set() if column in self.selected else {column}
+            column, row = map(int, button.name.split('_')[-2:])
+            position = (column, row) if row else column
+            x, y = self.clicks[-1][2]
+            left, top = 56 + 140 * column, 139 + 180 * row
+            if self.accept_click and left <= x <= left + 124 and top <= y <= top + 164:
+                self.selected = set() if position in self.selected else {position}
             if self.after_click is not None:
-                self.after_click(column)
+                self.after_click(position)
 
 
 class WorkerJuuSelectionTest(unittest.TestCase):
@@ -369,9 +378,48 @@ class WorkerJuuSelectionTest(unittest.TestCase):
         self.assertEqual(len(clicks), 1)
         self.assertEqual(clicks[0][0], 'SELECT_CHARACTER_GRID_0_0')
         x, y = clicks[0][1]
-        self.assertTrue(58 <= x <= 178 and 112 <= y <= 272)
+        self.assertTrue(78 <= x <= 158 and 182 <= y <= 262)
         self.assertEqual(device.selected, {0})
         self.assertGreaterEqual(device.selected_frames, 2)
+        selector._get_stamina_value.assert_not_called()
+
+    def test_worker_safe_click_uses_real_random_extremes_and_normalized_log_samples(self):
+        # 归一化重放同一随机偏向：旧框能落到日志失效的上缘，新框应首点命中。
+        samples = [(58, 112), (178, 272), (102, 138), (123, 118), (144, 128), (118, 133)]
+        for old_point in samples:
+            with self.subTest(old_point=old_point):
+                fx, fy = (old_point[0] - 58) / 120, (old_point[1] - 112) / 160
+                fractions = cycle([fx] * 3 + [fy] * 3)
+                device = CharacterSelectionDevice(self.clock)
+                selector = self.selector(device)
+                with patch('module.base.utils.random.randint',
+                           side_effect=lambda a, b: round(a + (b - a) * next(fractions))):
+                    self.assertEqual(random_rectangle_point(selector.select_character_grid[0, 0].button),
+                                     old_point)
+                    self.assertTrue(selector.select_character('WorkerJuu'))
+                self.assertEqual(len(device.clicks), 1)
+                self.assertEqual(device.clicks[0][1], 'SELECT_CHARACTER_GRID_0_0')
+                self.assertEqual(device.clicks[0][2], (round(78 + 80 * fx), round(182 + 80 * fy)))
+                self.assertEqual(device.selected, {0})
+                self.assertGreaterEqual(device.selected_frames, 2)
+
+    def test_worker_retry_in_second_row_uses_safe_area_without_moving_recognition_grid(self):
+        device = CharacterSelectionDevice(self.clock, characters=[((4, 1), 'WorkerJuu', False)],
+                                          accept_click=False)
+        device.after_click = lambda _: setattr(device, 'accept_click', True)
+        selector = self.selector(device)
+        fractions = cycle([0] * 6 + [1] * 6)
+        with patch('module.base.utils.random.randint',
+                   side_effect=lambda a, b: round(a + (b - a) * next(fractions))):
+            self.assertTrue(selector.select_character('WorkerJuu'))
+        self.assertEqual([(name, point) for _, name, point in device.clicks], [
+            ('SELECT_CHARACTER_GRID_4_1', (638, 362)),
+            ('SELECT_CHARACTER_GRID_4_1', (718, 442)),
+        ])
+        self.assertGreaterEqual(device.clicks[1][0] - device.clicks[0][0], 2)
+        self.assertEqual(device.selected, {(4, 1)})
+        self.assertEqual(selector.select_character_grid[0, 0].area, (58, 112, 178, 272))
+        self.assertEqual(selector.select_character_grid[4, 1].area, (618, 292, 738, 452))
         selector._get_stamina_value.assert_not_called()
 
     def test_already_selected_verified_worker_is_not_toggled_off(self):

@@ -1161,7 +1161,9 @@ class SelectCharacter(UI):
                 if attempts >= 5:
                     break
                 if retry.reached():
-                    self.device.click(self.select_character_grid[position[0], position[1]])
+                    # 识别网格包含卡片上方背景，实际点击取卡片中部。
+                    button = self.select_character_grid[position[0], position[1]]
+                    self.device.click(button.crop((20, 70, 100, 150)))
                     attempts += 1
                     retry.reset()
             logger.warning("[岛屿] 未确认工作啾身份及选中状态，跳过派遣")
