@@ -11,7 +11,9 @@
 """
 
 import unittest
-from unittest.mock import patch
+from datetime import datetime
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 from module.webui.app_stat_opsi import OpsiStatisticsMixin
 from module.webui.app_stat_opsi_export import OpsiExportMixin
@@ -47,6 +49,69 @@ class TestFormatRounds(unittest.TestCase):
         for raw in (None, "", "abc", [], {}):
             with self.subTest(raw=raw):
                 self.assertIsNone(OpsiStatisticsMixin._format_rounds(raw))
+
+
+class TestMeowBattleTimeDisplay(unittest.TestCase):
+    """旧版短猫战斗时长复用舰船经验页的近期样本。"""
+
+    def setUp(self):
+        self.view = object.__new__(OpsiStatisticsMixin)
+        self.cl1_db = MagicMock()
+        self.cl1_db.get_stats.return_value = {}
+        self.cl1_db.get_meow_stats.side_effect = (
+            lambda instance, year, month, hazard_level=None: {
+                3: {'battle_count': 4, 'effective_rounds': 2, 'avg_battle_time': 21,
+                    'avg_round_time': 60, 'akashi_encounters': 1, 'akashi_ap': 120,
+                    'siren_research_devices': 1},
+                5: {'battle_count': 9, 'effective_rounds': 3, 'avg_battle_time': 31,
+                    'avg_round_time': 90, 'akashi_encounters': 2, 'akashi_ap': 240,
+                    'siren_research_devices': 2},
+            }[hazard_level]
+        )
+        # 兼容带月度记录筛选的旧界面，保持本回归只读打桩数据。
+        self.legacy_display = SimpleNamespace(
+            has_meow_records=lambda *args: True,
+            monthly_meow_record_levels=lambda *args, **kwargs: set(),
+        )
+
+    def test_both_levels_use_recent_meow_battle_average(self):
+        with (
+            patch.dict('sys.modules', {'module.statistics.legacy_display': self.legacy_display}),
+            patch('module.statistics.ship_exp_stats.get_ship_exp_stats') as load,
+            patch('module.webui.app_stat_opsi.current_time', return_value=datetime(2026, 11, 11)),
+            patch('module.webui.app_stat_opsi.t', return_value='秒'),
+        ):
+            load.return_value.get_average_meow_battle_time.return_value = 11.57
+            levels = self.view._build_meow_stats_by_level(self.cl1_db, 'alas')
+
+        load.assert_called_once_with(instance_name='alas')
+        load.return_value.get_average_meow_battle_time.assert_called_once_with()
+        expected = '11.6秒'
+        self.assertEqual(levels[3]['avg_battle_time'], expected)
+        self.assertEqual(levels[5]['avg_battle_time'], expected)
+        self.assertEqual(levels[3]['avg_round_time'], '60.0秒')
+        self.assertEqual(levels[5]['avg_round_time'], '90.0秒')
+
+    def test_ship_exp_read_failure_preserves_monthly_fields(self):
+        with (
+            patch.dict('sys.modules', {'module.statistics.legacy_display': self.legacy_display}),
+            patch('module.statistics.ship_exp_stats.get_ship_exp_stats',
+                  side_effect=RuntimeError('舰船经验统计读取失败')),
+            patch('module.webui.app_stat_opsi.current_time', return_value=datetime(2026, 11, 11)),
+            patch('module.webui.app_stat_opsi.t', return_value='秒'),
+        ):
+            levels = self.view._build_meow_stats_by_level(self.cl1_db, 'alas')
+
+        self.assertEqual(levels[3]['avg_battle_time'], '-')
+        self.assertEqual(levels[5]['avg_battle_time'], '-')
+        self.assertEqual(levels[3]['battle_count'], 4)
+        self.assertEqual(levels[5]['battle_count'], 9)
+        self.assertEqual(levels[3]['rounds'], 2)
+        self.assertEqual(levels[5]['rounds'], 3)
+        self.assertEqual(levels[3]['akashi_encounters'], 1)
+        self.assertEqual(levels[5]['akashi_encounters'], 2)
+        self.assertEqual(levels[3]['avg_round_time'], '60.0秒')
+        self.assertEqual(levels[5]['avg_round_time'], '90.0秒')
 
 
 class TestHazardRowsRoundsColumn(unittest.TestCase):

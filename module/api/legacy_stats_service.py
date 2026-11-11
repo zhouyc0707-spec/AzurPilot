@@ -161,12 +161,19 @@ def _opsi_panel(instance):
     net_ap = ap_bought - sortie_cost if isinstance(ap_bought, int) and sortie_cost else DASH
     loop_eff = round(net_ap / sortie_cost * 100, 2) if isinstance(net_ap, int) and sortie_cost else DASH
 
+    exp_stats = None
     try:
         exp_stats = get_ship_exp_stats(instance_name=instance)
         avg_cl1_battle = _float_or_dash(exp_stats.get_average_battle_time())
         avg_cl1_round = _float_or_dash(exp_stats.get_average_round_time())
     except Exception:
         avg_cl1_battle = avg_cl1_round = DASH
+
+    # 与新版舰船经验共用最近100场短猫均值，不按月份或侵蚀等级拆分。
+    try:
+        avg_meow_battle = _float_or_dash(exp_stats.get_average_meow_battle_time())
+    except Exception:
+        avg_meow_battle = DASH
 
     cl1_values = {
         'Gui.Stat.Month': month,
@@ -193,7 +200,6 @@ def _opsi_panel(instance):
             meow_encounters = int(data.get('akashi_encounters', 0) or 0)
             meow_ap = int(data.get('akashi_ap', 0) or 0)
             meow_devices = int(data.get('siren_research_devices', 0) or 0)
-            avg_battle_time = float(data.get('avg_battle_time', 0.0) or 0)
             avg_round_time = float(data.get('avg_round_time', 0.0) or 0)
             meow[hazard_level] = {
                 'rounds': meow_rounds,
@@ -203,7 +209,7 @@ def _opsi_panel(instance):
                 'avg_ap': str(int(meow_ap / meow_encounters + 0.5)) if meow_encounters > 0 else DASH,
                 'siren_devices': meow_devices,
                 'siren_rate': round(meow_devices / meow_rounds * 100, 2) if meow_rounds > 0 else DASH,
-                'avg_battle_time': _float_or_dash(avg_battle_time) if avg_battle_time > 0 else DASH,
+                'avg_battle_time': avg_meow_battle,
                 'avg_round_time': _float_or_dash(avg_round_time) if avg_round_time > 0 else DASH,
             }
     except Exception:
