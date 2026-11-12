@@ -3,23 +3,30 @@
  */
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import type { CSSProperties } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { CalendarClock, Clock3, ListTree, Play, RotateCcw, Search, Settings2, Terminal } from 'lucide-react'
 import { api } from '../api/client'
 import type { Config } from '../api/types'
 import { useApp, useConnection } from '../app/context'
 import { htmlToPlainText } from '../app/htmlText'
-import { readRailView, setRailView, subscribeRailView } from '../app/railPrefs'
+import { getLayout, subscribeLayout } from '../app/layout'
+import { readRailView, setRailView, subscribeRailView, readRailVisible, subscribeRailVisible } from '../app/railPrefs'
+import { readSchedulerPosition, subscribeSchedulerPosition } from '../app/schedulerPositionPrefs'
 import { smoothScrollToElement } from '../app/scroll'
 import { clearSearchTarget, peekSearchTarget, subscribeSearchTarget } from '../app/searchTarget'
 import { Empty, ErrorBox, Loading, Modal } from '../components/ui'
+import { Input } from '../components/ui/input'
 import { LogPanel } from '../components/LogPanel'
 import { MeowfficerScorePanel } from '../components/MeowfficerScorePanel'
 import { OpsiSimulatorPanel } from '../components/OpsiSimulatorPanel'
 import { FieldInput } from '../components/FieldInput'
 import { StorageField } from '../components/StorageField'
-import { SchedulerWidget } from '../components/SchedulerWidget'
-import { TaskQueue } from '../components/TaskQueue'
+import {usesLegacyLayout} from '../app/theme'
+import {SchedulerWidget} from '../components/SchedulerWidget'
+import {TaskQueue} from '../components/TaskQueue'
+import { LegacyRail } from '../components/LegacyRail'
+import { LegacyRailResizeHandle } from '../components/LegacyRailResizeHandle'
 import { useInstanceOverview } from '../components/useInstanceOverview'
 import { editor, prepareValue } from '../config/editors'
 import { EditStatus } from '../components/EditStatus'
@@ -33,13 +40,18 @@ import { EmulatorRuntimeStatus } from '../components/EmulatorRuntimeStatus'
 import { isFieldVisible, isSeasonGroupVisible } from './configVisibility'
 import { FleetInfoPage } from './FleetInfoPage'
 
+/** 任务参数设置页：参数卡就地编辑、侧栏搜索定位、任务级说明与启动开关；工具任务页改为挂日志面板。 */
 export function TaskConfig() {
   const {instance = '', task = ''} = useParams()
-  const {schema, t, ui, notify, instances} = useApp()
+  const {schema, t, ui, notify, instances, theme} = useApp()
   const connection = useConnection()
   const railView = useSyncExternalStore(subscribeRailView, readRailView, readRailView)
-  // 只在真的切到调度器时才请求总览数据，否则这一页白拉一份队列。
-  const [railData, setRailData] = useInstanceOverview(instance, railView === 'scheduler')
+  const railVisibility = useSyncExternalStore(subscribeRailVisible, readRailVisible, readRailVisible)
+  const schedulerPosition = useSyncExternalStore(subscribeSchedulerPosition, readSchedulerPosition, readSchedulerPosition)
+  // 调度器列的宽度与总览页共用同一个持久化值，拖动任一处另一边跟着变。
+  const layout = useSyncExternalStore(subscribeLayout, getLayout, getLayout)
+  // 右列现在同时承载目录与调度器，进页面就要拉一份总览数据。
+  const [railData, setRailData] = useInstanceOverview(instance, true)
   const [config, setConfig] = useState<Config>()
   const [search, setSearch] = useState('')
   const [error, setError] = useState('')
@@ -97,7 +109,7 @@ export function TaskConfig() {
     }).catch(error => { if (active) setError(error.message) })
     return () => { active = false }
   }, [connection, instance, task, queue])
-  /* 开关状态取自部署层的运行列表，不在任务配置里。 */
+  // 开关状态取自部署层的运行列表，不在任务配置里。
   useEffect(() => {
     if (connection !== 'ready' || task !== 'Alas') return
     let active = true
@@ -155,7 +167,7 @@ export function TaskConfig() {
       if (!path || !path.startsWith(`${task}.`)) return
       if (find) window.clearInterval(find)
       let attempts = 0
-      // 卡片命中给两段路径（任务.分组），配置项命中给三段；据此选 DOM id 与滚动方式
+      // 卡片命中给两段路径（任务.分组），配置项命中给三段；据此选 DOM id 与滚动方式。
       const segments = path.split('.')
       const isCard = segments.length <= 2
       const elementId = isCard ? `group-${segments[1]}` : path
@@ -171,7 +183,7 @@ export function TaskConfig() {
           row.classList.add('is-search-target')
           window.setTimeout(() => row.classList.remove('is-search-target'), 3000)
         } else if (attempts > 20) {
-          // 等不到字段（被隐藏或该任务下没有这一项）就放弃，不再重试
+          // 等不到字段（被隐藏或该任务下没有这一项）就放弃，不再重试。
           window.clearInterval(find)
           find = undefined
           clearSearchTarget()
@@ -333,7 +345,7 @@ export function TaskConfig() {
     </div>
   </section>
 
-  /* 任务级说明（Task.<task>.help）：作为卡片列首卡，与参数卡同宽同层。 */
+  // 任务级说明（Task.<task>.help）：作为卡片列首卡，与参数卡同宽同层。
   const taskHelp = t(`Task.${task}.help`)
   const taskHelpBlock = taskHelp && taskHelp !== 'help' && !taskHelp.startsWith('Task.')
     ? <section className="panel task-help-panel"><p className="task-help">{htmlToPlainText(taskHelp)}</p></section>
@@ -371,7 +383,7 @@ export function TaskConfig() {
     onClick={() => setRailView(railView === 'scheduler' ? 'directory' : 'scheduler')}
   >{railView === 'scheduler' ? <CalendarClock size={17}/> : <ListTree size={17}/>}</button>
 
-  const rail = <aside className={`task-config-rail is-${railView}`} aria-label={railView === 'scheduler' ? ui('scheduler.rail') : ui('task.groupNav')}>
+  const legacyRail = <aside className={`task-config-rail is-${railView}`} aria-label={railView === 'scheduler' ? ui('scheduler.rail') : ui('task.groupNav')}>
     {railView === 'scheduler'
       ? <div className="task-rail-scheduler">
           <SchedulerWidget instance={instance} data={railData} onData={setRailData} action={railToggle}/>
@@ -392,11 +404,22 @@ export function TaskConfig() {
           </div>
         </div>}
   </aside>
+  // 目录与调度器是两列，不是一栏里的两块：目录常驻设置区右侧，调度器独占一列。
+  // 调度器列就是总览页那一个 LegacyRail，不换外壳、不套 panel；
+  // 停靠边与显隐都来自界面设置（schedulerPositionPrefs / railPrefs）。
+  const directory = <aside className="task-config-directory task-rail-directory instance-page-rail" aria-label={ui('task.groupNav')} onContextMenu={event => event.preventDefault()}>
+    <div className="rail-section-heading">
+      <div><ListTree size={15}/><span>{ui('task.groupNav')}</span></div>
+    </div>
+    {groupNav}
+  </aside>
+
+  const rail = <LegacyRail instance={instance} data={railData} onData={setRailData}/>
 
   const configToolbar = showConfigToolbar && <div className="config-toolbar">
       <div className="input-icon">
         <Search size={17} />
-        <input placeholder={ui('task.searchConfigPlaceholder')} aria-label={ui('task.searchConfig')} value={search} onChange={event => setSearch(event.target.value)} />
+        <Input placeholder={ui('task.searchConfigPlaceholder')} aria-label={ui('task.searchConfig')} value={search} onChange={event => setSearch(event.target.value)}/>
       </div>
     </div>
 
@@ -424,16 +447,25 @@ export function TaskConfig() {
     <LogPanel />
   </section>
 
-  // 旧版的任务详细设置：参数卡在左、右列在「分组目录 / 调度器」之间切，页名由顶栏居中显示。
+  // 旧版的任务详细设置：参数卡在中列，目录与调度器各占一列，页名由顶栏居中显示。
+  // 调度器列的宽度沿用总览页那套 `--legacy-rail-width`，边上挂同一个拖拽把手。
   return <>
-    <div className="task-config-legacy">
+    <div
+      className={`task-config-legacy${!usesLegacyLayout(theme) && schedulerPosition === 'left' ? ' rail-left' : ''}${railVisibility === 'hidden' ? ' rail-hidden' : ''}`}
+      style={layout.legacyRailWidth ? ({'--legacy-rail-width': `${layout.legacyRailWidth}px`} as CSSProperties) : undefined}
+    >
       <h1 className="legacy-sr-title">{t(`Task.${task}.name`)}</h1>
       <div className="task-config-settings">
-        {/* 换任务时重挂一次，让内容列的淡入重放。 */}
+        {/* 换任务时重挂内容列，触发该任务的卡片入场。 */}
         <div className="task-config-settings-inner" key={task}>{head}{groupsSection}{scorePanel}{toolPanel}</div>
       </div>
-      {/* 目录是逐页内容，跟着任务换；调度器是常驻的，换任务不重挂。 */}
-      <div className="task-config-rail-slot" key={railView === 'directory' ? task : 'scheduler'}>{rail}</div>
+      {!usesLegacyLayout(theme) && directory}
+      <div className="task-config-rail-slot" aria-label={ui('scheduler.rail')}>
+        <div className="instance-page-rail-wrap">
+          {usesLegacyLayout(theme) ? legacyRail : rail}
+          {!usesLegacyLayout(theme) && <LegacyRailResizeHandle side={schedulerPosition}/>}
+        </div>
+      </div>
     </div>
     {modal}
   </>

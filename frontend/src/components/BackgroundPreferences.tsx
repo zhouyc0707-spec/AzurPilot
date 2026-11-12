@@ -7,6 +7,7 @@ import { BookmarkPlus, ExternalLink, FolderOpen, ListPlus, Shuffle, Upload, X } 
 import { DEFAULT_BACKGROUND_URLS, applyGalleryEntry, disableBackground, galleryUrl, getBackground, getGallery, initBackgroundGallery, openGalleryFolder, refreshGallery, removeGalleryEntry, saveDirectUrlToGallery, setBackgroundUrls, subscribeBackground, uploadBackgroundFile, type BackgroundKind, type BackgroundSource } from '../app/background'
 import { useApp } from '../app/context'
 import { Select } from './FormControls'
+import { Input } from './ui/input'
 
 /** 地址行的稳定 id：用数组下标当 key，删一行后 React 会复用错误的输入节点。 */
 type Row = {id: string, value: string}
@@ -14,8 +15,10 @@ let rowSeed = 0
 const newRow = (value = ''): Row => ({id: `row-${++rowSeed}`, value})
 const toRows = (urls: string[]): Row[] => [...urls.map(url => newRow(url)), newRow()]
 
-/** 图片与视频背景属于当前浏览器偏好；上传文件保存在 IndexedDB，避免进入部署配置。
-    背景记录按材质各存一档，所以切换材质后表单要跟着换成那一档的值。 */
+/**
+ * 图片与视频背景属于当前浏览器偏好；上传文件保存在 IndexedDB，避免进入部署配置。
+ * 背景记录按材质各存一档，所以切换材质后表单要跟着换成那一档的值。
+ */
 export function BackgroundPreferences() {
   const {ui, notify, material} = useApp()
   const background = useSyncExternalStore(subscribeBackground, getBackground, getBackground)
@@ -77,7 +80,7 @@ export function BackgroundPreferences() {
     } catch (error) { setError((error as Error).message) }
   }
 
-  /** 一次可传多张：逐张存进图库，最后随机铺一张 —— 这就是"一个文件夹里随机播放"。 */
+  /** 一次可传多张：逐张存进图库，最后随机铺一张 —— 这就是「一个文件夹里随机播放」。 */
   async function upload(files: FileList | null) {
     if (!files?.length) return
     setBusy(true); setError('')
@@ -120,7 +123,7 @@ export function BackgroundPreferences() {
       {source === 'url' && <form className="background-url-form" onSubmit={applyUrls}>
         <div className="background-url-rows">
           {rows.map((row, index) => <div className="background-url-row" key={row.id}>
-            <input
+            <Input
               type="url"
               aria-label={ui('settings.backgroundUrl')}
               maxLength={2048}
@@ -145,7 +148,7 @@ export function BackgroundPreferences() {
       {/* 直链行：显示解析到的真实地址，可打开、可存进图库 —— 存的与看到的是同一张图。 */}
       {source === 'url' && <div className="background-direct">
         <label htmlFor="ui-background-direct">{ui('settings.backgroundDirect')}</label>
-        <input
+        <Input
           id="ui-background-direct"
           readOnly
           value={background.directUrl || (background.resolving ? ui('settings.backgroundResolving') : ui('settings.backgroundUnresolved'))}

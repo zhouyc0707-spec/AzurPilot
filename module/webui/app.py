@@ -302,7 +302,7 @@ def app():
     commission_rewards_dir.mkdir(parents=True, exist_ok=True)
     static_mounts = {
         "/static/assets": str(PROJECT_ROOT / "assets"),
-        "/static/doc": str(PROJECT_ROOT / "doc"),
+        "/static/doc": str(PROJECT_ROOT / "docs" / "images"),
         "/static/commission_rewards": str(commission_rewards_dir),
     }
 

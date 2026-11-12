@@ -146,6 +146,48 @@ class TestCoinSnapshotAppend(unittest.TestCase):
             self.seed['yellow_coin_snapshots'][0], self.yellow(950, NOW.isoformat(), 'dashboard'),
         ])
 
+    def test_yellow_native_append_thins_old_hours_and_keeps_other_families(self):
+        self.seed['yellow_coin_snapshots'] = [
+            self.yellow(1000 + minute, f'2026-10-12T12:{minute:02d}:00')
+            for minute in (5, 15, 55)
+        ]
+        self.db.save_stats(INSTANCE, MONTH, self.seed)
+        commissions = self.rows('commission_income')
+        coins = self.rows('coin_snapshots')
+        with self.no_month_rewrite():
+            self.db.add_yellow_coin_snapshot(INSTANCE, 950, source='dashboard')
+        current = self.db.get_stats(INSTANCE, MONTH)
+        self.assertEqual(current['yellow_coin_snapshots'], [
+            self.seed['yellow_coin_snapshots'][-1], self.yellow(950, NOW.isoformat(), 'dashboard'),
+        ])
+        self.assertEqual(commissions, self.rows('commission_income'))
+        self.assertEqual(coins, self.rows('coin_snapshots'))
+        self.assertEqual(current['battle_count'], 321)
+
+    def test_normal_and_deferred_resource_snapshots_keep_sampling_order(self):
+        from datetime import timedelta
+        from types import SimpleNamespace
+        from module.log_res import LogRes
+        from module.persistence.write_queue import write_queue
+
+        config = SimpleNamespace(config_name=INSTANCE, modified={}, data={
+            'Dashboard': {'Oil': {'Value': 0, 'Record': None}, 'Coin': {'Value': 0, 'Record': None}},
+        })
+        recorder = LogRes(config)
+        recorder.__dict__['groups'] = {'Oil': {}, 'Coin': {}}
+        recorder.__dict__['_observe'] = unittest.mock.Mock()
+        with patch.object(write_queue, '_schedule'), \
+                patch('module.statistics.resource_stats._LOCAL_DB', self.path.parent / 'azurstats_local.db'):
+            recorder.record('Oil', 100, observed_at=NOW)
+            recorder.record('Coin', 200, defer_history=True, observed_at=NOW + timedelta(seconds=1))
+            self.assertEqual(2, write_queue.pending())
+            self.assertTrue(write_queue.flush())
+        with self.db.store.transaction(write=False) as connection:
+            rows = connection.execute('SELECT ts, oil, coin FROM resource_snapshots ORDER BY id').fetchall()
+        self.assertEqual([tuple(row) for row in rows], [
+            (NOW.isoformat(), 100, None), ((NOW + timedelta(seconds=1)).isoformat(), 100, 200),
+        ])
+
     def test_unchanged_values_do_not_append_or_rewrite(self):
         coins, yellow = self.rows('coin_snapshots'), self.rows('yellow_coin_snapshots')
         with self.no_month_rewrite():

@@ -31,19 +31,21 @@ function applyTabSize(size: TabSize) {
 }
 
 /* 模块加载即落一次，让存下来的档位在首帧就生效，不必等用户点按钮。 */
+let sessionTabSize: TabSize = 'md'
 applyTabSize(readTabSize())
 
 const modeStore = prefStore<TopbarMode>(MODE_KEY, raw => raw === 'tabs' ? 'tabs' : 'dropdown')
 const tabSizeListeners = new Set<() => void>()
 
-/** 标签页档位：落盘并通知订阅者，下次打开接着上次的档位。 */
+/** 读取标签页档位：旧档位 `xs` 迁移成 `sm`，存储不可用时回落到会话内值。 */
 export function readTabSize(): TabSize {
   try {
     const stored = localStorage.getItem(TAB_SIZE_KEY)
     return TAB_SIZE_ORDER.find(size => size === stored) ?? (localStorage.getItem('azurpilot.theme')?.startsWith('legacy-') ? 'md' : 'lg')
-  } catch { return 'md' }
+  } catch { return sessionTabSize }
 }
 
+/** 订阅档位变化；返回取消订阅的函数。 */
 export const subscribeTabSize = (listener: () => void) => {
   tabSizeListeners.add(listener)
   return () => { tabSizeListeners.delete(listener) }
@@ -54,6 +56,7 @@ export const setTopbarMode = modeStore.write
 
 export function cycleTabSize(size: TabSize): TabSize {
   const next = TAB_SIZE_ORDER[(TAB_SIZE_ORDER.indexOf(size) + 1) % TAB_SIZE_ORDER.length]
+  sessionTabSize = next
   applyTabSize(next)
   try { localStorage.setItem(TAB_SIZE_KEY, next) } catch { /* 存储不可用时本次会话内仍生效。 */ }
   tabSizeListeners.forEach(listener => listener())
@@ -72,4 +75,4 @@ export function writeLastPath(path: string) {
 }
 
 export const TAB_SIZES = ['sm', 'md', 'lg', 'xl'] as const
-export function setTabSize(size: TabSize) {applyTabSize(size); try {localStorage.setItem(TAB_SIZE_KEY, size)} catch {} ; tabSizeListeners.forEach(listener => listener())}
+export function setTabSize(size: TabSize) {sessionTabSize = size; applyTabSize(size); try {localStorage.setItem(TAB_SIZE_KEY, size)} catch {} ; tabSizeListeners.forEach(listener => listener())}

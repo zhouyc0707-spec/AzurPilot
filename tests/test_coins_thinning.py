@@ -9,6 +9,8 @@ from tests.test_opsi_secure import MemoryProvider
 from module.statistics.cl1_database import (
     COINS_EXACT_DAYS,
     COINS_HISTORY_VERSION,
+    YELLOW_COIN_EXACT_HOURS,
+    thin_yellow_coin_snapshots,
     Cl1Database,
     thin_coins_snapshots,
 )
@@ -146,3 +148,17 @@ def test_new_month_residue_is_recorded_outside_display_curve(coins_database):
     assert [point['yellow_coins'] for point in stored['coins_month_start_residue']] == [510]
     assert [point['purple_coins'] for point in stored['coins_month_start_residue']] == [8]
     assert [point['purple_coins'] for point in stored['coins_snapshots']] == [1]
+
+
+def test_thin_yellow_coin_snapshots_keeps_recent_hours():
+    now = datetime.now()
+    recent = [{'ts': (now - timedelta(minutes=minute)).isoformat(), 'yellow_coin': minute} for minute in (1, 2, 3)]
+    older = [
+        {'ts': (now - timedelta(hours=YELLOW_COIN_EXACT_HOURS + 1)).replace(minute=5).isoformat(), 'yellow_coin': 5},
+        {'ts': (now - timedelta(hours=YELLOW_COIN_EXACT_HOURS + 1)).replace(minute=55).isoformat(), 'yellow_coin': 55},
+        {'ts': (now - timedelta(hours=YELLOW_COIN_EXACT_HOURS + 2)).replace(minute=30).isoformat(), 'yellow_coin': 30},
+    ]
+
+    kept = thin_yellow_coin_snapshots(recent + older)
+
+    assert [item['yellow_coin'] for item in kept] == [30, 55, 3, 2, 1]

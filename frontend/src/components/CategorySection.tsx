@@ -70,7 +70,7 @@ export function CategorySection({params, revision, onState, render}: {
     }
   }, [connection, instance, request, revision])
 
-  /* 后端标签是中文；在这里统一译成界面语言，下游的卡片、图表、表格和导出都用译文。 */
+  // 后端标签是中文；在这里统一译成界面语言，下游的卡片、图表、表格和导出都用译文。
   const shown = useMemo(() => data && localizeReport(data, language), [data, language])
 
   useEffect(() => onState?.({data: shown, error}), [shown, error, onState])

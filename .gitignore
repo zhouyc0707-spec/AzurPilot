@@ -54,6 +54,7 @@ dev_tools/debug_tools
 PaddleOCR
 # 单次开发诊断、截图校准和提交信息等临时产物
 /.tmp/
+.orphans-live.txt
 
 # Tests
 test/*
@@ -71,6 +72,7 @@ docs/*
 /f
 /workers
 /debug_img
+/.tmp/
 
 # AI and coding tools
 .codex/
@@ -79,6 +81,7 @@ docs/*
 .agents/
 .trae/
 .workbuddy/
+.codebuddy/
 .zcode/
 .cursor/
 # GraphFlow 工具的本地缓存（graphflow MCP 在工作目录运行时产生）
@@ -87,7 +90,7 @@ docs/*
 RTK.md
 
 # Frontend
-frontend/node_modules/
+node_modules/
 frontend/test-results/
 frontend/playwright-report/
 frontend/*.tsbuildinfo

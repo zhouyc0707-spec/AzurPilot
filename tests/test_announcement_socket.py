@@ -21,7 +21,9 @@ class AnnouncementSocketTest(unittest.IsolatedAsyncioTestCase):
         self.announcements = SimpleNamespace(get_async=AsyncMock(side_effect=fetch))
         self.router = SimpleNamespace(announcements=self.announcements,
                                       dispatch=Mock(return_value={'pong': True}))
-        self.ws = SimpleNamespace(receive_text=self.receive, close=AsyncMock())
+        self.ws = SimpleNamespace(receive_text=self.receive, close=AsyncMock(),
+                                  client=SimpleNamespace(host='127.0.0.1'),
+                                  headers={'host': '127.0.0.1'})
         self.session = Session(Gateway(self.router, ''), self.ws)
         self.reader = asyncio.create_task(self.session.reader())
 

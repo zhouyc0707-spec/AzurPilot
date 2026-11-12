@@ -3,6 +3,7 @@
  */
 
 import { palettes, paletteColors, paletteTokens, readCustomPalettes, colorModes, fixedColorModes, type Palette, type ColorMode, type ResolvedMode, type CustomPalette } from './palettes'
+import { applyColorOverrides } from './colorPalette'
 import { applyFamilyCustom } from './themeCustom'
 export type Theme = 'light' | 'dark' | 'minimal' | 'extreme'
   | 'legacy-light' | 'legacy-dark' | 'modern-light' | 'modern-dark'
@@ -77,6 +78,7 @@ export const showsRightRail = (theme: Theme, instance?: string) => Boolean(insta
 const VALID_THEMES: readonly string[] = ['light', 'dark', 'minimal', 'extreme',
   'legacy-light', 'legacy-dark', 'modern-light', 'modern-dark']
 
+/** 从 localStorage 读取主题偏好；键缺失或存储不可用时整体回落默认值，不抛错。 */
 export function readThemePreference(): Preference {
   try {
     const theme = localStorage.getItem('azurpilot.theme')
@@ -116,8 +118,10 @@ export function applyCustomLayer() {
   const root = document.documentElement
   for (const token of customTokens) root.style.removeProperty(token)
   customTokens = applyFamilyCustom(root, familyOf(preference.theme), modeOfTheme(preference.theme))
+  if (!usesLegacyLayout(preference.theme)) customTokens.push(...applyColorOverrides(root, preference.resolvedMode))
 }
 export const getThemePreference = () => preference
+/** 订阅主题变更通知，返回退订函数。 */
 export const subscribeTheme = (listener: () => void) => {
   listeners.add(listener)
   return () => { listeners.delete(listener) }
@@ -155,11 +159,13 @@ function applyColorMode(next: Preference) {
     managedTokens = []
     delete root.dataset.colorMode
   }
+  root.classList.toggle('dark', resolvedMode === 'dark')
   return resolvedMode
 }
 
 function systemModeChanged() {
   preference = {...preference, resolvedMode: applyColorMode(preference)}
+  applyCustomLayer()
   listeners.forEach(listener => listener())
 }
 

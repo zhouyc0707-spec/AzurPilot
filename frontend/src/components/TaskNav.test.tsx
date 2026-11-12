@@ -1,3 +1,7 @@
+/**
+ * @fileoverview TaskNavTree 侧栏导航树的渲染契约：分组归属、常驻子菜单与旧版主题行为；
+ * 末尾附 isDesktopDevice 的设备判定测试。
+ */
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -102,6 +106,8 @@ describe('TaskNav 导航组件', () => {
     const html = render('/i/default/overview')
 
     expect(html).toContain('task-nav-container')
+    // 旧版任务浮层保留搜索展开按钮，初始不展开搜索框。
+    expect(html).toContain('task-search')
     expect(html).toContain('展开任务搜索')
     expect(html).not.toContain('搜索任务…')
 
@@ -171,7 +177,7 @@ describe('TaskNav 导航组件', () => {
 
 describe('isDesktopDevice', () => {
   it('正确区分电脑端与移动端环境', () => {
-    // node/SSR 环境下无 window，应安全回退为 false
+    // node/SSR 环境下无 window，应安全回退为 false。
     expect(isDesktopDevice()).toBe(false)
 
     const originalWindow = globalThis.window
@@ -185,14 +191,14 @@ describe('isDesktopDevice', () => {
       }
       globalThis.window = mockWindow as unknown as Window & typeof globalThis
 
-      // 电脑端：宽度 > 950 且支持 hover
+      // 电脑端：宽度 > 950 且支持 hover。
       expect(isDesktopDevice()).toBe(true)
 
-      // 移动端：宽度 <= 950
+      // 移动端：宽度 <= 950。
       mockWindow.innerWidth = 768
       expect(isDesktopDevice()).toBe(false)
 
-      // 移动端触屏：宽度 > 950 但为 touch-only (hover: none)
+      // 移动端触屏：宽度 > 950 但为 touch-only (hover: none)。
       mockWindow.innerWidth = 1024
       mockWindow.matchMedia = (query: string) => ({
         matches: query.includes('(hover: none)') ? true : false,

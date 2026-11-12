@@ -1,18 +1,18 @@
 /* 旧版主题：MD3 靛紫配色，还原旧 WebUI 的平面观感。
    与简约主题一样复用共享骨架，但不导入玻璃、壁纸与外部 theme.css。
    结构性规则（布局、尺寸、层级）必须自带 —— 共享层不提供，平时由 apple.css 承担。 */
-@import './tokens.css';
+@import './legacy-tokens.css';
 @import './legacy-layout.css';
 @import './legacy-components.css';
 @import './insights.css';
 @import './home.css';
 @import './dev.css';
-@import './legacy-palette.css';
-@import './theme-material.css';
+@import './legacy-color-palette.css';
+@import './legacy-material.css';
 @import './legacy-theme-primitives.css';
 @import './legacy-forms.css';
 @import './legacy-fonts.css';
-@import './motion.css';
+@import './legacy-motion.css';
 
 /* 旧版侧栏贴边、只有一条右边框，顶栏与右栏不带圆角。 */
 .sidebar, .right-rail, .topbar {border-radius: 0}

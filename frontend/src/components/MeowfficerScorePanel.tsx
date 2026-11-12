@@ -21,6 +21,7 @@ const tierStyles: [string, string][] = [
   ['雷暴', 'is-thunder'],
 ]
 
+/** 按档位关键词取样式类名；关键词表见上方 tierStyles，未命中时走 is-other 中性样式。 */
 export function tierClass(tier: string): string {
   return tierStyles.find(([keyword]) => tier.includes(keyword))?.[1] ?? 'is-other'
 }
@@ -234,6 +235,7 @@ export function MeowfficerScorePanel({instance}: {instance: string}) {
     const timer = setInterval(() => {
       if (document.visibilityState !== 'visible') return
       void loader.poll()
+
     }, AUTO_REFRESH_INTERVAL)
     return () => {
       loader.stop(); clearInterval(timer)

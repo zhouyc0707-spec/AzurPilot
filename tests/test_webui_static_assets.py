@@ -28,10 +28,10 @@ class TestWebUIStaticAssets(unittest.TestCase):
         self._temporary_directory = tempfile.TemporaryDirectory()
         self.root = Path(self._temporary_directory.name)
         self.assets = self.root / "assets"
-        self.doc = self.root / "doc"
+        self.doc = self.root / "docs" / "images"
         css_directory = self.assets / "gui" / "css"
         css_directory.mkdir(parents=True)
-        self.doc.mkdir()
+        self.doc.mkdir(parents=True)
         (css_directory / "test.css").write_text("body {}", encoding="utf-8")
         (self.doc / "logo.webp").write_bytes(b"RIFF")
         (self.root / "config").mkdir()

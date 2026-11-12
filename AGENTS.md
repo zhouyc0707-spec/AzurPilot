@@ -26,7 +26,7 @@ AzurPilot 是面向安卓模拟器的碧蓝航线自动化框架，支持 CN/EN/
 | 同步 Python 依赖 | `uv sync --frozen` |
 | 安装前端锁定依赖 | `npm ci --prefix frontend` |
 | 启动 WebUI | `uv run python gui.py` |
-| 启动终端交互界面 (TUI) | `uv run python tui.py` |
+| 启动终端交互界面 (TUI) | `uv run python gui.py --tui` |
 | 启动游戏调度器 | `uv run python alas.py` |
 | 启动独立 MCP SSE 服务 | `uv run python mcp_server_sse.py` |
 | Python 单个测试模块（示例） | `uv run python -m unittest tests.test_api` |
@@ -39,6 +39,7 @@ AzurPilot 是面向安卓模拟器的碧蓝航线自动化框架，支持 CN/EN/
 | 浏览器端到端测试 | `npm run test:e2e --prefix frontend` |
 | 前端模拟服务端到端测试 | `npm run test:e2e:mock --prefix frontend` |
 | Python 导入冒烟检查 | `uv run python -m dev_tools.import_smoke_test` |
+| 生成配置和前端选项 | `uv run -m module.config.config_updater` |
 
 ## 按任务查阅
 
@@ -97,7 +98,7 @@ def some_function(self, skip_first_screenshot=True):
 - 游戏图像资源位于 `assets/{cn,en,jp,tw}/`；按 1280×720 游戏画面的坐标约定提取，模板可以是局部裁剪。模板对象名称使用 `TEMPLATE_` 前缀。
 - 修改按钮资源后运行 `uv run -m dev_tools.button_extract`，检查生成的 `assets.py`。切换服务器进行离线识别时，在导入游戏模块前设置 `module.config.server.server`，避免资源已按其他服务器加载。
 - `campaign/` 下关卡主要是 Python 地图定义与战斗逻辑；活动适配参考相近活动及 [campaign/Readme.md](campaign/Readme.md)，不要套用统一 YAML 地图流程。
-- WebUI 业务通信使用 `/api/v1/ws`；前端位于 `frontend/`，后端接口与运行服务分别位于 `module/api/`、`module/runtime/`。新增功能沿用这些边界。
+- WebUI 业务通信使用 `/api/v1/ws`，按 `channel=control` 与 `channel=data` 分流；前端位于 `frontend/`，后端接口与运行服务分别位于 `module/api/`、`module/runtime/`。新增功能沿用这些边界。
 - 修改后端 API 参数模型或方法注册后，运行 `uv run python -m dev_tools.export_api_schema`，同步 `frontend/src/api/generated.ts` 与 `frontend/src/api/contract.json`，不手改生成产物。
 - CI 会重新生成按钮、配置和 API 契约并检查差异。相关源文件与生成产物应一并交付；生成器产生无关差异时先查明原因，保留原有工作区修改。
 

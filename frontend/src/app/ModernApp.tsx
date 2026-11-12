@@ -5,6 +5,7 @@
 import {BrandActions} from '../components/BrandActions'
 import {InstancePageActivities} from './InstancePageActivities'
 import { PasswordInput, Select } from '../components/FormControls'
+import { Input } from '../components/ui/input'
 import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type MouseEvent, type ChangeEvent } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { getLayout, subscribeLayout } from './layout'
@@ -41,6 +42,12 @@ const PRIMARY_NAV_PATHS = ['/announcement', '/updater', '/interface', '/remote',
 const SETUP_PATH = '/setup'
 const Overview = lazy(() => import('../pages/Overview').then(module => ({default: module.Overview})))
 
+/**
+ * 创建实例的弹窗：支持选初始配置或从本机导入 JSON 配置文件。
+ *
+ * @param onClose 创建成功或取消后关闭弹窗的回调。
+ * @param startWithImport 从「导入配置」入口进入时为 true，弹窗打开即拉取可导入配置列表。
+ */
 export function CreateInstance({onClose, startWithImport = false}: {onClose: () => void; startWithImport?: boolean}) {
   const [name, setName] = useState('')
   const [source, setSource] = useState('')
@@ -98,7 +105,7 @@ export function CreateInstance({onClose, startWithImport = false}: {onClose: () 
     <label className="button secondary file-button" htmlFor="instance-import-file">{ui('instance.importPick')}<input id="instance-import-file" type="file" accept="application/json,.json" onChange={uploadImport}/></label>
     <button type="button" className="button secondary" disabled={importState.loading} onClick={pickImport}>{importState.loading ? ui('instance.importLoading') : ui('instance.importConfig')}</button>
     {importState.items.length > 0 && <label>{ui('instance.importSelect')}<Select value={importFile} onChange={event => chooseImport(event.target.value)}><option value="">{ui('instance.defaultConfig')}</option>{importState.items.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}</Select><span className="muted">{ui('instance.importHint')}</span></label>}
-    <label>{ui('instance.name')}<input autoFocus required pattern={INSTANCE_NAME_PATTERN} value={name} onChange={event => setName(event.target.value)} placeholder={ui('instance.namePlaceholder')} maxLength={64}/></label>
+    <label>{ui('instance.name')}<Input autoFocus required pattern={INSTANCE_NAME_PATTERN} value={name} onChange={event => setName(event.target.value)} placeholder={ui('instance.namePlaceholder')} maxLength={64}/></label>
     <label>{ui('instance.initialConfig')}<Select value={source} onChange={event => {setSource(event.target.value); setImportFile('')}}><option value="">{ui('instance.defaultConfig')}</option>{instances.map(item => <option key={item.name}>{item.name}</option>)}</Select></label>
     {error && <ErrorBox message={error}/>}
     <button className="button primary" disabled={busy}>{busy ? ui('instance.creating') : ui('instance.create')}<ArrowRight size={16}/></button>
@@ -123,6 +130,10 @@ function Login() {
     </form></div>
 }
 
+/**
+ * 应用外壳：按连接状态分流登录页、引导页与主界面，组装侧栏、顶栏与路由出口，
+ * 并按当前页面订阅后端事件主题。所有 Hook 都在早退 return 之前调用（见行内注释）。
+ */
 export function ModernApp() {
   const connection = useConnection()
   const {instancesLoaded, instances, schema, t, ui, notify, previewEnabled, devMode, setDevMode, theme} = useApp()
@@ -133,8 +144,8 @@ export function ModernApp() {
   const location = useLocation()
   const [creating, setCreating] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
-  /* 只区分「全新打开」与「刷新 / 后退前进」：前者才回上次选中的实例。
-     刷新时地址栏已经是用户要停留的页面，写进去就不再改。 */
+  // 只区分「全新打开」与「刷新 / 后退前进」：前者才回上次选中的实例。
+  // 刷新时地址栏已经是用户要停留的页面，写进去就不再改。
   const freshOpen = useRef((performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)?.type === 'navigate')
   const update = useUpdater()
   const announcement = useAnnouncement()
@@ -265,19 +276,19 @@ export function ModernApp() {
   const layout = useSyncExternalStore(subscribeLayout, getLayout, getLayout)
   /* 检视器停靠时整块画布要为它让出宽度，所以外壳自己订阅，靠类名驱动。 */
   const inspector = useSyncExternalStore(subscribeMaterialInspector, getMaterialInspector, getMaterialInspector)
-  /* 登录页要在所有 Hook 调用之后返回：否则同一次会话里的 Hook 数量会随连接状态变化，
-     隧道远程访问首帧就走 auth，React 会直接抛 #300 崩掉整页。 */
+  // 登录页要在所有 Hook 调用之后返回：否则同一次会话里的 Hook 数量会随连接状态变化，
+  // 隧道远程访问首帧就走 auth，React 会直接抛 #300 崩掉整页。
   if (connection === 'auth') return <Login/>
   if (setup || empty) return <main className="instance-setup">{setup && empty && schema ? <Suspense fallback={<Loading/>}><Outlet/></Suspense> : <Loading/>}</main>
   const hasDockedInspector = theme !== 'minimal' && inspector.open && inspector.docked && !inspector.minimized
   return <div
     className={`app-shell ${layout.sidebarCollapsed ? 'nav-collapsed' : ''} ${hasDockedInspector ? 'has-docked-inspector' : ''} ${currentTask ? 'task-config-shell' : ''} ${legacyShell ? 'legacy-shell' : ''} ${legacyGlobalShell ? 'legacy-global-shell' : ''} ${mobileOpen ? 'mobile-open' : ''}`}
-    style={layout.sidebarWidth != null ? ({'--sidebar-width': `${layout.sidebarWidth}px`} as React.CSSProperties) : undefined}
   >
     <a className="skip-link" href={`#${mainContentId}`} onClick={event => {event.preventDefault(); document.getElementById(mainContentId)?.focus()}}>{ui('nav.skipContent')}</a>
     {legacyShell && topbar}
     <NavHandle/>
-    <aside className="sidebar">
+    {/* 导航面板没有可编辑内容，右键默认菜单只会碍事：整块禁掉。 */}
+    <aside className="sidebar" style={layout.sidebarWidth != null ? ({'--sidebar-width': `${layout.sidebarWidth}px`} as React.CSSProperties) : undefined} onContextMenu={event => event.preventDefault()}>
       <SidebarResizeHandle label="拖动调整侧边栏宽度（双击恢复默认）"/>
       {/* 旧版把招牌放进顶栏，桌面端这一行隐藏；窄屏侧栏是抽屉，招牌回抽屉里。 */}
       <div className={`sidebar-brand ${legacyShell ? 'legacy-sidebar-actions' : ''}`.trim()}><div className="sidebar-brand-left">{brand}<BrandActions/></div><button className="mobile-close icon-button" aria-label={ui('nav.close')} onClick={() => setMobileOpen(false)}><X size={18}/></button></div>

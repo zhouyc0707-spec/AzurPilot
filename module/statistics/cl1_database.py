@@ -7,6 +7,7 @@
 # -*- coding: utf-8 -*-
 import json
 from copy import deepcopy
+import time
 from contextlib import contextmanager, suppress
 from contextvars import ContextVar
 from pathlib import Path
@@ -21,29 +22,16 @@ from module.logger import logger
 COINS_EXACT_DAYS = 3
 COINS_HISTORY_VERSION = 2
 COINS_CLEANUP_VERSION = 1
+# 黄币快照逐条保留的时间窗口；更早的按小时抽稀，控制月度文档体积。
+YELLOW_COIN_EXACT_HOURS = 6
 
 
-def thin_coins_snapshots(snapshots: List[Dict[str, Any]], *, enabled: bool = False) -> List[Dict[str, Any]]:
-    """默认保留全部原始凭证点；显式启用时执行上游按小时抽稀。
-
-    凭证写入很频繁（约 3 分钟一条），逐条无限增长会让月度 JSON 越来越大；
-    本地旧统计曲线依赖完整历史细节，因此运行期关闭有损抽稀，查询和传输仍使用
-    上游优化。保留抽稀算法供明确需要压缩的离线调用使用。
-
-    Args:
-        snapshots: 凭证快照列表，元素含 ts 等字段。
-        enabled: 是否启用有损抽稀；运行期调用默认关闭。
-
-    Returns:
-        list[dict]: 按时间升序整理的快照列表；未启用时保留全部原始记录。
-    """
+def thin_snapshots(snapshots: List[Dict[str, Any]], exact: timedelta) -> List[Dict[str, Any]]:
+    """最近窗口逐条保留，更早每小时保留最后一点，无效时间记录原样保留。"""
     if not snapshots:
         return snapshots
     ordered = sorted(snapshots, key=lambda item: str(item.get('ts', '')))
-    # 历史补齐会把更早的读数追加到现有记录之后，排序独立于有损抽稀。
-    if not enabled:
-        return ordered
-    cutoff = datetime.now() - timedelta(days=COINS_EXACT_DAYS)
+    cutoff = datetime.now() - exact
     kept: List[Dict[str, Any]] = []
     last_hour = None
     for snapshot in ordered:
@@ -64,6 +52,18 @@ def thin_coins_snapshots(snapshots: List[Dict[str, Any]], *, enabled: bool = Fal
             kept.append(snapshot)
             last_hour = hour
     return kept
+
+
+def thin_coins_snapshots(snapshots: List[Dict[str, Any]], *, enabled: bool = False) -> List[Dict[str, Any]]:
+    """运行期保留全部紫币关联凭证点，显式离线调用才启用按小时抽稀。"""
+    if enabled:
+        return thin_snapshots(snapshots, timedelta(days=COINS_EXACT_DAYS))
+    return sorted(snapshots, key=lambda item: str(item.get('ts', '')))
+
+
+def thin_yellow_coin_snapshots(snapshots: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """按用户决定采用上游黄币策略，六小时外每小时只保留末点。"""
+    return thin_snapshots(snapshots, timedelta(hours=YELLOW_COIN_EXACT_HOURS))
 
 
 class Cl1Database:
@@ -1383,6 +1383,14 @@ class Cl1Database:
                 "source": source,
             }
             if self._try_append_coin_snapshot(conn, instance, month, 'yellow_coin_snapshots', snapshot):
+                # 仅整理黄币族，沿用上游窗口算法，保留本地其他统计族的原生增量边界。
+                rows = [dict(row) for row in conn.execute(
+                    'SELECT id, ts FROM yellow_coin_snapshots WHERE instance=? AND month=? ORDER BY ordinal',
+                    (instance, month),
+                )]
+                kept = {row['id'] for row in thin_yellow_coin_snapshots(rows)}
+                conn.executemany('DELETE FROM yellow_coin_snapshots WHERE id=?',
+                                 [(row['id'],) for row in rows if row['id'] not in kept])
                 return
             data = self._get_stats_in_connection(conn, instance, month)
 
@@ -1392,7 +1400,7 @@ class Cl1Database:
                     if self._coerce_int(snapshots[-1].get("yellow_coin", -1)) == yellow_coin:
                         return
             snapshots.append(snapshot)
-            data["yellow_coin_snapshots"] = snapshots
+            data["yellow_coin_snapshots"] = thin_yellow_coin_snapshots(snapshots)
             self._save_stats_in_connection(conn, instance, month, data)
 
     def _latest_purple_snapshot(self, conn, instance, month):
@@ -1521,6 +1529,33 @@ class Cl1Database:
             logger.warning('[统计-快照] 后台写入被取消')
         elif future.exception() is not None:
             logger.error(f'[统计-快照] 后台写入失败: {type(future.exception()).__name__}')
+
+    # 同类型失败在窗口内只记一条，避免争用期刷屏。
+    _background_failure_at = {}
+    _background_failure_interval = 60.0
+
+    @classmethod
+    def _background_finished(cls, future):
+        """后台写入失败只报类型名，丢弃无主的 asyncio 异常栈。"""
+        if future.cancelled():
+            return
+        error = future.exception()
+        if error is None:
+            return
+        name = type(error).__name__
+        stamp = time.monotonic()
+        if stamp - cls._background_failure_at.get(name, 0.0) < cls._background_failure_interval:
+            return
+        cls._background_failure_at[name] = stamp
+        logger.warning(f'[统计-后台] 写入失败（可在下个周期重试）：{name}')
+
+    def _submit_write(self, function, *args, **kwargs):
+        """提交后台写入并挂降噪失败回调，避免 asyncio 打出无主 traceback。"""
+        from module.base.async_executor import async_executor
+
+        future = async_executor.submit(function, *args, **kwargs)
+        future.add_done_callback(self._background_finished)
+        return future
 
     def migrate_from_json(self, json_path: Path, instance: str):
         """显式导入旧月份文件，只补缺月，不修改源文件。"""
@@ -2039,29 +2074,21 @@ class Cl1Database:
 
     def async_save_stats(self, instance: str, month: str, data: Dict[str, Any]):
         """异步保存指定月份的 CL1 统计数据。"""
-        from module.base.async_executor import async_executor
-
-        return async_executor.submit(self.save_stats, instance, month, data)
+        return self._submit_write(self.save_stats, instance, month, data)
 
     def async_increment_battle_count(self, instance: str, delta: int = 1):
         """异步增加战斗场次计数。"""
-        from module.base.async_executor import async_executor
-
-        return async_executor.submit(self.increment_battle_count, instance, delta)
+        return self._submit_write(self.increment_battle_count, instance, delta)
 
     def async_increment_akashi_encounter(self, instance: str, month: Optional[str] = None):
         """异步增加明石遭遇次数。"""
-        from module.base.async_executor import async_executor
-
-        return async_executor.submit(self.increment_akashi_encounter, instance, month)
+        return self._submit_write(self.increment_akashi_encounter, instance, month)
 
     def async_add_akashi_ap_entry(
         self, instance: str, amount: int, base: int, count: int, source: str
     ):
         """异步记录明石购买行动力条目。"""
-        from module.base.async_executor import async_executor
-
-        return async_executor.submit(
+        return self._submit_write(
             self.add_akashi_ap_entry, instance, amount, base, count, source
         )
 
@@ -2079,9 +2106,7 @@ class Cl1Database:
 
     def async_set_last_ap_notification(self, instance: str, ap_current: int):
         """异步记录最近一次行动力通知值。"""
-        from module.base.async_executor import async_executor
-
-        return async_executor.submit(
+        return self._submit_write(
             self.set_last_ap_notification, instance, ap_current
         )
 
@@ -2102,9 +2127,7 @@ class Cl1Database:
         self, instance: str, hazard_level: int = None, delta: float = None
     ):
         """异步增加短猫相接战斗场次计数。"""
-        from module.base.async_executor import async_executor
-
-        return async_executor.submit(
+        return self._submit_write(
             self.increment_meow_battle_count, instance, hazard_level, delta
         )
 
@@ -2112,9 +2135,7 @@ class Cl1Database:
         self, instance: str, duration: float, hazard_level: int = None
     ):
         """异步记录短猫相接单轮耗时。"""
-        from module.base.async_executor import async_executor
-
-        return async_executor.submit(
+        return self._submit_write(
             self.add_meow_round_time, instance, duration, hazard_level
         )
 
@@ -2122,9 +2143,7 @@ class Cl1Database:
         self, instance: str, duration: float, hazard_level: int = None
     ):
         """异步记录短猫相接战斗耗时。"""
-        from module.base.async_executor import async_executor
-
-        return async_executor.submit(
+        return self._submit_write(
             self.add_meow_battle_time, instance, duration, hazard_level
         )
 
@@ -2152,9 +2171,7 @@ class Cl1Database:
         self, instance: str, source: str = "cl1", hazard_level: int = None
     ):
         """异步记录塞壬研究装置出现。"""
-        from module.base.async_executor import async_executor
-
-        return async_executor.submit(
+        return self._submit_write(
             self.add_siren_research_device, instance, source, hazard_level
         )
 
@@ -2162,17 +2179,13 @@ class Cl1Database:
         self, instance: str, hazard_level: int, month: Optional[str] = None,
     ):
         """异步增加短猫相接明石遭遇计数。"""
-        from module.base.async_executor import async_executor
-
-        return async_executor.submit(
+        return self._submit_write(
             self.increment_meow_akashi_encounter, instance, hazard_level, month
         )
 
     def async_add_meow_akashi_ap(self, instance: str, hazard_level: int, amount: int):
         """异步记录短猫相接明石行动力购买。"""
-        from module.base.async_executor import async_executor
-
-        return async_executor.submit(
+        return self._submit_write(
             self.add_meow_akashi_ap, instance, hazard_level, amount
         )
 
@@ -2753,9 +2766,7 @@ class Cl1Database:
         self, instance: str, project: str, series: int, items: Dict[str, int], imgid: str = ''
     ):
         """异步写入科研掉落，避免解析结果落库时阻塞主循环。"""
-        from module.base.async_executor import async_executor
-
-        return async_executor.submit(
+        return self._submit_write(
             self.add_research_drop, instance, project, series, items, imgid=imgid
         )
 
@@ -3025,9 +3036,7 @@ class Cl1Database:
         commission_name: Optional[str] = None,
     ):
         """异步记录委托收益。"""
-        from module.base.async_executor import async_executor
-
-        return async_executor.submit(
+        return self._submit_write(
             self.add_commission_income, instance, items, commission_count, screenshots,
             commission_name=commission_name,
         )

@@ -9,13 +9,15 @@ WebUI 是用户与 AzurPilot 交互的唯一界面：创建与配置实例、编
 WebUI 不是一个目录，而是一个跨四层协作的体系：
 
 - **浏览器层（frontend/）**：React + TypeScript + Vite 的单页应用，纯静态资源，不含游戏业务；负责渲染、表单交互、主题与连接管理。
-- **API 服务层（module/api/）**：Starlette ASGI 应用，托管静态资源、`/healthz` 与 `/mcp` 挂载，并以 `/api/v1/ws` 这一条 WebSocket 作为唯一业务通道。
+- **API 服务层（module/api/）**：Starlette ASGI 应用，托管静态资源、`/healthz` 与 `/mcp` 挂载，业务连接共用 `/api/v1/ws` 路径，按 `channel=control` 与 `channel=data` 分为操作和数据两条 WebSocket。
 - **运行时与进程层（module/runtime/ + gui.py）**：管理 worker（实例调度进程）的生命周期、更新事务、共享状态，以及 WebUI 自身的热重载与依赖同步。
 - **任务实例层（alas.py 子进程）**：每个配置实例最多一个 worker 进程；调度器运行 `AzurLaneAutoScript.loop()`，单次任务只绑定并执行指定任务，二者都通过运行时层控制设备。
 
 这样拆分各自解决一个问题。前端与后端解耦：前端可以脱离 Python 用 mock 服务独立开发（见 frontend/README.md），构建产物由后端静态托管。协议与业务解耦：module/api 刻意做成薄适配层，测试可以用临时配置目录并关闭真实进程生命周期完整运行，不接触设备。进程与业务解耦：gui.py 父监督进程不导入游戏模块，更新替换源码与 `.venv` 时父进程仍存活，才能完成「同步依赖 → 重建服务 → 按恢复计划拉回实例」的自我更新闭环。
 
 **本地兼容边界**：上游已迁移到 React 前端 + WebSocket API v1；本仓库另保留 `module/webui/` 和 `webapp/` 的 PyWebIO 运行入口。React 的「旧版主题」是 `legacy-light` / `legacy-dark`，顶部新旧 UI 切换只切换 React 主题，不切换后端。两种运行入口共用 `module/runtime` 的进程管理；任务列表的单次执行与停止也遵循同一实例互斥和运行批次核验。
+
+PyWebIO 的品牌图片继续通过 `/static/doc/` 访问，静态挂载目录随上游图片迁移改为 `docs/images/`，保留已有CSS相对URL与反向代理前缀。
 
 原 PyWebIO 的统计页保留已渲染内容，`app_statistics_page.py` 每 15 秒检查当前配置目录的 `azurpilot.db` 总库及 `-wal` 文件版本，有变化时提示刷新，不打断图表查看。签名包含文件路径、修改时间和大小，不再监听迁移后停止写入的旧统计库或舰船经验 JSON；检查本身不建连接、不触发迁移。`module/webui/warmup.py` 的每进程一次后台预热直接以 SQLite `mode=ro` 打开已存在的总库，不调用业务连接或初始化入口；未迁移、总库缺失时跳过，不创建总库或标记。正式迁移仍由运行入口负责。相关回归见 `tests/test_webui_statistics_page.py` 与 `tests/test_webui_warmup.py`。
 
@@ -92,7 +94,7 @@ AzurPilot/
 | `uv run python gui.py`（`__main__`） | 整个体系的进程起点：按 `EnableReload` 分流监督模式或直连模式 |
 | `gui.run_webui_supervisor()` / `gui.func()` | 父监督循环 / WebUI 服务子进程体 |
 | `module.api.app.create_app` | ASGI 应用工厂，uvicorn 以工厂字符串加载 |
-| `/api/v1/ws`（`Gateway.endpoint`） | 浏览器业务连接入口：Origin 校验、认证、会话 |
+| `/api/v1/ws`（`Gateway.endpoint`） | 浏览器业务连接入口：按control/data分流，执行Origin校验、认证和会话管理 |
 | `module.api.lifecycle.startup` / `clearup` | 应用 lifespan 钩子：共享运行时的启动与回收 |
 | `ProcessManager.run_process` | worker 进程入口：初始化日志、预览与事件后运行调度器 |
 | `AzurLaneAutoScript.loop` | worker 内的调度循环（游戏业务从这里开始） |
@@ -133,7 +135,7 @@ flowchart TB
     D["模拟器 / 游戏设备"]
 
     B -->|"HTTP 静态资源"| A
-    B -->|"WebSocket /api/v1/ws 业务请求"| A
+    B -->|"WebSocket /api/v1/ws control/data"| A
     A -->|"订阅事件（状态/日志/截图帧）"| B
     A -->|"进程启停 / 状态读取"| R
     A -->|"配置校验与写入（config_transaction）"| C
@@ -146,7 +148,7 @@ flowchart TB
     G -.->|"按登记回收孤儿"| W1
 ```
 
-浏览器与后端之间只有两类 HTTP 交互：加载静态资源，以及升级一条 `/api/v1/ws` WebSocket。此后一切业务都是 WS 请求-响应或订阅事件；TCP 断开不影响 worker 运行，浏览器重连后重新认证并重建订阅。
+浏览器加载静态资源后，通过同一路径建立 `/api/v1/ws?channel=control` 和 `/api/v1/ws?channel=data` 两条连接。操作与数据请求分流，避免统计大响应阻塞启停和配置操作。连接协商后支持分片传输，未带channel的旧客户端继续采用原协议。TCP断开不影响worker运行，浏览器重连后重新认证并重建订阅。
 
 两条主线贯穿日常运行：
 
@@ -159,7 +161,7 @@ flowchart TB
 
 | 模块 | 关系 |
 | --- | --- |
-| 浏览器（用户） | 唯一常规交互方；静态资源 + 单条 WebSocket |
+| 浏览器（用户） | 常规交互方；静态资源及control/data两条WebSocket |
 | Electron 桌面启动器 | 以 `--electron` 拉起 gui.py 并内嵌页面；免密信任令牌与命令通道分别见 `module/runtime/launcher_trust.py`、`module/runtime/launcher.py`，六个本机端点由 `module/api/launcher_api.py` 实现，与通知扩展一起通过 `launcher_routes.py` 注册 |
 | MCP 客户端 | 经 `/mcp` 挂载或独立 SSE 服务访问，与 WebUI 共享同一份服务对象与密码 |
 
@@ -370,7 +372,7 @@ v1 只允许兼容性新增；删除方法或更改语义需要新版本路径�
 
 ## 17. 已知限制
 
-- **业务无 HTTP 回退**：全部业务在一条 WebSocket 上，反向代理必须支持 Upgrade 并保留外部 Host/Origin；WS 不通则无任何业务能力。
+- **业务无 HTTP 回退**：业务使用control/data两条WebSocket连接，反向代理必须支持Upgrade并保留channel查询参数及外部Host/Origin。
 - **无跨连接事件重放**：重连后重新认证并重建订阅，服务不提供历史事件重放；日志靠游标增量，落后过多元数据会触发 reset。
 - **配额是硬限制**：32 个并发连接、单连接 30 请求/秒、单请求 1 MiB、单连接近 128 个请求 ID 去重——超限是拒绝而非排队。
 - **直连模式无热重载**：`EnableReload=false` 时没有监督器与重启通道，更新器拒绝执行需要重载的更新。

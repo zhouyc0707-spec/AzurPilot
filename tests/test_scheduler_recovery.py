@@ -1085,7 +1085,10 @@ class TestSchedulerRecovery(unittest.TestCase):
         self.assertEqual(script.task_restart_record, {})
 
     def test_main_continues_when_resource_observation_cannot_get_write_lock(self):
+        import sqlite3
+        from contextlib import closing
         from module.log_res import LogRes
+        from module.persistence.write_queue import write_queue
         from module.scheduler.store import ProgramStore
 
         directory = Path(self.enterContext(TemporaryDirectory())) / 'config'
@@ -1099,19 +1102,30 @@ class TestSchedulerRecovery(unittest.TestCase):
         script.config.data = {'Dashboard': {'Oil': {'Value': 123, 'Record': None}}}
         script.config.modified = {}
         recorder = LogRes(script.config)
-        script.main = lambda: setattr(recorder, 'Oil', 456)
+        stamp = datetime(2026, 11, 12, 9, 35, 10, 123456)
+        script.main = lambda: recorder.record('Oil', 456, observed_at=stamp)
 
         with patch('module.config.utils.filepath_config', return_value=profile), \
-                patch('module.statistics.resource_flow.observe') as ledger, \
-                patch.object(LogRes, '_record_all_resource_snapshot') as snapshot, \
-                self.assertLogs('alas', level='WARNING') as logs, store.database.transaction():
+                patch('module.statistics.resource_stats._LOCAL_DB', directory / 'azurstats_local.db'), \
+                patch.object(write_queue, '_schedule'), \
+                closing(sqlite3.connect(store.database.path)) as blocker:
+            blocker.execute('BEGIN IMMEDIATE')
             self.assertIs(script.run('main'), True)
+            self.assertFalse(write_queue.flush(timeout=0.01))
+            self.assertEqual(456, script.config.modified['Dashboard.Oil.Value'])
+            self.assertEqual({}, store.observations('testpilot'))
+            with store.database.transaction(write=False) as connection:
+                self.assertEqual(0, connection.execute('SELECT COUNT(*) FROM resource_flows').fetchone()[0])
+                self.assertEqual(0, connection.execute('SELECT COUNT(*) FROM resource_snapshots').fetchone()[0])
+            self.assertEqual(3, write_queue.pending())
+            blocker.rollback()
+            self.assertTrue(write_queue.flush(timeout=1))
 
-        self.assertIn('实例=testpilot 资源=Oil 来源=Main 错误=SQLITE_BUSY', '\n'.join(logs.output))
-        self.assertEqual(456, script.config.modified['Dashboard.Oil.Value'])
-        self.assertEqual({}, store.observations('testpilot'))
-        ledger.assert_not_called()
-        snapshot.assert_not_called()
+        self.assertEqual(456, store.observations('testpilot')['Oil']['Value'])
+        with store.database.transaction(write=False) as connection:
+            snapshot = connection.execute('SELECT ts, oil FROM resource_snapshots').fetchone()
+            self.assertEqual(456, snapshot['oil'])
+            self.assertEqual(stamp.isoformat(), snapshot['ts'])
         script.config.task_call.assert_not_called()
         script._try_restart_emulator.assert_not_called()
         self.assertEqual({}, script.task_restart_record)

@@ -3,6 +3,7 @@
  */
 
 import {
+  Fragment,
   useState,
   useMemo,
   useEffect,
@@ -42,8 +43,8 @@ import {
 import type { LogEntry } from '../api/types'
 import { LazyMarkdown } from './LazyMarkdown'
 
-// 提取日志消息正文（剥离 LEVEL HH:MM:SS.mmm │ 前缀）
-export function extractLogMessage(raw: string): { level: string; time: string; message: string } {
+// 提取日志消息正文（剥离 LEVEL HH:MM:SS.mmm │ 前缀）。
+function extractLogMessage(raw: string): { level: string; time: string; message: string } {
   const match = /^([A-Z]{4,8})\s+(?:(\d{4}-\d{2}-\d{2})\s+)?(\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?)\s*│\s*([\s\S]*)$/.exec(raw)
   if (match) {
     return { level: match[1], time: match[3], message: match[4] }
@@ -51,17 +52,19 @@ export function extractLogMessage(raw: string): { level: string; time: string; m
   return { level: 'INFO', time: '', message: raw }
 }
 
-// 词法高亮正则常量（避免重复实例化 RegExp）
+// 词法高亮正则常量（避免重复实例化 RegExp）。
 const TOKEN_REGEX = /(\b(?:True|False|None)\b)|(<<<[\s\S]*?>>>)|(\[[a-zA-Z0-9_.\u4e00-\u9fff-]+\])|([\{\}\[\]\(\)])|((?:[a-zA-Z]:[/\\]|(?:\.{1,2}[/\\]|[/\\]))[\w.\-/\\]+)|(\b\d{2}:\d{2}:\d{2}(?:\.\d+)?\b)/g
 
-// 词法解析与高亮 LRU 缓存（最大 2000 项，以 text + '\0' + search 为 key）
+/** 词法解析与高亮结果缓存的容量上限；缓存键为 text + '\0' + search。 */
 export const TOKEN_CACHE_MAX = 2000
 const tokenCache = new Map<string, ReactNode>()
 
+/** 清空词法高亮缓存；测试间隔离与内存回收用。 */
 export function clearTokenCache(): void {
   tokenCache.clear()
 }
 
+/** 读取当前词法高亮缓存的条目数；测试断言缓存行为用。 */
 export function getTokenCacheSize(): number {
   return tokenCache.size
 }
@@ -69,7 +72,7 @@ export function getTokenCacheSize(): number {
 function getCachedTokens(key: string): ReactNode | undefined {
   const cached = tokenCache.get(key)
   if (cached !== undefined) {
-    // 提升最近访问项到尾部
+    // 提升最近访问项到尾部。
     tokenCache.delete(key)
     tokenCache.set(key, cached)
     return cached
@@ -81,7 +84,7 @@ function setCachedTokens(key: string, node: ReactNode): void {
   if (tokenCache.has(key)) {
     tokenCache.delete(key)
   } else if (tokenCache.size >= TOKEN_CACHE_MAX) {
-    // 淘汰最久未访问的首项
+    // 淘汰最久未访问的首项。
     const oldestKey = tokenCache.keys().next().value
     if (oldestKey !== undefined) {
       tokenCache.delete(oldestKey)
@@ -90,6 +93,7 @@ function setCachedTokens(key: string, node: ReactNode): void {
   tokenCache.set(key, node)
 }
 
+/** 把一行日志文本做词法高亮（布尔值、[标签]、括号、路径、时间戳），并叠加搜索词高亮；结果走 LRU 缓存。 */
 export function renderTokens(text: string, search = ''): ReactNode {
   if (!text) return null
   const cacheKey = text + '\0' + search
@@ -99,6 +103,7 @@ export function renderTokens(text: string, search = ''): ReactNode {
   }
 
   const searchLower = search.trim().toLowerCase()
+  // 正则带 g 标志且跨调用复用，exec 的 lastIndex 要先归零。
   TOKEN_REGEX.lastIndex = 0
 
   const nodes: ReactNode[] = []
@@ -142,10 +147,10 @@ export function renderTokens(text: string, search = ''): ReactNode {
 
 function renderSearchHighlights(text: string, searchLower: string, keyPrefix: string): ReactNode {
   if (!text) return null
-  if (!searchLower) return <span key={keyPrefix}>{text}</span>
+  if (!searchLower) return <Fragment key={keyPrefix}>{text}</Fragment>
   const lower = text.toLowerCase()
   const idx = lower.indexOf(searchLower)
-  if (idx === -1) return <span key={keyPrefix}>{text}</span>
+  if (idx === -1) return <Fragment key={keyPrefix}>{text}</Fragment>
 
   const nodes: ReactNode[] = []
   let current = text
@@ -197,11 +202,9 @@ function CopyButton({ text, label = '复制' }: { text: string; label?: string }
   )
 }
 
-// ==========================================
-// 聚合卡片数据模型 (Card Aggregator Models)
-// ==========================================
+// 聚合卡片数据模型
 
-export type CardItem =
+type CardItem =
   | {
       type: 'map_grid'
       id: number
@@ -308,16 +311,15 @@ export type CardItem =
       rawText: string
     }
 
-// ==========================================
-// 流式块级聚合状态机 (Stream Aggregator)
-// ==========================================
+// 流式块级聚合状态机
 
-export interface CardRange {
+interface CardRange {
   card: CardItem
   start: number
   end: number
 }
 
+/** 从 startIndex 起把日志条目聚合成卡片：每个分支识别后端日志的一种排版模式，都不命中就落回单行卡片。 */
 function aggregateSlice(
   entries: LogEntry[],
   startIndex = 0,
@@ -334,7 +336,7 @@ function aggregateSlice(
     const { level, time, message } = extractLogMessage(raw)
     const trimmedMsg = message.trim()
 
-    // 1. 系统级横幅 (Level 0 HR: ═ + 居中文本 + ═)
+    // 1. 系统级横幅（Level 0 HR：═ + 居中文本 + ═）。
     if (
       trimmedMsg.includes('═'.repeat(10)) &&
       index + 2 < entries.length
@@ -356,12 +358,12 @@ function aggregateSlice(
       }
     }
 
-    // 2. 任务/阶段带线标题 (Level 1/2 HR: ═ TITLE ═ + 紧随其后的同名 INFO)
+    // 2. 任务/阶段带线标题（Level 1/2 HR：═ TITLE ═ + 紧随其后的同名 INFO）。
     const ruleMatch = /^[═─]{3,}\s*(.*?)\s*[═─]{3,}$/.exec(trimmedMsg)
     if (ruleMatch && ruleMatch[1].trim()) {
       const title = ruleMatch[1].trim()
       const isDouble = trimmedMsg.includes('═')
-      // 检查下一行是否重复输出了同名 INFO
+      // 检查下一行是否重复输出了同名 INFO。
       let rawText = entry.text
       if (index + 1 < entries.length) {
         const nextMsg = extractLogMessage(entries[index + 1].text).message.trim()
@@ -384,7 +386,7 @@ function aggregateSlice(
       continue
     }
 
-    // 3. 海域透视与边缘线识别: [地图-透视] 或 [地图-单应性]
+    // 3. 海域透视与边缘线识别：[地图-透视] 或 [地图-单应性]。
     const perspMatch = /^\[地图-(透视|单应性)\]\s+([\d.]+s)\s+(_)?\s*(水平:.*|边缘线:.*)$/.exec(trimmedMsg)
     if (perspMatch && index + 1 < entries.length) {
       const nextMsg = extractLogMessage(entries[index + 1].text).message
@@ -412,7 +414,7 @@ function aggregateSlice(
       }
     }
 
-    // 4. 全局海图主网格: [地图-显示]   A  B  C  D ...
+    // 4. 全局海图主网格：[地图-显示] 行头 + A  B  C  D 列头。
     const mapHeaderMatch = /^\[地图-显示\]\s+([A-Z](\s+[A-Z])+)/.exec(trimmedMsg)
     if (mapHeaderMatch) {
       const cols = mapHeaderMatch[1].trim().split(/\s+/)
@@ -450,7 +452,7 @@ function aggregateSlice(
       }
     }
 
-    // 5. 寻路代价网格 (Cost Map): A B C D (大间距) + 数字行
+    // 5. 寻路代价网格（Cost Map）：大间距字母列头 + 行号数字行。
     const costHeaderMatch = /^\s*([A-Z](\s{2,}[A-Z])+)/.exec(trimmedMsg)
     if (costHeaderMatch && index + 1 < entries.length) {
       const cols = costHeaderMatch[1].trim().split(/\s+/)
@@ -489,7 +491,7 @@ function aggregateSlice(
       }
     }
 
-    // 6. 局部视野或雷达矩阵 (View.show / Radar.show): 连续多行两字符单元格（无行号）
+    // 6. 局部视野或雷达矩阵（View.show / Radar.show）：连续多行两字符单元格（无行号）。
     const matrixRowMatch = /^\s*(([A-Za-z0-9_=+-]{2}|\.\.)\s+){3,}([A-Za-z0-9_=+-]{2}|\.\.)\s*$/.exec(trimmedMsg)
     if (matrixRowMatch && !/^\s*\d+/.test(trimmedMsg)) {
       const rows: string[][] = [trimmedMsg.split(/\s+/)]
@@ -523,7 +525,7 @@ function aggregateSlice(
       }
     }
 
-    // 7. 连续右对齐属性块 (attr_align: key: val)
+    // 7. 连续右对齐属性块（attr_align: key: val）。
     const attrMatch = /^\s*([^:\n]{2,22}):\s*(.+)$/.exec(trimmedMsg)
     if (attrMatch && !trimmedMsg.startsWith('http') && !trimmedMsg.startsWith('E:') && !trimmedMsg.startsWith('C:')) {
       const items = [{ key: attrMatch[1].trim(), value: attrMatch[2].trim() }]
@@ -557,7 +559,7 @@ function aggregateSlice(
       }
     }
 
-    // 8. 数据表格 (Rich Table / ASCII Table)
+    // 8. 数据表格（Rich Table / ASCII Table）。
     const hasUnicodeBox =
       (raw.includes('┌') && raw.includes('┘') && raw.includes('│')) ||
       (raw.includes('╭') && raw.includes('╯') && raw.includes('│') && !raw.includes('Traceback')) ||
@@ -616,7 +618,7 @@ function aggregateSlice(
       }
     }
 
-    // 9. 统一错误上下文 (error_context): 包含 [错误] 与 原因/建议
+    // 9. 统一错误上下文（error_context）：包含 [错误] 与 原因/建议。
     if (raw.includes('[错误]') && (raw.includes('原因：') || raw.includes('建议：'))) {
       const lines = raw.split('\n')
       let title = '运行时异常'
@@ -663,7 +665,7 @@ function aggregateSlice(
       continue
     }
 
-    // 10. 独立异常堆栈 (Traceback)
+    // 10. 独立异常堆栈（Traceback）。
     if (raw.includes('Traceback (most recent call last)')) {
       const excMatch = /([a-zA-Z0-9_]+Error|[a-zA-Z0-9_]+Exception|ScriptEnd):\s*(.*)$/.exec(raw)
       index++
@@ -679,7 +681,7 @@ function aggregateSlice(
       continue
     }
 
-    // 11. LLM 智能分析报告
+    // 11. LLM 智能分析报告。
     if (raw.includes('[LLM 分析报告') || raw.includes('[LLM] LLM 错误分析')) {
       const lines = raw.split('\n')
       const filtered: string[] = []
@@ -710,7 +712,7 @@ function aggregateSlice(
       continue
     }
 
-    // 12. 默认：常规单行日志卡片
+    // 12. 默认：常规单行日志卡片。
     index++
     const card: CardItem = {
       type: 'single',
@@ -734,6 +736,7 @@ export function createAggregationCache() {
 }
 const defaultAggregationCache = createAggregationCache()
 
+/** 清空增量聚合缓存；测试间隔离用。 */
 export function clearAggregationCache(): void {
   Object.assign(defaultAggregationCache, createAggregationCache())
 }
@@ -802,9 +805,7 @@ export function pruneMeasurements<T extends {id: number}>(
   }
 }
 
-// ==========================================
-// 语义色彩与 Tooltip 释义词典 (Map Cell Decorators)
-// ==========================================
+// 语义色彩与 Tooltip 释义词典
 
 const CELL_DICT: Record<string, { label: string; cls: string }> = {
   '++': { label: '陆地/不可通航', cls: 'cell-land' },
@@ -845,7 +846,7 @@ function getCellMeta(code: string): { label: string; cls: string } {
 }
 
 export function renderCellContent(code: string): ReactNode {
-  // 1. 敌舰: 1M, 2C, 3E, 1L, EN 等
+  // 1. 敌舰：行首 0-3 星数 + 舰种字母（1M、2C、3E…），EN 也是敌舰。
   if (/^[0-3][LMCET]/.test(code) || code === 'EN') {
     const star = code[0]
     return (
@@ -863,7 +864,6 @@ export function renderCellContent(code: string): ReactNode {
     )
   }
 
-  // 2. 首领关卡旗舰 (BO)
   if (code === 'BO') {
     return (
       <span className="cell-icon-wrap" title="关卡旗舰 Boss (BO)">
@@ -872,7 +872,6 @@ export function renderCellContent(code: string): ReactNode {
     )
   }
 
-  // 3. 旗舰与友军 (FL, Fl, ss, AL)
   if (code === 'FL' || code === 'Fl') {
     return (
       <span className="cell-icon-wrap" title="主力舰队旗舰 (FL)">
@@ -888,7 +887,6 @@ export function renderCellContent(code: string): ReactNode {
     )
   }
 
-  // 4. 不可走/陆地 (++)
   if (code === '++') {
     return (
       <span className="cell-icon-wrap" title="不可通航陆地/障碍 (++)">
@@ -911,12 +909,11 @@ export function renderCellContent(code: string): ReactNode {
     )
   }
 
-  // 5. 海域航道 (--, ==)：只留底色方格
+  // 5. 海域与已扫格（--、==）不画图标，只留 getCellMeta 给的底色。
   if (code === '--' || code === '==') {
     return null
   }
 
-  // 6. 大世界专属图标 (ME, EX, SD, AR, PO)
   if (code === 'ME') {
     return (
       <span className="cell-icon-wrap" title="大世界指挥喵搜索点 (ME)">
@@ -953,7 +950,6 @@ export function renderCellContent(code: string): ReactNode {
     )
   }
 
-  // 7. 物资与调查点 (MY, RE, AK, AM, QU)
   if (code === 'MY' || code === 'QU') {
     return (
       <span className="cell-icon-wrap" title="神秘问号调查点 (MY/QU)">
@@ -983,7 +979,6 @@ export function renderCellContent(code: string): ReactNode {
     )
   }
 
-  // 8. 视野盲区 (..)
   if (code === '..') {
     return <span className="cell-blind-dots">··</span>
   }
@@ -991,11 +986,9 @@ export function renderCellContent(code: string): ReactNode {
   return <span>{code}</span>
 }
 
-// ==========================================
-// 专用卡片组件集 (Specialized Card Components)
-// ==========================================
+// 专用卡片组件集
 
-// 1. 全局海图战术卡片
+/** 全局海图网格卡片：列头 + 行号表格，格子按 CELL_DICT 语义着色，附图例。 */
 export const MapGridCard = memo(
   function MapGridCard({ card }: { card: Extract<CardItem, { type: 'map_grid' }> }) {
     const [expanded, setExpanded] = useState(true)
@@ -1072,7 +1065,7 @@ export const MapGridCard = memo(
   (prev, next) => prev.card === next.card
 )
 
-// 2. 海域透视与边缘线识别卡片
+/** 海域透视卡片：SVG 梯形示意四条边界的完整度，附水平/垂直识别指标。 */
 export const PerspectiveCard = memo(
   function PerspectiveCard({ card }: { card: Extract<CardItem, { type: 'perspective' }> }) {
     const allActive = card.leftEdge && card.upperEdge && card.rightEdge && card.lowerEdge
@@ -1091,10 +1084,10 @@ export const PerspectiveCard = memo(
           </div>
         </div>
         <div className="card-body perspective-body">
-          {/* 梯形视口微型几何模型 (向前倾斜，近大远小) */}
+          {/* 梯形视口微型几何模型（向前倾斜，近大远小） */}
           <div className="trapezoid-visual" title="海域 2.5D 透视边界视口 (向前倾斜)">
             <svg width="156" height="80" viewBox="0 0 156 80" className="trapezoid-svg">
-              {/* 梯形底面浅色半透明背景 (仅完全闭合时填充) */}
+              {/* 梯形底面浅色半透明背景（仅完全闭合时填充） */}
               <polygon
                 points="44,14 112,14 144,68 12,68"
                 className={`trapezoid-fill ${allActive ? 'fill-all' : 'fill-broken'}`}
@@ -1105,25 +1098,25 @@ export const PerspectiveCard = memo(
               <line x1="96" y1="14" x2="108" y2="68" className="grid-depth-line" />
               <line x1="28" y1="41" x2="128" y2="41" className="grid-depth-line" />
 
-              {/* 上边界 (远处，较短) */}
+              {/* 上边界（远处，较短） */}
               <line
                 x1="44" y1="14" x2="112" y2="14"
                 className={`edge-stroke ${card.upperEdge ? 'edge-active' : 'edge-missing'}`}
               />
 
-              {/* 下边界 (近处，较宽) */}
+              {/* 下边界（近处，较宽） */}
               <line
                 x1="12" y1="68" x2="144" y2="68"
                 className={`edge-stroke ${card.lowerEdge ? 'edge-active' : 'edge-missing'}`}
               />
 
-              {/* 左边界 (向前倾斜收拢) */}
+              {/* 左边界（向前倾斜收拢） */}
               <line
                 x1="12" y1="68" x2="44" y2="14"
                 className={`edge-stroke ${card.leftEdge ? 'edge-active' : 'edge-missing'}`}
               />
 
-              {/* 右边界 (向前倾斜收拢) */}
+              {/* 右边界（向前倾斜收拢） */}
               <line
                 x1="112" y1="14" x2="144" y2="68"
                 className={`edge-stroke ${card.rightEdge ? 'edge-active' : 'edge-missing'}`}
@@ -1149,7 +1142,7 @@ export const PerspectiveCard = memo(
   (prev, next) => prev.card === next.card
 )
 
-// 3. 连续属性对齐卡片 (Property Sheet)
+/** 属性清单卡片：连续的 key: value 行排成两列网格。 */
 export const PropertySheetCard = memo(
   function PropertySheetCard({ card, search }: { card: Extract<CardItem, { type: 'property_sheet' }>; search: string }) {
     return (
@@ -1201,10 +1194,10 @@ function renderTableCell(cell: string): ReactNode {
   return cell
 }
 
-// 4. 原生数据表格卡片 (Benchmark / Score)
+/** 数据表格卡片：Rich/ASCII 表格还原成原生表格，列对齐按数字占比推断。 */
 export const DataTableCard = memo(
   function DataTableCard({ card }: { card: Extract<CardItem, { type: 'data_table' }> }) {
-    // 智能推断列对齐方式：若该列非空值多为数字或测量单位，则右对齐，否则左对齐
+    // 智能推断列对齐方式：若该列非空值多为数字或测量单位，则右对齐，否则左对齐。
     const colAlignments = useMemo(() => {
       return card.headers.map((_, cIdx) => {
         let numericCount = 0
@@ -1266,22 +1259,20 @@ export const DataTableCard = memo(
   (prev, next) => prev.card === next.card
 )
 
-// ==========================================
-// 异常堆栈解析与结构化渲染引擎 (Traceback Engine)
-// ==========================================
+// 异常堆栈解析与结构化渲染
 
-export interface StackCodeLine {
+interface StackCodeLine {
   lineNum: number
   isFault: boolean
   code: string
 }
 
-export interface StackLocalVar {
+interface StackLocalVar {
   name: string
   value: string
 }
 
-export interface ParsedStackFrame {
+interface ParsedStackFrame {
   file: string
   fileName: string
   line: number
@@ -1290,7 +1281,7 @@ export interface ParsedStackFrame {
   locals: StackLocalVar[]
 }
 
-export interface ParsedTraceback {
+interface ParsedTraceback {
   frames: ParsedStackFrame[]
   excLine: string
   rawText: string
@@ -1313,7 +1304,7 @@ function normalizeCodeLines(codeLines: StackCodeLine[]): StackCodeLine[] {
   return cleaned
 }
 
-export function parseTraceback(raw: string): ParsedTraceback {
+function parseTraceback(raw: string): ParsedTraceback {
   const lines = raw.split('\n').map(l => l.replace(/^\s{4,10}/, '').trimEnd())
   let currentFrame: ParsedStackFrame | null = null
   const frames: ParsedStackFrame[] = []
@@ -1325,17 +1316,17 @@ export function parseTraceback(raw: string): ParsedTraceback {
     const rawLine = lines[i]
     const stripped = rawLine.replace(/^[│\s]+|[│\s]+$/g, '').trim()
 
-    // 检查最后的异常类型与说明: ScriptEnd: ... 或 FooError: ...
+    // 检查最后的异常类型与说明：ScriptEnd: ... 或 FooError: ...。
     const excMatch = rawLine.match(/^([a-zA-Z0-9_.]*(?:Error|Exception|Exit|Interrupt|ScriptEnd))(?::\s*(.*))?$/)
     if (excMatch && excMatch[1] && !rawLine.includes('Traceback') && !rawLine.includes('File ')) {
       excLine = rawLine.trim()
       continue
     }
 
-    // 匹配调用栈帧头部:
-    // 1. Rich 风格: E:\AzurPilot\alas.py:1019 in run
+    // 匹配调用栈帧头部：
+    // 1. Rich 风格：E:\AzurPilot\alas.py:1019 in run
     const richFrame = rawLine.match(/[│]?\s*([a-zA-Z]:[\\\/][^:]+):(\d+)\s+in\s+([^\s│]+)/)
-    // 2. Python 标准风格: File "E:\AzurPilot\alas.py", line 1019, in run
+    // 2. Python 标准风格：File "E:\AzurPilot\alas.py", line 1019, in run
     const stdFrame = rawLine.match(/File\s+["\x27]([^"\x27]+)["\x27],\s+line\s+(\d+)(?:,\s+in\s+([^\s│]+))?/)
 
     const frameMatch = richFrame || stdFrame
@@ -1362,7 +1353,7 @@ export function parseTraceback(raw: string): ParsedTraceback {
 
     if (!currentFrame) continue
 
-    // 匹配 locals 变量框
+    // 匹配 locals 变量框。
     if (rawLine.includes('locals') && rawLine.includes('─')) {
       inLocals = true
       continue
@@ -1379,7 +1370,7 @@ export function parseTraceback(raw: string): ParsedTraceback {
       continue
     }
 
-    // 匹配 Rich 代码行 (含行号、故障标记 ❱/▶/> 与代码)
+    // 匹配 Rich 代码行（含行号、故障标记 ❱/▶/> 与代码）。
     const richCodeMatch = rawLine.match(/[│]?\s*(❱|▶|>)?\s*(\d+)\s*│\s*(.*?)\s*[│]?$/)
     if (richCodeMatch) {
       const isFault = Boolean(richCodeMatch[1])
@@ -1389,7 +1380,7 @@ export function parseTraceback(raw: string): ParsedTraceback {
       continue
     }
 
-    // 标准 Python 单行代码追踪 (紧随 File 行之后)
+    // 标准 Python 单行代码追踪（紧随 File 行之后）。
     if (stripped && !rawLine.includes('Traceback') && !rawLine.includes('╭') && !rawLine.includes('╰')) {
       if (currentFrame.codeLines.length === 0) {
         currentFrame.codeLines.push({ lineNum: currentFrame.line, isFault: true, code: stripped })
@@ -1406,7 +1397,8 @@ export function parseTraceback(raw: string): ParsedTraceback {
   return { frames, excLine, rawText: raw }
 }
 
-export const TracebackViewer = memo(
+/** Traceback 渲染器：解析 Rich/标准两种栈帧格式，结构化视图与原始文本可切换。 */
+const TracebackViewer = memo(
   function TracebackViewer({ rawText }: { rawText: string }) {
     const [viewMode, setViewMode] = useState<'structured' | 'raw'>('structured')
     const parsed = useMemo(() => parseTraceback(rawText), [rawText])
@@ -1529,7 +1521,7 @@ export const TracebackViewer = memo(
   (prev, next) => prev.rawText === next.rawText
 )
 
-// 5. 四段式统一错误上下文卡片 (error_context: 包含完整堆栈直接展开渲染)
+/** 统一错误上下文卡片：原因/影响/建议/底层异常分段展开，内嵌堆栈查看器。 */
 export const ErrorContextCard = memo(
   function ErrorContextCard({ card }: { card: Extract<CardItem, { type: 'error_context' }> }) {
     return (
@@ -1583,7 +1575,7 @@ export const ErrorContextCard = memo(
   (prev, next) => prev.card === next.card
 )
 
-// 6. 异常堆栈卡片 (Traceback)
+/** 异常堆栈卡片：整段 Traceback 交给 TracebackViewer 渲染。 */
 export const TracebackCard = memo(
   function TracebackCard({ card }: { card: Extract<CardItem, { type: 'traceback' }> }) {
     return (
@@ -1607,7 +1599,7 @@ export const TracebackCard = memo(
   (prev, next) => prev.card === next.card
 )
 
-// 7. LLM 智能分析报告卡片 (MarkdownView 格式化渲染)
+/** LLM 分析报告卡片：Markdown 渲染报告正文，徽章显示模型名。 */
 export const LlmReportCard = memo(
   function LlmReportCard({ card }: { card: Extract<CardItem, { type: 'llm_report' }> }) {
     return (
@@ -1632,7 +1624,7 @@ export const LlmReportCard = memo(
   (prev, next) => prev.card === next.card
 )
 
-// 8. 矩阵切片卡片 (Radar / View)
+/** 矩阵切片卡片：局部视野/雷达扫描的两字符单元格矩阵。 */
 export const MatrixGridCard = memo(
   function MatrixGridCard({ card }: { card: Extract<CardItem, { type: 'matrix_grid' }> }) {
     const [open, setOpen] = useState(true)
@@ -1701,14 +1693,16 @@ function interpolateColor(
   return `rgb(${r}, ${g}, ${b})`
 }
 
+/** 热力渐变停靠点：t ∈ [0,1] 由代价值归一而来，按远近插值取色。 */
 const HEATMAP_STOPS: [number, [number, number, number]][] = [
-  [0.0, [2, 132, 199]],   // #0284c7 Sky Blue (近距代价 1)
+  [0.0, [2, 132, 199]],   // #0284c7 Sky Blue（近距代价 1）
   [0.25, [37, 99, 235]],  // #2563eb 蓝色调
   [0.5, [124, 58, 237]],  // #7c3aed 紫色调
   [0.75, [192, 38, 211]], // #c026d3 品红色调
-  [1.0, [225, 29, 72]],   // #e11d48 Rose (远距最高代价)
+  [1.0, [225, 29, 72]],   // #e11d48 Rose（远距最高代价）
 ]
 
+/** 代价格子的配色：0 是起点绿，≥9000 是不可达暗格，其余按 maxCost 归一到渐变色带。 */
 export function getCostHeatmapStyle(num: number, maxCost: number): React.CSSProperties {
   if (num >= 9000) {
     return {
@@ -1742,7 +1736,7 @@ export function getCostHeatmapStyle(num: number, maxCost: number): React.CSSProp
   }
 }
 
-// 9. 寻路代价网格卡片 (Cost Grid)
+/** 寻路代价热力图卡片：代价格子按 HEATMAP_STOPS 渐变着色，附图例。 */
 export const CostGridCard = memo(
   function CostGridCard({ card }: { card: Extract<CardItem, { type: 'cost_grid' }> }) {
     const [open, setOpen] = useState(true)
@@ -1837,7 +1831,7 @@ export const CostGridCard = memo(
   (prev, next) => prev.card === next.card
 )
 
-// 10. 系统横幅卡片
+/** 系统横幅卡片：双横线夹标题的全宽横幅。 */
 export const SystemBannerCard = memo(
   function SystemBannerCard({ card }: { card: Extract<CardItem, { type: 'system_banner' }> }) {
     return (
@@ -1851,7 +1845,7 @@ export const SystemBannerCard = memo(
   (prev, next) => prev.card === next.card
 )
 
-// 11. 任务阶段卡片
+/** 任务阶段标题卡片：横线夹标题，level 区分主/次。 */
 export const StageHeaderCard = memo(
   function StageHeaderCard({ card }: { card: Extract<CardItem, { type: 'stage_header' }> }) {
     return (
@@ -1868,7 +1862,7 @@ export const StageHeaderCard = memo(
   (prev, next) => prev.card === next.card
 )
 
-// 12. 常规单行日志行
+/** 常规单行日志行：级别、时间与正文的高亮渲染。 */
 export const SingleLogLineCard = memo(
   function SingleLogLineCard({ card, search }: { card: Extract<CardItem, { type: 'single' }>; search: string }) {
     const lvlKey = card.level.toLowerCase()
@@ -1884,14 +1878,21 @@ export const SingleLogLineCard = memo(
   (prev, next) => prev.card === next.card && prev.search === next.search
 )
 
-// ==========================================
-// 虚拟化窗口与卡片高度预估 (Virtual Windowing Engine)
-// ==========================================
+// 虚拟化窗口与卡片高度预估
 
+/** 卡片数达到该阈值才启用虚拟化窗口；更少时全量渲染开销更低。 */
 export const VIRTUAL_THRESHOLD = 40
+/** 虚拟窗口上下各多渲染的像素余量，减少快速滚动时的白屏。 */
 export const OVERSCAN_BUFFER_PX = 800
-export const CARD_GAP_PX = 8
+const CARD_GAP_PX = 8
 
+/** 滚动不足半段预渲染余量时复用当前窗口，减少视口边缘的挂载与卸载。 */
+export function logWindowTop(scrollTop: number) {
+  const step = OVERSCAN_BUFFER_PX / 2
+  return Math.floor(scrollTop / step) * step
+}
+
+/** requestAnimationFrame 的环境兜底：无 window（测试/SSR）时退化为 16ms 的 setTimeout。 */
 export const safeRaf = (cb: FrameRequestCallback): number => {
   if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
     return window.requestAnimationFrame(cb)
@@ -1899,6 +1900,7 @@ export const safeRaf = (cb: FrameRequestCallback): number => {
   return setTimeout(cb, 16) as unknown as number
 }
 
+/** 与 safeRaf 配对取消；id 为 null 时忽略。 */
 export const safeCancelRaf = (id: number | null) => {
   if (id === null) return
   if (typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
@@ -1909,7 +1911,7 @@ export const safeCancelRaf = (id: number | null) => {
 }
 
 /**
- * 依据卡片类型与内部数据结构预估卡片渲染高度（包含 CSS padding/border 等）
+ * 依据卡片类型与内部数据结构预估卡片渲染高度（包含 CSS padding/border 等）。
  */
 export function getCardEstimatedHeight(card: CardItem): number {
   switch (card.type) {
@@ -1943,7 +1945,7 @@ export function getCardEstimatedHeight(card: CardItem): number {
 }
 
 /**
- * 二分查找当前视口区域 [visibleTop, visibleBottom] 所覆盖的卡片索引范围 [startIndex, endIndex]
+ * 二分查找当前视口区域 [visibleTop, visibleBottom] 所覆盖的卡片索引范围 [startIndex, endIndex]。
  */
 export function findVisibleRange(
   offsets: number[],
@@ -1954,18 +1956,18 @@ export function findVisibleRange(
 ): [number, number] {
   if (totalCount === 0) return [0, 0]
 
-  // 若视口顶部已经超出全部卡片总底部，直接锁定末尾卡片
+  // 若视口顶部已经超出全部卡片总底部，直接锁定末尾卡片。
   const lastBottom = (offsets[totalCount - 1] ?? 0) + (heights[totalCount - 1] ?? 0)
   if (visibleTop >= lastBottom) {
     return [totalCount - 1, totalCount - 1]
   }
 
-  // 若视口底部小于等于 0，直接锁定第一张卡片
+  // 若视口底部小于等于 0，直接锁定第一张卡片。
   if (visibleBottom <= 0) {
     return [0, 0]
   }
 
-  // 二分查找满足 offsets[i] + heights[i] >= visibleTop 的最小 i (startIndex)
+  // 二分查找满足 offsets[i] + heights[i] >= visibleTop 的最小 i（startIndex）。
   let low = 0
   let high = totalCount - 1
   let startIndex = 0
@@ -1981,7 +1983,7 @@ export function findVisibleRange(
     }
   }
 
-  // 二分查找满足 offsets[i] <= visibleBottom 的最大 i (endIndex)
+  // 二分查找满足 offsets[i] <= visibleBottom 的最大 i（endIndex）。
   low = startIndex
   high = totalCount - 1
   let endIndex = startIndex
@@ -2000,9 +2002,9 @@ export function findVisibleRange(
 }
 
 /**
- * 单个卡片类型分发渲染
+ * 单个卡片类型分发渲染。
  */
-export function renderCardItem(card: CardItem, search: string): ReactNode {
+function renderCardItem(card: CardItem, search: string): ReactNode {
   switch (card.type) {
     case 'map_grid':
       return <MapGridCard key={card.id} card={card} />
@@ -2032,11 +2034,7 @@ export function renderCardItem(card: CardItem, search: string): ReactNode {
   }
 }
 
-// ==========================================
-// 统一卡片模式渲染主容器 (LogCardView Container)
-// ==========================================
-
-export interface LogCardViewProps {
+interface LogCardViewProps {
   entries: LogEntry[]
   search: string
   scrollRef?: RefObject<HTMLDivElement | null>
@@ -2062,10 +2060,10 @@ export const LogCardView = memo(function LogCardView({
       (before, after) => before.type === after.type && before.rawText === after.rawText)
     measuredCards.current = cards
   }, [cards])
-  const [, setMeasureVersion] = useState(0)
+  const [measureVersion, setMeasureVersion] = useState(0)
   const measureRafRef = useRef<number | null>(null)
 
-  // 调度高度重测更新
+  // 高度变化合并到一帧再重渲染：ResizeObserver 高频触发，逐次 setState 会拖垮滚动。
   const requestMeasureUpdate = useCallback(() => {
     if (measureRafRef.current !== null) return
     measureRafRef.current = safeRaf(() => {
@@ -2074,35 +2072,33 @@ export const LogCardView = memo(function LogCardView({
     })
   }, [])
 
-  // 视口与滚动位置
   const [scrollState, setScrollState] = useState({ scrollTop: 0, clientHeight: 800 })
 
-  // 获取外层滚动容器（优先传入的 scrollRef，其次通过 DOM 寻找最近的父级）
+  // 获取外层滚动容器（优先传入的 scrollRef，其次找最近父级）。
   const getScrollElement = useCallback(() => {
     return scrollRef?.current ?? containerRef.current?.parentElement ?? null
   }, [scrollRef])
 
-  // 监听外部滚动容器的滚动与 Resize
+  // 监听外部滚动容器的滚动与尺寸变化。
   useEffect(() => {
     if (!active || !isVirtual) return
     const scrollEl = getScrollElement()
     if (!scrollEl) return
 
-    setScrollState({
-      scrollTop: scrollEl.scrollTop,
-      clientHeight: scrollEl.clientHeight || 800,
-    })
+    const syncWindow = () => {
+      const scrollTop = logWindowTop(scrollEl.scrollTop)
+      const clientHeight = scrollEl.clientHeight || 800
+      setScrollState(previous => previous.scrollTop === scrollTop && previous.clientHeight === clientHeight
+        ? previous : {scrollTop, clientHeight})
+    }
+    syncWindow()
 
     let scrollRafId: number | null = null
     const onScroll = () => {
       if (scrollRafId !== null) return
       scrollRafId = safeRaf(() => {
         scrollRafId = null
-        if (!scrollEl) return
-        setScrollState({
-          scrollTop: scrollEl.scrollTop,
-          clientHeight: scrollEl.clientHeight || 800,
-        })
+        syncWindow()
       })
     }
 
@@ -2110,14 +2106,7 @@ export const LogCardView = memo(function LogCardView({
 
     let resizeObserver: ResizeObserver | null = null
     if (typeof ResizeObserver !== 'undefined') {
-      resizeObserver = new ResizeObserver((observerEntries) => {
-        for (const entry of observerEntries) {
-          const h = entry.contentRect.height
-          if (h > 0) {
-            setScrollState(prev => (prev.clientHeight === h ? prev : { ...prev, clientHeight: h }))
-          }
-        }
-      })
+      resizeObserver = new ResizeObserver(syncWindow)
       resizeObserver.observe(scrollEl)
     }
 
@@ -2178,7 +2167,33 @@ export const LogCardView = memo(function LogCardView({
     measureRafRef.current = null
   }, [])
 
-  // 1. 卡片数量较少（如 < 40 张）：直接全量渲染，零计算开销
+  // 测量结果最多保留当前一屏历史窗口的数量级，连续运行也不会累积旧日志行高。
+  useEffect(() => {
+    const measured = heightCacheRef.current
+    if (measured.size <= 2 * cards.length) return
+    const retained = new Set(cards.map(card => card.id))
+    for (const id of measured.keys()) {
+      if (!retained.has(id)) measured.delete(id)
+    }
+  }, [cards])
+
+  // 滚动只移动窗口，偏移表仅在卡片或实测高度变化后重算。
+  const {heights, offsets, totalHeight} = useMemo(() => {
+    const heights: number[] = []
+    const offsets: number[] = []
+    let height = 0
+    if (isVirtual) {
+      for (const card of cards) {
+        const rowHeight = (heightCacheRef.current.get(card.id) ?? getCardEstimatedHeight(card)) + CARD_GAP_PX
+        heights.push(rowHeight)
+        offsets.push(height)
+        height += rowHeight
+      }
+    }
+    return {heights, offsets, totalHeight: Math.max(0, height - CARD_GAP_PX)}
+  }, [cards, isVirtual, measureVersion])
+
+  // 卡片不多时直接全量渲染，省去窗口计算与测量开销。
   if (!isVirtual) {
     return (
       <div ref={containerRef} className="log-cards-container">
@@ -2187,22 +2202,7 @@ export const LogCardView = memo(function LogCardView({
     )
   }
 
-  // 2. 虚拟化窗口计算
   const totalCount = cards.length
-  const heights = new Array<number>(totalCount)
-  const offsets = new Array<number>(totalCount)
-  let currentOffset = 0
-
-  for (let i = 0; i < totalCount; i++) {
-    const card = cards[i]
-    // 包含卡片自身高度以及 flex gap 占位
-    const baseHeight = heightCacheRef.current.get(card.id) ?? getCardEstimatedHeight(card)
-    const effectiveHeight = baseHeight + CARD_GAP_PX
-    heights[i] = effectiveHeight
-    offsets[i] = currentOffset
-    currentOffset += effectiveHeight
-  }
-  const totalHeight = Math.max(0, currentOffset - CARD_GAP_PX)
 
   const visibleTop = Math.max(0, scrollState.scrollTop - OVERSCAN_BUFFER_PX)
   const visibleBottom = scrollState.scrollTop + scrollState.clientHeight + OVERSCAN_BUFFER_PX

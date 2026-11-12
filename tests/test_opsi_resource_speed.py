@@ -596,7 +596,7 @@ class TestResourceCacheInvalidation(unittest.TestCase):
         handler = OSMap.__new__(OSMap)
         handler.config = SimpleNamespace(task=SimpleNamespace(command='OpsiHazard1Leveling'))
         handler.device = Mock()
-        handler.appear = Mock(return_value=True)
+        handler.match_template_color = Mock(return_value=True)
         handler.ui_ensure = Mock()
         names = ('_ap_snapshot', '_ap_purchase_count', '_yellow_coin_read', '_paired_purple_read')
         for name in names:
@@ -654,7 +654,7 @@ class TestDeferredResourceHistory(unittest.TestCase):
         recorder = LogRes(config)
         recorder.__dict__['groups'] = {'Oil': {}, 'Coin': {}}
         recorder.__dict__['_observe'] = Mock()
-        with patch('module.statistics.resource_stats.async_record_resource_snapshot') as queued, \
+        with patch('module.statistics.resource_stats.queue_resource_snapshot') as queued, \
                 patch('module.statistics.resource_stats.record_resource_snapshot') as synchronous:
             recorder.record('Oil', 150, defer_history=True)
         recorder._observe.assert_called_once_with('Oil', 150)
@@ -675,12 +675,13 @@ class TestDeferredResourceHistory(unittest.TestCase):
         recorder = LogRes(config)
         recorder.__dict__['groups'] = {'Oil': {}, 'Coin': {}, 'Pt': {}}
         recorder.__dict__['_observe'] = Mock()
-        with patch('module.statistics.resource_stats.record_resource_snapshot') as synchronous:
+        with patch('module.statistics.resource_stats.queue_resource_snapshot') as queued:
             recorder.Pt = 4720
             recorder.record('Coin', {'Limit': 105000})
-        synchronous.assert_called_once_with('isolated', {'Pt': 4720}, carry_forward=True)
+        self.assertEqual(queued.call_args.args, ('isolated', {'Pt': 4720}))
+        self.assertTrue(queued.call_args.kwargs['carry_forward'])
 
-    def test_legacy_history_remains_synchronous(self):
+    def test_default_history_is_queued_instead_of_blocking(self):
         config = SimpleNamespace(config_name='isolated', modified={}, data={
             'Dashboard': {'Oil': {'Value': 100, 'Record': None}},
         })
@@ -688,10 +689,10 @@ class TestDeferredResourceHistory(unittest.TestCase):
         recorder.__dict__['groups'] = {'Oil': {}}
         recorder.__dict__['_observe'] = Mock()
         with patch('module.statistics.resource_stats.record_resource_snapshot') as synchronous, \
-                patch('module.statistics.resource_stats.async_record_resource_snapshot') as queued:
+                patch('module.statistics.resource_stats.queue_resource_snapshot') as queued:
             recorder.record('Oil', 150)
-        synchronous.assert_called_once()
-        queued.assert_not_called()
+        queued.assert_called_once()
+        synchronous.assert_not_called()
 
     def test_sample_month_and_source_are_fixed_before_queue_processing(self):
         db = Cl1Database.__new__(Cl1Database)

@@ -1,6 +1,10 @@
+/**
+ * @fileoverview 舰队科技页的多语言文案表、四语言字典与 Wiki 阵营顺序常量。
+ */
+
 import type {Language} from '../i18n'
 
-// Wiki 图鉴阵营顺序；未收录的联动阵营保留在列表末尾。
+/** Wiki 图鉴阵营顺序；未收录的联动阵营保留在列表末尾。 */
 export const fleetFactionOrder: readonly number[] = [
   1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 97, 98, 96,
   101, 102, 103, 104, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115,
@@ -155,6 +159,7 @@ type Key = keyof typeof messages
 type Dictionary = {[K in Key as `fleetTech.${K}`]: string}
 const dictionary = (index: number) => Object.fromEntries(Object.entries(messages).map(([key, values]) => [`fleetTech.${key}`, values[index] ?? values[0]])) as Dictionary
 export const fleetTechZhCN = dictionary(0), fleetTechZhTW = dictionary(1), fleetTechEnUS = dictionary(2), fleetTechJaJP = dictionary(3), fleetTechZhMiao = dictionary(4)
+/** 按语言取一条舰队科技文案；找不到该 key 时原样返回 key。 */
 export function translateFleetTech(language: Language, key: string) {
   const index = {'zh-CN': 0, 'zh-TW': 1, 'en-US': 2, 'ja-JP': 3, 'zh-MIAO': 4}[language]
   const values = (messages as Record<string, readonly string[]>)[key]

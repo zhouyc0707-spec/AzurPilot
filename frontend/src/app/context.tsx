@@ -14,6 +14,7 @@ import type { ResolvedMode } from './palettes'
 
 export { languages }
 
+/** AppProvider 对外提供的上下文值；组件一律通过 useApp() 读取。 */
 export interface AppContextValue {
   instancesLoaded: boolean; instances: Instance[]; schema?: Schema; refresh: () => Promise<void>; t: (key: string) => string; ui: UiTranslator
   notify: (message: string, error?: boolean) => void
@@ -28,8 +29,11 @@ export interface AppContextValue {
   compactRailWidth: CompactRailWidth; setCompactRailWidth: (width: CompactRailWidth) => void
   language: Language; setLanguage: (language: Language) => void
 }
+/** 全局 React 上下文本体；业务代码不要直接 useContext，用 useApp() 拿已断言的非空值。 */
 export const AppContext = createContext<AppContextValue | null>(null)
+/** 订阅后端操作连接的状态（connecting/ready/auth/offline），登录界面与全局可编辑性由它驱动。 */
 export const useConnection = () => useSyncExternalStore(api.subscribe, api.getSnapshot, api.getSnapshot)
+/** 读取全局上下文；必须在 AppProvider 之内使用，Provider 外拿到 null 时这里的断言即失效。 */
 export const useApp = () => useContext(AppContext)!
 
 function initialLanguage(): Language {
@@ -40,6 +44,10 @@ function initialLanguage(): Language {
   return detectLanguage()
 }
 
+/**
+ * 全局 Provider：持有实例列表、配置架构、语言与主题偏好，连接就绪后拉取数据并订阅后端事件。
+ * 应用必须包在它之内；toast 提示也由它渲染。
+ */
 export function AppProvider({children}: {children: ReactNode}) {
   const connection = useConnection()
   const [instances, setInstances] = useState<Instance[]>([])
@@ -98,7 +106,7 @@ export function AppProvider({children}: {children: ReactNode}) {
   useEffect(() => api.onEvent(event => {
     if (event.topic !== 'instances') return
     const next = event.data as Instance[]
-    /* 后端每 2s 推一次快照；内容没变就留住旧引用，避免整棵消费树跟着重渲染。 */
+    // 后端每 2s 推一次快照；内容没变就留住旧引用，避免整棵消费树跟着重渲染。
     setInstances(previous => JSON.stringify(previous) === JSON.stringify(next) ? previous : next)
   }), [])
   useEffect(() => {

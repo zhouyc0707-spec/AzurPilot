@@ -1,0 +1,52 @@
+b9294e7fe fix(frontend): 修正玻璃任务卡片的错峰入场与开关绘制
+ae4263a10 fix(frontend): 减少玻璃任务卡片入场卡顿
+4cd964f51 fix(frontend): 恢复玻璃任务卡片的错峰入场
+c2765d563 perf(frontend): 降低运行总览的渲染开销
+6b144da6a Add:添加排除项
+7eaf529ed docs: 将 README 图片迁移到 docs/images
+bf077d3d1 feat(tui): 重构终端界面并完善交互、状态刷新与配置编辑
+6fb197ddb refactor(launcher): 将 TUI 入口合并到 gui.py
+6c420632d test(frontend): 补全端到端用例注释
+adb451870 refactor(frontend): 补全远程、调度与资源模块注释
+d7d7f93c4 refactor(frontend): 补全页面注释并统一控件用法
+922303539 refactor(frontend): 补全应用层与数据层注释并收窄导出
+f17bf44e9 refactor(frontend): 整理共享组件并补全注释
+55a6c7d28 refactor(frontend): 清理未使用的样式与设置页控件
+f7374abc2 chore(frontend): 精简未使用的前端依赖
+e59c44e7a refactor(persistence): 去掉舰船样本保存的冗余类型判断
+0329b0a81 refactor(persistence): 标量字段名集合提为模块常量
+69889b967 perf(stats): 黄币快照按小时抽稀，压缩整月重写代价
+2a3240cb6 chore: 忽略本地 .codebuddy 目录
+58a293cd0 docs: 同步持久化并发模型与锁等待说明
+1885204cd test: 补齐长连接句柄清理与排队写入用例
+4b145d9be fix(persistence): 替换总库前释放长连接
+91950a3ab fix(stats): 后台统计写入上报失败类型
+3e65b9f68 fix(stats): 日报只读查询改用延迟事务
+808d18506 perf(stats): 短猫汇总改为只读聚合加水位复核
+555f68e58 perf(log_res): 观测与快照改走排队写入
+5c041ee65 feat(persistence): 新增进程内排队写入队列
+b354f0bd6 feat(persistence): 总库改用长连接栈并分段重试写锁
+c3a624d52 feat(webui): 分离操作和数据 WebSocket 并支持分片
+d0e9e847a refactor(frontend): 使用 shadcn 表格与按钮
+47c70f309 fix(frontend): 移除舰船控件样式覆盖
+e3ee2ed60 refactor(frontend): 统一统计卡片编辑按钮
+4dc910772 refactor(frontend): 统一统计页面组合控件
+8707547e8 test(frontend): 验证暗色开关滑块边缘对齐
+ac37ca733 refactor(frontend): 统一舰船导入操作按钮
+9a8c6ac87 refactor(frontend): 统一统计页面操作按钮
+cf5032f98 refactor(frontend): 统一资源统计与舰队页面控件
+6b0a7339d test(frontend): 更新端到端断言覆盖设置页与任务配置控件
+ff5f82640 refactor(frontend): 舰队、统计与任务配置页面迁移到统一控件
+25838ae5a refactor(frontend): 应用外壳与偏好组件迁移到统一控件
+41f1359e4 refactor(frontend): 共享表单与弹窗组件迁移到组件库
+0f3e12cd6 refactor(frontend): 系统设置页改用卡片与字段组件
+75b2c9d6e build(frontend): 引入 shadcn/ui 基础组件与 radix 依赖
+293255dfd 修复玻璃任务卡片开关绘制错位
+0e212645d 1
+133382f64 fix(opsi): 放宽海域探索全部标签的匹配阈值
+3da26f381 搜索与调色板
+ce584a676 feat(war-archives): 支持愚者的天平作战档案
+c6c23f1ca 侧边栏组件更新
+8ffbb6460 微调样式
+bb1423290 Merge branch 'dev' of https://github.com/wess09/AzurPilot into dev
+6c77afe4c 调度器样式

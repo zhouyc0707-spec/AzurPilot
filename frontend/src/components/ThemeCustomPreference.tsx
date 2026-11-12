@@ -1,4 +1,8 @@
-import { lazy, Suspense, useEffect, useState, type CSSProperties } from 'react'
+/**
+ * @fileoverview 主题外观自定义设置：一级放品牌配色与材质面板入口，二级面板按区域收纳材质滑块。
+ */
+
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { useApp } from '../app/context'
 import { applyCustomLayer, familyOf, getThemePreference } from '../app/theme'
 import { MaterialDetailModal } from './MaterialDetailModal'
@@ -10,6 +14,7 @@ import { openMaterialInspector } from '../app/materialInspectorState'
 const MockInstancePreview = lazy(() => import('./MockInstancePreview').then(module => ({default: module.MockInstancePreview})))
 
 import { PaletteSwatches } from './PaletteSwatches'
+import { Slider } from './ui/slider'
 import type { UiKey } from '../i18n'
 
 type Ui = (key: UiKey, params?: Record<string, string | number>) => string
@@ -39,8 +44,10 @@ type PanelProps = {
   onRegionChange?: (region: RegionId) => void
 }
 
-/** 二级菜单的内容：先选作用的区域，下面只列这一区域的滑块，避免把全部滑块挤在一屏。
-    区域用一排可换行的芯片表示，选中项实心，该区域有自定义值时另带一个小圆点。 */
+/**
+ * 二级菜单的内容：先选作用的区域，下面只列这一区域的滑块，避免把全部滑块挤在一屏。
+ * 区域用一排可换行的芯片表示，选中项实心，该区域有自定义值时另带一个小圆点。
+ */
 export function MaterialDetailPanel({regions, custom, ui, onKnob, onResetKnob, onResetRegion, onResetAll, initialRegion, onRegionChange}: PanelProps & {initialRegion?: RegionId}) {
   const [region, setRegion] = useState<RegionId>(initialRegion ?? regions[0])
   const dirtyIn = (target: RegionId) => Object.keys(custom.params).some(id => id.startsWith(`${target}.`))
@@ -88,18 +95,15 @@ export function MaterialDetailPanel({regions, custom, ui, onKnob, onResetKnob, o
         return <div className="field-row knob-row" key={knob.id}>
           <div className="field-label"><label htmlFor={`ui-knob-${knob.id}`}>{ui(knob.labelKey)}</label></div>
           <div className="field-control knob-control">
-            <input
+            <Slider
               id={`ui-knob-${knob.id}`}
-              type="range"
               aria-label={label}
               min={knob.min}
               max={knob.max}
               step={knob.step}
-              value={value}
-              /* 已填充比例：滑块轨道的进度渐变按它绘制。 */
-              style={{['--knob-fill']: `${Math.round(((value - knob.min) / (knob.max - knob.min)) * 100)}%`} as CSSProperties}
+              value={[value]}
               /* 值没变就不落盘：写盘会把这一项标成「已调过」。 */
-              onChange={event => { const next = Number(event.target.value); if (next !== value) onKnob(knob.id, next) }}
+              onValueChange={([next]) => { if (next !== value) onKnob(knob.id, next) }}
             />
             <span className="knob-value">{value}{knob.unit}</span>
             <button type="button" className="knob-reset" title={ui('settings.resetItem')} aria-label={`${ui('settings.resetItem')} · ${label}`} disabled={stored === undefined} onClick={() => onResetKnob(knob.id)}><RotateCcw size={14} aria-hidden="true"/></button>
@@ -114,8 +118,10 @@ export function MaterialDetailPanel({regions, custom, ui, onKnob, onResetKnob, o
   </>
 }
 
-/** 有材质轴的家族专属的自定义外观：一级界面只放主题色与二级菜单入口，全部材质滑块都在二级菜单里。
-    区域只是控件挂载位置的归类（不想调的人不用管），每一区都能独立调、也能单独还原。 */
+/**
+ * 有材质轴的家族专属的自定义外观：一级界面只放主题色与二级菜单入口，全部材质滑块都在二级菜单里。
+ * 区域只是控件挂载位置的归类（不想调的人不用管），每一区都能独立调、也能单独还原。
+ */
 export function ThemeCustomPreference() {
   const {ui, material, instances} = useApp()
   const family = familyOf(getThemePreference().theme)

@@ -94,7 +94,7 @@ React 旧版统计在首次显示、手动刷新、60 秒轮询及 `statistics` 
 ### 负责
 
 - 渲染单页应用（hash 路由）：主页、实例总览、任务配置、统计、系统设置、更新器等页面
-- WebSocket 连接管理：认证、心跳、请求关联、超时与重连（`src/api/client.ts`）。发送 `system.restart` 后的 60 秒内，断线按 600–1,000 毫秒间隔重连；服务端明确拒绝、发送失败、重新认证成功、需要登录或主动断开时结束该窗口。请求响应前断线及请求超时保留剩余窗口。窗口到期后继续普通指数退避，业务写请求不会自动重发。
+- WebSocket 请求与订阅分流由 `src/api/client.ts` 负责。两条连接的认证、心跳、超时、重连与分片重组由 `src/api/socket.ts` 处理。发送 `system.restart` 后的 60 秒内，连接层按 600–1,000 毫秒间隔重连；明确拒绝、发送失败、认证成功、需要登录或主动断开时结束窗口，窗口到期恢复普通退避。
 - 配置表单展示与保存：字段保存队列、草稿恢复、重试与数值校验（`src/config/EditQueue.ts`）
 - 通用设置的任务优先级由 `FieldInput` 的 `task_priority` 专用文本框显示，每行保留英文任务标识，并以 `# 本地化任务名` 附加已有翻译；`src/config/taskPriorityText.ts` 的纯函数负责显示转换与提交清理，保存到 `General.YukikazeTaskManager.TaskPriorityAdjustment` 时仅提交英文标识，使用 `\n> ` 分隔，翻译注释不写入配置（兼容注释行与全角箭头）
 - 主题、语言、背景等浏览器侧偏好的保存与应用（localStorage / IndexedDB）
@@ -113,8 +113,8 @@ React 旧版统计在首次显示、手动刷新、60 秒轮询及 `statistics` 
 ```text
 frontend/
 ├── src/main.tsx              # 应用入口：hash 路由表、错误兜底、先加载主题再挂载
-├── src/api/                  # client.ts 连接层；generated.ts 与 contract.json 为生成产物
-├── src/app/                  # 布局、主题系统（theme.ts 按需加载）、连接上下文、各类偏好
+├── src/api/                  # client.ts 分流，socket.ts 连接；generated.ts 与 contract.json 为生成产物
+├── src/app/                  # 布局、主题系统（theme.ts 按需加载）、连接上下文、任务优先级解析（taskPriority.ts）、各类偏好
 ├── src/pages/                # 页面：Home / Overview / TaskConfig / Statistics / Settings / Updater 等
 ├── src/components/StockExchangeBoundary.tsx # 股票接入页面的加载和错误兜底
 ├── src/components/           # 可复用组件：FormControls、FieldInput（含任务优先级文本框）、LogPanel、StatisticsChart、实例切换等
@@ -196,3 +196,5 @@ Node.js >= 22.12（推荐 24），首次准备用 `npm ci --prefix frontend`。
 - [API 服务](api.md) —— 协议、认证与路由，前端所有业务通信的对端
 - [配置系统](../config.md) —— args.json、menu.json 与翻译文件的来源
 - [外部桥接与开发工具](../infra/submodule-tools.md) —— dev_tools.export_api_schema 所在的开发工具层
+
+2026-11-12前端融合继续使用独立两族外壳。新版接入上游控件库、全量调色板、搜索、目录与调度器独立列及右键队列菜单；旧版保留原下拉框、复选框、密码框、开关、分组队列与目录／调度切换。新版队列右键菜单继续提供本地独立执行／停止能力，停止按原runId校验。两族共用业务接口，统计本地刷新合并和历史缓存继续有效。

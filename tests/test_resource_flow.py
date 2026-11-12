@@ -71,6 +71,21 @@ class ResourceFlowTests(unittest.TestCase):
         self.assertEqual(0, result['total'])
         self.assertIsNone(next(item for item in result['resources'] if item['key'] == 'Coin')['current'])
 
+    def test_queued_observations_preserve_intermediate_income_and_expense(self):
+        from module.persistence.write_queue import write_queue
+
+        with patch.object(write_queue, '_schedule'), flow.task_session('testpilot', 'Main'):
+            flow.observe_async(self.config, 'Oil', 1000)
+            self.time += timedelta(seconds=1)
+            flow.observe_async(self.config, 'Oil', 900)
+            self.time += timedelta(seconds=1)
+            flow.observe_async(self.config, 'Oil', 1100)
+            self.assertTrue(write_queue.flush())
+        result = self.report(resource='Oil')
+        oil = next(item for item in result['resources'] if item['key'] == 'Oil')
+        self.assertEqual((200, 100, 1100), (oil['income'], oil['expense'], oil['current']))
+        self.assertEqual(2, result['total'])
+
     def test_event_shop_pt_spending_is_not_an_event_reset(self):
         with flow.task_session('testpilot', 'EventShop'):
             flow.observe(self.config, 'Pt', 1500)

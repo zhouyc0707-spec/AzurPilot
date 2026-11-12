@@ -16,6 +16,7 @@ interface AnnouncementStoreState {
   lastReadId: string | null
 }
 
+// 公告状态放在模块级单例：多个组件实例共用一份轮询与未读状态，经 useSyncExternalStore 订阅。
 let storeState: AnnouncementStoreState = {
   data: null,
   loading: false,
@@ -48,7 +49,7 @@ function writeStoredId(id: string) {
   }
 }
 
-export function subscribeAnnouncement(listener: () => void) {
+function subscribeAnnouncement(listener: () => void) {
   listeners.add(listener)
   return () => {
     listeners.delete(listener)
@@ -111,6 +112,10 @@ export function markAnnouncementAsRead() {
   }
 }
 
+/**
+ * 订阅系统公告：连接就绪后拉取一次并转入每 2 分钟的轮询；refresh 可强制重新拉取，
+ * markAsRead 把当前公告 ID 写进 localStorage 作为未读基准。
+ */
 export function useAnnouncement() {
   const connection = useConnection()
   const state = useSyncExternalStore(subscribeAnnouncement, getAnnouncementSnapshot, getAnnouncementSnapshot)

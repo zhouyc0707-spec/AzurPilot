@@ -1,3 +1,4 @@
+import {usesLegacyLayout} from '../app/theme'
 /**
  * @fileoverview 调度器核心控制卡片与任务数量摘要组件。
  */
@@ -18,7 +19,7 @@ import { editor } from '../config/editors'
  */
 export function SchedulerWidget({instance, data, onData, action}: {instance: string; data?: Overview; onData: (data: Overview) => void; action?: ReactNode}) {
   const connection = useConnection()
-  const {notify, ui} = useApp()
+  const {notify, ui, theme} = useApp()
   const [busy, setBusy] = useState(false)
   const requestPending = useRef(false)
   const singleTask = data?.status === 'running' ? data.singleTask : null
@@ -29,6 +30,7 @@ export function SchedulerWidget({instance, data, onData, action}: {instance: str
     requestPending.current = true
     setBusy(true)
     try {
+      // 启动前等配置编辑器把未保存改动落盘（有未落盘的会抛错拦下）：防止带着旧配置启动调度器。
       if (data.status !== 'running') await editor(`config:${instance}`).settled()
       // 调度器停止是「温柔停止」：后端先让当前任务在安全点退出（最长 5 分钟）。
       // 等待期间再点一次，后端会立即强制终止，所以这里用 stopping 区分两条提示。
@@ -59,9 +61,9 @@ export function SchedulerWidget({instance, data, onData, action}: {instance: str
       </span>
     </div>
     <div className="scheduler-stats">
-      <div><span>{ui('scheduler.running')}</span><strong>{running}</strong></div>
-      <div><span>{ui('scheduler.pending')}</span><strong>{pending}</strong></div>
-      <div><span>{ui('scheduler.waiting')}</span><strong>{waiting}</strong></div>
+      <div className="running">{usesLegacyLayout(theme) ? <><span>{ui('scheduler.running')}</span><strong>{running}</strong></> : <><strong>{running}</strong><span>{ui('scheduler.running')}</span></>}</div>
+      <div className="pending">{usesLegacyLayout(theme) ? <><span>{ui('scheduler.pending')}</span><strong>{pending}</strong></> : <><strong>{pending}</strong><span>{ui('scheduler.pending')}</span></>}</div>
+      <div className="waiting">{usesLegacyLayout(theme) ? <><span>{ui('scheduler.waiting')}</span><strong>{waiting}</strong></> : <><strong>{waiting}</strong><span>{ui('scheduler.waiting')}</span></>}</div>
     </div>
     <button
       className={`button scheduler-toggle ${data?.status === 'running' ? 'danger' : 'primary'}${data?.stopping ? ' is-stopping' : ''}`}

@@ -5,18 +5,22 @@ import {usesLegacyLayout} from '../app/theme'
 
 import { useSyncExternalStore } from 'react'
 import { Select } from '../components/FormControls'
+import { Switch } from '../components/Switch'
 import { languages, useApp, useConnection } from '../app/context'
 import { PageTitle } from '../components/ui'
 import { SegmentedControl } from '../components/SegmentedControl'
 import { ThemeCustomPreference } from '../components/ThemeCustomPreference'
 import { ThemePreferences } from '../components/ThemePreferences'
+import { ColorPalettePreference } from '../components/ColorPalettePreference'
 import { BackgroundPreferences } from '../components/BackgroundPreferences'
 import { readSchedulerPosition, setSchedulerPosition, subscribeSchedulerPosition } from '../app/schedulerPositionPrefs'
+import { readRailVisible, setRailVisible, subscribeRailVisible } from '../app/railPrefs'
 
 /** 界面设置：主题、调度器位置、材质、明暗、配色、背景与语言，只影响当前浏览器，不写进实例配置。 */
 export function InterfaceSettings() {
   const {theme, setTheme, material, setMaterial, resolvedMode, language, setLanguage, ui} = useApp()
   const schedulerPosition = useSyncExternalStore(subscribeSchedulerPosition, readSchedulerPosition, readSchedulerPosition)
+  const railVisibility = useSyncExternalStore(subscribeRailVisible, readRailVisible, readRailVisible)
   const connection = useConnection()
   const minimal = theme === 'minimal'
   const legacy = usesLegacyLayout(theme)
@@ -50,6 +54,15 @@ export function InterfaceSettings() {
             ]}/>
           </div>
         </div>
+        <div className="field-row">
+          <div className="field-label">
+            <label htmlFor="ui-rail-visible">{ui('settings.showSchedulerRail')}</label>
+            <p>{ui('settings.showSchedulerRailHelp')}</p>
+          </div>
+          <div className="field-control">
+            <Switch id="ui-rail-visible" label={ui('settings.showSchedulerRail')} checked={railVisibility === 'shown'} onChange={checked => setRailVisible(checked ? 'shown' : 'hidden')}/>
+          </div>
+        </div>
         {minimal ? <ThemePreferences/> : <>
           <div className="field-row">
             <div className="field-label">
@@ -76,6 +89,8 @@ export function InterfaceSettings() {
           <ThemeCustomPreference/>
           <BackgroundPreferences/>
         </>}
+        {/* 调色板对两套主题都开放：它改的是颜色契约本身，不分家族。 */}
+        {!legacy && <ColorPalettePreference/>}
         <div className="field-row">
           <div className="field-label">
             <label htmlFor="ui-language">{ui('settings.language')}</label>

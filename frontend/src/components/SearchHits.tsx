@@ -16,6 +16,7 @@ import type { SearchContentHit } from '../api/types'
 /** 命中项分两类：卡片（三级标题）与配置项；卡片命中没有配置项键。 */
 type Hit = SearchContentHit & {card?: boolean}
 
+/** 侧栏搜索的配置项命中列表：关键词防抖 200ms 后查后端索引，点击命中跳到所属任务页并定位。查询失败静默清空；关键词为空或无命中时不渲染。 */
 export function SearchHits({search, onNavigate}: {search: string; onNavigate?: () => void}) {
   const {schema, ui} = useApp()
   const {instance} = useParams()
@@ -52,10 +53,13 @@ export function SearchHits({search, onNavigate}: {search: string; onNavigate?: (
     onNavigate?.()
   }
 
+  /* 没有命中就不渲染：任务名过滤已由侧栏树自己完成，空态提示只会增加噪音。 */
+  if (!hits.length) return null
+
   return (
     <div className="nav-search-hits">
       <div className="sidebar-label">{ui('nav.searchConfigGroup')}</div>
-      {hits.length ? hits.map(hit => (
+      {hits.map(hit => (
         <button
           key={`${hit.card ? 'group' : 'option'}.${hit.task}.${hit.key}`}
           type="button"
@@ -66,7 +70,7 @@ export function SearchHits({search, onNavigate}: {search: string; onNavigate?: (
           <span className="nav-search-hit-path">{hit.card ? hit.task : `${hit.task}.${hit.key}`}</span>
           {hit.help && <span className="nav-search-hit-help">{hit.help}</span>}
         </button>
-      )) : <div className="nav-search-empty">{ui('nav.searchConfigEmpty')}</div>}
+      ))}
     </div>
   )
 }
