@@ -17,6 +17,7 @@ import errno
 import os
 import queue
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -42,7 +43,7 @@ from deploy.uv import (
 )
 from module.logger import get_log_file_path, logger
 from module.runtime import worker_registry
-from module.runtime.process_control import pid_exists, stop_process, stop_process_tree
+from module.runtime.process_control import pid_exists, process_created_at, stop_process, stop_process_tree
 from module.runtime.setting import (
     State,
     clear_dependency_sync_pending,
@@ -130,9 +131,26 @@ def _resolve_frontend(electron: bool = False) -> None:
     logger.attr("WebUI", "react" if use_react else "pywebio")
 
 
-def _ensure_frontend_if_needed() -> None:
-    """仅在启用 React 前端时构建并校验 frontend 静态资源。"""
+def _ensure_frontend_if_needed(fresh_process: bool = False) -> None:
+    """校验 React 静态资源；常驻监督器通过新解释器读取更新后的构建代码。"""
     if not USE_REACT_FRONTEND:
+        return
+    if fresh_process:
+        flags = {'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt' else {}
+        process = subprocess.Popen(
+            [sys.executable, '-m', 'deploy.frontend'],
+            cwd=Path(__file__).resolve().parent, **flags,
+        )
+        try:
+            returncode = process.wait()
+        except BaseException:
+            if process.poll() is None:
+                record = {'pid': process.pid, 'created_at': process_created_at(process.pid)}
+                stop_process_tree(record=record, name='前端预检', timeout=0)
+                process.wait(timeout=5)
+            raise
+        if returncode:
+            raise subprocess.CalledProcessError(returncode, process.args)
         return
     from deploy.frontend import ensure_frontend
 
@@ -1070,7 +1088,7 @@ def run_webui_supervisor(watch_sources: bool = False) -> int:
             if USE_REACT_FRONTEND:
                 logger.info('[GUI] 检查前端静态资源，必要时安装依赖并构建')
             try:
-                _ensure_frontend_if_needed()
+                _ensure_frontend_if_needed(fresh_process=True)
                 if USE_REACT_FRONTEND:
                     logger.info('[GUI] 前端静态资源已就绪，耗时 %.2f 秒', time.perf_counter() - stage_started)
             except Exception as exc:

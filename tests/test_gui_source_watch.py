@@ -197,7 +197,7 @@ class SupervisorWiringTest(unittest.TestCase):
             'gui._recover_orphaned_workers', return_value=True
         ), patch('gui._prepare_dependency_sync_before_webui_start',
                  return_value=(True, None, None, None)), patch(
-            'deploy.frontend.ensure_frontend'
+            'gui._ensure_frontend_if_needed'
         ), patch('gui.Event', side_effect=events), patch(
             'gui.Process', return_value=process
         ), patch('gui._wait_for_webui_ready', return_value=True), patch(

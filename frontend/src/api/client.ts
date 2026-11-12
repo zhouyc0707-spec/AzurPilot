@@ -11,7 +11,7 @@ export class ApiError extends Error {
   constructor(public code: string, message: string, public details?: unknown) { super(message) }
 }
 type Connection = 'connecting' | 'ready' | 'auth' | 'offline'
-type Pending = { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }
+type Pending = { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout>; restart: boolean }
 
 export class ApiClient {
   private socket?: WebSocket
@@ -27,6 +27,7 @@ export class ApiClient {
   private state: Connection = 'connecting'
   private counter = 0
   private lastReceived = 0
+  private restartUntil = 0
 
   /** 获取当前连接状态快照。 */
   getSnapshot = () => this.state
@@ -34,7 +35,11 @@ export class ApiClient {
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener) } }
   /** 注册全量 API 事件监听器。 */
   onEvent = (listener: (event: ApiEvent) => void) => { this.events.add(listener); return () => { this.events.delete(listener) } }
-  private setState(state: Connection) { this.state = state; this.listeners.forEach(listener => listener()) }
+  private setState(state: Connection) {
+    if (state === 'auth') this.restartUntil = 0
+    this.state = state
+    this.listeners.forEach(listener => listener())
+  }
 
   connect = () => {
     if (this.socket && this.socket.readyState < 2) return
@@ -66,6 +71,7 @@ export class ApiClient {
         if (!pending) return
         clearTimeout(pending.timer)
         this.pending.delete(message.id)
+        if (pending.restart && !message.ok) this.restartUntil = 0
         if (message.ok) pending.resolve(message.result)
         else pending.reject(new ApiError(message.error?.code ?? 'UNKNOWN', message.error?.message ?? translateCurrentUi('api.requestFailed'), message.error?.details))
       } else if (message.type === 'event') {
@@ -93,7 +99,12 @@ export class ApiClient {
       })
       this.pending.clear()
       this.setState('offline')
-      if (!this.stopped) this.retry = setTimeout(this.connect, Math.min(15000, 800 * 2 ** this.attempt++) + Math.random() * 400)
+      if (!this.stopped) {
+        // 主动重启只在有限窗口内加快重连；普通故障和窗口到期仍按原退避处理。
+        const delay = Date.now() < this.restartUntil ? 600 : Math.min(15000, 800 * 2 ** this.attempt)
+        this.attempt++
+        this.retry = setTimeout(this.connect, delay + Math.random() * 400)
+      }
     }
     socket.onerror = () => socket.close()
   }
@@ -101,6 +112,7 @@ export class ApiClient {
   /** 进入就绪状态并启动心跳定时器。 */
   private ready() {
     this.attempt = 0
+    this.restartUntil = 0
     this.setState('ready')
     clearInterval(this.heartbeat)
     this.heartbeat = setInterval(() => {
@@ -115,6 +127,7 @@ export class ApiClient {
   async login(password: string) {
     try { await this.request('auth.login', {password}) } catch (error) {
       if (error instanceof ApiError && error.code === 'UNAUTHORIZED') {
+        this.restartUntil = 0
         this.password = ''
         try { window.localStorage.removeItem('azurpilot.access-password') } catch { /* 存储不可用。 */ }
       }
@@ -133,13 +146,23 @@ export class ApiClient {
       return Promise.reject(new ApiError('DISCONNECTED', translateCurrentUi('api.notConnected')))
     }
     const id = `${Date.now()}-${++this.counter}`
+    const restart = method === 'system.restart'
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id)
         reject(new ApiError('TIMEOUT', translateCurrentUi('api.timeout')))
       }, 45000)
-      this.pending.set(id, {resolve: value => resolve(value as Results[M]), reject, timer})
-      this.socket!.send(JSON.stringify({v: 1, type: 'request', id, method, params}))
+      this.pending.set(id, {resolve: value => resolve(value as Results[M]), reject, timer, restart})
+      // 旧进程可能来不及响应就退出；断连或请求超时不能撤销这个重连窗口。
+      if (restart) this.restartUntil = Date.now() + 60000
+      try {
+        this.socket!.send(JSON.stringify({v: 1, type: 'request', id, method, params}))
+      } catch (error) {
+        clearTimeout(timer)
+        this.pending.delete(id)
+        if (restart) this.restartUntil = 0
+        reject(error)
+      }
     })
   }
 
@@ -149,6 +172,7 @@ export class ApiClient {
   disconnect() {
     this.stopped = true
     this.password = ''
+    this.restartUntil = 0
     clearTimeout(this.retry)
     clearInterval(this.heartbeat)
     this.socket?.close()

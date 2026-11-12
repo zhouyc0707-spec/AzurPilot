@@ -1,4 +1,5 @@
 import logging
+import subprocess
 import tempfile
 import sys
 import unittest
@@ -14,9 +15,61 @@ from gui import (
     main,
     func,
     run_webui_supervisor,
+    _ensure_frontend_if_needed,
 )
 from module.logger import logger
 from module.persistence.migration import MigrationError
+
+
+class TestFrontendPreflight(unittest.TestCase):
+    def test_supervisor_uses_updated_builder_despite_cached_old_modules(self):
+        """旧监督器的构建器及事务接口缓存不能影响磁盘上的新版预检。"""
+        stale_builder = Mock(side_effect=AssertionError('不应执行已缓存的旧构建器'))
+        stale_transaction = Mock(side_effect=AssertionError('不应复用旧事务接口'))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            deploy = root / 'deploy'
+            deploy.mkdir()
+            (deploy / '__init__.py').touch()
+            (deploy / 'config_transaction.py').write_text(
+                'from contextlib import contextmanager\n'
+                '@contextmanager\n'
+                'def config_transaction(path, *, timeout):\n'
+                '    yield\n', encoding='utf-8',
+            )
+            (deploy / 'frontend.py').write_text(
+                'from pathlib import Path\n'
+                'from deploy.config_transaction import config_transaction\n'
+                'with config_transaction("build", timeout=10):\n'
+                '    Path("checked").write_text("updated", encoding="utf-8")\n',
+                encoding='utf-8',
+            )
+            with patch('gui.USE_REACT_FRONTEND', True), patch('gui.__file__', str(root / 'gui.py')), patch.dict(
+                sys.modules, {
+                    'deploy.frontend': SimpleNamespace(ensure_frontend=stale_builder),
+                    'deploy.config_transaction': SimpleNamespace(config_transaction=stale_transaction),
+                },
+            ):
+                _ensure_frontend_if_needed(fresh_process=True)
+            self.assertEqual('updated', (root / 'checked').read_text(encoding='utf-8'))
+        stale_builder.assert_not_called()
+        stale_transaction.assert_not_called()
+
+    def test_interrupted_preflight_stops_its_process_tree(self):
+        process = Mock(pid=1234)
+        process.wait.side_effect = [KeyboardInterrupt, 0]
+        process.poll.return_value = None
+        with patch('gui.USE_REACT_FRONTEND', True), patch(
+            'gui.subprocess.Popen', return_value=process,
+        ), patch('gui.process_created_at', return_value=123.0), patch(
+            'gui.stop_process_tree', return_value=True,
+        ) as stop_tree:
+            with self.assertRaises(KeyboardInterrupt):
+                _ensure_frontend_if_needed(fresh_process=True)
+        stop_tree.assert_called_once_with(
+            record={'pid': 1234, 'created_at': 123.0}, name='前端预检', timeout=0,
+        )
+        process.wait.assert_called_with(timeout=5)
 
 
 class TestGuiStartup(unittest.TestCase):
@@ -68,14 +121,12 @@ class TestSupervisorExitCode(unittest.TestCase):
             self.assertEqual(run_webui_supervisor(), EXIT_WORKER_CLEANUP_FAILURE)
 
     def test_frontend_build_failure_returns_failure_code(self):
-        # 本地定制：gui.py 的 USE_REACT_FRONTEND 由 ALAS_WEBUI 决定，未设置时不会走
-        # 前端构建分支 —— 那样这个用例就绕过了被 patch 的 ensure_frontend，转而去启动
-        # 真的监督进程（不会返回）。这里把开关钉住，让用例与环境变量无关。
+        # 固定前端模式并隔离预检边界，避免测试启动真实构建进程。
         with self.assertLogs('alas', level='INFO') as captured, patch("gui._recover_orphaned_workers", return_value=True), patch(
             "gui._prepare_dependency_sync_before_webui_start",
             return_value=(True, None, None, None),
         ), patch("gui.USE_REACT_FRONTEND", True), patch(
-            "deploy.frontend.ensure_frontend", side_effect=RuntimeError("npm 不可用")
+            "gui._ensure_frontend_if_needed", side_effect=subprocess.CalledProcessError(1, ['frontend-check'])
         ):
             self.assertEqual(run_webui_supervisor(), EXIT_FRONTEND_BUILD_FAILURE)
         messages = '\n'.join(captured.output)
@@ -96,7 +147,7 @@ class TestSupervisorExitCode(unittest.TestCase):
         with patch("gui._recover_orphaned_workers", return_value=True), patch(
             "gui._prepare_dependency_sync_before_webui_start",
             return_value=(True, None, None, None),
-        ), patch("deploy.frontend.ensure_frontend"), patch(
+        ), patch("gui._ensure_frontend_if_needed"), patch(
             "gui.Process", return_value=process
         ), patch("gui._wait_for_webui_ready", side_effect=KeyboardInterrupt), patch(
             "gui._stop_webui_process_tree", return_value=True
