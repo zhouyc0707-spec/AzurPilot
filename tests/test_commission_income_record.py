@@ -235,23 +235,27 @@ class TestCommissionIncomeNameCollection(unittest.TestCase):
                 ocr.return_value.ocr.return_value = raw
                 self.assertEqual(read_commission_name(object(), 'cn'), '中型油田开发I')
 
-    def collect(self, kinds, names, stable_frames=None, blocked_exp_frames=()):
+    def collect(self, kinds, names, stable_frames=None, blocked_exp_frames=(),
+                capture_drop=False, trace=None, extra_exp_frames=()):
         from module.commission import commission as module
         from module.statistics.commission_drop import read_commission_name
 
         images = [np.full((1, 1, 3), index, dtype=np.uint8) for index in range(len(kinds))]
         handler = MagicMock()
         handler.config = SimpleNamespace(
-            config_name='test', SERVER='cn', DropRecord_CommissionRecord='do_not',
+            config_name='test', SERVER='cn', DropRecord_CommissionRecord='save' if capture_drop else 'do_not',
             DropRecord_CloudUpload=False, Commission_DetectShipDrop=False,
         )
-        handler.stat.new.return_value.__enter__.return_value = None
+        drop = Mock() if capture_drop else None
+        handler.stat.new.return_value.__enter__.return_value = drop
         handler.device.image = images[0]
         position = 0
+        events = trace if trace is not None else []
 
         def screenshot():
             nonlocal position
             position += 1
+            events.append(('frame', position))
             handler.device.image = images[position]
 
         def frame_kind(image):
@@ -259,6 +263,7 @@ class TestCommissionIncomeNameCollection(unittest.TestCase):
 
         def read_name(image, server):
             self.assertEqual(server, 'cn')
+            events.append(('ocr', int(image[0, 0, 0])))
             ocr.return_value.ocr.return_value = names.get(int(image[0, 0, 0]), '')
             return read_commission_name(image, server)
 
@@ -271,16 +276,22 @@ class TestCommissionIncomeNameCollection(unittest.TestCase):
             kind = frame_kind(handler.device.image)
             return ((kind in ('done', 'perfect', 'exp') and button is module.EXP_INFO_S_REWARD
                      and position not in blocked_exp_frames)
+                    or (position in extra_exp_frames and button is module.EXP_INFO_S_REWARD)
                     or (kind == 'reward' and button is module.GET_ITEMS_1))
 
         collected = []
 
         def record():
+            events.append(('record', position))
             collected.extend(handler._commission_reward_names.get(id(image))
                              for image in handler._commission_reward_images)
             return True
 
         handler.device.screenshot.side_effect = screenshot
+        handler.device.click.side_effect = lambda button: events.append(('click', position))
+        handler._handle_research_genre_t_update.side_effect = lambda count: events.append(('completed', count))
+        if drop is not None:
+            drop.add.side_effect = lambda image: events.append(('drop', int(image[0, 0, 0])))
         handler.ui_page_appear.side_effect = lambda *args, **kwargs: frame_kind(handler.device.image) == 'exit'
         handler.appear.side_effect = appear
         handler.appear_then_click.return_value = False
@@ -324,10 +335,89 @@ class TestCommissionIncomeNameCollection(unittest.TestCase):
 
     def test_different_valid_initial_and_stable_names_are_unknown(self):
         result, _ = self.collect(
-            ['done', 'reward', 'reward', 'exit'],
+            ['done', 'reward', 'reward', 'reward', 'exit'],
             {0: 'BIW要员护卫', 127: 'NYB要员护卫'}, stable_frames={0: 127},
         )
         self.assertEqual(result, [None])
+
+    def test_conflict_requires_matching_late_frames_and_consumes_exp_once(self):
+        trace = []
+        result, reads = self.collect(
+            ['done', 'exp', 'reward', 'reward', 'exit'],
+            {0: '日常资源开发IV', 127: '日常资源开发V', 1: '日常资源开发V'},
+            stable_frames={0: 127}, capture_drop=True, trace=trace,
+        )
+        self.assertEqual(result, ['日常资源开发V'])
+        self.assertEqual(reads, 3)
+        self.assertLess(trace.index(('frame', 1)), trace.index(('ocr', 1)))
+        self.assertEqual([item for item in trace if item[0] == 'drop'], [('drop', 1), ('drop', 3)])
+        self.assertEqual([item for item in trace if item[0] == 'click'], [('click', 1), ('click', 3)])
+        self.assertEqual([item for item in trace if item[0] == 'completed'], [('completed', 1)])
+        self.assertEqual(len([item for item in trace if item[0] == 'record']), 1)
+
+    def test_initial_majority_does_not_override_disagreeing_late_frames(self):
+        result, reads = self.collect(
+            ['done', 'exp', 'reward', 'reward', 'exit'],
+            {0: '日常资源开发IV', 127: '日常资源开发V', 1: '日常资源开发IV'},
+            stable_frames={0: 127},
+        )
+        self.assertEqual(result, [None])
+        self.assertEqual(reads, 3)
+
+    def test_conflict_review_error_keeps_unknown_reward_once(self):
+        trace = []
+        result, reads = self.collect(
+            ['done', 'exp', 'reward', 'reward', 'exit'],
+            {0: '日常资源开发IV', 127: '日常资源开发V'},
+            stable_frames={0: 127}, trace=trace,
+        )
+        self.assertEqual(result, [None])
+        self.assertEqual(reads, 3)
+        self.assertEqual([item for item in trace if item[0] == 'completed'], [('completed', 1)])
+        self.assertEqual(len([item for item in trace if item[0] == 'record']), 1)
+
+    def test_conflict_review_cannot_read_a_reward_as_completion(self):
+        trace = []
+        result, reads = self.collect(
+            ['done', 'reward', 'reward', 'reward', 'exit'],
+            {0: '日常资源开发IV', 127: '日常资源开发V', 1: '日常资源开发V'},
+            stable_frames={0: 127}, trace=trace, extra_exp_frames={1},
+        )
+        self.assertEqual(result, [None])
+        self.assertEqual(reads, 2)
+        self.assertEqual([item for item in trace if item[0] == 'completed'], [('completed', 0)])
+        self.assertEqual([item for item in trace if item[0] == 'click'], [('click', 3)])
+
+    def test_conflict_review_ship_boundary_cannot_leak_identity(self):
+        result, reads = self.collect(
+            ['done', 'ship', 'exp', 'reward', 'reward', 'exit'],
+            {0: '日常资源开发IV', 127: '日常资源开发V', 1: '日常资源开发V'},
+            stable_frames={0: 127},
+        )
+        self.assertEqual(result, [None])
+        self.assertEqual(reads, 3)
+
+    def test_conflict_does_not_flush_previous_reward_before_review(self):
+        trace = []
+        result, reads = self.collect(
+            ['done', 'reward', 'reward', 'done', 'exp', 'reward', 'reward', 'exit'],
+            {0: 'NYB要员护卫', 3: '日常资源开发IV', 127: '日常资源开发V', 4: '日常资源开发V'},
+            stable_frames={3: 127}, trace=trace,
+        )
+        self.assertEqual(result, ['NYB要员护卫', '日常资源开发V'])
+        self.assertEqual(reads, 5)
+        self.assertEqual([item for item in trace if item[0] == 'record'], [('record', 4), ('record', 7)])
+
+    def test_conflict_review_exit_preserves_previous_reward_only(self):
+        trace = []
+        result, _ = self.collect(
+            ['done', 'reward', 'reward', 'done', 'exit'],
+            {0: 'NYB要员护卫', 3: '日常资源开发IV', 127: '日常资源开发V'},
+            stable_frames={3: 127}, capture_drop=True, trace=trace,
+        )
+        self.assertEqual(result, ['NYB要员护卫'])
+        self.assertEqual([item for item in trace if item[0] == 'drop'], [('drop', 0), ('drop', 2)])
+        self.assertEqual([item for item in trace if item[0] == 'completed'], [('completed', 1)])
 
     def test_next_exp_without_intermediate_reward_cannot_reuse_previous_name(self):
         result, _ = self.collect(

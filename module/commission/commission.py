@@ -2175,6 +2175,7 @@ class RewardCommission(Dock, UI, InfoHandler):
         commission_name_candidates = set()
         commission_name_attempted = False
         commission_name_error = None
+        commission_name_review = None
         commission_reward_image = None
         completed_commission_count = 0
         income_recorded = True
@@ -2212,6 +2213,9 @@ class RewardCommission(Dock, UI, InfoHandler):
                             except Exception as error:
                                 commission_name_error = f'{type(error).__name__} {error}'
                     elif kind in ('ship', 'exit'):
+                        if commission_name_review is not None:
+                            logger.warning(f'[委托-名称] 复核时画面已变化，本次待审身份已清除，画面 {kind}')
+                            commission_name_review = None
                         commission_name = None
                         commission_name_candidates.clear()
                         commission_name_attempted = False
@@ -2221,11 +2225,33 @@ class RewardCommission(Dock, UI, InfoHandler):
                     if self.ui_page_appear(page_commission, offset=(20, 20)):
                         break
 
-                    if not reward_click_timer.reached():
-                        continue
-
                     button = None
-                    if pending_reward is not None:
+                    if commission_name_review is not None:
+                        # 冲突后回到父循环取新帧，只在同一完成页继续一次复核。
+                        commission_name = None
+                        commission_name_candidates.clear()
+                        commission_name_attempted = True
+                        commission_name_error = None
+                        if kind in ('done', 'perfect', 'exp') and self.appear(EXP_INFO_S_REWARD):
+                            try:
+                                reviewed_name = read_commission_name(self.device.image, self.config.SERVER)
+                                if reviewed_name == commission_name_review:
+                                    commission_name = reviewed_name
+                                    logger.attr('委托名称复核确认', commission_name)
+                                else:
+                                    logger.warning(f'[委托-名称] 两张稳定帧名称不一致，本次名称未知，'
+                                                   f'前帧 {commission_name_review}，新帧 {reviewed_name}')
+                            except Exception as error:
+                                logger.warning(f'[委托-名称] 新帧名称复核失败，本次名称未知，'
+                                               f'原因 {type(error).__name__} {error}')
+                            button = EXP_INFO_S_REWARD
+                        else:
+                            logger.warning(f'[委托-名称] 复核时画面已变化，本次待审身份已清除，画面 {kind}')
+                            commission_name_review = None
+                            continue
+                    elif not reward_click_timer.reached():
+                        continue
+                    elif pending_reward is not None:
                         # 渲染期间持续截图；只在同一弹窗仍可见时保存新帧。
                         if self.appear(pending_reward):
                             if not render_timer.reached():
@@ -2249,30 +2275,33 @@ class RewardCommission(Dock, UI, InfoHandler):
                                 continue
 
                     if button is not None:
-                        if drop:
-                            drop.add(self.device.image)
-
                         if button is EXP_INFO_S_REWARD:
-                            # 信息栏处理已持续截图，点击完成页前用当前稳定帧复核名称。
-                            stable_error = None
-                            try:
-                                commission_name_candidates.add(read_commission_name(
-                                    self.device.image, self.config.SERVER))
-                            except Exception as error:
-                                stable_error = f'{type(error).__name__} {error}'
-                            if len(commission_name_candidates) == 1:
-                                commission_name = next(iter(commission_name_candidates))
-                                detail = commission_name
-                                if stable_error:
-                                    detail += f'，稳定帧复核失败，沿用本次已确认名称，原因 {stable_error}'
-                                logger.attr('委托名称确认', detail)
-                            else:
-                                commission_name = None
-                                reason = (f'有效候选冲突 {sorted(commission_name_candidates)}'
-                                          if commission_name_candidates else
-                                          f'初帧 {commission_name_error or "无已确认候选"}，稳定帧 {stable_error}')
-                                logger.warning(f'[委托-名称] 本次收获名称未确认，{reason}')
+                            if commission_name_review is None:
+                                # 信息栏处理已持续截图，点击完成页前用当前稳定帧复核名称。
+                                stable_name, stable_error = None, None
+                                try:
+                                    stable_name = read_commission_name(self.device.image, self.config.SERVER)
+                                    commission_name_candidates.add(stable_name)
+                                except Exception as error:
+                                    stable_error = f'{type(error).__name__} {error}'
+                                if len(commission_name_candidates) == 1:
+                                    commission_name = next(iter(commission_name_candidates))
+                                    detail = commission_name
+                                    if stable_error:
+                                        detail += f'，稳定帧复核失败，沿用本次已确认名称，原因 {stable_error}'
+                                    logger.attr('委托名称确认', detail)
+                                elif stable_name is not None:
+                                    commission_name_review = stable_name
+                                    logger.warning(f'[委托-名称] 有效候选冲突 {sorted(commission_name_candidates)}，'
+                                                   '等待父循环新帧复核一次')
+                                    continue
+                                else:
+                                    commission_name = None
+                                    reason = (f'初帧 {commission_name_error or "无已确认候选"}，'
+                                              f'稳定帧 {stable_error}')
+                                    logger.warning(f'[委托-名称] 本次收获名称未确认，{reason}')
                             # 保留本次奖励身份，清空已消费候选，残留完成页只做点击前复核。
+                            commission_name_review = None
                             commission_name_candidates.clear()
                             commission_name_attempted = True
                             commission_name_error = None
@@ -2292,6 +2321,8 @@ class RewardCommission(Dock, UI, InfoHandler):
                             commission_reward_image = image
                             logger.info(f'[委托-收入] 收集奖励截图 (触发按钮={button.name})')
 
+                        if drop:
+                            drop.add(self.device.image)
                         REWARD_SAVE_CLICK.name = button.name
                         self.device.click(REWARD_SAVE_CLICK)
                         reward_click_timer.reset()
