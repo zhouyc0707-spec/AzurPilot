@@ -197,7 +197,7 @@ test('切实例后迟到的旧读取不覆盖新实例维护日', async ({page})
 
 for (const theme of ['legacy-light', 'legacy-dark']) {
   for (const width of [1440, 390]) {
-    test(`${theme} ${width}px 日志标题、维护日和设置按钮不重叠`, async ({page}, info) => {
+    test(`${theme} ${width}px 维护日工具栏保持连续背景且各控件不重叠`, async ({page}, info) => {
       const state = await fixture(page)
       await page.setViewportSize({width, height: width === 390 ? 844 : 1100})
       await open(page, theme)
@@ -228,6 +228,14 @@ for (const theme of ['legacy-light', 'legacy-dark']) {
         }
       }
       expect(bounds.scrollWidth).toBeLessThanOrEqual(bounds.viewport + 1)
+      const title = card.locator('.legacy-stat-title')
+      const select = card.locator('.maintenance-weekday .select-trigger')
+      // 背景由整行承载，标题和下拉不能再各自形成灰白色块或输入框底线。
+      const transparent = 'rgba(0, 0, 0, 0)'
+      await expect(card).not.toHaveCSS('background-color', transparent)
+      await expect(title).toHaveCSS('background-color', transparent)
+      await expect(select).toHaveCSS('background-color', transparent)
+      await expect(select).toHaveCSS('border-bottom-width', '0px')
       const compact = await card.locator('.maintenance-weekday-control').evaluate(element => {
         const label = element.querySelector('label')!.getBoundingClientRect()
         const select = element.querySelector('.select-trigger')!.getBoundingClientRect()
@@ -251,6 +259,17 @@ for (const theme of ['legacy-light', 'legacy-dark']) {
       expect(list!.x).toBeGreaterThanOrEqual(0)
       expect(list!.x + list!.width).toBeLessThanOrEqual(width + 1)
       await page.screenshot({path: info.outputPath(`维护日选项-${theme}-${width}.png`)})
+      await page.keyboard.press('Escape')
+      await title.click()
+      await expect(title).toHaveCSS('background-color', transparent)
+      await page.mouse.move(0, 0)
+      await expect(title).toHaveText('日志')
+      await expect(title).toHaveAttribute('aria-pressed', 'true')
+      await expect(card).not.toHaveCSS('background-color', transparent)
+      await expect(title).toHaveCSS('background-color', transparent)
+      await expect(select).toHaveCSS('background-color', transparent)
+      await expect(select).toHaveCSS('border-bottom-width', '0px')
+      await card.screenshot({path: info.outputPath(`维护日统计态-${theme}-${width}.png`)})
       expect(state.errors).toEqual([])
     })
   }
