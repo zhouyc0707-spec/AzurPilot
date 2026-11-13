@@ -504,3 +504,53 @@ test('手工编辑连续保存失败后拒绝公告覆盖，恢复写入后先�
   expect(state.skins).toHaveLength(3)
   expect(errors).toEqual([])
 })
+
+test('公告和谐名映射原名后保留云仙记录，新建使用新泽西原名且区分II角色', async ({page}) => {
+  // 仅使用用户给定的名称映射及虚构收藏数据，不读取真实账号或用户收藏。
+  const original = {id: 'fixture_unzen', name: '云仙', rarity: 'super_rare', acquisition: '手工来源', collected: '9', shareableSkinCount: '2', customTargetCount: null}
+  const ownedSkin = {id: 'fixture_unzen_owned', characterId: original.id, name: '测试旧装', acquisition: '手工来源', owned: true}
+  let updates = [
+    {...announcementEntries[0], name: '云仙', aliases: ['猃', '云仙'], skins: [{name: '测试旧装', acquisition: '商城'}, {name: '测试新增云仙换装', acquisition: '商城'}]},
+    {...announcementEntries[0], name: '新泽西', aliases: ['花园', '新泽西'], skins: [{name: '测试新增新泽西换装', acquisition: '商城'}]},
+  ]
+  const errors = await prepare(page, 'legacy-light')
+  await mockAnnouncements(page, () => updates)
+  await page.addInitScript(({character, skin}) => {
+    if (localStorage.getItem('azurLaneCharacters') === null) {
+      localStorage.setItem('azurLaneCharacters', JSON.stringify([character]))
+      localStorage.setItem('azurLaneSkins', JSON.stringify([skin]))
+    }
+  }, {character: original, skin: ownedSkin})
+  await page.goto('/#/i/demo-main/skin-collection')
+  await expect(page.getByTestId('collection-sync-status')).toContainText('新增')
+  const state = await readCollection(page)
+  expect(state.characters).toHaveLength(2)
+  expect(state.characters.find((item: {id: string}) => item.id === original.id)).toEqual(original)
+  expect(state.characters.map((item: {name: string}) => item.name)).toEqual(['云仙', '新泽西'])
+  expect(state.skins.find((item: {id: string}) => item.id === ownedSkin.id)).toEqual(ownedSkin)
+  expect(state.skins.find((item: {name: string}) => item.name === '测试新增云仙换装')).toMatchObject({characterId: original.id, owned: false})
+  const newJersey = state.characters.find((item: {name: string}) => item.name === '新泽西')
+  expect(newJersey).toMatchObject({collected: '0', shareableSkinCount: '0', customTargetCount: null})
+  expect(state.skins.find((item: {name: string}) => item.name === '测试新增新泽西换装')).toMatchObject({characterId: newJersey.id, owned: false})
+  await revisitCollection(page)
+  expect(await readCollection(page)).toEqual(state)
+
+  // 基础舰与 II 是不同角色；只归一化 Ⅱ/II 表现形式，不删除变体后缀。
+  updates = [...updates,
+    {...announcementEntries[0], name: '约克城', aliases: ['约克城'], skins: [{name: '测试基础舰换装', acquisition: '活动'}]},
+    {...announcementEntries[0], name: '约克城II', aliases: ['约克城Ⅱ'], skins: [{name: '测试II舰换装', acquisition: '活动'}]},
+  ]
+  await revisitCollection(page)
+  await expect(page.getByTestId('collection-sync-status')).toContainText('新增')
+  const variants = await readCollection(page)
+  expect(variants.characters).toHaveLength(4)
+  const base = variants.characters.find((item: {name: string}) => item.name === '约克城')
+  const second = variants.characters.find((item: {name: string}) => item.name === '约克城II')
+  expect(base.id).not.toBe(second.id)
+  expect(variants.skins.find((item: {name: string}) => item.name === '测试基础舰换装')).toMatchObject({characterId: base.id})
+  expect(variants.skins.find((item: {name: string}) => item.name === '测试II舰换装')).toMatchObject({characterId: second.id})
+  updates = updates.map(entry => entry.name === '约克城II' ? {...entry, name: '约克城Ⅱ', aliases: ['约克城II']} : entry)
+  await revisitCollection(page)
+  expect(await readCollection(page)).toEqual(variants)
+  expect(errors).toEqual([])
+})

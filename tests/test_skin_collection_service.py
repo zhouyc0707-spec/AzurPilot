@@ -162,6 +162,34 @@ class SkinCollectionTests(unittest.TestCase):
         self.assertEqual(set(data['entries'][0]['aliases']),
                          {'正式舰名', '和谐舰名', 'English Name', '日本語名', 'Local Name'})
 
+    def test_harmony_redirects_use_original_names_and_local_aliases(self):
+        pairs = {'猃': ('云仙', 'Unzen'), '花园': ('新泽西', 'New Jersey'), '鵗': ('信浓', 'Shinano')}
+        path = self.root / 'assets/ship/ship_data.json'
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps({str(i): {'name': {'cn': original, 'en': english}, 'rarity_name': 'UR'}
+                                    for i, (original, english) in enumerate(pairs.values())}), encoding='utf-8')
+
+        def request(url, params):
+            harmony = params['page']
+            original, english = pairs[harmony]
+            text = (f'{{{{舰娘图鉴\n|名称={original}\n|和谐名={harmony}\n|英文名=IJN {english}'
+                    '\n|稀有度=海上传奇\n}}') if params.get('redirects') == 1 else f'#重定向 [[{original}]]'
+            return {'parse': {'wikitext': {'*': text}}}
+
+        body = ('司令部将于11月12日10:00~15:00改建。\n『改建内容』\n'
+                '一、内容新增\n1.换装商店全新上架以下换装：\n'
+                + '\n'.join(f'{name}-「测试新换装」' for name in pairs))
+        data = self.service._data
+        data['documents'][SEED_ID] = document(body)
+        with patch.object(self.service, '_request', side_effect=request):
+            self.service._merge(data)
+        self.assertEqual(data['pendingNames'], [])
+        self.assertEqual([entry['name'] for entry in data['entries']], [p[0] for p in pairs.values()])
+        for harmony, entry in zip(pairs, data['entries']):
+            self.assertIn(harmony, entry['aliases'])
+            self.assertIn(pairs[harmony][1], entry['aliases'])
+            self.assertEqual(entry['skins'][0]['name'], '测试新换装')
+
     def test_catalog_includes_only_explicit_clean_language_names(self):
         path = self.root / 'assets/ship/ship_data.json'
         path.parent.mkdir(parents=True)

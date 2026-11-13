@@ -250,7 +250,8 @@ class SkinCollectionService:
     def _wiki(self, name):
         # 斜杠是 MediaWiki 子页面分隔符，国服图鉴标题使用全角斜杠。
         data = self._request('https://wiki.biligame.com/blhx/api.php', {
-            'action': 'parse', 'page': name.replace('/', '／'), 'prop': 'wikitext', 'format': 'json'})
+            'action': 'parse', 'page': name.replace('/', '／'), 'prop': 'wikitext', 'format': 'json',
+            'redirects': 1})
         text = data['parse']['wikitext']['*']
         start = re.search(r'\{\{\s*舰娘图鉴\s*\n', text)
         if not start:
@@ -297,6 +298,8 @@ class SkinCollectionService:
                     if not wiki:
                         pending.add(name)
                         continue
+                    # 国服公告可能用和谐名；跟随重定向取得原名后，再匹配本地舰船资料。
+                    metadata = catalog.get(_key(wiki['name'])) or metadata
                     rarity = ((metadata or {}).get('rarity') or candidate['rarity']
                               or (wiki or {}).get('rarity'))
                     if not rarity:

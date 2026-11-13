@@ -19,6 +19,8 @@
 
 换装收藏页由 `pages/SkinCollection.tsx` 在 iframe 完成加载、数据通道就绪后调用 `skinCollection.updates`，通过 `syncAnnouncementCollection()` 增量合并到当前浏览器。Activity 隐藏时停止轮询，返回时立即检查，停留时每五分钟检查，后端正在刷新则每五秒读取快照。公告读取在独立后台线程进行，跨浏览器共享服务端缓存，原有维护排程服务继续提供运行任务所需的维护时间。
 
+角色规范名采用图鉴 `名称` 字段中的原名。查询国服和谐名时启用 MediaWiki 重定向，取得原名后再查询本地资料，合并原名、和谐名及明确的语言别名。前端用这些别名精确匹配已有原名记录，新换装沿用原 ID，新增角色使用原名。II、META 等独立角色后缀继续保留。
+
 `module/api/skin_collection_service.py` 归档自 2026 年 11 月 12 日起的国服完整维护公告，识别新增角色、换装和返场，排除家具、兵装和试用。最近十四天重叠检查正文修订，网络失败时保留已聚合条目，缺少稀有度等资料的角色进入待补齐名单。浏览器合并使用同源锁和既有回滚事务，保留手工记录、撤销快照及当前查看位置。公告处理标记只属于该浏览器，显式导入备份后重置，撤销追加保留标记。
 
 「换装收藏统计」位于实例侧栏「茗喵证券交易所」下方，路径 `/i/:instance/skin-collection`。`pages/SkinCollection.tsx` 使用同源 iframe 加载 `public/skin-collection/index.html`，由 `InstancePageActivities` 懒加载并保留挂载，独立隔离原网页样式与脚本。页面只使用浏览器存储，各实例共享同一份收藏；不调用游戏或统计 API，不向服务端同步。旧文件页面需通过已有 JSON 导出、导入迁移。宿主隐藏或销毁 iframe 前派发 `azurpilot:collection-save`，同步提交原页防抖保存及查看状态，防止导航时丢失刚提交的记录。完整操作说明见 `frontend/README.md` 的「换装收藏统计」。
