@@ -523,6 +523,23 @@ class SocketApiTests(unittest.TestCase):
             self.assertTrue(self.call(ws, 'auth.login', {'password': 'test-secret'})['ok'])
             self.assertEqual('testpilot', self.call(ws, 'instances.list')['result'][0]['name'])
 
+    def test_collection_updates_require_authentication_and_data_channel(self):
+        snapshot = {'entries': [], 'checkedAt': None, 'error': None,
+                    'pendingNames': [], 'refreshing': True}
+        service = Mock()
+        service.get.return_value = snapshot
+        self.app.state.gateway.router._skin_collection = service
+        with self.client.websocket_connect('/api/v1/ws?channel=data') as data:
+            self.assertEqual('session', data.receive_json()['topic'])
+            denied = self.call(data, 'skinCollection.updates')
+            self.assertEqual('UNAUTHORIZED', denied['error']['code'])
+            service.get.assert_not_called()
+            self.assertTrue(self.call(data, 'auth.login', {'password': 'test-secret'})['ok'])
+            self.assertEqual(snapshot, self.call(data, 'skinCollection.updates')['result'])
+        with self.client.websocket_connect('/api/v1/ws?channel=control') as control:
+            self.login(control)
+            self.assertEqual('WRONG_CHANNEL', self.call(control, 'skinCollection.updates')['error']['code'])
+
     def test_data_channel_fragments_large_reports_without_blocking_operations(self):
         entered, release = threading.Event(), threading.Event()
         self.addCleanup(release.set)

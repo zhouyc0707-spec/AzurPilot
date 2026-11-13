@@ -292,6 +292,7 @@ export interface IslandSeasonProgress {
 
 /** WebSocket 各 topic 对应的响应数据形状。 */
 export interface Results {
+  'skinCollection.updates': SkinCollectionUpdates
   'island.seasonProgress': IslandSeasonProgress
   'emulator.status': EmulatorStatus
   'dock.report': DockReport
@@ -389,6 +390,24 @@ export interface Results {
   'settings.patch': {updated: string[]}
   'startup.get': {enabled: boolean; remember: boolean}
   'startup.set': {enabled: boolean; remember: boolean}
+}
+
+export interface SkinCollectionEntry {
+  name: string
+  aliases: string[]
+  rarity: 'ultra_rare' | 'super_rare' | 'elite' | 'rare' | 'common'
+  acquisition: string
+  skins: Array<{name: string; acquisition: string}>
+  sourceUrl: string
+  announcementId: string
+}
+
+export interface SkinCollectionUpdates {
+  entries: SkinCollectionEntry[]
+  checkedAt: string | null
+  error: string | null
+  pendingNames: string[]
+  refreshing?: boolean
 }
 
 /** 最近一次系统时长检测快照；所有时间戳使用 Unix 秒，页面读取不会访问设备。 */

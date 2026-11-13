@@ -100,6 +100,8 @@
 
         // 防抖保存定时器
         let _saveDataTimer = null;
+        // 保存失败后定时器已经结束，但未落盘的用户编辑仍必须保留。
+        let _dataDirty = false;
         let _saveUndoTimer = null;
         
         const defaultIconUrl = 'assets/anchor.svg';
@@ -2398,7 +2400,8 @@
                             ['azurLaneSkins', JSON.stringify(data.skins)],
                             ['azurLaneActivityLog', JSON.stringify(nextLog)],
                             ['azurLaneUndoHistory', JSON.stringify(nextUndo)],
-                            ['azurLaneRedoHistory', JSON.stringify([])]
+                            ['azurLaneRedoHistory', JSON.stringify([])],
+                            ['azurLaneAnnouncementProcessed', null]
                         ];
                         if (data.acquisitionSortOrder) entries.push(['azurLaneAcquisitionSortOrder', JSON.stringify(data.acquisitionSortOrder)]);
                         notifySaveState('saving', '正在导入并保存…');
@@ -2818,6 +2821,114 @@
             return { success: true, characters: charCount, skins: skinCount };
         }
         
+        const announcementProcessedKey = 'azurLaneAnnouncementProcessed';
+
+        // 只统一表现形式；跨语言名称必须由公告明确提供别名，不做模糊匹配。
+        function announcementName(value) {
+            return value.normalize('NFKC').replace(/\s+/g, '').replace(/[‐‑‒–—−]/g, '-').toLowerCase();
+        }
+
+        function readAnnouncementStorage(key, fallback) {
+            const raw = localStorage.getItem(key);
+            const value = raw === null ? fallback : JSON.parse(raw);
+            if (!Array.isArray(value)) throw new Error('收藏存储格式不正确，请先导出备份检查：' + key);
+            return structuredClone(value);
+        }
+
+        // 重绘保留可见记录的位置；新条目排在上方时仍让当前正在看的角色停在原处。
+        function renderAnnouncementChanges() {
+            const list = document.getElementById('character-list');
+            const listTop = list.getBoundingClientRect().top;
+            const anchor = [...list.querySelectorAll('.character-row')].find(row => row.getBoundingClientRect().bottom > listTop);
+            const anchorId = anchor?.dataset.id;
+            const anchorTop = anchor?.getBoundingClientRect().top;
+            const elements = [list, document.querySelector('.detail-panel'), document.getElementById('acquisition-filter'), document.getElementById('detail-drawer-body')];
+            const offsets = elements.map(element => [element.scrollLeft, element.scrollTop]);
+            const page = [window.scrollX, window.scrollY];
+            renderAll();
+            elements.forEach((element, index) => { element.scrollLeft = offsets[index][0]; element.scrollTop = offsets[index][1]; });
+            if (anchorId) {
+                const restored = [...list.querySelectorAll('.character-row')].find(row => row.dataset.id === anchorId);
+                if (restored) list.scrollTop += restored.getBoundingClientRect().top - anchorTop;
+            }
+            window.scrollTo({left: page[0], top: page[1], behavior: 'instant'});
+        }
+
+        function applyAnnouncementCollection(entries) {
+            if (!Array.isArray(entries)) throw new Error('公告收藏条目必须是数组');
+            if (_dataDirty && !saveDataImmediate()) throw new Error('当前编辑尚未保存，暂不追加公告收藏');
+            flushPendingSaves();
+            // 进入同源锁后重新读存储，防止另一个实例/标签页刚完成的追加被旧内存覆盖。
+            const baseCharacters = readAnnouncementStorage('azurLaneCharacters', characters);
+            const baseSkins = readAnnouncementStorage('azurLaneSkins', skins);
+            validateImportedData({characters: baseCharacters, skins: baseSkins});
+            const baseUndo = readAnnouncementStorage('azurLaneUndoHistory', undoHistory);
+            const baseRedo = readAnnouncementStorage('azurLaneRedoHistory', redoHistory);
+            const baseLog = readAnnouncementStorage('azurLaneActivityLog', activityLog);
+            const previousProcessed = readAnnouncementStorage(announcementProcessedKey, []);
+            const processed = new Set(previousProcessed);
+            const nextCharacters = structuredClone(baseCharacters), nextSkins = structuredClone(baseSkins);
+            const timestamp = new Date().toISOString();
+            const result = {characters: 0, skins: 0};
+            for (const entry of entries) {
+                if (!entry || typeof entry.name !== 'string' || !entry.name.trim() || !Array.isArray(entry.aliases) || entry.aliases.some(alias => typeof alias !== 'string') || !Array.isArray(entry.skins)) throw new Error('公告收藏条目不完整');
+                if (!['ultra_rare', 'super_rare', 'elite', 'rare', 'common'].includes(entry.rarity) || typeof entry.acquisition !== 'string') throw new Error('公告角色信息无效');
+                const names = [...new Set([entry.name, ...entry.aliases].map(announcementName).filter(Boolean))];
+                const characterKeys = names.map(name => JSON.stringify(['character', name]));
+                const matches = nextCharacters.filter(character => names.includes(announcementName(character.name)));
+                if (matches.length > 1) throw new Error('公告别名匹配到多个角色，请先整理重复档案：' + entry.name);
+                let character = matches[0];
+                if (!character && !characterKeys.some(key => processed.has(key))) {
+                    character = {id: 'announcement_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2), name: entry.name.trim(), rarity: entry.rarity, acquisition: entry.acquisition,
+                        collected: '0', shareableSkinCount: '0', customTargetCount: null, createdAt: timestamp, updatedAt: timestamp};
+                    nextCharacters.push(character);
+                    result.characters++;
+                }
+                characterKeys.forEach(key => processed.add(key));
+                for (const skin of entry.skins) {
+                    if (!skin || typeof skin.name !== 'string' || !skin.name.trim() || typeof skin.acquisition !== 'string') throw new Error('公告换装信息无效');
+                    const name = announcementName(skin.name);
+                    const keys = names.map(characterName => JSON.stringify(['skin', characterName, name]));
+                    if (character && !keys.some(key => processed.has(key)) && !nextSkins.some(existing => existing.characterId === character.id && announcementName(existing.name) === name)) {
+                        nextSkins.push({id: 'announcement_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2), characterId: character.id, name: skin.name.trim(), acquisition: skin.acquisition,
+                            owned: false, createdAt: timestamp, updatedAt: timestamp});
+                        if (character.customTargetCount !== undefined && character.customTargetCount !== null && character.customTargetCount !== '') character.customTargetCount = Number(character.customTargetCount) + 1;
+                        result.skins++;
+                    }
+                    // 撤销或手动删除后不再次导入同一条；下一次真正的新换装仍可追加。
+                    keys.forEach(key => processed.add(key));
+                }
+            }
+            const changed = result.characters + result.skins > 0;
+            const nextUndo = changed ? [{characters: baseCharacters, skins: baseSkins, timestamp}, ...baseUndo].slice(0, 10) : baseUndo;
+            const nextLog = changed ? [{type: 'sync', target: 'action', logMessage: '公告同步：新增 ' + result.characters + ' 位角色、' + result.skins + ' 件换装', timestamp}, ...baseLog].slice(0, 50) : baseLog;
+            const writes = [];
+            if (processed.size !== previousProcessed.length) writes.push([announcementProcessedKey, JSON.stringify([...processed])]);
+            if (changed) writes.push(
+                ['azurLaneCharacters', JSON.stringify(nextCharacters)], ['azurLaneSkins', JSON.stringify(nextSkins)],
+                ['azurLaneUndoHistory', JSON.stringify(nextUndo)], ['azurLaneRedoHistory', JSON.stringify([])], ['azurLaneActivityLog', JSON.stringify(nextLog)]
+            );
+            // 数据、撤销、日志和处理标记共用原有回滚事务，成功前不修改内存或界面。
+            try { if (writes.length) writeStorageEntries(writes); }
+            catch (error) { notifySaveState('error', storageErrorMessage(error)); throw error; }
+            const refresh = changed || JSON.stringify(characters) !== JSON.stringify(nextCharacters) || JSON.stringify(skins) !== JSON.stringify(nextSkins);
+            characters = nextCharacters; skins = nextSkins; undoHistory = nextUndo; redoHistory = changed ? [] : baseRedo; activityLog = nextLog;
+            if (refresh) { markSkinsIndexDirty(); renderAnnouncementChanges(); }
+            updateUndoButton(); updateRedoButton();
+            if (changed) notifySaveState('saved', nextLog[0].logMessage);
+            return result;
+        }
+
+        window.syncAnnouncementCollection = entries => navigator.locks
+            ? navigator.locks.request('azurLaneAnnouncementCollection', () => applyAnnouncementCollection(entries))
+            : Promise.resolve().then(() => applyAnnouncementCollection(entries));
+
+        // 其他标签页落盘后刷新无待保存编辑的页面；本地正在编辑时由下次同步先提交。
+        window.addEventListener('storage', event => {
+            if (!['azurLaneCharacters', 'azurLaneSkins', 'azurLaneUndoHistory', 'azurLaneRedoHistory'].includes(event.key) || _dataDirty || _saveUndoTimer) return;
+            window.syncAnnouncementCollection([]).catch(error => notifySaveState('error', storageErrorMessage(error)));
+        });
+
         function deleteCharacter(characterId) {
             if (!characterId) return;
             
@@ -2953,6 +3064,8 @@
                 }
             } else if (target === 'action') {
                 switch (type) {
+                    case 'sync':
+                        return logMessage || '同步了公告收藏';
                     case 'undo':
                         return isShort ? '撤销了最近操作' : '撤销了最近的操作';
                     default:
@@ -3025,6 +3138,7 @@
         }
         
         function saveData() {
+            _dataDirty = true;
             if (_saveDataTimer) clearTimeout(_saveDataTimer);
             notifySaveState('saving', '正在保存修改…');
             _saveDataTimer = setTimeout(saveDataImmediate, 300);
@@ -3038,6 +3152,7 @@
                     ['azurLaneCharacters', JSON.stringify(characters)],
                     ['azurLaneSkins', JSON.stringify(skins)]
                 ]);
+                _dataDirty = false;
                 notifySaveState('saved', '修改已保存到此浏览器');
                 return true;
             } catch (error) {

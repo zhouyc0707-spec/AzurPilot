@@ -1,4 +1,5 @@
 import {expect, test, type FrameLocator, type Page} from '@playwright/test'
+import {routeRpc} from '../rpc-route'
 
 // 全部使用虚构收藏和独立浏览器上下文，不读取用户收藏，也不启动游戏任务。
 const backup = {
@@ -315,3 +316,191 @@ for (const theme of ['legacy-light', 'light']) {
     expect(errors).toEqual([])
   })
 }
+
+const announcementEntries = [
+  {name: '公告新角色', aliases: ['New Ship'], rarity: 'super_rare', acquisition: '限时建造', skins: [{name: '公告新礼服', acquisition: '商城'}], sourceUrl: 'https://example.test/announcement', announcementId: 'fixture-20261113'},
+  {name: '既有角色', aliases: ['Test-A'], rarity: 'super_rare', acquisition: '限时建造', skins: [{name: '海风／礼服', acquisition: '商城'}, {name: '新睡衣', acquisition: '活动'}], sourceUrl: 'https://example.test/announcement', announcementId: 'fixture-20261113'},
+]
+const existingAnnouncementCharacter = {id: 'existing_announcement', name: 'Ｔｅｓｔ — Ａ', rarity: 'rare', acquisition: '手工获取方式', collected: '9', shareableSkinCount: '2', customTargetCount: 11}
+const existingAnnouncementSkin = {id: 'existing_announcement_skin', characterId: 'existing_announcement', name: '海风 / 礼服', acquisition: '手工换装来源', owned: true}
+
+async function mockAnnouncements(page: Page, getEntries: () => typeof announcementEntries) {
+  await routeRpc(page, socket => {
+    const server = socket.connectToServer()
+    socket.onMessage(message => {
+      const request = JSON.parse(message)
+      if (request.method === 'skinCollection.updates') {
+        socket.send(JSON.stringify({v: 1, type: 'response', id: request.id, ok: true,
+          result: {entries: getEntries(), checkedAt: '2026-11-13T12:00:00', error: '', pendingNames: [], refreshing: false}}))
+      } else server.send(message)
+    })
+    server.onMessage(message => socket.send(message))
+  })
+}
+
+async function readCollection(page: Page) {
+  return tracker(page).locator('body').evaluate(() => ({
+    characters: JSON.parse(localStorage.getItem('azurLaneCharacters') || '[]'),
+    skins: JSON.parse(localStorage.getItem('azurLaneSkins') || '[]'),
+    undo: JSON.parse(localStorage.getItem('azurLaneUndoHistory') || '[]'),
+    redo: JSON.parse(localStorage.getItem('azurLaneRedoHistory') || '[]'),
+    processed: localStorage.getItem('azurLaneAnnouncementProcessed'),
+  }))
+}
+
+async function revisitCollection(page: Page) {
+  await page.locator('.primary-nav').getByRole('link', {name: '运行总览', exact: true}).click()
+  await expect(page.locator('#main-content')).toBeVisible()
+  await page.locator('.primary-nav').getByRole('link', {name: '换装收藏统计', exact: true}).click()
+  await expect(page.getByTestId('collection-sync-status')).not.toHaveText(/正在/)
+}
+
+test('公告自动增量同步保留既有数据，别名与换装去重，撤销后不重导且旧备份可补录', async ({page}) => {
+  const errors = await prepare(page, 'legacy-light')
+  await mockAnnouncements(page, () => announcementEntries)
+  await page.addInitScript(({character, skin}) => {
+    localStorage.setItem('azurLaneCharacters', JSON.stringify([character]))
+    localStorage.setItem('azurLaneSkins', JSON.stringify([skin]))
+  }, {character: existingAnnouncementCharacter, skin: existingAnnouncementSkin})
+  await page.goto('/#/i/demo-main/skin-collection')
+  const frame = tracker(page)
+  await expect(page.getByTestId('collection-sync-status')).toContainText('新增')
+  let state = await readCollection(page)
+  expect(state.characters).toHaveLength(2)
+  expect(state.skins).toHaveLength(3)
+  expect(state.characters.find((item: {id: string}) => item.id === 'existing_announcement')).toEqual({...existingAnnouncementCharacter, customTargetCount: 12})
+  expect(state.skins.find((item: {id: string}) => item.id === 'existing_announcement_skin')).toEqual(existingAnnouncementSkin)
+  expect(state.characters.find((item: {name: string}) => item.name === '公告新角色')).toMatchObject({collected: '0', shareableSkinCount: '0', customTargetCount: null})
+  expect(state.skins.filter((item: {id: string}) => item.id !== 'existing_announcement_skin').every((item: {owned: boolean}) => !item.owned)).toBe(true)
+  expect(state.undo).toHaveLength(1)
+  const saved = state
+  await revisitCollection(page)
+  expect(await readCollection(page)).toEqual(saved)
+  await frame.locator('#undo-btn').click()
+  await expect(frame.locator('#stat-characters')).toHaveText('1')
+  await revisitCollection(page)
+  state = await readCollection(page)
+  expect(state.characters).toEqual([existingAnnouncementCharacter])
+  expect(state.skins).toEqual([existingAnnouncementSkin])
+  expect(state.undo).toHaveLength(0)
+  expect(state.redo).toHaveLength(1)
+  expect(state.processed).toBe(saved.processed)
+
+  // 旧备份没有公告标记；显式导入会清理同步偏好，允许补入备份之后的新内容。
+  await frame.locator('#import-btn').click()
+  await frame.locator('#import-data').fill(JSON.stringify({characters: [existingAnnouncementCharacter], skins: [existingAnnouncementSkin]}))
+  await frame.locator('#confirm-import-btn').click()
+  await expect(frame.locator('#import-review')).toContainText('1 位角色、1 件换装')
+  await frame.locator('#confirm-import-btn').click()
+  await expect(frame.locator('#import-modal')).toBeHidden()
+  expect((await readCollection(page)).processed).toBeNull()
+  await revisitCollection(page)
+  await expect(frame.locator('#stat-characters')).toHaveText('2')
+  expect((await readCollection(page)).skins).toHaveLength(3)
+  expect(errors).toEqual([])
+})
+
+test('公告同步事务失败不污染记录与撤销，恢复后可重试', async ({page}) => {
+  const errors = await prepare(page, 'light')
+  await mockAnnouncements(page, () => announcementEntries)
+  await page.addInitScript(() => {
+    // 只让公告事务中途的一次写入失败，回滚写入仍可成功。
+    const setItem = Storage.prototype.setItem
+    let failed = false
+    Storage.prototype.setItem = function(key, value) {
+      if (!failed && key === 'azurLaneSkins') { failed = true; throw new DOMException('测试模拟存储配额不足', 'QuotaExceededError') }
+      return setItem.call(this, key, value)
+    }
+  })
+  await page.goto('/#/i/demo-main/skin-collection')
+  await expect(page.getByTestId('collection-sync-status')).toContainText('暂不可用')
+  const state = await readCollection(page)
+  expect(state).toEqual({characters: [], skins: [], undo: [], redo: [], processed: null})
+  await expect(tracker(page).locator('#stat-characters')).toHaveText('0')
+  await expect(tracker(page).locator('#undo-btn')).toBeDisabled()
+  await revisitCollection(page)
+  await expect(tracker(page).locator('#stat-characters')).toHaveText('2')
+  expect((await readCollection(page)).undo).toHaveLength(1)
+  expect(errors).toEqual([])
+})
+
+test('公告追加新角色和换装时保留正在查看的角色、列表与页面位置', async ({page}) => {
+  let updates: typeof announcementEntries = []
+  await mockAnnouncements(page, () => updates)
+  const errors = await prepareScrollCollection(page, 'light')
+  const before = await scrollArchive(page)
+  updates = [{...announcementEntries[0], skins: []}, {...announcementEntries[1], name: '滚动测试角色20', aliases: [], skins: [{name: '公告追加测试装', acquisition: '活动'}]}]
+  await revisitCollection(page)
+  await expect(page.getByTestId('collection-sync-status')).toContainText('新增')
+  // 名称排序下新角色插在当前行之前，scrollTop 需增加；核对的是原行的实际像素位置。
+  const after = await readScrollPosition(page)
+  expect(after.listY).toBeGreaterThan(before.listY)
+  await expectScrollRestored(page, {...before, listY: after.listY})
+  expect((await readCollection(page)).characters).toHaveLength(scrollCharacters.length + 1)
+  expect(errors).toEqual([])
+})
+
+test('两个标签页同时同步公告仅追加一次，并同步另一页的已保存记录', async ({page, context}) => {
+  const other = await context.newPage()
+  await prepare(page, 'light')
+  await prepare(other, 'light')
+  await mockAnnouncements(page, () => announcementEntries)
+  await mockAnnouncements(other, () => announcementEntries)
+  await Promise.all([page.goto('/#/i/demo-main/skin-collection'), other.goto('/#/i/demo-alt/skin-collection')])
+  await expect(tracker(page).locator('#stat-characters')).toHaveText('2')
+  await expect(tracker(other).locator('#stat-characters')).toHaveText('2')
+  expect(await readCollection(page)).toEqual(await readCollection(other))
+  expect((await readCollection(page)).undo).toHaveLength(1)
+  await tracker(page).locator('#character-list .character-row').first().click()
+  const count = tracker(page).locator('#collection-progress-container input[data-character-id]')
+  await count.fill('4')
+  await count.dispatchEvent('change')
+  await expect.poll(async () => (await readCollection(page)).characters.some((item: {collected: string}) => item.collected === '4')).toBe(true)
+  await revisitCollection(other)
+  expect(await readCollection(page)).toEqual(await readCollection(other))
+  await other.close()
+})
+
+test('手工编辑连续保存失败后拒绝公告覆盖，恢复写入后先保存编辑再追加', async ({page}) => {
+  let updates: typeof announcementEntries = []
+  const errors = await prepare(page, 'light')
+  await mockAnnouncements(page, () => updates)
+  await page.goto('/#/i/demo-main/skin-collection')
+  const frame = tracker(page)
+  await expect(page.getByTestId('collection-sync-status')).toContainText('已同步')
+  await importBackup(frame)
+  await frame.locator('#character-list [data-id="fixture_unowned"]').click()
+  const count = frame.locator('#collection-progress-container input[data-character-id="fixture_unowned"]')
+  await frame.locator('body').evaluate(() => {
+    const original = Storage.prototype.setItem
+    ;(window as Window & {restoreTestStorage?: () => void}).restoreTestStorage = () => { Storage.prototype.setItem = original }
+    Storage.prototype.setItem = function(key, value) {
+      // 每次尝试保存未提交数量都失败，仍允许原值回滚，模拟持续配额不足。
+      if (key === 'azurLaneCharacters' && JSON.parse(value).some((item: {collected: string}) => item.collected === '17')) {
+        throw new DOMException('测试持续配额不足', 'QuotaExceededError')
+      }
+      return original.call(this, key, value)
+    }
+  })
+  await count.fill('17')
+  await count.dispatchEvent('change')
+  // 明确等到 300ms 定时保存已经失败，避免只覆盖尚在防抖中的状态。
+  await expect(frame.locator('#save-status')).toHaveAttribute('data-state', 'error')
+  await expect(count).toHaveValue('17')
+  expect((await readCollection(page)).characters.find((item: {id: string}) => item.id === 'fixture_unowned').collected).toBe('0')
+  updates = [announcementEntries[0]]
+  await revisitCollection(page)
+  await expect(page.getByTestId('collection-sync-status')).toContainText('暂不可用')
+  await expect(count).toHaveValue('17')
+  expect((await readCollection(page)).characters).toHaveLength(3)
+  expect((await readCollection(page)).processed).toBeNull()
+  await frame.locator('body').evaluate(() => (window as Window & {restoreTestStorage?: () => void}).restoreTestStorage!())
+  await revisitCollection(page)
+  await expect(page.getByTestId('collection-sync-status')).toContainText('新增')
+  await expect(count).toHaveValue('17')
+  const state = await readCollection(page)
+  expect(state.characters).toHaveLength(4)
+  expect(state.characters.find((item: {id: string}) => item.id === 'fixture_unowned').collected).toBe('17')
+  expect(state.skins).toHaveLength(3)
+  expect(errors).toEqual([])
+})

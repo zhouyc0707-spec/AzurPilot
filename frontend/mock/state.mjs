@@ -1110,6 +1110,8 @@ export function createMockState({ empty = false } = {}) {
         if (params.remember !== undefined) { if (params.remember) remember.add(name); else remember.delete(name) }
         return { enabled: startup.has(name), remember: remember.has(name) }
       case 'background.access': return {token: 'mock-background-token'}
+      case 'skinCollection.updates':
+        return {entries: [], checkedAt: new Date().toISOString(), error: null, pendingNames: [], refreshing: false}
       case 'announcement.get':
         return {
           announcementId: 'mock-announcement-v2',

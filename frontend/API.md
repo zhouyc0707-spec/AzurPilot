@@ -2,6 +2,8 @@
 
 ## 连接与认证
 
+`skinCollection.updates` 使用数据通道和空参数对象，返回 `entries`、`checkedAt`、`error`、`pendingNames` 与 `refreshing`。`entries` 为自 2026 年 11 月 12 日起国服维护公告的聚合角色与换装目录，含名称、别名、稀有度、获取方式、换装列表及原文链接。请求立即读取共享缓存并按需触发后台刷新。接口响应不含个人收藏或拥有状态，浏览器在本地事务中去重追加。
+
 地址为同源 `/api/v1/ws`，HTTPS 下使用 `wss`。协议版本固定为 `v: 1`。服务只通过 HTTP 提供静态资源与 `/healthz`；业务数据与操作使用 WebSocket。独立 MCP 是另一项对外集成，仍保留自己的 SSE 协议。
 
 服务升级连接前检查 Origin 与 Host 是否一致，拒绝跨站连接。最多同时保留 32 个连接，每连接请求上限 30 次/秒、单请求 1 MiB。反向代理必须支持 WebSocket Upgrade，并正确保留外部 Host/Origin。

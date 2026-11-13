@@ -55,6 +55,8 @@ class Router:
         self._opsi_simulator_lock = threading.Lock()
         self._stock_exchange = None
         self._stock_exchange_lock = threading.Lock()
+        self._skin_collection = None
+        self._skin_collection_lock = threading.Lock()
         self.access_password = ''
         self.background_token = secrets.token_urlsafe(32)
         self.methods = {
@@ -146,6 +148,7 @@ class Router:
             'updater.apply': Method(p.Params, lambda _: self.updates.start('apply'), True),
             'updater.cancel': Method(p.Params, lambda _: self.updates.cancel(), True),
             'announcement.get': Method(p.AnnouncementParams, lambda x: self.announcements.get(force=x.force)),
+            'skinCollection.updates': Method(p.Params, lambda _: self.skin_collection.get(), data_channel=True),
             'background.access': Method(p.Params, lambda _: {'token': self.background_token}),
             'background.resolve': Method(p.BackgroundUrlParams, lambda x: background.resolve(x.url)),
             'background.gallery.list': Method(p.Params, lambda _: background.gallery_list()),
@@ -246,6 +249,15 @@ class Router:
         """
         from module.api.announcement_service import announcement_service
         return announcement_service
+
+    @property
+    def skin_collection(self):
+        """共享国服维护公告的增量收藏目录，不读取浏览器收藏。"""
+        with self._skin_collection_lock:
+            if self._skin_collection is None:
+                from module.api.skin_collection_service import SkinCollectionService
+                self._skin_collection = SkinCollectionService(self.configs.root)
+            return self._skin_collection
 
     @property
     def updates(self):
