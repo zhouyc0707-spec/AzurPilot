@@ -1,6 +1,6 @@
 import {expect, test} from '@playwright/test'
 
-for (const theme of ['legacy-light', 'light']) {
+for (const theme of ['legacy-light', 'legacy-dark']) {
   test(`${theme} 队列任务单次启动、再次停止与其他任务互斥`, async ({page}) => {
     const errors: string[] = []
     const actions: {method: string; params: Record<string, unknown>}[] = []
@@ -11,7 +11,7 @@ for (const theme of ['legacy-light', 'light']) {
       localStorage.setItem('azurpilot.language', 'zh-CN')
       localStorage.setItem('azurpilot.background', JSON.stringify({source: 'off'}))
     }, theme)
-    await page.routeWebSocket('**/api/v1/ws', socket => {
+    await page.routeWebSocket(/\/api\/v1\/ws(?:\?.*)?$/, socket => {
       const server = socket.connectToServer()
       let reset = false
       socket.onMessage(message => {
@@ -25,10 +25,7 @@ for (const theme of ['legacy-light', 'light']) {
         if (request.method.startsWith('tasks.') || request.method === 'scheduler.start') actions.push(request)
         server.send(message)
       })
-      server.onMessage(message => {
-        const response = JSON.parse(String(message))
-        if (!response.id?.startsWith('single-test-')) socket.send(message)
-      })
+      server.onMessage(message => socket.send(message))
     })
     await page.goto('/#/i/demo-main/overview')
     const queue = page.locator('.rail-task-list')
@@ -38,7 +35,7 @@ for (const theme of ['legacy-light', 'light']) {
     await page.locator('.rail-schedule').screenshot({path: test.info().outputPath(`single-task-${theme}-pending.png`)})
     const location = page.url()
     await start.click()
-    const active = queue.locator('.rail-queue-group.running [data-task="Commission"]')
+    const active = queue.locator('[data-task="Commission"].running')
     await expect(active.getByRole('button', {name: /立即停止/})).toBeEnabled()
     await expect(page.locator('.scheduler-status')).toHaveText('单次任务运行中')
     await expect(queue.locator('[data-task="Research"] button')).toBeDisabled()
@@ -48,7 +45,7 @@ for (const theme of ['legacy-light', 'light']) {
     await page.locator('.scheduler-widget').screenshot({path: test.info().outputPath(`single-task-${theme}-running.png`)})
 
     await active.getByRole('button', {name: /立即停止/}).click()
-    await expect(queue.locator('.rail-queue-group.pending [data-task="Commission"] button')).toHaveAccessibleName(/执行一次/)
+    await expect(queue.locator('[data-task="Commission"].pending button')).toHaveAccessibleName(/执行一次/)
     await expect(page.locator('.scheduler-status')).toHaveText('已停止')
     await expect(queue.locator('[data-task="Research"] button')).toBeEnabled()
     expect(actions.map(action => action.method)).toEqual(['tasks.runOnce', 'tasks.stop'])
@@ -56,15 +53,14 @@ for (const theme of ['legacy-light', 'light']) {
     await queue.screenshot({path: test.info().outputPath(`single-task-${theme}-stopped.png`)})
 
     // 未来任务可手动提前执行；大停止按钮也应走同一个快速停止接口。
-    const waiting = queue.locator('.rail-queue-group.waiting [data-task="Main"] button')
+    const waiting = queue.locator('[data-task="Main"].waiting button')
     await expect(waiting).toBeEnabled()
     await waiting.click()
     await expect(page.locator('.scheduler-status')).toHaveText('单次任务运行中')
     await page.locator('.scheduler-toggle').click()
-    await expect(queue.locator('.rail-queue-group.waiting [data-task="Main"] button')).toBeEnabled()
+    await expect(queue.locator('[data-task="Main"].waiting button')).toBeEnabled()
     expect(actions.map(action => action.method)).toEqual(['tasks.runOnce', 'tasks.stop', 'tasks.runOnce', 'tasks.stop'])
     await page.setViewportSize({width: 390, height: 844})
-    if (theme === 'light') await page.getByRole('button', {name: '打开调度与任务', exact: true}).click()
     const narrowButton = queue.locator('[data-task="Commission"] button')
     await narrowButton.scrollIntoViewIfNeeded()
     await expect(narrowButton).toBeInViewport({ratio: 1})
@@ -81,7 +77,7 @@ test('单次执行自然完成后自动恢复按钮，不接着启动其他任�
     localStorage.setItem('azurpilot.theme', 'legacy-light')
     localStorage.setItem('azurpilot.language', 'zh-CN')
   })
-  await page.routeWebSocket('**/api/v1/ws', socket => {
+  await page.routeWebSocket(/\/api\/v1\/ws(?:\?.*)?$/, socket => {
     const server = socket.connectToServer()
     socket.onMessage(message => {
       const request = JSON.parse(String(message))
@@ -95,7 +91,7 @@ test('单次执行自然完成后自动恢复按钮，不接着启动其他任�
   await queue.locator('[data-task="Commission"] button').click()
   await expect(page.locator('.scheduler-status')).toHaveText('单次任务运行中')
   await expect(page.locator('.scheduler-status')).toHaveText('已停止', {timeout: 12000})
-  await expect(queue.locator('.rail-queue-group.waiting [data-task="Commission"] button')).toHaveAccessibleName(/执行一次/)
+  await expect(queue.locator('[data-task="Commission"].waiting button')).toHaveAccessibleName(/执行一次/)
   expect(actions).toEqual(['tasks.runOnce'])
 })
 
@@ -105,7 +101,7 @@ test('独立工具保持原停止方式，不能冒充队列单次运行', async
     localStorage.setItem('azurpilot.theme', 'light')
     localStorage.setItem('azurpilot.language', 'zh-CN')
   })
-  await page.routeWebSocket('**/api/v1/ws', socket => {
+  await page.routeWebSocket(/\/api\/v1\/ws(?:\?.*)?$/, socket => {
     const server = socket.connectToServer()
     let start = false
     socket.onMessage(message => {
@@ -117,10 +113,7 @@ test('独立工具保持原停止方式，不能冒充队列单次运行', async
       if (request.method === 'tasks.stop' || request.method === 'scheduler.stop') actions.push(request.method)
       server.send(message)
     })
-    server.onMessage(message => {
-      const response = JSON.parse(String(message))
-      if (response.id !== 'single-test-tool') socket.send(message)
-    })
+    server.onMessage(message => socket.send(message))
   })
   await page.goto('/#/i/demo-dog/overview')
   await expect(page.locator('.scheduler-status')).toHaveText('独立任务运行中')

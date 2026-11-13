@@ -4,10 +4,11 @@
 
 import { useLayoutEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, Loader2, Play, Square } from 'lucide-react'
 import { api } from '../api/client'
 import type { Overview, ScheduledTask } from '../api/types'
 import { useApp, useConnection } from '../app/context'
+import { usesLegacyLayout } from '../app/theme'
 import { editor } from '../config/editors'
 import { ContextMenu, type ContextMenuItem } from './ContextMenu'
 
@@ -61,7 +62,8 @@ export function taskRunAction(data: Overview, task: ScheduledTask): 'run' | 'sto
  * 容器的高度用补间兑现，离开的条目在原地收缩塌陷，插入的条目自中心放大。
  */
 export function TaskQueue({instance, data, onData, onNavigate}: {instance: string; data?: Overview; onData: (data: Overview) => void; onNavigate?: () => void}) {
-  const {t, ui, notify} = useApp()
+  const {t, ui, notify, theme} = useApp()
+  const legacy = usesLegacyLayout(theme)
   const connection = useConnection()
   const [busyTask, setBusyTask] = useState<string | null>(null)
   const requestPending = useRef(false)
@@ -249,10 +251,7 @@ export function TaskQueue({instance, data, onData, onNavigate}: {instance: strin
           <div className="rail-queue-body">
             {tasks.map(task => {
               const nextRun = task.nextRun?.replace('T', ' ').trim()
-              return <Link key={task.name} data-task={task.name} className={`rail-task-item ${task.state}`}
-                           to={`/i/${instance}/task/${task.name}`}
-                           onClick={onNavigate}
-                           onContextMenu={event => {event.preventDefault(); setMenu({task, x: event.clientX, y: event.clientY})}}>
+              const content = <>
                 <div className="rail-task-main">
                   <strong>{t(`Task.${task.name}.name`)}</strong>
                   {nextRun && <small>{nextRun}</small>}
@@ -261,8 +260,27 @@ export function TaskQueue({instance, data, onData, onNavigate}: {instance: strin
                   {task.state === 'running' && <span className="thinking-dots" aria-hidden="true"><i/><i/><i/></span>}
                   <span className="state-label">{labels[task.state]}</span>
                 </span>
-                <ChevronRight size={13}/>
+                {!legacy && <ChevronRight size={13}/>}
+              </>
+              if (!legacy) return <Link key={task.name} data-task={task.name} className={`rail-task-item ${task.state}`}
+                to={`/i/${instance}/task/${task.name}`} onClick={onNavigate}
+                onContextMenu={event => {event.preventDefault(); setMenu({task, x: event.clientX, y: event.clientY})}}>
+                {content}
               </Link>
+              const action = data ? taskRunAction(data, task) : null
+              const label = ui(action === 'stop' ? 'task.stopOnce' : 'task.runOnce', {task: t(`Task.${task.name}.name`)})
+              return <div key={task.name} data-task={task.name} className={`rail-task-item ${task.state}`}
+                onContextMenu={event => {event.preventDefault(); setMenu({task, x: event.clientX, y: event.clientY})}}>
+                <Link className="rail-task-link" to={`/i/${instance}/task/${task.name}`} onClick={onNavigate}>
+                  {content}
+                </Link>
+                {action && <button type="button" className={`icon-button rail-task-run${action === 'stop' ? ' is-running' : ''}`}
+                  aria-label={label} title={label} aria-pressed={action === 'stop'}
+                  disabled={!!busyTask || connection !== 'ready' || (action === 'run' && (data?.status === 'running' || data?.status === 'updating'))}
+                  onClick={() => void toggleTask(task)}>
+                  {busyTask === task.name ? <Loader2 size={15} className="spin"/> : action === 'stop' ? <Square size={15}/> : <Play size={15}/>}
+                </button>}
+              </div>
             })}
           </div>
         </section>

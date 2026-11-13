@@ -24,7 +24,7 @@ describe('任务条目在调度栏内移动的判定', () => {
   })
 })
 
-describe('单次任务菜单操作按真实运行模式显示', () => {
+describe('单次任务操作按真实运行模式显示', () => {
   const task: ScheduledTask = {name: 'Research', nextRun: '', pending: true, state: 'pending', runOnceAllowed: true}
   const overview: Overview = {instance: 'test', revision: '', status: 'stopped', tasks: [task], resources: [], emulator: {}}
 

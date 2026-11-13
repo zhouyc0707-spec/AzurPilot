@@ -28,7 +28,7 @@ async function fixture(page: Page) {
   let holdWrite = false
   page.on('pageerror', error => errors.push(error.message))
   await page.route('https://**', route => route.abort())
-  await page.routeWebSocket('**/api/v1/ws', socket => {
+  await page.routeWebSocket(/\/api\/v1\/ws(?:\?.*)?$/, socket => {
     const server = socket.connectToServer()
     socket.onMessage(raw => {
       const request = JSON.parse(String(raw)) as Request
@@ -228,6 +228,21 @@ for (const theme of ['legacy-light', 'legacy-dark']) {
         }
       }
       expect(bounds.scrollWidth).toBeLessThanOrEqual(bounds.viewport + 1)
+      const compact = await card.locator('.maintenance-weekday-control').evaluate(element => {
+        const label = element.querySelector('label')!.getBoundingClientRect()
+        const select = element.querySelector('.select-trigger')!.getBoundingClientRect()
+        return {
+          labelCenter: label.top + label.height / 2,
+          selectCenter: select.top + select.height / 2,
+          selectHeight: select.height,
+          cardHeight: element.closest('.legacy-stat-card')!.getBoundingClientRect().height,
+        }
+      })
+      expect(Math.abs(compact.labelCenter - compact.selectCenter)).toBeLessThanOrEqual(1)
+      expect(compact.selectHeight).toBeGreaterThanOrEqual(27)
+      expect(compact.selectHeight).toBeLessThanOrEqual(31)
+      expect(compact.cardHeight).toBeGreaterThanOrEqual(38)
+      expect(compact.cardHeight).toBeLessThanOrEqual(42)
       await card.screenshot({path: info.outputPath(`维护日-${theme}-${width}.png`)})
       await control(page).click()
       await expect(page.getByRole('option')).toHaveText(DAYS)
@@ -243,8 +258,9 @@ for (const theme of ['legacy-light', 'legacy-dark']) {
 
 test('新版主题不新增维护日入口或自动保存配置', async ({page}) => {
   const state = await fixture(page)
-  await open(page, 'light')
-  await expect(page.locator('.overview-page')).toBeVisible()
+  await open(page, 'modern-light')
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'modern-light')
+  await expect(page.locator('.instance-page-grid')).toBeVisible()
   await expect(control(page)).toHaveCount(0)
   await expect(page.locator('.maintenance-weekday')).toHaveCount(0)
   expect(state.writes).toHaveLength(0)

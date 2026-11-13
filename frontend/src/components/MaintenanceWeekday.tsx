@@ -62,7 +62,7 @@ function WeekdayControl({instance}: {instance: string}) {
   const value = typeof edit?.value === 'string' ? edit.value : weekday
   return <div className="maintenance-weekday" title={ui('overview.maintenanceHint')}>
     <div className="maintenance-weekday-control">
-      <label htmlFor="overview-maintenance-weekday">{ui('overview.maintenanceDay')}</label>
+      <label htmlFor="overview-maintenance-weekday" title={ui('overview.maintenanceDay')}>{ui('overview.maintenanceDay')}</label>
       <Select id="overview-maintenance-weekday" aria-label={ui('overview.maintenanceDay')}
         value={value} disabled={!weekday || connection !== 'ready' || Boolean(error)}
         onChange={event => queue.change(PATH, event.target.value)}>

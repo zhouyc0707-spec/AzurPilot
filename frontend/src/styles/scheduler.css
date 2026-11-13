@@ -618,6 +618,8 @@
 
 /* 两族基础布局不同，统一任务条目的三列与分组容器。 */
 .rail-task-item {grid-template-columns: minmax(0, 1fr) auto 13px; min-height: 44px}
+:root[data-theme^='legacy-'] .rail-task-item {grid-template-columns: minmax(0, 1fr) auto; gap: 6px}
+:root[data-theme^='legacy-'] .rail-task-link {grid-template-columns: minmax(0, 1fr) auto; gap: 6px}
 .rail-queue-group.tasks {border: 0; border-radius: 0; background: transparent; box-shadow: none}
 .instance-page-rail .scheduler-widget-heading {margin-bottom: 14px}
 .instance-page-rail .scheduler-widget-heading > div {gap: 8px; font-size: 15px; font-weight: 600}
