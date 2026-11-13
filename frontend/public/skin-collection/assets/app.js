@@ -2913,7 +2913,9 @@
             catch (error) { notifySaveState('error', storageErrorMessage(error)); throw error; }
             const refresh = changed || JSON.stringify(characters) !== JSON.stringify(nextCharacters) || JSON.stringify(skins) !== JSON.stringify(nextSkins);
             characters = nextCharacters; skins = nextSkins; undoHistory = nextUndo; redoHistory = changed ? [] : baseRedo; activityLog = nextLog;
-            if (refresh) { markSkinsIndexDirty(); renderAnnouncementChanges(); }
+            // 每次同步都替换了换装对象，角色索引需要随之重建。
+            markSkinsIndexDirty();
+            if (refresh) renderAnnouncementChanges();
             updateUndoButton(); updateRedoButton();
             if (changed) notifySaveState('saved', nextLog[0].logMessage);
             return result;

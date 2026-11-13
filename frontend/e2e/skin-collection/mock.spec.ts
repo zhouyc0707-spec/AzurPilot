@@ -135,6 +135,7 @@ test('立即离开收藏页与切换实例均保存编辑，返回保留查询�
   })
   await expect(page.locator('#main-content')).toBeVisible()
   await page.locator('.primary-nav').getByRole('link', {name: '换装收藏统计', exact: true}).click()
+  await expect(page.locator('.primary-nav').getByRole('link', {name: '换装收藏统计', exact: true})).toHaveAttribute('aria-current', 'page')
   await expect(frame.locator('#search-input')).toHaveValue('测试未拥有')
   await expect(count).toHaveValue('7')
 
@@ -554,3 +555,72 @@ test('公告和谐名映射原名后保留云仙记录，新建使用新泽西�
   expect(await readCollection(page)).toEqual(variants)
   expect(errors).toEqual([])
 })
+
+for (const mode of ['空公告', '重复已处理公告']) {
+  test(`${mode}无新增同步后，换装格与勾选仍双向切换拥有状态并支持撤销和刷新`, async ({page}) => {
+    const errors = await prepare(page, 'light')
+    const updates = mode === '空公告' ? [] : [{
+      ...announcementEntries[0], name: '测试未拥有', aliases: [],
+      skins: [{name: '测试礼服', acquisition: '880'}],
+    }]
+    await mockAnnouncements(page, () => updates)
+    await page.addInitScript(data => {
+      if (localStorage.getItem('azurLaneCharacters') === null) {
+        localStorage.setItem('azurLaneCharacters', JSON.stringify(data.characters))
+        localStorage.setItem('azurLaneSkins', JSON.stringify(data.skins))
+      }
+    }, backup)
+    await page.goto('/#/i/demo-main/skin-collection')
+    const frame = tracker(page)
+    await expect(page.getByTestId('collection-sync-status')).toContainText('已同步')
+    await frame.locator('#character-list [data-id="fixture_unowned"]').click()
+    const before = await readCollection(page)
+    if (updates.length) expect(before.processed).not.toBeNull()
+
+    // 返回页面再次同步相同数据，覆盖已处理公告和没有公告两条无新增路径。
+    await revisitCollection(page)
+    const repeated = await frame.locator('body').evaluate(async (_body, entries) => {
+      const sync = (window as Window & {syncAnnouncementCollection: (entries: unknown[]) => Promise<{characters: number; skins: number}>}).syncAnnouncementCollection
+      return await sync(entries)
+    }, updates)
+    expect(repeated).toEqual({characters: 0, skins: 0})
+    expect(await readCollection(page)).toEqual(before)
+    const row = frame.locator('#skins-list > div').filter({hasText: '测试礼服'})
+    const checkbox = row.getByRole('checkbox')
+    async function expectOwned(owned: boolean) {
+      await expect(checkbox).toBeChecked({checked: owned})
+      await expect(row.locator('label')).toHaveText(owned ? '已拥有' : '未拥有')
+      await expect(frame.locator('#skin-count-label')).toHaveText(owned ? '1 / 1' : '0 / 1')
+      await expect(frame.locator('#stat-owned')).toHaveText(owned ? '2' : '1')
+      await expect.poll(async () => (await readCollection(page)).skins.find((skin: {id: string}) => skin.id === 'fixture_skin_a').owned).toBe(owned)
+    }
+    await expectOwned(false)
+    await row.locator('h4').click()
+    await expectOwned(true)
+    await row.click({position: {x: 3, y: 3}})
+    await expectOwned(false)
+    await checkbox.check()
+    await expectOwned(true)
+    await row.locator('label').click()
+    await expectOwned(false)
+    await frame.locator('#undo-btn').click()
+    await expectOwned(true)
+    await frame.locator('#redo-btn').click()
+    await expectOwned(false)
+    await checkbox.check()
+    await expectOwned(true)
+
+    await page.reload()
+    await expect(page.getByTestId('collection-sync-status')).toContainText('已同步')
+    await expect(frame.locator('#detail-name')).toHaveText('测试未拥有')
+    await expectOwned(true)
+    await row.locator('h4').click()
+    await expectOwned(false)
+    const after = await readCollection(page)
+    // 撤销快照会补齐旧数据缺省的共享数量字段，原有记录值保持一致。
+    expect(after.characters).toMatchObject(backup.characters)
+    expect(after.skins).toHaveLength(backup.skins.length)
+    expect(after.processed).toBe(before.processed)
+    expect(errors).toEqual([])
+  })
+}
