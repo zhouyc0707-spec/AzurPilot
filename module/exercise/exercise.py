@@ -15,8 +15,9 @@
 - leftmost: 优先选择最左侧对手，尝试耗尽后先刷新，刷新用完再向右选择
 """
 import datetime
+from pathlib import Path
 from module.config.time_source import now as current_time
-from module.config.utils import get_server_last_update, server_timezone
+from module.config.utils import get_server_last_update, server_timezone, filepath_config, SERVER_TO_TIMEZONE
 from module.exercise.assets import *
 from module.exercise.combat import ExerciseCombat
 from module.logger import logger
@@ -284,14 +285,32 @@ class Exercise(ExerciseCombat):
         return preserve, admiral_interval
 
     def _get_exercise_start_time(self, next_update):
-        """计算本轮最早执行时间，可在指定星期中午补次数前提前至九点。"""
-        server_update = next_update.astimezone(datetime.timezone(server_timezone()))
-        weekdays = ('mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun')
-        if (self.preserve == 5 and self.config.Exercise_MaintenanceAdvance
-                and server_update.weekday() == weekdays.index(self.config.Exercise_MaintenanceWeekday)
-                and (server_update.hour, server_update.minute) == (12, 0)):
-            return next_update - datetime.timedelta(hours=3)
-        return next_update - datetime.timedelta(hours=self.config.Exercise_DelayUntilHoursBeforeNextUpdate)
+        """在真实维护前一小时所在的补次数周期提前执行。"""
+        from module.maintenance import get_maintenance_start, server_for_config
+        from module.maintenance_schedule import exercise_start_time
+
+        server = server_for_config(self.config.data, fallback=self.config.SERVER)
+        start = None
+        if self.preserve == 5 and self.config.Exercise_MaintenanceAdvance:
+            start = get_maintenance_start(
+                server, directory=Path(filepath_config(self.config.config_name)).parent,
+                refresh=False,
+            )
+        return exercise_start_time(
+            next_update, start, self.config.Scheduler_ServerUpdate,
+            self.config.Exercise_DelayUntilHoursBeforeNextUpdate,
+            server_timezone() if server == self.config.SERVER else SERVER_TO_TIMEZONE[server],
+        )
+
+    def _get_next_exercise_update(self, refresh_times):
+        """设备尚未设置全局区服时，以明确的实例包名计算补次数节点。"""
+        from module.maintenance import server_for_config
+        from module.maintenance_schedule import exercise_next_update
+
+        server = server_for_config(self.config.data, fallback=self.config.SERVER)
+        if server == self.config.SERVER:
+            return get_server_next_update(refresh_times)
+        return exercise_next_update(current_time(), refresh_times, SERVER_TO_TIMEZONE[server])
 
     def run(self):
         """
@@ -309,6 +328,21 @@ class Exercise(ExerciseCombat):
             in: 任意页面
             out: page_exercise
         """
+        from module.maintenance import get_maintenance_snapshot, server_for_config, was_maintenance_rescheduled
+
+        server = server_for_config(self.config.data, fallback=self.config.SERVER)
+        directory = Path(filepath_config(self.config.config_name)).parent
+        before = self.config.cross_get('Exercise.Scheduler.NextRun')
+        get_maintenance_snapshot(
+            server, directory=directory, refresh=True,
+        )
+        self.config.update()
+        after = self.config.cross_get('Exercise.Scheduler.NextRun')
+        if (before != after and not self.config.__dict__.get('_single_run_task')
+                and not was_maintenance_rescheduled(
+                    server, self.config.config_name, 'Exercise', before, after, directory=directory)):
+            logger.info('[演习] 查询期间排程已修改，保留最新设置并结束当前派发')
+            self.config.task_stop()
         self.ui_ensure(page_exercise)
         server_update = self.config.Scheduler_ServerUpdate
 
@@ -337,8 +371,8 @@ class Exercise(ExerciseCombat):
         else:
             forced_run = False
 
-        # 执行门禁与下次排程使用同一时间，确保所选星期九点即可运行。
-        start_time = self._get_exercise_start_time(get_server_next_update(server_update))
+        # 执行门禁与下次排程使用同一时间，使用同一维护计划执行门禁。
+        start_time = self._get_exercise_start_time(self._get_next_exercise_update(server_update))
         if current_time() < start_time and not forced_run:
             logger.warning(f'[演习-调度] 尚未到执行时间 {start_time}，延迟任务')
             run = False
@@ -368,10 +402,14 @@ class Exercise(ExerciseCombat):
         with self.config.multi_set():
             self.config.set_record(Exercise_OpponentRefreshValue=self.opponent_change_count)
             if not run or self.remain <= self.preserve or self.opponent_change_count >= 5:
-                next_run = self._get_exercise_start_time(get_server_next_update(server_update))
+                update = self._get_next_exercise_update(server_update)
+                next_run = self._get_exercise_start_time(update)
                 now = current_time()
                 if run:
-                    self.config.task_delay(server_update=True)
+                    if server_for_config(self.config.data, fallback=self.config.SERVER) == self.config.SERVER:
+                        self.config.task_delay(server_update=True)
+                    else:
+                        self.config.task_delay(target=update)
                     return
                 # 若检查过程中刚好跨过执行时间，立即重排，避免漏掉本轮。
                 self.config.task_delay(target=max(next_run, now))

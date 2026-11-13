@@ -1053,10 +1053,6 @@
       "name": "Run before maintenance (min)",
       "help": "How many minutes before server maintenance to run the last commission with sorties maxed.\nDefault 10."
     },
-    "MaintainCheckMinutes": {
-      "name": "Maintenance re-check interval (min)",
-      "help": "While only waiting for maintenance, re-check the maintenance notice after this many minutes.\nDefault 120."
-    },
     "ConflictRetryMinutes": {
       "name": "Task conflict retry interval (min)",
       "help": "When the commission end time cannot be read, postpone the conflicting task by this many minutes.\nDefault 15."
@@ -1897,7 +1893,7 @@
     },
     "MaintainOverride": {
       "name": "Handover before maintenance",
-      "help": "Check the maintenance notice once a day. If the maintenance is today and has not started yet, this run is\npostponed to 10 minutes before it and then runs with max sorties (still respecting Use Handover Book and\nauto-supplement time). Past or non-today maintenance is ignored.\nData from api-blhx-maintain, fetched for your game server and converted to local time",
+      "help": "Share the maintenance notice fetched and cached daily for this region. If maintenance starts later today, run at the configured lead time, 10 minutes by default, with maximum sorties. Handover Book and auto-supplement settings still apply. Use the normal schedule when no notice or valid cache is available.",
       "True": "Enabled",
       "False": "Disabled"
     },
@@ -3786,7 +3782,7 @@
     },
     "RunAt18": {
       "name": "Run at 18:00 on maintenance day",
-      "help": "Disabled by default. Uses the Early exercise weekday: that day runs at 18:00 server time, all other days at 00:00. When disabled, every day runs at 00:00. Does not require early exercise or the exercise task to be enabled."
+      "help": "Use the maintenance notice fetched daily for this region. Run at 18:00 server time on the announced maintenance date and at 00:00 on other dates. Use the normal schedule when no notice is published. A failed query uses a valid cached notice when available. Exercise and Hard mode keep their own switches."
     }
   },
   "Exercise": {
@@ -3796,7 +3792,7 @@
     },
     "DelayUntilHoursBeforeNextUpdate": {
       "name": "Delay Exercise until X hours before next refresh",
-      "help": "Normally follows this setting. When early exercise is enabled, the selected weekday morning starts at 09:00; other rounds follow this delay.",
+      "help": "Use this delay for normal rounds. With early maintenance exercise enabled, the round containing one hour before the announced maintenance start uses that time. Other rounds use this delay.",
       "1": "1",
       "2": "2",
       "3": "3",
@@ -3806,18 +3802,7 @@
     },
     "MaintenanceAdvance": {
       "name": "Exercise early before maintenance",
-      "help": "At 09:00 on the selected weekday, exercise down to 5 remaining attempts to leave room for the noon refill. Applies only to strategies that preserve 5 attempts. Disable to use the normal delay setting."
-    },
-    "MaintenanceWeekday": {
-      "name": "Early exercise weekday",
-      "help": "Uses the game server time zone. Only this morning round is moved; afternoon rounds and other days use the normal settings. Hard mode also uses this weekday when Run at 18:00 on maintenance day is enabled.",
-      "mon": "Monday",
-      "tue": "Tuesday",
-      "wed": "Wednesday",
-      "thu": "Thursday",
-      "fri": "Friday",
-      "sat": "Saturday",
-      "sun": "Sunday"
+      "help": "Fetch the maintenance notice daily for this region and run the corresponding round one hour before maintenance starts, preserving 5 attempts. Applies to strategies that preserve 5. Use the normal schedule when no notice or valid cache is available. Failed queries retain a valid cached notice."
     },
     "OpponentChooseMode": {
       "name": "Opponent selection mode",

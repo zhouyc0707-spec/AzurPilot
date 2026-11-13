@@ -174,6 +174,10 @@ class RuntimeService:
                       'record': values.get('Record')}
                      for name, values in data.get('Dashboard', {}).items() if 'Value' in values]
         resources.extend(monthly_statistics_resources(instance))
+        from module.maintenance import get_maintenance_snapshot, server_for_config
+        maintenance = get_maintenance_snapshot(
+            server_for_config(data), directory=getattr(self.configs, 'directory', None)
+        )
         # stopping：用户点了停止、正在等当前任务在安全点退出（温柔停止）。
         # 前端据此把启停按钮显示成「停止中…」，再点一次即强制停止。
         return {'instance': instance, 'revision': revision,
@@ -181,7 +185,7 @@ class RuntimeService:
                 'stopping': stopping,
                 'singleTask': single_task,
                 'schedulerRunning': state == 1 and started_func in {'alas', *get_available_mod()},
-                'tasks': tasks, 'resources': resources,
+                'tasks': tasks, 'resources': resources, 'maintenance': maintenance,
                 'emulator': data.get('Alas', {}).get('Emulator', {})}
 
     def start(self, instance: str, task: str = None) -> dict:

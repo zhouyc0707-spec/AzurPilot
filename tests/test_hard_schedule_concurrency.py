@@ -3,7 +3,7 @@
 import json
 import tempfile
 import unittest
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -36,12 +36,16 @@ class HardScheduleConcurrencyTests(unittest.TestCase):
         self.enterContext(patch('module.hard.hard.logger'))
         self.ocr = self.enterContext(patch('module.hard.hard.OCR_HARD_REMAIN'))
         self.ocr.ocr.return_value = 3
+        self.enterContext(patch('module.hard.hard.get_maintenance_snapshot', return_value={}))
+        self.maintenance_day = date(2026, 10, 23)
+        self.enterContext(patch('module.hard.hard.get_maintenance_start', side_effect=lambda *args, **kwargs: datetime.combine(self.maintenance_day, datetime.min.time()).replace(hour=10).astimezone() if self.maintenance_day else None))
 
-    def runner(self, *, run_at_18=True, weekday='fri'):
+    def runner(self, *, run_at_18=True, maintenance_day=date(2026, 10, 23)):
+        self.maintenance_day = maintenance_day
         data = self.configs.read_json(self.path)
         data['Hard']['Hard']['RunAt18'] = run_at_18
         data['Hard']['Scheduler'].update(Enable=True, NextRun='2026-10-22 00:00:00')
-        data['Exercise']['Exercise'].update(MaintenanceAdvance=False, MaintenanceWeekday=weekday)
+        data['Exercise']['Exercise']['MaintenanceAdvance'] = False
         data['Exercise']['Scheduler']['Enable'] = False
         self.path.write_text(json.dumps(data, ensure_ascii=False), encoding='utf-8')
         config = AzurLaneConfig('testpilot', task='Hard')
@@ -58,13 +62,15 @@ class HardScheduleConcurrencyTests(unittest.TestCase):
             ConfigChange(path=path, value=value) for path, value in changes
         ])
 
-    def run_with_edit(self, runner, *changes):
+    def run_with_edit(self, runner, *changes, maintenance_day=None):
         """把前端保存插在第一场战斗内，保留真实运行器加载和排程写入。"""
         during_battle = []
 
         def first_battle():
             if not during_battle:
-                result = self.save(*changes)
+                if maintenance_day is not None:
+                    self.maintenance_day = maintenance_day
+                result = self.save(*changes) if changes else self.configs.get('testpilot')
                 during_battle.append(result['values'])
 
         runner.campaign.run.side_effect = first_battle
@@ -75,18 +81,14 @@ class HardScheduleConcurrencyTests(unittest.TestCase):
         self.assertEqual(len(during_battle), 1)
         return during_battle[0], self.configs.get('testpilot')['values']
 
-    def test_running_weekday_change_removes_old_tomorrow_evening(self):
-        during, after = self.run_with_edit(self.runner(weekday='fri'),
-                                          ('Exercise.Exercise.MaintenanceWeekday', 'sat'))
-        # 已到期时间不后移；收尾仍须按新的星期重算，不能沿用入口的周五。
+    def test_running_announcement_change_removes_old_tomorrow_evening(self):
+        during, after = self.run_with_edit(self.runner(maintenance_day=date(2026, 10, 23)), maintenance_day=date(2026, 10, 24))
+        # 已到期时间不后移；收尾仍须按新公告日期重算。
         self.assertEqual(during['Hard']['Scheduler']['NextRun'], '2026-10-22 00:00:00')
-        self.assertEqual(after['Exercise']['Exercise']['MaintenanceWeekday'], 'sat')
         self.assertEqual(after['Hard']['Scheduler']['NextRun'], '2026-10-23 00:00:00')
 
-    def test_running_weekday_change_adds_new_tomorrow_evening(self):
-        _, after = self.run_with_edit(self.runner(weekday='sat'),
-                                     ('Exercise.Exercise.MaintenanceWeekday', 'fri'))
-        self.assertEqual(after['Exercise']['Exercise']['MaintenanceWeekday'], 'fri')
+    def test_running_announcement_change_adds_new_tomorrow_evening(self):
+        _, after = self.run_with_edit(self.runner(maintenance_day=date(2026, 10, 24)), maintenance_day=date(2026, 10, 23))
         self.assertEqual(after['Hard']['Scheduler']['NextRun'], '2026-10-23 18:00:00')
 
     def test_disabling_evening_during_run_uses_next_midnight(self):
@@ -106,17 +108,15 @@ class HardScheduleConcurrencyTests(unittest.TestCase):
         _, after = self.run_with_edit(self.runner(), ('Hard.Scheduler.NextRun', manual))
         self.assertEqual(after['Hard']['Scheduler']['NextRun'], manual)
 
-    def test_explicit_next_run_and_weekday_saved_together_are_preserved(self):
+    def test_explicit_next_run_and_announcement_saved_together_are_preserved(self):
         manual = '2026-10-25 06:30:00'
-        _, after = self.run_with_edit(self.runner(),
-                                     ('Exercise.Exercise.MaintenanceWeekday', 'sat'),
-                                     ('Hard.Scheduler.NextRun', manual))
-        self.assertEqual(after['Exercise']['Exercise']['MaintenanceWeekday'], 'sat')
+        _, after = self.run_with_edit(self.runner(), ('Hard.Scheduler.NextRun', manual),
+                                     maintenance_day=date(2026, 10, 24))
         self.assertEqual(after['Hard']['Scheduler']['NextRun'], manual)
 
-    def test_entry_gate_refreshes_weekday_changed_after_worker_loaded(self):
-        runner = self.runner(weekday='fri')
-        self.save(('Exercise.Exercise.MaintenanceWeekday', 'thu'))
+    def test_entry_gate_refreshes_announcement_changed_after_worker_loaded(self):
+        runner = self.runner(maintenance_day=date(2026, 10, 23))
+        self.maintenance_day = date(2026, 10, 22)
         with self.assertRaises(TaskEnd):
             runner.run()
         self.assertEqual(self.configs.get('testpilot')['values']['Hard']['Scheduler']['NextRun'],
@@ -127,7 +127,7 @@ class HardScheduleConcurrencyTests(unittest.TestCase):
         runner.config.task_call.assert_not_called()
 
     def test_entry_gate_refreshes_evening_switch_changed_after_worker_loaded(self):
-        runner = self.runner(run_at_18=False, weekday='thu')
+        runner = self.runner(run_at_18=False, maintenance_day=date(2026, 10, 22))
         self.save(('Hard.Hard.RunAt18', True))
         with self.assertRaises(TaskEnd):
             runner.run()

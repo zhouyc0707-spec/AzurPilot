@@ -1,4 +1,4 @@
-"""主线困难图维护星期设置保存后的重排回归，仅修改临时实例。"""
+"""主线困难图维护开关保存后的重排回归，仅修改临时实例。"""
 
 import json
 import tempfile
@@ -49,14 +49,14 @@ class HardConfigScheduleTests(unittest.TestCase):
     def scheduler(self, task='Hard'):
         return self.configs.read_json(self.path)[task]['Scheduler']
 
-    def test_weekday_change_wakes_hard_even_when_exercise_and_advance_are_disabled(self):
+    def test_evening_switch_change_wakes_hard_even_when_exercise_is_disabled(self):
         self.reset_config(exercise_enabled=False, advance=False)
         exercise_before = self.scheduler('Exercise')
-        result = self.save(('Exercise.Exercise.MaintenanceWeekday', 'fri'))
+        result = self.save(('Hard.Hard.RunAt18', False))
         self.assertEqual(self.scheduler()['NextRun'], self.woken)
         self.assertTrue(self.scheduler()['Enable'])
         self.assertEqual(self.scheduler('Exercise'), exercise_before)
-        self.assertEqual(result['values']['Exercise']['Exercise']['MaintenanceWeekday'], 'fri')
+        self.assertFalse(result['values']['Hard']['Hard']['RunAt18'])
         self.clock.assert_called_once_with()
 
     def test_changing_run_at_18_in_either_direction_wakes_hard(self):
@@ -68,10 +68,10 @@ class HardConfigScheduleTests(unittest.TestCase):
                 self.assertEqual(result['values']['Hard']['Hard']['RunAt18'], target)
                 self.clock.assert_called_once_with()
 
-    def test_weekday_change_does_not_wake_hard_when_run_at_18_is_disabled(self):
+    def test_identical_disabled_evening_switch_does_not_wake_hard(self):
         self.reset_config(run_at_18=False)
         before = self.scheduler()
-        self.save(('Exercise.Exercise.MaintenanceWeekday', 'fri'))
+        self.save(('Hard.Hard.RunAt18', False))
         self.assertEqual(self.scheduler(), before)
         self.clock.assert_not_called()
 
@@ -87,26 +87,26 @@ class HardConfigScheduleTests(unittest.TestCase):
     def test_disabled_hard_is_neither_enabled_nor_rescheduled(self):
         self.reset_config(hard_enabled=False)
         before = self.scheduler()
-        self.save(('Exercise.Exercise.MaintenanceWeekday', 'fri'), ('Hard.Hard.RunAt18', False))
+        self.save(('Hard.Hard.RunAt18', False))
         self.assertEqual(self.scheduler(), before)
         self.clock.assert_not_called()
 
     def test_disabling_hard_in_same_batch_preserves_its_schedule(self):
-        self.save(('Exercise.Exercise.MaintenanceWeekday', 'fri'), ('Hard.Scheduler.Enable', False))
+        self.save(('Hard.Hard.RunAt18', False), ('Hard.Scheduler.Enable', False))
         self.assertFalse(self.scheduler()['Enable'])
         self.assertEqual(self.scheduler()['NextRun'], self.future)
         self.clock.assert_not_called()
 
     def test_enabling_hard_in_same_batch_uses_final_enable_value(self):
         self.reset_config(hard_enabled=False)
-        self.save(('Exercise.Exercise.MaintenanceWeekday', 'fri'), ('Hard.Scheduler.Enable', True))
+        self.save(('Hard.Hard.RunAt18', False), ('Hard.Scheduler.Enable', True))
         self.assertTrue(self.scheduler()['Enable'])
         self.assertEqual(self.scheduler()['NextRun'], self.woken)
         self.clock.assert_called_once_with()
 
     def test_saving_identical_values_does_not_wake_hard(self):
         before = self.scheduler()
-        self.save(('Hard.Hard.RunAt18', True), ('Exercise.Exercise.MaintenanceWeekday', 'thu'))
+        self.save(('Hard.Hard.RunAt18', True), ('Exercise.Exercise.MaintenanceAdvance', True))
         self.assertEqual(self.scheduler(), before)
         self.clock.assert_not_called()
 
@@ -114,13 +114,13 @@ class HardConfigScheduleTests(unittest.TestCase):
         data = self.configs.read_json(self.path)
         data['Hard']['Hard'].pop('RunAt18')
         self.path.write_text(json.dumps(data), encoding='utf-8')
-        self.save(('Hard.Hard.RunAt18', False), ('Exercise.Exercise.MaintenanceWeekday', 'fri'))
+        self.save(('Hard.Hard.RunAt18', False))
         self.assertEqual(self.scheduler()['NextRun'], self.future)
         self.clock.assert_not_called()
 
     def test_explicit_hard_next_run_wins_regardless_of_change_order(self):
         manual = ('Hard.Scheduler.NextRun', '2026-10-23 12:00:00')
-        weekday = ('Exercise.Exercise.MaintenanceWeekday', 'fri')
+        weekday = ('Hard.Hard.RunAt18', False)
         for changes in ((manual, weekday), (weekday, manual)):
             with self.subTest(changes=changes):
                 self.reset_config()
@@ -132,7 +132,7 @@ class HardConfigScheduleTests(unittest.TestCase):
         for scheduled in ('2026-10-22 00:00:00', self.woken):
             with self.subTest(scheduled=scheduled):
                 self.reset_config(hard_next_run=scheduled)
-                self.save(('Exercise.Exercise.MaintenanceWeekday', 'fri'))
+                self.save(('Hard.Hard.RunAt18', False))
                 self.assertEqual(self.scheduler()['NextRun'], scheduled)
 
     def test_invalid_saved_next_run_is_repaired_when_gate_changes(self):
@@ -141,7 +141,7 @@ class HardConfigScheduleTests(unittest.TestCase):
         self.assertEqual(self.scheduler()['NextRun'], self.woken)
 
     def test_multiple_gate_changes_use_final_values_and_share_one_write(self):
-        weekday = ('Exercise.Exercise.MaintenanceWeekday', 'fri')
+        weekday = ('Exercise.Exercise.MaintenanceAdvance', False)
         run_at_18 = ('Hard.Hard.RunAt18', True)
         for changes in ((weekday, run_at_18), (run_at_18, weekday)):
             with self.subTest(changes=changes):
@@ -154,7 +154,7 @@ class HardConfigScheduleTests(unittest.TestCase):
                 after = self.configs.read_json(self.path)
                 self.assertEqual(after['Hard']['Scheduler']['NextRun'], self.woken)
                 self.assertTrue(after['Hard']['Hard']['RunAt18'])
-                self.assertEqual(after['Exercise']['Exercise']['MaintenanceWeekday'], 'fri')
+                self.assertFalse(after['Exercise']['Exercise']['MaintenanceAdvance'])
                 for task, groups in before.items():
                     if task != 'Hard' and isinstance(groups, dict) and 'Scheduler' in groups:
                         self.assertEqual(after[task]['Scheduler'], groups['Scheduler'], task)
@@ -164,7 +164,6 @@ class HardConfigScheduleTests(unittest.TestCase):
         before = self.configs.read_json(self.path)
         with patch('module.api.config_service.atomic_write', wraps=atomic_write) as write:
             self.save(('Exercise.Exercise.MaintenanceAdvance', False),
-                      ('Exercise.Exercise.MaintenanceWeekday', 'fri'),
                       ('Hard.Hard.RunAt18', False))
         write.assert_called_once()
         self.clock.assert_called_once_with()
@@ -181,18 +180,19 @@ class HardConfigScheduleTests(unittest.TestCase):
                 self.reset_config(exercise_enabled=True)
                 manual = '2026-10-23 12:00:00'
                 self.save((f'{manual_task}.Scheduler.NextRun', manual),
-                          ('Exercise.Exercise.MaintenanceWeekday', 'fri'))
+                          ('Exercise.Exercise.MaintenanceAdvance', False),
+                          ('Hard.Hard.RunAt18', False))
                 self.assertEqual(self.scheduler(manual_task)['NextRun'], manual)
                 self.assertEqual(self.scheduler(woken_task)['NextRun'], self.woken)
                 self.clock.assert_called_once_with()
 
-    def test_invalid_weekday_rejects_entire_batch_without_write(self):
+    def test_removed_weekday_rejects_entire_batch_without_write(self):
         original = self.path.read_bytes()
         with patch('module.api.config_service.atomic_write', wraps=atomic_write) as write:
             with self.assertRaises(ApiError) as caught:
                 self.save(('Hard.Hard.RunAt18', False),
                           ('Exercise.Exercise.MaintenanceWeekday', 'holiday'))
-        self.assertEqual(caught.exception.code, 'INVALID_PARAMS')
+        self.assertEqual(caught.exception.code, 'NOT_FOUND')
         write.assert_not_called()
         self.clock.assert_not_called()
         self.assertEqual(self.path.read_bytes(), original)

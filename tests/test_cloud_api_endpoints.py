@@ -1,12 +1,16 @@
 """Cloud URL migration keeps the client request and response contracts."""
 import json
+import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from unittest.mock import Mock, patch
 from types import SimpleNamespace
 
 from deploy.git import GitManager
+from deploy.api_endpoints import MAINTENANCE_API_URL
 from module.base.api_client import ApiClient
-from module.handover.handover import HANDOVER_MAINTAIN_API, OperationHandover
+from module.handover.handover import OperationHandover
 from module.api.announcement_service import AnnouncementService
 from module.server_checker import SERVER_API_BASE
 
@@ -63,32 +67,48 @@ class CloudApiEndpointsTest(unittest.TestCase):
 
     def test_other_core_calls_use_same_origin(self):
         self.assertEqual(SERVER_API_BASE, 'https://api.azurpilot.com')
-        self.assertEqual(HANDOVER_MAINTAIN_API, 'https://api.azurpilot.com/api/v2/get/maintenance')
+        self.assertEqual(MAINTENANCE_API_URL, 'https://api.azurpilot.com/api/v2/get/maintenance')
 
     def test_maintenance_never_falls_back_from_jp_to_cn(self):
         target = SimpleNamespace(config=SimpleNamespace(SERVER='jp'))
         response = Mock()
         response.json.return_value = {'schema_version': 2, 'server': 'jp', 'maintenance': None}
-        with patch('module.handover.handover.get_device_id', return_value='a' * 32), \
-                patch('module.handover.handover.http.get', return_value=response) as request:
-            result, _, error = OperationHandover.handover_maintain_query(target)
-            self.assertEqual(result, {})
-            self.assertEqual(error, '')
-            self.assertEqual(request.call_args.kwargs['params'], {'server': 'jp'})
+        temp_root = Path('D:/Codex/tests')
+        temp_root.mkdir(parents=True, exist_ok=True)
+        with (tempfile.TemporaryDirectory(dir=temp_root, prefix='cloud-maintenance-') as directory,
+              patch('module.maintenance.get_device_id', return_value='a' * 32),
+              patch('module.maintenance._clock', return_value=datetime(
+                  2026, 11, 13, 10, tzinfo=timezone(timedelta(hours=9)))),
+              patch('module.maintenance.http.get', return_value=response) as request):
+            with patch('module.maintenance.DEFAULT_DIRECTORY', Path(directory) / 'no-plan'):
+                result, _, error = OperationHandover.handover_maintain_query(target)
+                self.assertEqual(result, {})
+                self.assertEqual(error, '')
+                self.assertEqual(request.call_args.kwargs['params'], {'server': 'jp'})
             response.json.return_value = {'schema_version': 2, 'server': 'cn', 'maintenance': {'starts_at': '2026-10-22T02:00:00Z'}}
-            result, _, error = OperationHandover.handover_maintain_query(target)
-            self.assertIsNone(result)
-            self.assertTrue(error)
+            # 使用另一缓存目录，确保错误区服响应真正经过校验。
+            with patch('module.maintenance.DEFAULT_DIRECTORY', Path(directory) / 'wrong-server'):
+                result, _, error = OperationHandover.handover_maintain_query(target)
+                self.assertIsNone(result)
+                self.assertTrue(error)
+            self.assertEqual(request.call_count, 2)
+            self.assertTrue(all(call.kwargs['params'] == {'server': 'jp'} for call in request.call_args_list))
 
     def test_unavailable_maintenance_is_an_explicit_query_error(self):
         import requests
         target = SimpleNamespace(config=SimpleNamespace(SERVER='cn'))
         response = Mock()
         response.raise_for_status.side_effect = requests.HTTPError('503 Service Unavailable')
-        with patch('module.handover.handover.http.get', return_value=response):
+        temp_root = Path('D:/Codex/tests')
+        temp_root.mkdir(parents=True, exist_ok=True)
+        with (tempfile.TemporaryDirectory(dir=temp_root, prefix='cloud-maintenance-') as directory,
+              patch('module.maintenance.DEFAULT_DIRECTORY', Path(directory)),
+              patch('module.maintenance.get_device_id', return_value='a' * 32),
+              patch('module.maintenance.http.get', return_value=response) as request):
             result, _, error = OperationHandover.handover_maintain_query(target)
         self.assertIsNone(result)
         self.assertTrue(error)
+        request.assert_called_once()
 
 
 if __name__ == '__main__':

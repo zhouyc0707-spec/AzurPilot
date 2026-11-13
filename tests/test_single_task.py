@@ -7,7 +7,8 @@ import tempfile
 import threading
 import unittest
 from contextlib import ExitStack, nullcontext
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch, mock_open
 
@@ -360,8 +361,207 @@ class SingleTaskScheduleTests(unittest.TestCase):
             self.assertTrue(execute_once('testpilot', 'Main'))
         self.assertEqual(self.delayed, deep_get(self.saved(), 'Main.Scheduler.NextRun'))
 
+    def test_maintenance_reconcile_precedes_single_baseline_and_manual_edits_still_win(self):
+        from module import maintenance
+        from deploy.atomic import atomic_write
+
+        self.worker.finish_single_run(False)
+        now = datetime(2026, 11, 13, 8)
+        target = datetime(2026, 11, 14)
+        manual = '2026-11-16 07:30:00'
+        for task in ('Exercise', 'Hard'):
+            for success, edit in ((True, 'none'), (False, 'none'), (True, 'query'), (False, 'query'),
+                                  (True, 'run'), (False, 'run')):
+                with self.subTest(task=task, success=success, manual_edit=edit), ExitStack() as stack:
+                    directory = Path(self.path).parent
+                    cache = directory / 'maintenance' / 'jp.json'
+                    if cache.exists():
+                        cache.unlink()
+                    data = json.loads(self.path.read_text(encoding='utf-8'))
+                    data['Alas']['Emulator']['PackageName'] = 'com.YoStarJP.AzurLane'
+                    data[task]['Scheduler'].update(Enable=True, NextRun='2026-11-13 18:00:00')
+                    data['Exercise']['Exercise']['MaintenanceAdvance'] = True
+                    data['Hard']['Hard']['RunAt18'] = True
+                    self.path.write_text(json.dumps(data), encoding='utf-8')
+                    for name in ('module.config.config.current_time', 'module.config.utils.current_time',
+                                 'module.maintenance_schedule.current_time'):
+                        stack.enter_context(patch(name, return_value=now))
+                    stack.enter_context(patch('module.config.server.server', 'cn'))
+                    stack.enter_context(patch('module.config.utils.filepath_config', return_value=str(self.path)))
+                    stack.enter_context(patch.object(maintenance, '_clock', return_value=now.replace(
+                        tzinfo=timezone(timedelta(hours=8))).astimezone(timezone(timedelta(hours=9)))))
+                    def edit_next_run():
+                        current = json.loads(self.path.read_text(encoding='utf-8'))
+                        current[task]['Scheduler']['NextRun'] = manual
+                        self.path.write_text(json.dumps(current), encoding='utf-8')
+
+                    def query_maintenance(*args):
+                        if edit == 'query':
+                            edit_next_run()
+                        return '2026-11-13T10:00:00+09:00'
+
+                    query = stack.enter_context(patch.object(maintenance, '_query', side_effect=query_maintenance))
+                    worker = AzurLaneConfig('testpilot', task=task)
+                    script = Mock()
+                    writes = []
+
+                    def fail_first_reconcile_write(path, text):
+                        writes.append(path)
+                        if len(writes) == 1:
+                            raise OSError('模拟首次重排写入暂时失败')
+                        atomic_write(path, text)
+
+                    stack.enter_context(patch('module.maintenance_schedule.atomic_write',
+                                              side_effect=fail_first_reconcile_write))
+
+                    def complete():
+                        baseline = datetime(2026, 11, 13, 18) if edit == 'query' else now
+                        self.assertEqual(worker._single_run_schedule_baseline[f'{task}.Scheduler.NextRun'], baseline)
+                        # 消费者入口再次刷新仍复用同日结果，完成后延后至下一轮。
+                        maintenance.get_maintenance_snapshot('jp', directory, refresh=True)
+                        worker.update()
+                        if edit == 'run':
+                            edit_next_run()
+                        worker.task_delay(target=target)
+                        return True
+
+                    script.run.side_effect = lambda function: complete()
+                    event = threading.Event()
+                    if not success:
+                        event.set()
+                    stack.enter_context(patch('module.config.config.AzurLaneConfig', return_value=worker))
+                    stack.enter_context(patch('alas.AzurLaneAutoScript', return_value=script))
+                    stack.enter_context(patch('module.api.config_service.ConfigService', return_value=self.configs))
+                    self.assertTrue(execute_once('testpilot', task, event))
+                    if edit != 'query':
+                        self.assertGreaterEqual(len(writes), 2)
+                    query.assert_called_once()
+                    self.assertEqual(query.call_args.args[0], 'jp')
+                    expected = manual if edit != 'none' else (target if success else now).isoformat(sep=' ')
+                    saved = json.loads(self.path.read_text(encoding='utf-8'))
+                    self.assertEqual(saved[task]['Scheduler']['NextRun'], expected)
+
+    def test_consumer_preserves_manual_next_run_during_query_and_accepts_automatic_receipt(self):
+        from module import maintenance
+        from module.exercise.exercise import Exercise
+        from module.hard.hard import CampaignHard
+
+        self.worker.finish_single_run(False)
+        now = datetime(2026, 11, 13, 8)
+        manual = '2026-11-16 07:30:00'
+        for task, consumer_type in (('Exercise', Exercise), ('Hard', CampaignHard)):
+            for edited, single in ((False, False), (True, False), (True, True)):
+                with self.subTest(task=task, manual_edit=edited, single=single), ExitStack() as stack:
+                    directory = Path(self.path).parent
+                    cache = directory / 'maintenance' / 'jp.json'
+                    if cache.exists():
+                        cache.unlink()
+                    data = json.loads(self.path.read_text(encoding='utf-8'))
+                    data['Alas']['Emulator']['PackageName'] = 'com.YoStarJP.AzurLane'
+                    data[task]['Scheduler'].update(
+                        Enable=True, NextRun='2026-11-13 00:00:00' if edited else '2026-11-13 18:00:00')
+                    data['Exercise']['Exercise']['MaintenanceAdvance'] = True
+                    data['Hard']['Hard']['RunAt18'] = True
+                    self.path.write_text(json.dumps(data), encoding='utf-8')
+                    for name in ('module.config.config.current_time', 'module.config.utils.current_time',
+                                 'module.maintenance_schedule.current_time', 'module.exercise.exercise.current_time',
+                                 'module.hard.hard.current_time'):
+                        stack.enter_context(patch(name, return_value=now))
+                    for name in ('module.exercise.exercise.filepath_config', 'module.hard.hard.filepath_config'):
+                        stack.enter_context(patch(name, return_value=str(self.path)))
+                    stack.enter_context(patch('module.config.server.server', 'cn'))
+                    stack.enter_context(patch('module.hard.hard.server_time_offset', return_value=timedelta()))
+                    stack.enter_context(patch.object(maintenance, '_clock', return_value=now.replace(
+                        tzinfo=timezone(timedelta(hours=8))).astimezone(timezone(timedelta(hours=9)))))
+
+                    def query(*args):
+                        if edited:
+                            current = json.loads(self.path.read_text(encoding='utf-8'))
+                            current[task]['Scheduler']['NextRun'] = manual
+                            self.path.write_text(json.dumps(current), encoding='utf-8')
+                        return '2026-11-13T10:00:00+09:00'
+
+                    stack.enter_context(patch.object(maintenance, '_query', side_effect=query))
+                    worker = AzurLaneConfig('testpilot', task=task)
+                    if single:
+                        worker.begin_single_run()
+                    consumer = object.__new__(consumer_type)
+                    consumer.config = worker
+                    consumer.device = Mock()
+                    consumer.ui_ensure = Mock(side_effect=RuntimeError('已通过门禁进入页面'))
+                    consumer.load_campaign = Mock()
+                    continues = not edited or single
+                    if task == 'Exercise' and continues:
+                        with self.assertRaisesRegex(RuntimeError, '已通过门禁进入页面'):
+                            consumer.run()
+                        consumer.ui_ensure.assert_called_once()
+                    else:
+                        with self.assertRaises(TaskEnd):
+                            consumer.run()
+                        consumer.ui_ensure.assert_not_called()
+                    if task == 'Hard' and continues:
+                        self.assertTrue(hasattr(consumer, '_hard_next_run'))
+                    consumer.device.screenshot.assert_not_called()
+                    consumer.load_campaign.assert_not_called()
+                    saved = json.loads(self.path.read_text(encoding='utf-8'))
+                    expected = manual if edited else ('2026-11-13 17:00:00' if task == 'Hard' else '2026-11-13 08:00:00')
+                    self.assertEqual(saved[task]['Scheduler']['NextRun'], expected)
+                    if single:
+                        worker.finish_single_run(False)
+
 
 class SingleTaskWorkerTests(unittest.TestCase):
+    def test_maintenance_tasks_refresh_and_reload_before_single_run_baseline(self):
+        for task in ('Exercise', 'Hard'):
+            with self.subTest(task=task):
+                data = {'Alas': {'Emulator': {'PackageName': 'com.YoStarJP.AzurLane'}},
+                        task: {'Scheduler': {'Enable': True, 'Command': task}}}
+                config = Mock(data=data, SERVER='cn')
+                script = Mock()
+                script.run.return_value = True
+                calls = Mock()
+                calls.attach_mock(config.update, 'reload')
+                calls.attach_mock(config.begin_single_run, 'begin')
+                calls.attach_mock(script.run, 'run')
+                with patch('module.config.config.AzurLaneConfig', return_value=config), \
+                        patch('alas.AzurLaneAutoScript', return_value=script), \
+                        patch('module.api.config_service.ConfigService', return_value=SimpleNamespace(template=data)), \
+                        patch('module.maintenance.settle_maintenance_instance', return_value=True) as settle, \
+                        patch('module.maintenance.get_maintenance_snapshot', return_value={}) as refresh:
+                    calls.attach_mock(refresh, 'refresh')
+                    calls.attach_mock(settle, 'settle')
+                    self.assertTrue(execute_once('testpilot', task))
+                self.assertEqual([item[0] for item in calls.mock_calls], ['refresh', 'settle', 'reload', 'begin', 'run'])
+                self.assertEqual(refresh.call_args.args[0], 'jp')
+                self.assertTrue(refresh.call_args.kwargs['refresh'])
+
+    def test_current_maintenance_reconcile_failure_does_not_begin_single_task(self):
+        data = {'Hard': {'Scheduler': {'Enable': True, 'Command': 'Hard'}}}
+        config = Mock(data=data, SERVER='cn')
+        with patch('module.config.config.AzurLaneConfig', return_value=config), \
+                patch('alas.AzurLaneAutoScript') as script, \
+                patch('module.api.config_service.ConfigService', return_value=SimpleNamespace(template=data)), \
+                patch('module.maintenance.get_maintenance_snapshot', return_value={}), \
+                patch('module.maintenance.settle_maintenance_instance', return_value=False), \
+                self.assertRaisesRegex(RuntimeError, '当前实例的维护排程尚未同步'):
+            execute_once('testpilot', 'Hard')
+        config.begin_single_run.assert_not_called()
+        script.assert_not_called()
+
+    def test_disabling_maintenance_task_during_preheat_prevents_single_task_start(self):
+        data = {'Hard': {'Scheduler': {'Enable': True, 'Command': 'Hard'}}}
+        config = Mock(data=data, SERVER='cn')
+        config.update.side_effect = lambda: data['Hard']['Scheduler'].update(Enable=False)
+        with patch('module.config.config.AzurLaneConfig', return_value=config), \
+                patch('alas.AzurLaneAutoScript') as script, \
+                patch('module.api.config_service.ConfigService', return_value=SimpleNamespace(template=data)), \
+                patch('module.maintenance.get_maintenance_snapshot', return_value={}), \
+                patch('module.maintenance.settle_maintenance_instance', return_value=True), \
+                self.assertRaises(ApiError):
+            execute_once('testpilot', 'Hard')
+        config.begin_single_run.assert_not_called()
+        script.assert_not_called()
+
     def test_worker_binds_target_runs_once_and_commits_only_success(self):
         for result, stopped, success in ((True, False, True), (False, False, False),
                                          ('recoverable', False, False), (True, True, False)):

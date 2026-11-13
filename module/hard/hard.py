@@ -8,16 +8,20 @@
 """
 
 import importlib
+from pathlib import Path
 from datetime import timedelta
 
 from campaign.campaign_hard.campaign_hard import Campaign
 from module.campaign.run import CampaignRun
 from module.config.time_source import now as current_time
 from module.config.transaction import config_transaction
-from module.config.utils import filepath_config, server_time_offset
+from module.config.utils import SERVER_TO_TIMEZONE, filepath_config, server_time_offset, server_timezone
 from module.handler.fast_forward import to_map_file_name
 from module.hard.assets import *
 from module.hard.schedule import hard_run_time
+from module.maintenance import (
+    get_maintenance_snapshot, get_maintenance_start, server_for_config, was_maintenance_rescheduled,
+)
 from module.logger import logger
 from module.ocr.ocr import Digit
 
@@ -49,13 +53,16 @@ class CampaignHard(CampaignRun):
                     return False
             else:
                 self._hard_next_run = next_run
-            weekday = self.config.cross_get(
-                'Exercise.Exercise.MaintenanceWeekday', default=self.config.Exercise_MaintenanceWeekday
+            server = server_for_config(self.config.data, fallback=self.config.SERVER)
+            maintenance = get_maintenance_start(
+                server, directory=Path(filepath_config(self.config.config_name)).parent,
+                refresh=False,
             )
-            offset = server_time_offset()
+            offset = server_time_offset() + server_timezone() - SERVER_TO_TIMEZONE[server]
             server_now = current_time() - offset
             day = server_now + timedelta(days=1) if completed else server_now
-            target = hard_run_time(day, self.config.Hard_RunAt18, weekday)
+            maintenance_day = (maintenance.astimezone().replace(tzinfo=None) - offset).date() if maintenance else None
+            target = hard_run_time(day, self.config.Hard_RunAt18, maintenance_day)
             if completed or server_now < target:
                 self.config.task_delay(target=target + offset)
                 return True
@@ -65,13 +72,26 @@ class CampaignHard(CampaignRun):
         """执行困难关卡出击主流程。
 
         流程包括：覆写困难模式配置、加载战役与地图模块、导航至困难关卡界面、
-        OCR 识别剩余次数并循环出击，维护星期可延后至18点，其余日期按服务器零点安排。
+        OCR 识别剩余次数并循环出击，真实维护日可延后至18点，其余日期按服务器零点安排。
 
         Pages:
             in: 任意页面
             out: 延后时保留当前页面，否则为 page_campaign 或关卡选择界面
         """
         logger.hr('困难战役', level=1)
+        server = server_for_config(self.config.data, fallback=self.config.SERVER)
+        directory = Path(filepath_config(self.config.config_name)).parent
+        before = self.config.cross_get('Hard.Scheduler.NextRun')
+        get_maintenance_snapshot(
+            server, directory=directory, refresh=True,
+        )
+        self.config.update()
+        after = self.config.cross_get('Hard.Scheduler.NextRun')
+        if (before != after and not self.config.__dict__.get('_single_run_task')
+                and not was_maintenance_rescheduled(
+                    server, self.config.config_name, 'Hard', before, after, directory=directory)):
+            logger.info('[困难战役] 查询期间排程已修改，保留最新设置并结束当前派发')
+            self.config.task_stop()
         if self._schedule():
             self.config.task_stop()
 

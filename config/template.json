@@ -2530,7 +2530,6 @@
     "Exercise": {
       "DelayUntilHoursBeforeNextUpdate": 12,
       "MaintenanceAdvance": true,
-      "MaintenanceWeekday": "thu",
       "OpponentChooseMode": "max_exp",
       "OpponentTrial": 1,
       "ExerciseStrategy": "aggressive",
@@ -3964,7 +3963,6 @@
     "Handover": {
       "ConsumeRetryMinutes": 30,
       "MaintainLeadMinutes": 10,
-      "MaintainCheckMinutes": 120,
       "ConflictRetryMinutes": 15
     },
     "Storage": {

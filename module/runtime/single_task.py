@@ -92,9 +92,38 @@ def execute_once(instance: str, task: str, stop_event=None):
     from module.config.config import AzurLaneConfig
 
     config = AzurLaneConfig(config_name=instance, task=task)
-    if not is_run_once_allowed(config.data, ConfigService().template, task):
+    template = ConfigService().template
+    if not is_run_once_allowed(config.data, template, task):
         raise ApiError('INVALID_PARAMS', '目标任务已关闭或不属于普通排程任务')
-    config.begin_single_run()
+    if task in ('Exercise', 'Hard'):
+        from pathlib import Path
+
+        from module.config.transaction import config_transaction
+        from module.config.utils import filepath_config
+        from module.maintenance import (
+            get_maintenance_snapshot, server_for_config, settle_maintenance_instance, was_maintenance_rescheduled,
+        )
+
+        # 公告重排先于单次基线建立，收尾不会把自动唤醒误当作人工修改。
+        path = Path(filepath_config(instance))
+        server = server_for_config(config.data, fallback=config.SERVER)
+        schedule_path = f'{task}.Scheduler.NextRun'
+        before = config.cross_get(schedule_path)
+        get_maintenance_snapshot(server, directory=path.parent, refresh=True)
+        with config_transaction(path):
+            if not settle_maintenance_instance(server, instance, directory=path.parent):
+                raise RuntimeError('当前实例的维护排程尚未同步，请检查配置文件的访问和写入状态')
+            config.update()
+            if not is_run_once_allowed(config.data, template, task):
+                raise ApiError('INVALID_PARAMS', '目标任务已关闭或不属于普通排程任务')
+            config.begin_single_run()
+            after = config.cross_get(schedule_path)
+            if before != after and not was_maintenance_rescheduled(
+                    server, instance, task, before, after, directory=path.parent):
+                # 查询期间的人工排程同样优先，只有精确回执可更新单次基线。
+                config._single_run_schedule_baseline[schedule_path] = before
+    else:
+        config.begin_single_run()
     script = AzurLaneAutoScript(config_name=instance)
     script.config = config
     result = False

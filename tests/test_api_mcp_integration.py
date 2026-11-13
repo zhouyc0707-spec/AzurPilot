@@ -94,7 +94,7 @@ class ApiMcpCleanupTests(unittest.TestCase):
         settings = SimpleNamespace(Run='', DiscordRichPresence=False)
         with tempfile.TemporaryDirectory() as directory, \
                 patch.object(State, '_deploy_config_', settings, create=True), \
-                patch('module.api.lifecycle.startup', side_effect=lambda runs: events.append('startup')), \
+                patch('module.api.lifecycle.startup', side_effect=lambda runs, **kwargs: events.append('startup')), \
                 patch('module.api.lifecycle.clearup', side_effect=lambda: events.append('runtime_cleanup')), \
                 patch('module.runtime.discord_presence.async_close_discord_rpc',
                       new=AsyncMock(side_effect=lambda: events.append('discord_cleanup'))):

@@ -1,9 +1,9 @@
-"""困难图按演习维护星期运行的时间边界与配置兼容性。"""
+"""困难图按真实维护日期运行的时间边界与配置兼容性。"""
 
 import copy
 import tempfile
 import unittest
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -23,7 +23,7 @@ class HardRunTimeTests(unittest.TestCase):
             for offset in range(7):
                 with self.subTest(weekday=weekday, day=offset):
                     day = monday + timedelta(days=offset)
-                    target = hard_run_time(day, True, weekday)
+                    target = hard_run_time(day, True, monday + timedelta(days=selected))
                     self.assertEqual(target, datetime(2026, 10, 19 + offset,
                                                       18 if selected == offset else 0))
                     self.assertIsNone(target.tzinfo)
@@ -32,13 +32,13 @@ class HardRunTimeTests(unittest.TestCase):
         for weekday in WEEKDAYS:
             for day in (date(2026, 10, 22), date(2026, 12, 31), date(2027, 1, 1)):
                 with self.subTest(weekday=weekday, day=day):
-                    self.assertEqual(hard_run_time(day, False, weekday),
+                    self.assertEqual(hard_run_time(day, False, date(2026, 10, 22)),
                                      datetime.combine(day, datetime.min.time()))
 
     def test_datetime_input_discards_clock_and_microseconds(self):
-        self.assertEqual(hard_run_time(datetime(2026, 10, 22, 23, 59, 59, 123456), True, 'thu'),
+        self.assertEqual(hard_run_time(datetime(2026, 10, 22, 23, 59, 59, 123456), True, date(2026, 10, 22)),
                          datetime(2026, 10, 22, 18))
-        self.assertEqual(hard_run_time(datetime(2026, 10, 23, 23, 59, 59, 123456), True, 'thu'),
+        self.assertEqual(hard_run_time(datetime(2026, 10, 23, 23, 59, 59, 123456), True, date(2026, 10, 22)),
                          datetime(2026, 10, 23))
 
 
@@ -57,18 +57,21 @@ class HardScheduleTests(unittest.TestCase):
         self.enterContext(patch('module.hard.hard.logger'))
         self.ocr = self.enterContext(patch('module.hard.hard.OCR_HARD_REMAIN'))
         self.ocr.ocr.return_value = 3
+        self.refresh = self.enterContext(patch('module.hard.hard.get_maintenance_snapshot', return_value={}))
+        self.plan = self.enterContext(patch('module.hard.hard.get_maintenance_start'))
+        self.plan.return_value = datetime(2026, 10, 22, 10, tzinfo=timezone(timedelta(hours=8)))
 
-    def runner(self, *, maintenance_weekday='thu', maintenance_advance=True,
+    def runner(self, *, maintenance_day=date(2026, 10, 22), maintenance_advance=True,
                exercise_enabled=True, **hard):
         config = AzurLaneConfig('template')
         config.data = config.config_update({
             'Hard': {'Hard': hard},
             'Exercise': {
-                'Exercise': {'MaintenanceWeekday': maintenance_weekday,
-                             'MaintenanceAdvance': maintenance_advance},
+                'Exercise': {'MaintenanceAdvance': maintenance_advance},
                 'Scheduler': {'Enable': exercise_enabled},
             },
         })
+        self.plan.return_value = ((datetime.combine(maintenance_day, datetime.min.time()).replace(hour=10) + self.offset).astimezone() if maintenance_day else None)
         config.bind('Hard')
         config.task = name_to_function('Hard')
         config.task_call = Mock()
@@ -101,17 +104,28 @@ class HardScheduleTests(unittest.TestCase):
         self.assertEqual(runner.config.modified['Hard.Scheduler.NextRun'], target)
         runner.config.task_call.assert_called_once_with('Reward', force_call=False)
 
+    def test_daily_plan_is_checked_before_schedule_transaction_or_game_access(self):
+        runner = self.runner()
+        runner._schedule = Mock(side_effect=RuntimeError('已到达排程入口'))
+        calls = Mock()
+        calls.attach_mock(self.refresh, 'refresh')
+        calls.attach_mock(runner._schedule, 'schedule')
+        with self.assertRaisesRegex(RuntimeError, '已到达排程入口'):
+            runner.run()
+        self.assertEqual([item[0] for item in calls.mock_calls], ['refresh', 'schedule'])
+        self.assertTrue(self.refresh.call_args.kwargs['refresh'])
+        runner.device.screenshot.assert_not_called()
+
     def test_config_default_and_saved_choice(self):
         runner = self.runner()
         self.assertFalse(runner.config.Hard_RunAt18)
         definition = read_file('module/config/argument/args.json')['Hard']['Hard']['RunAt18']
         self.assertEqual(definition, {'type': 'checkbox', 'value': False})
         self.assertFalse(read_file('config/template.json')['Hard']['Hard']['RunAt18'])
-        runner = self.runner(RunAt18=True, maintenance_weekday='fri')
+        runner = self.runner(RunAt18=True, maintenance_day=date(2026, 10, 23))
         runner.config.data = runner.config.config_update(runner.config.data)
         runner.config.bind('Hard')
         self.assertTrue(runner.config.Hard_RunAt18)
-        self.assertEqual(runner.config.cross_get('Exercise.Exercise.MaintenanceWeekday'), 'fri')
         for lang in ('zh-CN', 'zh-MIAO', 'en-US', 'ja-JP', 'zh-TW'):
             translation = read_file(f'module/config/i18n/{lang}.json')['Hard']['RunAt18']
             self.assertTrue(all(value and not value.startswith('Hard.RunAt18.') for value in translation.values()))
@@ -125,11 +139,11 @@ class HardScheduleTests(unittest.TestCase):
                     runner = self.runner(RunAt18=True)
                     self.assert_skipped_until(runner, datetime(2026, 10, 22, 18) + self.offset)
 
-    def test_each_selected_maintenance_weekday_blocks_its_morning(self):
+    def test_each_announced_maintenance_date_blocks_its_morning(self):
         for selected, weekday in enumerate(WEEKDAYS):
             with self.subTest(weekday=weekday):
                 self.now = datetime(2026, 10, 19 + selected, 8)
-                runner = self.runner(RunAt18=True, maintenance_weekday=weekday)
+                runner = self.runner(RunAt18=True, maintenance_day=date(2026, 10, 19 + WEEKDAYS.index(weekday)))
                 self.assert_skipped_until(runner, self.now.replace(hour=18))
 
     def test_non_maintenance_mornings_run_without_waiting_until_18(self):
@@ -154,29 +168,44 @@ class HardScheduleTests(unittest.TestCase):
         for weekday in WEEKDAYS:
             with self.subTest(weekday=weekday):
                 self.now = datetime(2026, 10, 22, 8)
-                self.assert_runs_until(self.runner(maintenance_weekday=weekday), datetime(2026, 10, 23))
+                self.assert_runs_until(self.runner(maintenance_day=date(2026, 10, 19 + WEEKDAYS.index(weekday))), datetime(2026, 10, 23))
 
     def test_disabled_option_does_not_delay_next_maintenance_day(self):
         self.now = datetime(2026, 10, 21, 8)
         self.assert_runs_until(self.runner(RunAt18=False), datetime(2026, 10, 22))
 
-    def test_shared_weekday_does_not_depend_on_exercise_enable_or_advance_switch(self):
+    def test_announced_date_does_not_depend_on_exercise_enable_or_advance_switch(self):
         for advance, enabled in ((False, True), (True, False), (False, False)):
             with self.subTest(maintenance_advance=advance, exercise_enabled=enabled):
                 self.now = datetime(2026, 10, 23, 8)
-                runner = self.runner(RunAt18=True, maintenance_weekday='fri',
+                runner = self.runner(RunAt18=True, maintenance_day=date(2026, 10, 23),
                                      maintenance_advance=advance, exercise_enabled=enabled)
                 self.assert_skipped_until(runner, datetime(2026, 10, 23, 18))
 
-    def test_saved_weekday_takes_precedence_over_generated_thursday_default(self):
+    def test_announced_friday_does_not_delay_thursday(self):
         self.now = datetime(2026, 10, 22, 8)
-        self.assert_runs_until(self.runner(RunAt18=True, maintenance_weekday='fri'), datetime(2026, 10, 23, 18))
+        self.assert_runs_until(self.runner(RunAt18=True, maintenance_day=date(2026, 10, 23)), datetime(2026, 10, 23, 18))
 
-    def test_missing_legacy_weekday_falls_back_to_default_without_disabling_gate(self):
+    def test_no_announcement_uses_midnight_even_when_evening_option_is_on(self):
         self.now = datetime(2026, 10, 22, 8)
-        runner = self.runner(RunAt18=True)
-        runner.config.data['Exercise']['Exercise'].pop('MaintenanceWeekday')
-        self.assert_skipped_until(runner, datetime(2026, 10, 22, 18))
+        self.assert_runs_until(self.runner(RunAt18=True, maintenance_day=None), datetime(2026, 10, 23))
+
+    def test_japan_package_uses_japan_day_and_evening_while_global_server_is_china(self):
+        with patch('module.config.server.server', 'cn'):
+            for now in (datetime(2026, 10, 21, 23, 30), datetime(2026, 10, 22, 16)):
+                with self.subTest(now=now):
+                    self.now = now
+                    runner = self.runner(RunAt18=True)
+                    runner.config.data['Alas']['Emulator']['PackageName'] = 'com.YoStarJP.AzurLane'
+                    self.plan.return_value = datetime(2026, 10, 22, 10, tzinfo=timezone(timedelta(hours=9)))
+                    self.assert_skipped_until(runner, datetime(2026, 10, 22, 17))
+                    self.assertEqual(self.refresh.call_args.args[0], 'jp')
+                    self.assertEqual(self.plan.call_args.args[0], 'jp')
+            self.now = datetime(2026, 10, 22, 17, 1)
+            runner = self.runner(RunAt18=True)
+            runner.config.data['Alas']['Emulator']['PackageName'] = 'com.YoStarJP.AzurLane'
+            self.plan.return_value = datetime(2026, 10, 22, 10, tzinfo=timezone(timedelta(hours=9)))
+            self.assert_runs_until(runner, datetime(2026, 10, 22, 23))
 
     def test_day_before_maintenance_keeps_legal_42_hour_schedule_after_save_reload(self):
         self.now = datetime(2026, 10, 21)
@@ -200,22 +229,21 @@ class HardScheduleTests(unittest.TestCase):
                 runner.config.bind('Hard')
             self.assertEqual(runner.config.Scheduler_NextRun, target)
             self.assertTrue(runner.config.Hard_RunAt18)
-            self.assertEqual(runner.config.cross_get('Exercise.Exercise.MaintenanceWeekday'), 'thu')
             self.assertEqual(runner.config.modified, {})
 
     def test_cross_month_and_year_schedule_uses_next_server_date(self):
         cases = (
-            (datetime(2026, 10, 31, 23, 59, 50), 'sun', datetime(2026, 11, 1, 18)),
-            (datetime(2026, 11, 30, 23, 59, 50), 'tue', datetime(2026, 12, 1, 18)),
-            (datetime(2026, 12, 31, 23, 59, 50), 'fri', datetime(2027, 1, 1, 18)),
-            (datetime(2026, 12, 31, 18), 'thu', datetime(2027, 1, 1)),
+            (datetime(2026, 10, 31, 23, 59, 50), date(2026, 11, 1), datetime(2026, 11, 1, 18)),
+            (datetime(2026, 11, 30, 23, 59, 50), date(2026, 12, 1), datetime(2026, 12, 1, 18)),
+            (datetime(2026, 12, 31, 23, 59, 50), date(2027, 1, 1), datetime(2027, 1, 1, 18)),
+            (datetime(2026, 12, 31, 18), date(2026, 12, 31), datetime(2027, 1, 1)),
         )
-        for now, weekday, target in cases:
+        for now, maintenance_day, target in cases:
             for hours in (0, -1, 16):
-                with self.subTest(now=now, weekday=weekday, offset=hours):
+                with self.subTest(now=now, maintenance_day=maintenance_day, offset=hours):
                     self.offset = timedelta(hours=hours)
                     self.now = now + self.offset
-                    self.assert_runs_until(self.runner(RunAt18=True, maintenance_weekday=weekday), target + self.offset)
+                    self.assert_runs_until(self.runner(RunAt18=True, maintenance_day=maintenance_day), target + self.offset)
 
     def test_completion_crossing_midnight_schedules_from_completion_day(self):
         self.now = datetime(2026, 10, 22, 23, 59, 59)

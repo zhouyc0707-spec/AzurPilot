@@ -71,6 +71,13 @@ export interface Resource { name: string; label: string; value: number | null; l
 /** 运行总览数据：实例状态、任务队列、资源与模拟器信息。 */
 export interface Overview {
   instance: string; revision: string; status: Status; tasks: ScheduledTask[]
+  /** 官方维护公告的后台缓存，时间保留对应区服的时区偏移。 */
+  maintenance?: {
+    state: 'pending' | 'announced' | 'not_published' | 'error'
+    startsAt: string | null
+    checkedAt: string | null
+    error: string | null
+  }
   /** 区分调度器、单次队列任务与独立工具进程。 */
   schedulerRunning?: boolean
   singleTask?: {name: string; runId: string} | null

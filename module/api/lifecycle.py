@@ -13,9 +13,10 @@ from module.runtime.single_task import is_single_task
 from module.runtime.task_handler import TaskHandler
 
 task_handler = TaskHandler()
+maintenance_monitor = None
 
 
-def startup(runs=None):
+def startup(runs=None, *, directory=None):
     """初始化共享进程登记与可选后台服务。
 
     启动自动检查更新任务、定时更新计划、OCR 独立服务（若配置启用）、
@@ -23,14 +24,20 @@ def startup(runs=None):
 
     Args:
         runs (list[str], optional): 随 WebUI 启动自动运行的实例名称列表。默认为 None。
+        directory (Path, optional): 实例配置目录，默认使用项目配置目录。
     """
+    global maintenance_monitor
     from module.runtime.updater import updater
+    from module.maintenance import start_maintenance_monitor
+    from module.runtime.password_utils import is_demo_mode
     State.init()
     updater.event = State.manager.Event()
     if updater.delay > 0:
         task_handler.add(updater.check_update_loop(), 1)
     task_handler.add(updater.schedule_update(), 86400)
     task_handler.start()
+    if not is_demo_mode():
+        maintenance_monitor = start_maintenance_monitor(directory=directory)
     if State.deploy_config.StartOcrServer:
         from module.ocr.rpc import start_ocr_server_process
         start_ocr_server_process(State.deploy_config.OcrServerPort)
@@ -52,6 +59,8 @@ def clearup():
         if State._clearup:
             return True
         actions = [task_handler.stop, stop_ocr_server_process, RemoteAccess.kill_ssh_process]
+        if maintenance_monitor is not None:
+            actions.insert(0, maintenance_monitor.stop)
         success = True
         try:
             running = ProcessManager.running_instances()

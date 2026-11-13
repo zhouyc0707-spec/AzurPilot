@@ -2712,6 +2712,23 @@ class AzurLaneAutoScript:
         return task.command
 
     def loop(self):
+        """运行调度器并在退出时回收独立的每日维护公告检查。"""
+        from module.maintenance import server_for_config, start_maintenance_monitor
+        logger.set_file_logger(self.config_name)
+        # 先加载实例配置，再读取当前区服，避免启动时使用上一个实例的区服。
+        config = self.config
+
+        def maintenance_servers():
+            current = self.__dict__.get('config', config)
+            return (server_for_config(current.data, fallback=current.SERVER),)
+
+        monitor = start_maintenance_monitor(maintenance_servers)
+        try:
+            return self._loop()
+        finally:
+            monitor.stop()
+
+    def _loop(self):
         """调度器主事件循环。
 
         负责任务提取、运行监护生命周期管理、日常维护检查、异常恢复与重试逻辑。
@@ -2721,7 +2738,7 @@ class AzurLaneAutoScript:
 
         from module.config.utils import is_oobe_needed
 
-        # 调度器本身需要先加载配置；日报关闭时不创建任何附加线程或服务。
+        # 日报服务按开关启动，维护公告检查由外层生命周期独立管理。
         config = self.config
         self._log_source_watermark()
         if config.DailySummary_Enable:

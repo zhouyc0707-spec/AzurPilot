@@ -19,6 +19,7 @@ from module.api.protocol import ApiError, ConfigChange, CreateEmulatorParams
 from module.api.runtime_service import RuntimeService
 from module.api.socket import Gateway, Session
 from module.api.ws_transport import FRAME_BYTES, frames
+from module.persistence.database import close_all
 from tests.platform_capabilities import supports_symlinks
 
 
@@ -39,6 +40,7 @@ class ConfigApiTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
+        self.addCleanup(close_all, Path(self.temp.name) / 'config')
         self.configs = ConfigService(fixture(self.temp.name))
 
     def test_setup_emulator_values_are_saved_with_new_instance(self):
@@ -475,6 +477,7 @@ class SocketApiTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
+        self.addCleanup(close_all, Path(self.temp.name) / 'config')
         self.app = create_app(root=fixture(self.temp.name), password='test-secret', manage_runtime=False, mount_mcp=False)
         self.client = TestClient(self.app)
         self.counter = 0

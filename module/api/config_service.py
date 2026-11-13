@@ -592,25 +592,20 @@ class ConfigService:
             edited_groups = {}
             exercise_schedule_changed = False
             hard_schedule_changed = False
-            maintenance_weekday_changed = False
             for change in changes:
                 task, group, arg = self.validate(change.path, change.value)
                 if change.path in seen:
                     raise ApiError('INVALID_PARAMS', '同一次保存不能重复修改同一个参数')
                 seen.add(change.path)
                 value = self._normalize_number(self.args[task][group][arg], change.value)
-                if change.path in ('Exercise.Exercise.MaintenanceAdvance',
-                                    'Exercise.Exercise.MaintenanceWeekday'):
+                if change.path == 'Exercise.Exercise.MaintenanceAdvance':
                     exercise_schedule_changed |= deep_get(data, change.path) != value
-                if change.path == 'Exercise.Exercise.MaintenanceWeekday':
-                    maintenance_weekday_changed |= deep_get(data, change.path) != value
                 if change.path == 'Hard.Hard.RunAt18':
                     hard_schedule_changed |= deep_get(data, change.path) != value
                 data.setdefault(task, {}).setdefault(group, {})[arg] = value
                 if change.path in OPSI_EXPLORE_PROGRESS:
                     self._reset_opsi_explore_progress(data, change.path)
                 edited_groups.setdefault((task, group), set()).add(arg)
-            hard_schedule_changed |= maintenance_weekday_changed and deep_get(data, 'Hard.Hard.RunAt18', False)
             schedule_now = None
             for task, changed in (('Exercise', exercise_schedule_changed), ('Hard', hard_schedule_changed)):
                 if not changed or f'{task}.Scheduler.NextRun' in seen:

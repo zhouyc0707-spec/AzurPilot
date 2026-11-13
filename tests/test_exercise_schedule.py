@@ -26,20 +26,38 @@ def cn_time(day, hour=0, minute=0, second=0):
 class ExerciseScheduleTests(unittest.TestCase):
     """真实执行门禁和排程，替换所有设备入口与资源消耗。"""
 
+    def test_daily_plan_is_checked_before_config_reload_and_game_navigation(self):
+        exercise = object.__new__(Exercise)
+        exercise.config = SimpleNamespace(SERVER='cn', data={}, config_name='exercise_fixture',
+                                          update=Mock(), cross_get=Mock(return_value=None))
+        exercise.ui_ensure = Mock(side_effect=RuntimeError('已到达导航入口'))
+        calls = Mock()
+        calls.attach_mock(exercise.config.update, 'reload')
+        calls.attach_mock(exercise.ui_ensure, 'navigate')
+        with patch('module.maintenance.get_maintenance_snapshot', return_value={}) as refresh:
+            calls.attach_mock(refresh, 'refresh')
+            with self.assertRaisesRegex(RuntimeError, '已到达导航入口'):
+                exercise.run()
+        self.assertEqual([item[0] for item in calls.mock_calls], ['refresh', 'reload', 'navigate'])
+        self.assertTrue(refresh.call_args.kwargs['refresh'])
+
     def run_exercise(self, now, next_update, *, stock=10, stale_remain=0,
                      strategy='sun18', delay=1, season_hours=120,
                      server_offset=datetime.timedelta(hours=8), end_now=None,
-                     maintenance_advance=True, maintenance_weekday='thu'):
+                     maintenance_advance=True, maintenance_date=22, maintenance_start=None, package='auto'):
         exercise = object.__new__(Exercise)
         exercise.config = SimpleNamespace(
             Scheduler_ServerUpdate='00:00,12:00,18:00',
             Exercise_ExerciseStrategy=strategy,
             Exercise_DelayUntilHoursBeforeNextUpdate=delay,
             Exercise_MaintenanceAdvance=maintenance_advance,
-            Exercise_MaintenanceWeekday=maintenance_weekday,
+            SERVER='cn', config_name='exercise_fixture',
+            data={'Alas': {'Emulator': {'PackageName': package}}},
             Exercise_OpponentChooseMode='leftmost',
             multi_set=lambda: nullcontext(),
             set_record=Mock(),
+            update=Mock(),
+            cross_get=Mock(return_value=None),
             task_delay=Mock(),
         )
         exercise.device = SimpleNamespace(image=object())
@@ -57,6 +75,10 @@ class ExerciseScheduleTests(unittest.TestCase):
         exercise._exercise_easiest_else_exp = Mock(side_effect=complete_one)
         with ExitStack() as stack:
             stack.enter_context(patch('module.exercise.exercise.logger'))
+            maintenance = maintenance_start or (datetime.datetime(2026, 10, maintenance_date, 10, tzinfo=CN_TIMEZONE)
+                           if maintenance_date is not None else None)
+            plan = stack.enter_context(patch('module.maintenance.get_maintenance_start', return_value=maintenance))
+            refresh = stack.enter_context(patch('module.maintenance.get_maintenance_snapshot', return_value={}))
             stack.enter_context(patch('module.exercise.exercise.current_time', return_value=now,
                                       side_effect=(now, end_now) if end_now is not None else None))
             stack.enter_context(patch('module.exercise.exercise.get_server_next_update', return_value=next_update))
@@ -66,6 +88,10 @@ class ExerciseScheduleTests(unittest.TestCase):
             read_stock = stack.enter_context(patch('module.exercise.exercise.OCR_EXERCISE_REMAIN.ocr',
                                                    side_effect=lambda image: remaining[0]))
             exercise.run()
+            expected_server = 'jp' if package == 'com.YoStarJP.AzurLane' else 'cn'
+            self.assertEqual(refresh.call_args.args[0], expected_server)
+            if maintenance_advance and exercise.preserve == 5:
+                self.assertEqual(plan.call_args.args[0], expected_server)
         return exercise, remaining[0], read_stock
 
     def assert_skipped_until(self, exercise, remaining, read_stock, target):
@@ -201,54 +227,94 @@ class ExerciseScheduleTests(unittest.TestCase):
         self.assertEqual(remaining, 5)
         self.assertEqual(exercise._exercise_once.call_count, 5)
 
-    def test_each_selected_weekday_schedules_nine_and_retains_five(self):
+    def test_each_announced_date_schedules_nine_and_retains_five(self):
         for day, weekday in ((19, 'mon'), (20, 'tue'), (21, 'wed'),
                              (23, 'fri'), (24, 'sat'), (25, 'sun')):
             with self.subTest(weekday=weekday):
                 result = self.run_exercise(
-                    cn_time(day, 8), cn_time(day, 12), maintenance_weekday=weekday,
+                    cn_time(day, 8), cn_time(day, 12), maintenance_date=day,
                 )
                 self.assert_skipped_until(*result, cn_time(day, 9))
                 exercise, remaining, _ = self.run_exercise(
-                    cn_time(day, 9), cn_time(day, 12), maintenance_weekday=weekday,
+                    cn_time(day, 9), cn_time(day, 12), maintenance_date=day,
                 )
                 self.assertEqual(remaining, 5)
                 self.assertEqual(exercise._exercise_once.call_count, 5)
                 exercise.config.task_delay.assert_called_once_with(server_update=True)
 
-    def test_selecting_another_weekday_stops_thursday_advance(self):
-        for weekday in ('mon', 'tue', 'wed', 'fri', 'sat', 'sun'):
-            with self.subTest(weekday=weekday):
+    def test_other_announced_dates_do_not_advance_thursday(self):
+        for day in (19, 20, 21, 23, 24, 25):
+            with self.subTest(maintenance_date=day):
                 result = self.run_exercise(
-                    cn_time(22, 9), cn_time(22, 12), maintenance_weekday=weekday,
+                    cn_time(22, 9), cn_time(22, 12), maintenance_date=day,
                 )
                 self.assert_skipped_until(*result, cn_time(22, 11))
 
-    def test_selected_weekday_afternoon_and_evening_keep_original_time(self):
+    def test_announced_date_afternoon_and_evening_keep_original_time(self):
         for day, weekday in enumerate(('mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'), 19):
             for hour, update, target in ((12, cn_time(day, 18), cn_time(day, 17)),
                                          (18, cn_time(day + 1), cn_time(day, 23))):
                 with self.subTest(weekday=weekday, hour=hour):
                     result = self.run_exercise(
-                        cn_time(day, hour, 0, 1), update, maintenance_weekday=weekday,
+                        cn_time(day, hour, 0, 1), update, maintenance_date=day,
                     )
                     self.assert_skipped_until(*result, target)
 
-    def test_disabled_advance_uses_custom_delay_on_selected_weekday(self):
+    def test_disabled_advance_uses_custom_delay_on_announced_date(self):
         for delay in (0, 2, 5):
             for day, weekday in ((19, 'mon'), (22, 'thu'), (25, 'sun')):
                 with self.subTest(delay=delay, weekday=weekday):
                     result = self.run_exercise(
                         cn_time(day, 0, 0, 1), cn_time(day, 12), delay=delay,
-                        maintenance_advance=False, maintenance_weekday=weekday,
+                        maintenance_advance=False, maintenance_date=day,
                     )
                     self.assert_skipped_until(
                         *result, cn_time(day, 12) - datetime.timedelta(hours=delay),
                     )
 
+    def test_afternoon_maintenance_moves_only_the_corresponding_cycle(self):
+        maintenance = datetime.datetime(2026, 10, 22, 16, tzinfo=CN_TIMEZONE)
+        result = self.run_exercise(cn_time(22, 14), cn_time(22, 18), maintenance_start=maintenance)
+        self.assert_skipped_until(*result, cn_time(22, 15))
+        exercise, remaining, _ = self.run_exercise(cn_time(22, 15), cn_time(22, 18), maintenance_start=maintenance)
+        self.assertEqual(remaining, 5)
+        exercise.config.task_delay.assert_called_once_with(server_update=True)
+
+    def test_midnight_maintenance_can_advance_the_previous_evening(self):
+        maintenance = datetime.datetime(2026, 10, 23, 0, 30, tzinfo=CN_TIMEZONE)
+        result = self.run_exercise(cn_time(22, 22), cn_time(23), maintenance_start=maintenance)
+        self.assert_skipped_until(*result, cn_time(22, 23, 30))
+        exercise, remaining, _ = self.run_exercise(cn_time(22, 23, 30), cn_time(23), maintenance_start=maintenance)
+        self.assertEqual(remaining, 5)
+        exercise.config.task_delay.assert_called_once_with(server_update=True)
+        result = self.run_exercise(cn_time(23, 1), cn_time(23, 12), maintenance_start=maintenance)
+        self.assert_skipped_until(*result, cn_time(23, 11))
+
+    def test_no_announcement_uses_configured_normal_delay(self):
+        result = self.run_exercise(cn_time(22, 9), cn_time(22, 12), maintenance_date=None)
+        self.assert_skipped_until(*result, cn_time(22, 11))
+
+    def test_japan_package_uses_japan_cycles_while_global_server_is_china(self):
+        japan = datetime.timezone(datetime.timedelta(hours=9))
+        maintenance = datetime.datetime(2026, 10, 22, 14, tzinfo=japan)
+        with patch('module.config.server.server', 'cn'):
+            # 当前日服已补过中午次数，国服尚未补，不能误取国服所在周期。
+            result = self.run_exercise(
+                cn_time(22, 11, 30), cn_time(22, 12), maintenance_start=maintenance,
+                package='com.YoStarJP.AzurLane',
+            )
+            self.assert_skipped_until(*result, cn_time(22, 12))
+            exercise, remaining, _ = self.run_exercise(
+                cn_time(22, 12, 30), cn_time(22, 18), maintenance_start=maintenance,
+                package='com.YoStarJP.AzurLane',
+            )
+        self.assertEqual(remaining, 5)
+        # 日服18点对应国服17点，完成后需等待此补次数节点。
+        exercise.config.task_delay.assert_called_once_with(target=cn_time(22, 17))
+
 
 class ExerciseMaintenanceConfigTests(unittest.TestCase):
-    """用临时配置验证旧设置迁移与维护星期的持久化。"""
+    """用临时配置验证旧设置迁移与维护提前开关的持久化。"""
 
     @contextmanager
     def temporary_config(self, values=None, *, legacy=False):
@@ -267,42 +333,21 @@ class ExerciseMaintenanceConfigTests(unittest.TestCase):
             ), patch('module.config.config_updater.filepath_config', return_value=str(path)):
                 yield AzurLaneConfig('exercise_maintenance_test', task='Exercise'), path
 
-    def test_generated_defaults_preserve_existing_thursday_behavior(self):
+    def test_generated_default_keeps_advance_switch_and_removes_manual_weekday(self):
         self.assertIs(GeneratedConfig.Exercise_MaintenanceAdvance, True)
-        self.assertEqual(GeneratedConfig.Exercise_MaintenanceWeekday, 'thu')
+        self.assertFalse(hasattr(GeneratedConfig, 'Exercise_MaintenanceWeekday'))
 
-    def test_legacy_config_gains_defaults_without_changing_strategy_or_delay(self):
+    def test_legacy_config_gains_advance_default_and_keeps_strategy_and_delay(self):
         with self.temporary_config({
             'ExerciseStrategy': 'sun18', 'DelayUntilHoursBeforeNextUpdate': 2,
         }, legacy=True) as (config, path):
             self.assertIs(config.Exercise_MaintenanceAdvance, True)
-            self.assertEqual(config.Exercise_MaintenanceWeekday, 'thu')
             self.assertEqual(config.Exercise_ExerciseStrategy, 'sun18')
             self.assertEqual(config.Exercise_DelayUntilHoursBeforeNextUpdate, 2)
-            # 加载只合并默认值；一次正常保存后检查迁移字段落盘。
-            config.Exercise_MaintenanceAdvance = True
-            saved = json.loads(path.read_text(encoding='utf-8'))['Exercise']['Exercise']
-            self.assertIs(saved['MaintenanceAdvance'], True)
-            self.assertEqual(saved['MaintenanceWeekday'], 'thu')
-            restarted = AzurLaneConfig('exercise_maintenance_test', task='Exercise')
-            self.assertIs(restarted.Exercise_MaintenanceAdvance, True)
-            self.assertEqual(restarted.Exercise_MaintenanceWeekday, 'thu')
-            self.assertEqual(restarted.Exercise_DelayUntilHoursBeforeNextUpdate, 2)
-
-    def test_disabled_advance_and_selected_weekday_survive_restart(self):
-        with self.temporary_config() as (config, path):
-            config.Exercise_MaintenanceWeekday = 'tue'
             config.Exercise_MaintenanceAdvance = False
-            saved = json.loads(path.read_text(encoding='utf-8'))['Exercise']['Exercise']
-            self.assertIs(saved['MaintenanceAdvance'], False)
-            self.assertEqual(saved['MaintenanceWeekday'], 'tue')
             restarted = AzurLaneConfig('exercise_maintenance_test', task='Exercise')
-            self.assertIs(restarted.Exercise_MaintenanceAdvance, False)
-            self.assertEqual(restarted.Exercise_MaintenanceWeekday, 'tue')
-            restarted.Exercise_MaintenanceAdvance = True
-            enabled = AzurLaneConfig('exercise_maintenance_test', task='Exercise')
-            self.assertIs(enabled.Exercise_MaintenanceAdvance, True)
-            self.assertEqual(enabled.Exercise_MaintenanceWeekday, 'tue')
+            self.assertFalse(restarted.Exercise_MaintenanceAdvance)
+            self.assertEqual(restarted.Exercise_DelayUntilHoursBeforeNextUpdate, 2)
 
 
 if __name__ == '__main__':

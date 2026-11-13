@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 from module.config.deep import deep_get
 from module.config.utils import filepath_args, parse_value
-from module.handover.handover import HANDOVER_MAINTAIN_CHECK_MINUTES, OperationHandover
+from module.handover.handover import OperationHandover
 
 # 2026-09-12 是周六，ISO 第 37 周的第一天（周一）是 2026-09-07
 NOW = datetime(2026, 9, 12, 11, 30)
@@ -151,8 +151,7 @@ class TestConsumeAllBookGiveUp(unittest.TestCase):
 class TestMaintainIdleTime(unittest.TestCase):
     """委托次数为 0、只等维护时的排期。
 
-    查到公告、今天又没有还没开始的维护时，今天就不必再看，排到第二天 0 点；
-    没查到公告才隔 HANDOVER_MAINTAIN_CHECK_MINUTES 分钟重试。
+    无公告或查询失败均等待区服下个自然日，避免当天重复查询。
     """
 
     def idle(self, maintain, queried, monkey=None):
@@ -169,8 +168,8 @@ class TestMaintainIdleTime(unittest.TestCase):
         # 今天的维护已经开始过了，今天同样不用再看
         self.assertEqual(self.idle(datetime(2026, 9, 12, 10, 0), True), datetime(2026, 9, 13, 0, 0))
 
-    def test_failed_query_retries_soon(self):
-        self.assertEqual(self.idle(None, False), NOW + timedelta(minutes=HANDOVER_MAINTAIN_CHECK_MINUTES))
+    def test_failed_query_waits_until_next_server_day(self):
+        self.assertEqual(self.idle(None, False), datetime(2026, 9, 13, 0, 0))
 
     def test_earlier_candidate_wins(self):
         # 下次一键消耗就在两小时后，比明天 0 点早，取它

@@ -13,7 +13,7 @@ for (const theme of ['legacy-light', 'legacy-dark', 'modern-light', 'modern-dark
     await expect(page.locator('.instance-page-grid')).toBeVisible()
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
     if (theme.startsWith('legacy')) {
-      await expect(page.getByLabel('维护日', {exact: true})).toBeVisible()
+      await expect(page.locator('.maintenance-time')).toBeVisible()
       await page.locator('.task-group-button').filter({hasText: '系统'}).click()
       await expect(page.locator('.task-submenu-flyout')).toBeVisible()
       if (theme === 'legacy-light') {

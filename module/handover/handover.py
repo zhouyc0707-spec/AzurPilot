@@ -44,13 +44,8 @@ import math
 import re
 from datetime import datetime, timedelta, timezone
 
-from module.base import http
-
-from deploy.api_endpoints import MAINTENANCE_API_URL
-from module.base.device_id import get_device_id
 from module.base.runtime_params import (
     HANDOVER_CONSUME_RETRY_MINUTES,
-    HANDOVER_MAINTAIN_CHECK_MINUTES,
     HANDOVER_MAINTAIN_LEAD_MINUTES,
 )
 from module.base.timer import Timer
@@ -63,6 +58,7 @@ from module.config.utils import SERVER_TO_TIMEZONE
 from module.handler.assets import NEW_SHIP_SKIP, POPUP_CONFIRM
 from module.handler.fast_forward import to_map_file_name
 from module.logger import logger
+from module.maintenance import get_maintenance_snapshot, server_for_config
 from module.map.assets import (FLEET_PREPARATION, HANDOVER_BOOK_AMOUNT_OCR,
                                HANDOVER_BOOK_COUNT_OCR, HANDOVER_BOOK_ITEM,
                                HANDOVER_BOOK_MAX, HANDOVER_CHECK, HANDOVER_COUNT_INPUT,
@@ -101,10 +97,7 @@ HANDOVER_WEEKDAY_NAMES = ['周一', '周二', '周三', '周四', '周五', '周
 # 消耗重试、维护前提前量与维护核对间隔走 WebUI「运行参数」页
 # （RunParams.Handover），默认值集中在 module/base/runtime_params.py。
 
-# 停服维护时间接口，顶层是国服公告的聚合结果，servers 里按 cn/jp/en/tw 分别给出
-# maintenance_date(YYYY-MM-DD) 与 start_time(HH:MM)
-HANDOVER_MAINTAIN_API = MAINTENANCE_API_URL
-# 接口里服务器时区的形状，如 `UTC+8`、`UTC-7`、`UTC+08:00`
+# 共享维护快照转为本模块公告结构后使用的服务器时区格式。
 HANDOVER_MAINTAIN_TIMEZONE = re.compile(r'^UTC([+-])(\d{1,2})(?::?(\d{2}))?$')
 # 委托结束时间的初始值，表示脚本手上没有开过委托
 HANDOVER_COMMISSION_NONE = datetime(2020, 1, 1)
@@ -757,7 +750,7 @@ class OperationHandover(CampaignRun):
         return str(record)
 
     def handover_maintain_query(self):
-        """查询停服维护接口，取出当前游戏服务器的那一份公告。
+        """读取共享维护计划，当前区服每天至多尝试查询一次。
 
         使用 v2 按当前区服查询，RFC 3339 时间转换为当前区服时区。
         其他区服没有计划时返回空结果，不退回国服公告。
@@ -766,28 +759,21 @@ class OperationHandover(CampaignRun):
             tuple[dict | None, datetime.timedelta, str]:
                 (维护公告, 公告时间所用的兜底时区, 失败原因)。取不到公告时公告为 None。
         """
-        server = self.config.SERVER
+        server = server_for_config(getattr(self.config, 'data', {}), fallback=self.config.SERVER)
         try:
-            result = http.get(HANDOVER_MAINTAIN_API, params={'server': server},
-                                  headers={'X-AzurPilot-ID': get_device_id()}, timeout=10)
-            result.raise_for_status()
-            response = result.json()
-            if response.get('schema_version') != 2 or response.get('server') != server or 'maintenance' not in response:
-                raise ValueError('维护接口返回了无效或其他区服的数据')
-            plan = response['maintenance']
+            snapshot = get_maintenance_snapshot(server, refresh=True)
             default = SERVER_TO_TIMEZONE.get(server, SERVER_TO_TIMEZONE['cn'])
-            if plan is None:
+            if not snapshot['startsAt']:
+                if snapshot['state'] == 'error':
+                    return None, default, '查询维护时间失败，未找到有效缓存'
                 return {}, default, ''
-            at = datetime.fromisoformat(plan['starts_at'].replace('Z', '+00:00'))
-            if at.tzinfo is None:
-                raise ValueError('维护时间缺少时区')
-            at = at.astimezone(timezone(default))
+            at = datetime.fromisoformat(snapshot['startsAt']).astimezone(timezone(default))
             minutes = int(default.total_seconds() / 60)
             sign = '+' if minutes >= 0 else '-'
             absolute = abs(minutes)
             tz = f'UTC{sign}{absolute // 60}' + (f':{absolute % 60:02d}' if absolute % 60 else '')
             return {'maintenance_date': at.strftime('%Y-%m-%d'), 'start_time': at.strftime('%H:%M'),
-                    'timezone': tz, 'name': plan.get('name', server)}, default, ''
+                    'timezone': tz, 'name': server}, default, ''
         except Exception as e:
             logger.warning(f'[作战委托] 查询维护时间失败，按不维护处理: {e}')
             return None, timedelta(), '查询维护时间失败'
@@ -824,8 +810,7 @@ class OperationHandover(CampaignRun):
         Returns:
             tuple[datetime.datetime | None, str, bool]:
                 (今天的维护开始时间, 原因, 这次有没有成功查到公告)。
-                没查到公告时第三个值为 False，调用方应过一会儿再查，而不是当成
-                「今天没有维护」直接等到明天。
+                查询失败且没有有效缓存时第三个值为 False，下一自然日再查询。
         """
         if not self.config.OperationHandover_MaintainOverride:
             return None, '开关未开启', False
@@ -847,10 +832,11 @@ class OperationHandover(CampaignRun):
 
         # 服务器本地时间 → 本机时间，后续调度用的都是本机时间
         offset = self.handover_maintain_timezone(payload, default)
-        start = start.replace(tzinfo=timezone(offset)).astimezone().replace(tzinfo=None)
+        server_start = start.replace(tzinfo=timezone(offset))
+        start = server_start.astimezone().replace(tzinfo=None)
 
         now = current_time()
-        if start.date() != now.date():
+        if server_start.date() != now.astimezone(timezone(offset)).date():
             if start < now:
                 return None, f'{start} 已经过去', True
             return None, f'下次维护 {start}，不是今天', True
@@ -895,10 +881,8 @@ class OperationHandover(CampaignRun):
     def handover_idle_time(self, maintain, maintain_queried=True):
         """委托次数为 0、手上没有委托时，下一次该在什么时候看一眼。
 
-        两头取早的：一键消耗的触发时刻，以及维护检查。维护检查成功查到公告、
-        今天又没有还没开始的维护时，今天就不必再看，排到第二天 0 点；
-        没查到公告（网络失败、接口没有该服数据）才隔
-        HANDOVER_MAINTAIN_CHECK_MINUTES 分钟重试。
+        取一键消耗触发时刻与区服下个自然日零点的较早值。
+        维护接口失败也等待下一自然日，避免当天重复安排无效查询。
 
         Args:
             maintain (datetime.datetime | None): 今天的维护开始时间，没有则为 None。
@@ -916,14 +900,11 @@ class OperationHandover(CampaignRun):
                 candidates.append(target)
 
         if self.config.OperationHandover_MaintainOverride:
-            if maintain_queried:
-                # 公告查到了，今天要么没有维护、要么维护已经开始，今天不用再看
-                candidates.append(
-                    (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0))
-            else:
-                candidates.append(now + timedelta(minutes=int(read_run_param(
-                    self.config, 'Handover_MaintainCheckMinutes',
-                    HANDOVER_MAINTAIN_CHECK_MINUTES, 15, 720))))
+            server = server_for_config(getattr(self.config, 'data', {}), fallback=getattr(self.config, 'SERVER', 'cn'))
+            zone = timezone(SERVER_TO_TIMEZONE[server])
+            midnight = (now.astimezone(zone) + timedelta(days=1)).replace(
+                hour=0, minute=0, second=0, microsecond=0)
+            candidates.append(midnight.astimezone().replace(tzinfo=None))
 
         if not candidates:
             return None

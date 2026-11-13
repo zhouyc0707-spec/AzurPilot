@@ -19,6 +19,8 @@ from module.webui.app_helpers import (
     is_demo_mode,
 )
 
+maintenance_monitor = None
+
 
 def _clearup_step(name, handler) -> bool:
     """执行单项清理；一项失败不应阻断其余资源回收。"""
@@ -37,6 +39,8 @@ def _clearup_step(name, handler) -> bool:
 
 def startup() -> None:
     """初始化 WebUI 进程级后台服务。"""
+    global maintenance_monitor
+    from module.maintenance import start_maintenance_monitor
     State.init()
     lang.reload()
     updater.event = State.manager.Event()
@@ -44,6 +48,8 @@ def startup() -> None:
         task_handler.add(updater.check_update_loop(), 1)
     task_handler.add(updater.schedule_update(), 86400)
     task_handler.start()
+    if not is_demo_mode():
+        maintenance_monitor = start_maintenance_monitor()
     if State.deploy_config.DiscordRichPresence:
         init_discord_rpc()
     if State.deploy_config.StartOcrServer and not is_demo_mode():
@@ -62,6 +68,8 @@ def clearup() -> bool:
 
         logger.info("[WebUI-生命周期] 开始清理")
         success = _clearup_step("任务处理器", task_handler.stop)
+        if maintenance_monitor is not None:
+            success = _clearup_step("维护计划", maintenance_monitor.stop) and success
 
         for name, handler in (
             ("远程访问", RemoteAccess.kill_ssh_process),

@@ -76,7 +76,7 @@ def create_app(*, root: Path = ROOT, password=None, manage_runtime=True, mount_m
                     # 只在决定启动清单这一支消费更新标记。
                     update_restart = consume_update_restart()
                     runs = startup_runs(runs, update_restart=update_restart)
-                await asyncio.to_thread(startup, runs)
+                await asyncio.to_thread(startup, runs, directory=configs.directory)
                 if State.deploy_config.DiscordRichPresence:
                     try:
                         from module.runtime.discord_presence import init_discord_rpc

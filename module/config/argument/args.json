@@ -13514,19 +13514,6 @@
         "type": "checkbox",
         "value": true
       },
-      "MaintenanceWeekday": {
-        "type": "select",
-        "value": "thu",
-        "option": [
-          "mon",
-          "tue",
-          "wed",
-          "thu",
-          "fri",
-          "sat",
-          "sun"
-        ]
-      },
       "OpponentChooseMode": {
         "type": "select",
         "value": "max_exp",
@@ -21030,14 +21017,6 @@
         "validate": [
           2,
           60
-        ]
-      },
-      "MaintainCheckMinutes": {
-        "type": "input",
-        "value": 120,
-        "validate": [
-          15,
-          720
         ]
       },
       "ConflictRetryMinutes": {

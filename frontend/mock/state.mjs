@@ -511,6 +511,7 @@ export function createMockState({ empty = false } = {}) {
     const currentTask = item.status === 'running' ? item.task ?? 'Commission' : null
     return {
       instance: name, revision: data.revision, status: item.status, emulator: data.values.Alas.Emulator,
+      maintenance: {state: 'not_published', startsAt: null, checkedAt: null, error: null},
       singleTask, schedulerRunning: item.status === 'running' && item.mode !== 'single' && item.mode !== 'tool',
       tasks: Object.entries(data.values).filter(([, groups]) => groups.Scheduler?.Enable).map(([task, groups]) => ({
         name: task, nextRun: groups.Scheduler.NextRun,
