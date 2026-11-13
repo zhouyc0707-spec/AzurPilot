@@ -351,7 +351,7 @@ CN 空订单页新增今日次数确认：订单页与右侧地图背景均正�
 
 鱼肉目标默认 0，保护养殖最低库存、卡住的季节订单及下一架经营菜单需求。CN／TW 使用严格确认与小批兑换，EN／JP 使用带相同库存保护的执行器；数量、商品、币种、预览或确认后到账任一证据不符均交上层恢复。EN 有脱敏截图回归，JP 仍沿用 CN 资源回退，尚无实机验收。
 
-CN／TW 加工数量在 `fish_exchange_ocr.py` 按区域与颜色分开读取：完整鱼名、卡片右下库存、深色现货和蓝色 `+预览`。固定卡位和徽标裁剪沿用 [ALAS 鱼肉加工](https://github.com/LmeSzinc/AzurLaneAutoScript/blob/master/module/island_handler/exchange.py) 的布局；保留本地精确鱼名与库存保护。已隔离且存在数字笔画的数量区域允许 `O/o` 与 `0` 的有限纠正，不能从 `C18` 等混合文本抽取数字；现货或鱼卡空白、边界截断、未知文字仍是未知，只有蓝色预览区域完全空白才表示未选择。连续两帧鱼卡库存一致后才选鱼，每次点击验证预览，确认弹窗与精确到账后才扣减本轮库存。
+CN／TW 加工数量在 `fish_exchange_ocr.py` 按区域与颜色分开读取：完整鱼名、卡片右下库存、深色现货和蓝色 `+预览`。固定卡位和徽标裁剪沿用 [ALAS 鱼肉加工](https://github.com/LmeSzinc/AzurLaneAutoScript/blob/master/module/island_handler/exchange.py) 的布局；保留本地精确鱼名与库存保护。已隔离且存在数字笔画的数量区域允许 `O/o` 与 `0` 的有限纠正，不能从 `C18` 等混合文本抽取数字；现货或鱼卡空白、边界截断、未知文字仍是未知，只有蓝色预览区域完全空白才表示未选择。连续两帧鱼卡库存一致后才选鱼，每次点击验证预览，确认弹窗与精确到账后才扣减本轮库存。加工专用确认文案经高置信度识别后，按钮模板在局部 `offset=(30,30)` 范围内定位，以覆盖确认文字的横向偏移，再复用通用确认处理器的点击冷却。匿名国服确认弹窗与原数量、到账保护回归见 `tests/test_island_fish_exchange.py`。
 
 已确认在鱼肉加工页时，切换分组不再重新导航到普通商店；目标分组已打开但数量未知时只等待新截图，不反复点击侧栏。加工结束通过已确认页面的返回按钮回到本岛，以本岛画面作退出条件。首次商店导航禁用内部重启，页面未知、卡死或过多点击统一转换为 `IslandFishExchangeError`，交共享生产轮清账、延期及上层恢复，避免内部重启后仍继续使用旧库存。相关回归见 `test_island_fish_exchange.py`、`test_island_fish_exchange_ocr.py`、`test_island_fish_exchange_retry.py` 和 `test_island_fish_merge.py`。
 

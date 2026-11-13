@@ -256,7 +256,8 @@ class FishExchangeSession:
         expected = {'是否确认进行加工?', '是否確認進行加工?'}
         texts = self._detect((250, 200, 1050, 510))
         if any(score >= 0.90 and _normalize_text(text) in expected for text, _, score in texts):
-            return self.main.handle_popup_confirm('ISLAND_FISH_EXCHANGE')
+            # 加工弹窗的确定文字横向偏移较大，通过专用文案后扩大局部定位范围。
+            return self.main.handle_popup_confirm('ISLAND_FISH_EXCHANGE', offset=(30, 30))
         return False
 
     def _exchange_batch(self, meat_id, current, cards, selection, produced):

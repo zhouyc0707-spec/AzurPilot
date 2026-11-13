@@ -1,15 +1,21 @@
 """鱼肉有限兑换的库存保护、OCR 歧义和提交闭环离线验证。"""
 
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+import numpy as np
+
+from module.base.utils import load_image, random_rectangle_point
 from module.exception import GameStuckError, IslandFishExchangeError
+from module.handler.info_handler import InfoHandler
 from module.island.fish_exchange import (
     FishExchangeSession, get_fish_protection, parse_exchange_amounts,
     parse_exchange_cards, plan_fish_exchange,
 )
 from module.island.raw_catalog import get_extra_raw_items
+from module.island.round_inventory import IslandRoundInventory
 
 
 def detection(text, x, y, width=30, height=15, score=0.99):
@@ -59,6 +65,127 @@ class ExchangeMain:
 
 
 class TestFishExchange(unittest.TestCase):
+    def popup_session(self):
+        # 11月13日错误末帧只保留弹窗；OCR输出用同帧实测结果回放，按钮仍真实匹配。
+        path = Path(__file__).parent / 'fixtures/island_fish_meat/exchange_confirm_cn.png'
+        main = InfoHandler.__new__(InfoHandler)
+        main.interval_timer = {}
+        clicks = []
+        main.device = SimpleNamespace(
+            image=load_image(str(path)), stuck_record_add=Mock(), save_screenshot=Mock(),
+            click=lambda button: clicks.append((button.name, random_rectangle_point(button.button))))
+        session = FishExchangeSession(main)
+        session._detect = Mock(return_value=[detection('是否确认进行加工?', 288, 123, score=0.9763)])
+        return main, session, clicks
+
+    def test_actual_processing_popup_requires_local_horizontal_search_and_clicks_blue_confirm(self):
+        main, session, clicks = self.popup_session()
+        self.assertFalse(main.handle_popup_confirm('ISLAND_FISH_EXCHANGE'))
+        self.assertEqual(clicks, [])
+        self.assertTrue(session._handle_exchange_popup())
+        self.assertEqual(len(clicks), 1)
+        name, (x, y) = clicks[0]
+        self.assertEqual(name, 'POPUP_CONFIRM_WHITE_ISLAND_FISH_EXCHANGE')
+        self.assertTrue(656 <= x <= 930 and 480 <= y <= 539)
+        self.assertFalse(np.any(main.device.image[:144]))
+        self.assertFalse(np.any(main.device.image[561:]))
+        self.assertFalse(np.any(main.device.image[:, :325]))
+        self.assertFalse(np.any(main.device.image[:, 955:]))
+
+    def test_processing_popup_never_confirms_unknown_low_confidence_or_button_only(self):
+        for detections in ([detection('是否确认购买?', 288, 123)],
+                           [detection('是否确认进行加工?', 288, 123, score=0.89)], []):
+            with self.subTest(detections=detections):
+                _, session, clicks = self.popup_session()
+                session._detect.return_value = detections
+                self.assertFalse(session._handle_exchange_popup())
+                self.assertEqual(clicks, [])
+
+    def test_processing_text_without_confirm_button_never_clicks(self):
+        main, session, clicks = self.popup_session()
+        main.device.image[480:540, 656:931] = 0
+        self.assertFalse(session._handle_exchange_popup())
+        self.assertEqual(clicks, [])
+
+    def test_actual_popup_flow_submits_once_and_records_only_exact_arrival(self):
+        # 弹窗来自现场，其余页面/数量按状态模拟；不冒充加工后的实机截图验收。
+        for arrival in ((21, 0), (20, 0), (21, 1), None):
+            with self.subTest(arrival=arrival):
+                main, session, clicks = self.popup_session()
+                popup_frame = main.device.image.copy()
+                blank = np.zeros_like(popup_frame)
+                main.current, main.preview, main.popup = 9, 0, False
+                main.settling, main.settled = 0, False
+                main.device.image = blank
+                ledger = main.island_round = IslandRoundInventory({2521: 9, 5007: 54})
+                ledger.consume = Mock(wraps=ledger.consume)
+                ledger.observe = Mock(wraps=ledger.observe)
+                clock = [1000.0]
+
+                def screenshot():
+                    clock[0] += 0.2
+                    self.assertLess(clock[0], 1050)
+                    # 游戏到账确认完成前，始终不能提前扣鱼或加鱼肉。
+                    self.assertEqual(ledger.get(2521), 9)
+                    self.assertEqual(ledger.get(5007), 54)
+                    ledger.consume.assert_not_called()
+                    if main.settling:
+                        main.settling -= 1
+                        if not main.settling:
+                            main.settled = True
+                            if arrival is not None:
+                                main.current, main.preview = arrival
+                    main.device.image = popup_frame if main.popup else blank
+                    return main.device.image
+
+                def click(button):
+                    name, point = button.name, random_rectangle_point(button.button)
+                    clicks.append((name, point))
+                    if name == 'FISH_EXCHANGE_CARD_5007':
+                        main.preview += 3
+                    elif name == 'ALAS_EXCHANGE_CONFIRM':
+                        main.popup = True
+                    elif name == 'POPUP_CONFIRM_WHITE_ISLAND_FISH_EXCHANGE':
+                        x, y = point
+                        self.assertTrue(656 <= x <= 930 and 480 <= y <= 539)
+                        main.popup = False
+                        main.settling = 2
+                    else:
+                        self.fail(f'加工期间出现预期之外的点击：{name}')
+
+                def amounts():
+                    if main.popup or main.settling or (main.settled and arrival is None):
+                        return None
+                    return main.current, main.preview
+
+                main.device.click = click
+                main.device.screenshot = screenshot
+                session._goto_group = Mock(return_value=9)
+                session._cards = Mock(return_value={5007: {'stock': 54, 'button': (213, 222, 321, 249)}})
+                session._panel = Mock(return_value=True)
+                session._amounts = amounts
+                session._detect.side_effect = lambda area: (
+                    [detection('是否确认进行加工?', 288, 123, score=0.9763)] if main.popup else [])
+                with patch('module.base.timer.time', lambda: clock[0]):
+                    if arrival == (21, 0):
+                        self.assertTrue(session.run({2521: 21}, {}))
+                    else:
+                        with self.assertRaises(IslandFishExchangeError):
+                            session.run({2521: 21}, {})
+                names = [name for name, _ in clicks]
+                self.assertEqual(names.count('FISH_EXCHANGE_CARD_5007'), 4)
+                self.assertEqual(names.count('ALAS_EXCHANGE_CONFIRM'), 1)
+                self.assertEqual(names.count('POPUP_CONFIRM_WHITE_ISLAND_FISH_EXCHANGE'), 1)
+                session._goto_group.assert_called_once_with(2521)
+                if arrival == (21, 0):
+                    ledger.consume.assert_called_once_with({5007: 4})
+                    self.assertEqual((ledger.get(5007), ledger.get(2521)), (50, 21))
+                    main.device.save_screenshot.assert_not_called()
+                else:
+                    ledger.consume.assert_not_called()
+                    self.assertEqual((ledger.get(5007), ledger.get(2521)), (54, 9))
+                    main.device.save_screenshot.assert_called_once()
+
     def navigation_session(self, frames, initial=None):
         main = SimpleNamespace(
             device=SimpleNamespace(screenshot=Mock(), save_screenshot=Mock()),
