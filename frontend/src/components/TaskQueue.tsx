@@ -4,26 +4,12 @@
 
 import { useLayoutEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ChevronRight, CirclePlay, Hourglass, ListTodo, Loader2, Play, Square } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import { api } from '../api/client'
 import type { Overview, ScheduledTask } from '../api/types'
 import { useApp, useConnection } from '../app/context'
 import { editor } from '../config/editors'
-import type { UiKey } from '../i18n'
-
-const taskStateLabel = {
-  running: 'scheduler.running',
-  pending: 'scheduler.pending',
-  waiting: 'scheduler.waiting',
-} as const
-
-const taskGroups = [
-  {state: 'running', label: 'scheduler.running', empty: 'scheduler.noRunning', icon: CirclePlay},
-  {state: 'pending', label: 'scheduler.pending', empty: 'scheduler.noPending', icon: ListTodo},
-  {state: 'waiting', label: 'scheduler.waiting', empty: 'scheduler.noWaiting', icon: Hourglass},
-] as const
 import { ContextMenu, type ContextMenuItem } from './ContextMenu'
-import {usesLegacyLayout} from '../app/theme'
 
 /** NextRun 的出厂默认值：所有任务共用，落在过去，
  *  调度器下一轮扫描就把它当待运行任务——「清空下一次运行时间」的等价写法。 */
@@ -75,7 +61,7 @@ export function taskRunAction(data: Overview, task: ScheduledTask): 'run' | 'sto
  * 容器的高度用补间兑现，离开的条目在原地收缩塌陷，插入的条目自中心放大。
  */
 export function TaskQueue({instance, data, onData, onNavigate}: {instance: string; data?: Overview; onData: (data: Overview) => void; onNavigate?: () => void}) {
-  const {t, ui, notify, theme} = useApp()
+  const {t, ui, notify} = useApp()
   const connection = useConnection()
   const [busyTask, setBusyTask] = useState<string | null>(null)
   const requestPending = useRef(false)
@@ -251,43 +237,7 @@ export function TaskQueue({instance, data, onData, onNavigate}: {instance: strin
     }
   }
 
-  return usesLegacyLayout(theme) ? (
-    <div className="rail-task-list" ref={list}>
-    {data?.tasks.length ? taskGroups.map(group => {
-      const tasks = data.tasks.filter(task => task.state === group.state)
-      const GroupIcon = group.icon
-      return <section className={`rail-queue-group ${group.state}`} key={group.state} aria-label={ui(group.label as UiKey)}>
-        <div className="rail-queue-heading">
-          <div><GroupIcon size={16}/><strong>{ui(group.label as UiKey)}</strong></div>
-          <span>{tasks.length}</span>
-        </div>
-        <div className="rail-queue-body">
-          {tasks.length ? tasks.map(task => {
-            const nextRun = task.nextRun?.replace('T', ' ').trim()
-            const action = taskRunAction(data, task)
-            const label = ui(action === 'stop' ? 'task.stopOnce' : 'task.runOnce', {task: t(`Task.${task.name}.name`)})
-            return <div key={task.name} data-task={task.name} className="rail-task-item">
-              <Link className="rail-task-link" to={`/i/${instance}/task/${task.name}`} onClick={onNavigate}>
-                <div>
-                  <strong>{t(`Task.${task.name}.name`)}</strong>
-                  {nextRun && <small>{nextRun}</small>}
-                </div>
-                <span className={`task-state ${task.state}`}><GroupIcon size={12}/>{ui(taskStateLabel[task.state])}</span>
-                <ChevronRight size={13}/>
-              </Link>
-              {action && <button type="button" className={`icon-button rail-task-run${action === 'stop' ? ' is-running' : ''}`}
-                aria-label={label} title={label} aria-pressed={action === 'stop'}
-                disabled={!!busyTask || connection !== 'ready' || (action === 'run' && (data.status === 'running' || data.status === 'updating'))}
-                onClick={() => void toggleTask(task)}>
-                {busyTask === task.name ? <Loader2 size={15} className="spin"/> : action === 'stop' ? <Square size={15}/> : <Play size={15}/>}
-              </button>}
-            </div>
-          }) : <div className="rail-queue-empty">{ui(group.empty as UiKey)}</div>}
-        </div>
-      </section>
-    }) : <div className="rail-empty">{ui('scheduler.noEnabled')}</div>}
-  </div>
-  ) : (
+  return (
     <div className="rail-task-list" ref={list}>
     {tasks.length > 0 ? (
       <>
@@ -301,6 +251,7 @@ export function TaskQueue({instance, data, onData, onNavigate}: {instance: strin
               const nextRun = task.nextRun?.replace('T', ' ').trim()
               return <Link key={task.name} data-task={task.name} className={`rail-task-item ${task.state}`}
                            to={`/i/${instance}/task/${task.name}`}
+                           onClick={onNavigate}
                            onContextMenu={event => {event.preventDefault(); setMenu({task, x: event.clientX, y: event.clientY})}}>
                 <div className="rail-task-main">
                   <strong>{t(`Task.${task.name}.name`)}</strong>

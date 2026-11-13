@@ -1,5 +1,3 @@
-import {Clock3} from 'lucide-react'
-import {usesLegacyLayout} from '../app/theme'
 /**
  * @fileoverview 旧版实例视图左侧调度器与任务列表面板组件。
  */
@@ -18,15 +16,11 @@ import { TaskQueue } from './TaskQueue'
  * `SchedulerWidget` + `TaskQueue`。`children` 插在两者之间，供总览页放「统计界面」入口。
  */
 export function LegacyRail({instance, data, onData, children}: {instance: string; data?: Overview; onData: (data: Overview) => void; children?: ReactNode}) {
-  const {ui, theme} = useApp()
+  const {ui} = useApp()
   return <div className="instance-page-rail" onContextMenu={event => event.preventDefault()}>
     <SchedulerWidget instance={instance} data={data} onData={onData}/>
     {children}
     <section className="rail-schedule" aria-label={ui('scheduler.plan')}>
-      {usesLegacyLayout(theme) && <div className="rail-section-heading">
-        <div><Clock3 size={15}/><span>{ui('scheduler.plan')}</span></div>
-        <span>{data?.tasks.length ?? 0}</span>
-      </div>}
       <TaskQueue instance={instance} data={data} onData={onData}/>
     </section>
   </div>

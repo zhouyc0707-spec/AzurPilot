@@ -185,11 +185,19 @@ function applyCompactLayout(root: HTMLElement, next: Preference) {
 /** Vite 要求 import 路径静态可分析，所以用显式映射表而不是变量拼接。 */
 const skinLoaders = {
   minimal: async () => {
-    const [base, skin] = await Promise.all([import('../styles/modern.css?inline'), import('../styles/minimal.css?inline')])
-    return {default: base.default + '\n' + skin.default}
+    const [base, scheduler, skin] = await Promise.all([
+      import('../styles/modern.css?inline'), import('../styles/scheduler.css?inline'), import('../styles/minimal.css?inline'),
+    ])
+    return {default: base.default + '\n' + scheduler.default + '\n' + skin.default}
   },
-  legacy: () => import('../styles/legacy.css?inline'),
-  modern: () => import('../styles/modern.css?inline'),
+  legacy: async () => {
+    const [skin, scheduler] = await Promise.all([import('../styles/legacy.css?inline'), import('../styles/scheduler.css?inline')])
+    return {default: skin.default + '\n' + scheduler.default}
+  },
+  modern: async () => {
+    const [skin, scheduler] = await Promise.all([import('../styles/modern.css?inline'), import('../styles/scheduler.css?inline')])
+    return {default: skin.default + '\n' + scheduler.default}
+  },
 } as const
 type Skin = keyof typeof skinLoaders
 

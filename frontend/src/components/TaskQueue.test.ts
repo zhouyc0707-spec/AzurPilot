@@ -24,7 +24,7 @@ describe('任务条目在调度栏内移动的判定', () => {
   })
 })
 
-describe('单次任务按钮按真实运行模式显示', () => {
+describe('单次任务菜单操作按真实运行模式显示', () => {
   const task: ScheduledTask = {name: 'Research', nextRun: '', pending: true, state: 'pending', runOnceAllowed: true}
   const overview: Overview = {instance: 'test', revision: '', status: 'stopped', tasks: [task], resources: [], emulator: {}}
 
@@ -33,17 +33,17 @@ describe('单次任务按钮按真实运行模式显示', () => {
     expect(taskRunAction(overview, {...task, state: 'waiting', pending: false})).toBe('run')
   })
 
-  it('当前单次任务显示停止；其他任务保留执行按钮并由运行状态禁用', () => {
+  it('当前单次任务提供停止操作，其他任务的执行受运行状态限制', () => {
     const running = {...overview, status: 'running' as const, singleTask: {name: task.name, runId: 'run'}}
     expect(taskRunAction(running, {...task, state: 'running'})).toBe('stop')
     expect(taskRunAction(running, {...task, name: 'Dorm'})).toBe('run')
   })
 
-  it('调度器正在执行的任务不显示独立停止按钮', () => {
+  it('调度器正在执行的任务不提供独立停止操作', () => {
     expect(taskRunAction({...overview, status: 'running', schedulerRunning: true}, {...task, state: 'running'})).toBeNull()
   })
 
-  it('未获服务端授权的任务不显示执行按钮', () => {
+  it('未获服务端授权的任务不提供执行操作', () => {
     expect(taskRunAction(overview, {...task, runOnceAllowed: false})).toBeNull()
     expect(taskRunAction(overview, {...task, runOnceAllowed: undefined})).toBeNull()
   })

@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import type { CSSProperties } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { CalendarClock, Clock3, ListTree, Play, RotateCcw, Search, Settings2, Terminal } from 'lucide-react'
+import { CalendarClock, ListTree, Play, RotateCcw, Search, Settings2, Terminal } from 'lucide-react'
 import { api } from '../api/client'
 import type { Config } from '../api/types'
 import { useApp, useConnection } from '../app/context'
@@ -385,13 +385,9 @@ export function TaskConfig() {
 
   const legacyRail = <aside className={`task-config-rail is-${railView}`} aria-label={railView === 'scheduler' ? ui('scheduler.rail') : ui('task.groupNav')}>
     {railView === 'scheduler'
-      ? <div className="task-rail-scheduler">
+      ? <div className="task-rail-scheduler instance-page-rail">
           <SchedulerWidget instance={instance} data={railData} onData={setRailData} action={railToggle}/>
           <section className="rail-schedule" aria-label={ui('scheduler.plan')}>
-            <div className="rail-section-heading">
-              <div><Clock3 size={15}/><span>{ui('scheduler.plan')}</span></div>
-              <span>{railData?.tasks.length ?? 0}</span>
-            </div>
             <TaskQueue instance={instance} data={railData} onData={setRailData}/>
           </section>
         </div>
