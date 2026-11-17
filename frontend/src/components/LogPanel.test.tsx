@@ -30,7 +30,7 @@ describe('LogPanel 日志解析与渲染', () => {
 
     const retained = mergeLogEntries([], entries, true)
     expect(retained).toHaveLength(LOG_ENTRY_LIMIT)
-    expect(retained[0].id).toBe(42_000 - LOG_ENTRY_LIMIT + 1)
+    expect(retained[0]?.id).toBe(42_000 - LOG_ENTRY_LIMIT + 1)
     expect(retained.at(-1)?.id).toBe(42_000)
   })
 
@@ -46,7 +46,7 @@ describe('LogPanel 日志解析与渲染', () => {
 
     const retained = mergeLogEntries(previous, incoming)
     expect(retained).toHaveLength(LOG_ENTRY_LIMIT)
-    expect(retained[0].id).toBe(3)
+    expect(retained[0]?.id).toBe(3)
     expect(retained.at(-1)?.id).toBe(LOG_ENTRY_LIMIT + 2)
     expect(retained.find(entry => entry.id === LOG_ENTRY_LIMIT)?.level).toBe('WARNING')
   })
@@ -176,7 +176,7 @@ describe('LogPanel 日志解析与渲染', () => {
       })
       expect(buffer.reset).toBe(true)
       expect(buffer.entries).toHaveLength(1)
-      expect(buffer.entries[0].id).toBe(10)
+      expect(buffer.entries[0]?.id).toBe(10)
       expect(buffer.cursor).toBe(20)
 
       // 同一动画帧内后续到达的事件继续追加
@@ -202,7 +202,7 @@ describe('LogPanel 日志解析与渲染', () => {
         cursor: entries.length + 1,
       })
       expect(buffer.entries).toHaveLength(LOG_ENTRY_LIMIT)
-      expect(buffer.entries[0].id).toBe(7)
+      expect(buffer.entries[0]?.id).toBe(7)
       expect(buffer.entries.at(-1)?.id).toBe(entries.length + 1)
     })
   })
@@ -304,7 +304,7 @@ describe('快照与逐条事件的独立游标', () => {
     }
     entries = mergeLogEntries(entries, buffer.entries, buffer.reset)
     expect(entries).toHaveLength(103)
-    expect(entries[0].id).toBe(1)
+    expect(entries[0]!.id).toBe(1)
     expect(buffer.cursor).toBe(103)
   })
   it('事件流自身从500回退到2时重置历史与最大游标', () => {

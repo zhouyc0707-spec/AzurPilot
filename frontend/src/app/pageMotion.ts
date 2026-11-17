@@ -5,18 +5,24 @@
 import { useLayoutEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { motionReducedActive, motionSpeedValue } from './motionPrefs'
-import { triggerCardStaggerMotion, replayCardStaggerMotion } from './cardMotion'
+import { triggerCardStaggerMotion } from './cardMotion'
 
-export { triggerCardStaggerMotion, replayCardStaggerMotion } from './cardMotion'
+export { triggerCardStaggerMotion } from './cardMotion'
 
 type NavDirection = 'forward' | 'back' | 'fade'
 
 // 侧栏顶层导航的展示顺序：同深度页面之间用它判断横向方向（向右 = forward）。
-const PRIMARY_NAV_ORDER = ['/updater', '/interface', '/remote', '/configs', '/settings', '/dev']
+const PRIMARY_NAV_ORDER = ['/updater', '/interface', '/remote', '/configs', '/settings']
 // 实例内一级页的展示顺序：与顶层导航一样用于同深度互跳的横向方向判断；
 // 这些页挂在实例路径前缀之下，orderIndex 对本表改用 endsWith 匹配。
 const INSTANCE_PAGE_ORDER = ['/overview', '/resources', '/statistics']
 
+/**
+ * 计算路由路径的层级深度。
+ *
+ * @param pathname 路由路径。
+ * @returns 非空路径段数量。
+ */
 export function routeDepth(pathname: string): number {
   return pathname.split('/').filter(Boolean).length
 }
@@ -53,8 +59,7 @@ const DIRECTION_CLASS: Record<NavDirection, string> = {
 
 const ALL_CLASSES = ['motion-nav-forward', 'motion-nav-back', 'motion-nav-fade']
 
-/** 最近一次播放的转场类；供开发者工具「重播页面转场」使用。 */
-let lastTransitionClass: string | null = null
+let lastTransitionClass: string | undefined
 let cleanupTimer: number | null = null
 
 /** 保留的隐藏页面仍有 DOM，动效只作用于当前可见内容。 */
@@ -70,6 +75,7 @@ function stopTransition(target: HTMLElement) {
 }
 
 function playTransition(target: HTMLElement, className: string) {
+  lastTransitionClass = className
   stopTransition(target)
   void target.offsetWidth
   target.classList.add(className)
@@ -87,7 +93,7 @@ export function replayLastPageTransition() {
   if (lastTransitionClass) {
     playTransition(target, lastTransitionClass)
   }
-  replayCardStaggerMotion()
+  triggerCardStaggerMotion(target)
 }
 
 /**
@@ -111,7 +117,6 @@ export function usePageMotion() {
 
     if (before === null || before === pathname) return
     const className = DIRECTION_CLASS[routeDirection(before, pathname)]
-    lastTransitionClass = className
     playTransition(target, className)
     return () => stopTransition(target)
   }, [location.pathname])

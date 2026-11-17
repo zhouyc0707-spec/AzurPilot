@@ -10,6 +10,8 @@ import type { Family } from './theme'
 export type FamilyCustom = {params: Record<string, number>; palette?: Palette}
 
 const knobsKey = (family: Family) => `azurpilot.custom.${family}`
+/** 大类更名前的旋钮键：modern 首次读取时从原新版 new 家族迁移，避免用户自定义外观丢失。 */
+const legacyKnobsKey = (family: Family) => (family === 'modern' ? 'azurpilot.custom.new' : undefined)
 /** 自定义配色的定义是全局资产，只有「选哪套」按大类各存。 */
 const customPalettesKey = 'azurpilot.custom-palettes'
 
@@ -46,12 +48,26 @@ function readParams(input: Record<string, unknown>) {
   return params
 }
 
-/** 读取某大类的自定义参数与品牌配色：记录损坏或缺键时按默认态（空参数）处理，并把旧版全局旋钮折算进来。 */
+/**
+ * 读取某大类的自定义参数与品牌配色。
+ *
+ * @param family 主题家族。
+ * @returns 合法的自定义参数与可选品牌配色，损坏或缺键时回默认态。
+ */
 export function readFamilyCustom(family: Family): FamilyCustom {
   try {
-    const raw = JSON.parse(localStorage.getItem(knobsKey(family)) ?? '{}') as Record<string, unknown>
-    if (!raw || typeof raw !== 'object') return {params: {}}
-    return {params: readParams(raw), ...(isPalette(raw.palette) ? {palette: raw.palette} : {})}
+    let raw = localStorage.getItem(knobsKey(family))
+    const fallbackKey = legacyKnobsKey(family)
+    if (raw == null && fallbackKey) {
+      raw = localStorage.getItem(fallbackKey)
+      if (raw != null) {
+        localStorage.setItem(knobsKey(family), raw)
+        localStorage.removeItem(fallbackKey)
+      }
+    }
+    const parsed = JSON.parse(raw ?? '{}') as Record<string, unknown>
+    if (!parsed || typeof parsed !== 'object') return {params: {}}
+    return {params: readParams(parsed), ...(isPalette(parsed.palette) ? {palette: parsed.palette} : {})}
   } catch { return {params: {}} }
 }
 
@@ -63,7 +79,14 @@ function save(family: Family, custom: FamilyCustom) {
   } catch { /* 存储不可用时本次会话内仍生效。 */ }
 }
 
-/** 写入该大类动过的参数 token，返回写入的 token 名供调用方记账清理。 */
+/**
+ * 把某大类的自定义参数与品牌配色写入根元素。
+ *
+ * @param root 应用主题的根元素。
+ * @param family 主题家族。
+ * @param mode 最终明暗模式。
+ * @returns 实际写入的 CSS 变量名。
+ */
 export function applyFamilyCustom(root: HTMLElement, family: Family, mode: ResolvedMode): string[] {
   const custom = readFamilyCustom(family)
   const written: string[] = []
@@ -76,7 +99,7 @@ export function applyFamilyCustom(root: HTMLElement, family: Family, mode: Resol
   }
   if (custom.palette) {
     const palettes2 = readCustomPalettes(localStorage.getItem(customPalettesKey))
-    /* 材质与旧版的表面/文字/边框归主题自己管，品牌配色只换强调色一族。 */
+    /* 材质与现代主题的表面/文字/边框归主题自己管，品牌配色只换强调色一族。 */
     const tokens = accentTokens(paletteColors(custom.palette, palettes2, mode), mode)
     for (const [token, value] of Object.entries(tokens)) {
       if (root.style.getPropertyValue(token) !== value) root.style.setProperty(token, value)
@@ -86,7 +109,12 @@ export function applyFamilyCustom(root: HTMLElement, family: Family, mode: Resol
   return written
 }
 
-/** 合并写入参数补丁：undefined 的参数项表示回默认（连同键一起删）；palette 不传则保持现状。 */
+/**
+ * 合并写入某大类的自定义参数补丁。
+ *
+ * @param family 主题家族。
+ * @param patch 参数补丁；undefined 的参数项表示回默认，palette 不传则保持现状。
+ */
 export function writeFamilyCustom(family: Family, patch: {params?: Record<string, number | undefined>; palette?: Palette}) {
   const current = readFamilyCustom(family)
   const merged: Record<string, number> = {...current.params}
@@ -104,9 +132,19 @@ function clearFamilyKnobs(family: Family, keep: (id: string) => boolean) {
   save(family, {params: Object.fromEntries(Object.entries(current.params).filter(([id]) => keep(id))), palette: current.palette})
 }
 
-/** 单个参数回默认；品牌配色保留。 */
+/**
+ * 将单个参数恢复默认值。
+ *
+ * @param family 主题家族。
+ * @param id 参数旋钮标识。
+ */
 export const clearFamilyKnob = (family: Family, id: string) => clearFamilyKnobs(family, kept => kept !== id)
-/** 清掉某一区域的全部自定义参数；品牌配色保留。 */
+/**
+ * 清掉某一区域的全部自定义参数。
+ *
+ * @param family 主题家族。
+ * @param region 要清理的区域。
+ */
 export const clearFamilyRegion = (family: Family, region: RegionId) => clearFamilyKnobs(family, id => !id.startsWith(`${region}.`))
 
 /** 品牌配色回到「跟随主题」：清掉选择，由主题自带配色接管。 */

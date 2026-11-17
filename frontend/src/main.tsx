@@ -7,6 +7,8 @@ import { createRoot } from 'react-dom/client'
 import { createHashRouter, RouterProvider, Navigate } from 'react-router-dom'
 import { App } from './app/App'
 import { AppProvider } from './app/context'
+import { PluginProvider } from './plugins/context'
+import { PluginPage } from './plugins/views'
 import { Home } from './pages/Home'
 import {useApp} from './app/context'
 import {usesLegacyLayout} from './app/theme'
@@ -16,6 +18,7 @@ import { translateCurrentUi } from './i18n'
 import './styles/home.css'
 
 import './styles/shadcn.css'
+import './plugins/styles.css'
 
 // 顶层兜底与路由级兜底共用同一页：路由渲染出错时 React Router 会先接住，
 // 没有 errorElement 就落到它自带的崩溃页（带堆栈），所以两级都要挂上。
@@ -39,18 +42,20 @@ const Announcement = lazy(() => import('./pages/Announcement').then(module => ({
 const InterfaceSettings = lazy(() => import('./pages/InterfaceSettings').then(module => ({default: module.InterfaceSettings})))
 const RemoteAccess = lazy(() => import('./pages/RemoteAccess').then(module => ({default: module.RemoteAccess})))
 const Settings = lazy(() => import('./pages/Settings').then(module => ({default: module.Settings})))
-const DevControls = lazy(() => import('./pages/DevControls').then(module => ({default: module.DevControls})))
 const ConfigManager = lazy(() => import('./pages/ConfigManager').then(module => ({default: module.ConfigManager})))
 const SchedulerProgram = lazy(() => import('./pages/SchedulerProgram').then(module => ({default: module.SchedulerProgram})))
 const FleetAnalysis = lazy(() => import('./pages/FleetAnalysis').then(module => ({default: module.FleetAnalysis})))
 const FleetSwitch = lazy(() => import('./pages/FleetSwitch').then(module => ({default: module.FleetSwitch})))
+const DevControls = lazy(() => import('./pages/DevControls').then(module => ({default: module.DevControls})))
+const Plugins = lazy(() => import('./pages/Plugins').then(module => ({default: module.Plugins})))
 
+function DeveloperEntry() {return usesLegacyLayout(useApp().theme) ? <DevControls/> : <Navigate to="/interface" replace/>}
 function HomeEntry() {return usesLegacyLayout(useApp().theme) ? <Home/> : null}
 const router = createHashRouter([
-  {path: '/', element: <App/>, errorElement: <ErrorPage/>, children: [{index: true, element: <HomeEntry/>}, {path: 'setup', element: <InstanceSetup/>}, {path: 'announcement', element: <Announcement/>}, {path: 'interface', element: <InterfaceSettings/>}, {path: 'remote', element: <RemoteAccess/>}, {path: 'settings', element: <Settings/>}, {path: 'updater', element: <Updater/>}, {path: 'configs', element: <ConfigManager/>}, {path: 'dev', element: <DevControls/>}]},
+  {path: '/', element: <App/>, errorElement: <ErrorPage/>, children: [{index: true, element: <HomeEntry/>}, {path: 'setup', element: <InstanceSetup/>}, {path: 'announcement', element: <Announcement/>}, {path: 'interface', element: <InterfaceSettings/>}, {path: 'remote', element: <RemoteAccess/>}, {path: 'settings', element: <Settings/>}, {path: 'updater', element: <Updater/>}, {path: 'configs', element: <ConfigManager/>}, {path: 'dev', element: <DeveloperEntry/>}, {path: 'plugins', element: <Plugins/>}, {path: 'plugins/:pluginId/:pageId', element: <PluginPage/>}]},
   {path: '/i/:instance', element: <App/>, errorElement: <ErrorPage/>, children: [
     {index: true, element: <Navigate to="overview" replace/>},
-    {path: 'overview', element: <Overview/>}, {path: 'task/:task', element: <TaskConfig/>},
+    {path: 'plugins/:pluginId/:pageId', element: <PluginPage/>}, {path: 'overview', element: <Overview/>}, {path: 'task/:task', element: <TaskConfig/>},
     {path: 'mind-calculator', element: <Navigate to="../task/FleetAnalysis?tab=mind" replace/>},
     {path: 'task/MindCalculator', element: <Navigate to="../FleetAnalysis?tab=mind" relative="path" replace/>},
     {path: 'task/FleetTechnology', element: <Navigate to="../FleetAnalysis?tab=technology" relative="path" replace/>},
@@ -71,6 +76,6 @@ const router = createHashRouter([
 ])
 // 在挂载前应用已保存的主题，避免首屏闪过默认外观。
 void applyTheme(getThemePreference()).then(() => {
-createRoot(document.getElementById('root')!).render(<ErrorBoundary><AppProvider><ThemeWallpaper/><RouterProvider router={router}/></AppProvider></ErrorBoundary>)
+createRoot(document.getElementById('root')!).render(<ErrorBoundary><AppProvider><PluginProvider><ThemeWallpaper/><RouterProvider router={router}/></PluginProvider></AppProvider></ErrorBoundary>)
 
 })

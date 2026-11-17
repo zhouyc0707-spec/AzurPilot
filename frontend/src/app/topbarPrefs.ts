@@ -55,7 +55,7 @@ export const subscribeTopbarMode = modeStore.subscribe
 export const setTopbarMode = modeStore.write
 
 export function cycleTabSize(size: TabSize): TabSize {
-  const next = TAB_SIZE_ORDER[(TAB_SIZE_ORDER.indexOf(size) + 1) % TAB_SIZE_ORDER.length]
+  const next = TAB_SIZE_ORDER[(TAB_SIZE_ORDER.indexOf(size) + 1) % TAB_SIZE_ORDER.length] ?? 'lg'
   sessionTabSize = next
   applyTabSize(next)
   try { localStorage.setItem(TAB_SIZE_KEY, next) } catch { /* 存储不可用时本次会话内仍生效。 */ }
@@ -70,6 +70,11 @@ export function readLastPath(): string {
   try { return localStorage.getItem(LAST_PATH_KEY) ?? '' } catch { return '' }
 }
 
+/**
+ * 写入上次停留的页面路径。
+ *
+ * @param path 下次启动优先恢复的路由路径。
+ */
 export function writeLastPath(path: string) {
   try { localStorage.setItem(LAST_PATH_KEY, path) } catch { /* 存储不可用只影响下次启动的落点。 */ }
 }

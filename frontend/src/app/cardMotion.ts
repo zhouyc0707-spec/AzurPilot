@@ -110,7 +110,8 @@ export function applyCardStaggerMotion(cards: HTMLElement[], sessionId: number) 
   // 已经播放中的卡片需要先取消旧动画；首播无需同步量布局。
   const playing = cards.filter(card => card.classList.contains('motion-card-stagger'))
   for (const card of playing) card.classList.remove('motion-card-stagger')
-  if (playing.length) void playing[0].offsetWidth
+  const firstPlaying = playing[0]
+  if (firstPlaying) void firstPlaying.offsetWidth
 
   cards.forEach((card, index) => {
     // 双重断言绕开 HTMLElement 的类型限制：键名带 __azurpilot 前缀，不会撞上真实属性。
@@ -199,20 +200,4 @@ export function triggerCardStaggerMotion(root: HTMLElement | null) {
     }
     sessionTimeoutId = null
   }, 1500)
-}
-
-/**
- * 供开发者工具「重播页面转场」调用：重新播放当前页面卡片从左上角逐个上浮的效果。
- */
-export function replayCardStaggerMotion() {
-  if (typeof document === 'undefined') return
-  const root = document.getElementById('main-content')
-  if (!root || motionReducedActive()) return
-
-  currentSessionId += 1
-  const sessionId = currentSessionId
-
-  const cards = findTopLevelCards(root)
-  const sorted = sortCardsFromTopLeft(cards, root)
-  applyCardStaggerMotion(sorted, sessionId)
 }

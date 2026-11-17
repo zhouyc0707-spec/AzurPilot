@@ -5,6 +5,10 @@
 import { expect, test, type Page } from '@playwright/test'
 import { mockWebGLRenderer } from './webgl'
 
+test.beforeEach(async ({page}) => {
+  await page.route('https://www.clarity.ms/**', route => route.abort())
+})
+
 /** 元素实际读到的令牌值：把令牌挂到探针元素上，让浏览器把 var() 解析并归一化成与计算样式同样的写法。 */
 async function resolvedFilter(page: Page, token: string) {
   return page.evaluate(tokenName => {
@@ -34,7 +38,7 @@ test('生产构建保留高斯模糊且资源图标能够解码', async ({page})
     await expect(page.locator(selector).first()).toHaveCSS('backdrop-filter', filter)
   }
   await expectFilterFrom('.sidebar', '--theme-surface-filter')
-  await expectFilterFrom('.legacy-page-nav', '--theme-surface-filter')
+  await expectFilterFrom('.modern-page-nav', '--theme-surface-filter')
   // 一级面：面板与资源卡都走一级面滤镜。
   await expectFilterFrom('.monitor-panel', '--theme-surface-filter')
   await expectFilterFrom('.resource-card', '--theme-surface-filter')

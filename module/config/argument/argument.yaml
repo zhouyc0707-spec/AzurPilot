@@ -685,6 +685,10 @@ Campaign:
   UseClearMode: true
   UseFleetLock: true
   UseAutoSearch: true
+  MultipleSortiesCount:
+    value: 0
+    validate: [0, 999]
+    display: hide
   ContinueAfterRestart: false
   Use2xBook: false
   AmbushEvade: true
@@ -696,6 +700,17 @@ OperationHandover:
   Count:
     value: 1
     validate: [0, 999]
+  DailyRunCount:
+    value: 1
+    validate: [0, 999]
+  DailyRunCountUsed:
+    type: stored
+    value: 0
+    display: hide
+  DailyRunCountRecord:
+    type: stored
+    value: 2020-01-01 00:00:00
+    display: hide
   AutoSupplementTime: false
   UseHandoverBook: false
   ConsumeAllBook:
@@ -2006,6 +2021,7 @@ IslandFishery:
   MinTuna: 0
   MinSalmon: 0
   MinRedSeaBream: 0
+  MinBlackPorgy: 0
   MinYellowfinTuna: 50
   MinSeaCucumber: 50
   MinFreshwaterFishMeat: 0
@@ -2015,12 +2031,9 @@ IslandFishery:
     option: [ 0, 1, 2, 3 ]
   DefaultFish:
     value: yellowfin_tuna
-    option: [ shell, catfish, koi_carp, common_carp, shrimp, crayfish, bass, crab, squid, mackerel, tuna, salmon, red_sea_bream, yellowfin_tuna, sea_cucumber ]
+    option: [ shell, catfish, koi_carp, common_carp, shrimp, crayfish, bass, crab, squid, mackerel, tuna, salmon, red_sea_bream, black_porgy, yellowfin_tuna, sea_cucumber ]
   RancherFilter: |-
     WorkerJuu
-  DefaultFish:
-    value: yellowfin_tuna
-    option: [ shell, catfish, koi_carp, common_carp, shrimp, crayfish, bass, crab, squid, mackerel, tuna, salmon, red_sea_bream, yellowfin_tuna, sea_cucumber ]
 IslandMine:
   Positions:
     value: 1
@@ -2780,8 +2793,8 @@ IslandProductionPlanner:
     option: [ true, false ]
   UnlockedFish:
     type: multiselect
-    value: [ shell, catfish, koi_carp, common_carp, shrimp, crayfish, bass, crab, squid, mackerel, tuna, salmon, red_sea_bream, yellowfin_tuna, sea_cucumber ]
-    option: [ shell, catfish, koi_carp, common_carp, shrimp, crayfish, bass, crab, squid, mackerel, tuna, salmon, red_sea_bream, yellowfin_tuna, sea_cucumber ]
+    value: [ shell, catfish, koi_carp, common_carp, shrimp, crayfish, bass, crab, squid, mackerel, tuna, salmon, red_sea_bream, black_porgy, yellowfin_tuna, sea_cucumber ]
+    option: [ shell, catfish, koi_carp, common_carp, shrimp, crayfish, bass, crab, squid, mackerel, tuna, salmon, red_sea_bream, black_porgy, yellowfin_tuna, sea_cucumber ]
   RescanTechnology:
     type: checkbox
     value: true

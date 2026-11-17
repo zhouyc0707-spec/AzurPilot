@@ -52,6 +52,8 @@
 | --- | --- | --- |
 | `auth.login` | password | 当前连接通过认证 |
 | `background.access` | 无 | 已授权会话获取仅用于背景 HTTP 接口的随机令牌，服务重启后失效 |
+| `plugins.list` | 无 | 全局已安装 APU 列表及启用状态 |
+| `plugins.access` | 无 | 已授权会话领取插件 HTTP 管理能力令牌 |
 | `system.ping` | 无 | pong |
 | `schema.get` | 可选 language | 任务菜单、参数定义与指定语言翻译；默认 zh-CN |
 | `instances.list` | 无 | 实例名称、状态、序列号、服务器、currentTask（停止时为 null） |
@@ -129,7 +131,7 @@ API 和核心运行器共用跨进程事务锁。API 只合并请求指定的字
 {"v":1,"type":"request","id":"subscribe-1","method":"events.subscribe","params":{"instance":"alas","topics":["instances","overview","logs"]}}
 ```
 
-支持 `instances`、`overview`、`logs`、`preview`、`emulator`、`stock`。除 `instances` 外必须提供 instance；空 topics 表示取消订阅。订阅会立即生效，并在下一次采样时发送初始快照。实例每两秒采样，总览及模拟器状态每秒采样，内容未变化时不发送。日志、预览及交易事件由独立事件通道唤醒，不使用轮询计时器。预览在总览切换到截图时订阅，不访问 ADB 或额外调用截图后端；`emulator` 只读取 worker 检测快照，页面离开实例系统设置时取消该主题。
+常用主题包括 `instances`、`overview`、`logs`、`preview`、`emulator`、`statistics`、`stock`、`notifications`、`launcher` 和 `plugins`。其中 `instances`、`notifications`、`launcher`、`plugins` 为全局主题，可省略 instance；`launcher` 限本机直连。其余主题须提供有效 instance，空 topics 表示取消订阅。订阅会立即生效，并在下一次采样时发送初始快照。实例每两秒采样，总览及模拟器状态每秒采样，内容未变化时不发送。日志、预览及交易事件由独立事件通道唤醒，不使用轮询计时器。预览在总览切换到截图时订阅，不访问 ADB 或额外调用截图后端；`emulator` 只读取 worker 检测快照，页面离开实例系统设置时取消该主题。
 
 ```json
 {"v":1,"type":"event","topic":"overview","seq":2,"data":{"instance":"alas","status":"stopped","revision":"SHA256","tasks":[],"resources":[],"emulator":{}}}
@@ -142,6 +144,12 @@ API 和核心运行器共用跨进程事务锁。API 只合并请求指定的字
 日志响应包含 `cursor`、`reset`、`entries`。每条日志有单调递增的 `id`、`level` 和纯文本 `text`。服务及页面各保留最多 400 条；客户端游标落后缓冲区或服务重启时返回 reset，客户端替换窗口。清空页面只影响当前视图，不删除服务端日志。完整运行日志仍由原有文件日志系统保存。
 
 单连接控制消息队列最多 32 条，慢客户端以 1013 关闭并重新同步。预览只占一个待发送槽，新帧替换未发送旧帧，事件序号按实际发送顺序分配。网络断开不停止任务。预览/实例读取失败会发送 `subscription.error`，包含 topic、instance、code、message；其他订阅继续运行。
+
+## APU 插件
+
+`plugins.list` 与 `plugins` 订阅无需实例。已认证会话通过 `plugins.access` 领取随机令牌，插件管理 HTTP 请求使用 `X-AzurPilot-Plugin-Token` 请求头。`GET/POST /api/v1/plugins` 用于列表与安装，`PATCH/DELETE /api/v1/plugins/{identifier}` 用于启停与移除，演示模式禁止变更。
+
+`GET /api/v1/plugins/{identifier}/{revision}/{path}` 提供启用插件的静态资源，服务端校验 revision、路径与组件并配置 CSP 隔离。`plugins.storage.get/write` 经 WebSocket 读取或写入存储，实例可省略，插件须已启用且在 manifest 声明 `storage` 权限。宿主 SDK 将获准的 `instance.read`、`scheduler.control` 与存储请求映射到对应业务接口。参数以生成契约为准，包结构、组件槽和消息桥接说明见 [APU 插件 SDK](plugin-sdk/README.md)。
 
 ## 错误码
 

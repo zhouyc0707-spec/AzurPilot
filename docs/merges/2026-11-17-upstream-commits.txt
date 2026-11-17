@@ -1,0 +1,55 @@
+f7c1913272d7f53c1fab4ce0176d9223e4853b0f 2026-11-17T03:55:28+08:00 Merge branch 'dev' of https://github.com/wess09/AzurPilot into dev
+015c950e01d5d15aeb24c134477e6ceff278a537 2026-11-17T03:55:25+08:00 Test
+9af13b8c211eb2de1f8c6c99e540aa4e6919ffd2 2026-11-17T03:41:03+08:00 fix(campaign): remove sortie result count recognition
+53a259da8ddd9a0db49b89d3a76ac60f8edce842 2026-11-17T02:24:46+08:00 fix(handover): coordinate sortie schedules and support war archives
+fe2e9b3c77ee1de5fc3debe78ff35e49b0a8c191 2026-11-17T00:10:10+08:00 feat(campaign): integrate continuous sorties and verify handover unlock
+8d2f63790cc1ea1e56661018681437c755449c6d 2026-11-16T11:04:43Z chore(merge): record master squash ancestry after PR #1509
+487448d8903130fea42ac1f195f1d628cc13368e 2026-11-16T19:03:23+08:00 修复了一些已知问题 (#1509)
+f8cbe8b091a19265b1cbc7cad185c6825003d043 2026-11-16T18:58:56+08:00 fix(statistics): handle mixed meow battle duration samples
+081344deabc95d07af3801ae3b29514fd1b91984 2026-11-16T11:02:11Z feat(island): game-accurate English names, Black Porgy support, EN fishery picture fixes (#1507)
+cc099b42d51cc1a2ac02a3cda10d81a38ee2b805 2026-11-16T11:01:56Z fix(island): find shop items across the whole grid (EN Lavender seeds) and close late "Items Obtained" popups when opening posts (#1506)
+356a4aaea9057ff16f114a749ca964298c5c9f49 2026-11-15T11:29:14Z chore(merge): record master squash ancestry after PR #1505
+c8fe5393d6935b7a951ab4aa5246114c80633bac 2026-11-15T19:28:13+08:00 修复了一些已知问题 (#1505)
+c5754ff38a8b7e921676d7256736ac7de10bfc97 2026-11-15T14:52:31+08:00 Fix aiortc connection state callback during P2P handshake
+2cccff72ee1a458cbfe3ad23be1b93ea1d3b3186 2026-11-15T12:25:12+08:00 Use registry STUN host for direct P2P
+1be38020428b0960c8a3cbae41aa1c62eec21005 2026-11-15T07:46:52+08:00 Add WebRTC P2P tunnel with direct HTTP fallback
+2921444734a05dd8e865c97cc2acef7d53950421 2026-11-15T05:47:05+08:00 Update scan test fixtures for keyword recognition options
+c4d25911feef8d106650680e754ddc26ca8f8407 2026-11-15T05:41:39+08:00 Use supported Apple Silicon runner for macOS CI
+55febd60b158303a238e1451403389ec2ec8582e 2026-11-15T05:38:55+08:00 Fix registry lockfile and release SQLite handles in Windows CI fixtures
+4f81fef03443400eadca045766c3a4eac91104f1 2026-11-15T05:22:51+08:00 Decouple remote entry registration from tunnel readiness and recover stale tunnels
+77b4946ee1f35950f94a7d081df71688dfb3cd29 2026-11-15T05:09:11+08:00 前端
+e0004bcee4a2fa33f86dc6d960919e782b064e1d 2026-11-15T05:03:41+08:00 Keep Cloudflare fallback available when IP listeners are unsupported
+b82ec62af47ea4180c5a57a2df642e0150cb5030 2026-11-15T05:02:05+08:00 Prefer verified public HTTP access with Cloudflare fallback
+8c0e6f5b879498aa5fd2f487fbe14c260bf7e18f 2026-11-14T17:54:21+08:00 perf(storage): 事务进入路径削减，每事务省一次 stat 与至多三条 PRAGMA
+7017c0e014d46a407e36cb623de0edba753f4a2d 2026-11-14T17:18:10+08:00 perf(storage): 钻石委托归档改单行追加，整月读改写改 O(1)
+50de0531dec1cc348011e5224a9d7254b64a47a3 2026-11-14T17:16:30+08:00 perf(storage): 委托收益改增量追加，钻石结算改小列表匹配与单行删除
+823345e9f1dcce9f901b9dbd7b1820f82a1d3200 2026-11-14T17:11:29+08:00 perf(storage): 科研掉落改查尾去重与单行追加，整月读改写改 O(1)
+b1cfd394ac8498b25bb02a9a477a40b1ac4245d4 2026-11-14T17:07:49+08:00 perf(storage): 行动力购买与推送记录改增量写，整月读改写改 O(1) 单行操作
+9703f4fbe5a83a79144c31211a703c3f4ba095a5 2026-11-14T17:04:29+08:00 perf(storage): 塞壬研究装置改计数 UPSERT 与事件单行追加，O(N)→O(1)
+0d05ec1b79ee38a5222d6a3994e5c82a39bcc240 2026-11-14T16:58:16+08:00 perf(storage): 月度读取的子表查询批量化，SQL 往返次数 O(N)→O(1)
+8820cbae108e781e48d49f1381a0a17c1d4a0f6b 2026-11-14T16:54:10+08:00 perf(storage): 最近行动力查询改索引单行读取，复杂度 O(月数×月大小)→O(log N)
+de9fd96a26afa3f38c9731be981b0806f82947b5 2026-11-14T16:51:17+08:00 perf(storage): 凭证快照改增量单行追加，SQL 端按小时抽稀
+a3b7bf5a413a04cfd0e824e5d8293cb2a8dafaa7 2026-11-14T16:38:37+08:00 perf(storage): 耄耋相接计数与样本改增量写，O(N)→O(1)
+805cdd1872c33016df89b326e24ba3af4aeeaec3 2026-11-14T16:26:07+08:00 perf(storage): 黄币/AP 快照改增量单行追加，SQL 端按小时抽稀
+6e691218639c5927856bb5f8cbe282141a095ca6 2026-11-14T16:14:07+08:00 perf(storage): 战斗计数器改单行 UPSERT，递增复杂度 O(N)→O(1)
+de6457bc7a56c47d240925ae6781a691d8689631 2026-11-14T16:06:49+08:00 perf(storage): 连接级 mmap/内存临时表/页缓存，测试环境临时目录可写化
+32e717aa69ab67050f67b28aba15189aead396e7 2026-11-14T15:52:22+08:00 perf(storage): WAL 提交降级 synchronous=NORMAL 提升落库速度
+32838c65e0ee7add949619e47366df44a884c44a 2026-11-14T11:13:26+08:00 refactor(frontend): 全量注释规范化、编译器级类型安全与死代码清理
+44a57b4d17fd17544fc6df5b449e28538412a33b 2026-11-14T10:06:09+08:00 refactor: legacy 主题完全重命名为 modern
+10bf4c958105685c1a5aae532a4b140a6321fb62 2026-11-14T09:01:49+08:00 fix: 补全 LogPanel 入口缺失的 Select 与 LogBufferState 导入
+935426be3776476144784392ca04bc0a3b324447 2026-11-14T09:01:36+08:00 refactor: 拆分 Statistics 与 StatisticsChart 为域子文件
+be367499ae47b2ca70c12aa90c4586cdaab756c5 2026-11-14T08:54:48+08:00 refactor: 拆分 SchedulerProgram 与 MockInstancePreview 为域子文件
+f36ad0f5efdfdaa033e0b559bef2222e260b5f2f 2026-11-14T08:51:36+08:00 refactor: 拆分 LogCardView/LogPanel/ResourceCards 为域子文件
+300f47e271d583b130a06f3bc859c80add19cd9f 2026-11-14T08:25:43+08:00 refactor: WebUI 样式按域拆分为 L2 域文件并支持任务页窄屏折叠
+27c10f48ea18897b68fd5240dfaf26724599def2 2026-11-13T16:50:08Z feat(webui): batch "run now" for waiting tasks in the Task plan (#1494)
+7c449a227bc572ad2b94be5782caae517c4924c1 2026-11-14T00:29:46+08:00 feat: APU 插件系统增加全局样式槽位、插件图标与主题预载
+1b4e69536cad3d96e2b1b524eeb1441a2ec76c65 2026-11-13T22:17:18+08:00 feat: APU 插件包系统
+bf1d10a9d0d67da4f3638f19a245e03d2ddd772f 2026-11-13T03:42:09+08:00 fix(frontend): 经典主题页面背景垫一层极浅暖白
+6a5bba14ff22d2f09196f3f884593c40e4d42307 2026-11-13T03:27:05+08:00 test(frontend): e2e 用例适配改动并补充 ConfigManager 测试
+f042c9b3f75739ff528075534137eed134efbdc1 2026-11-13T03:26:58+08:00 style(frontend): 调整各页面视觉与交互细节
+5875c48c16f2f4b19cbbdb01662d2a669b8de82e 2026-11-13T03:26:51+08:00 refactor(frontend): 经典主题色板对齐组件库中性色并移除自定义色板
+9ab434ad38d92050f4404a91ebf96dd4a4aa7ccb 2026-11-13T03:26:42+08:00 refactor(frontend): 动效偏好收敛为全局减少动效判定
+e3f4c5aedaae1bb41c4cbd13924aa13c40873c60 2026-11-13T03:26:36+08:00 refactor(frontend): 移除开发者模式与调试工具
+18710b7814ca5e46a2c4c2dca8eb1b1373fea9b6 2026-11-13T03:26:26+08:00 refactor(frontend): 系统设置与部署设置统一为任务设置页版式
+fa1aa1de88537a7041e6dffbe3382e7d05f390fa 2026-11-13T03:26:19+08:00 refactor(frontend): 字段保存状态只保留错误提示
+506f3f9605bb74ac2672ed59cc23a48e6052f97c 2026-11-13T03:26:13+08:00 build(frontend): 补交 cn 类名合并工具并修正 .gitignore 的 lib 忽略规则

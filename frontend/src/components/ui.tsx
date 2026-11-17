@@ -9,7 +9,6 @@ import type { ReactNode } from 'react'
 import { AlertCircle, LoaderCircle } from 'lucide-react'
 import type { Status } from '../api/types'
 import { useApp } from '../app/context'
-import { useDevOverride } from '../app/devOverride'
 import { Alert, AlertDescription } from './ui/alert'
 import { Badge } from './ui/badge'
 import { Button } from './ui/button'
@@ -28,12 +27,9 @@ const STATUS_VARIANTS = {
 } as const
 
 /** 实例状态徽章：按 Status 映射颜色与 i18n 文案。 */
-function ModernStatusBadge({status, simulate = false}: {status: Status; simulate?: boolean}) {
+function ModernStatusBadge({status}: {status: Status; simulate?: boolean}) {
   const {ui} = useApp()
-  // 实例列表上的徽章跟随开发者工具的「模拟状态」；控件预览里的徽章不跟随。
-  const override = useDevOverride().status
-  const shown = simulate && override ? override : status
-  return <Badge variant={STATUS_VARIANTS[shown]}>{{running: ui('status.running'), stopped: ui('status.stopped'), error: ui('status.error'), updating: ui('status.updating')}[shown]}</Badge>
+  return <Badge variant={STATUS_VARIANTS[status]}>{{running: ui('status.running'), stopped: ui('status.stopped'), error: ui('status.error'), updating: ui('status.updating')}[status]}</Badge>
 }
 
 /** 空态占位：图标 + 标题 + 可选描述，统一排版。 */
@@ -78,14 +74,14 @@ function ModernModal({title, children, onClose, className = ''}: {title: string;
 }
 
 /** 页面动作组：控件外面包一层容器，挂载位置由调用方决定。 */
-function ModernActionGroup({children}: {children: ReactNode}) {
-  return <div className="flex flex-wrap items-center gap-2.5">{children}</div>
+function ModernActionGroup({children, className = ''}: {children: ReactNode; className?: string}) {
+  return <div className={`flex flex-wrap items-center gap-2.5 ${className}`.trim()}>{children}</div>
 }
 
 /** 页头：左侧标题、右侧动作区。 */
 function ModernPageTitle({title, actions, className = ''}: {title: string; actions?: ReactNode; className?: string}) {
   return <div className={`flex items-center justify-between gap-4.5 ${className}`.trim()}>
-    <h1 aria-label={title} className="text-3xl font-bold tracking-tight">{title}</h1>
+    <h1 aria-label={title} className="page-title-heading text-3xl font-bold tracking-tight">{title}</h1>
     {actions && <ActionGroup>{actions}</ActionGroup>}
   </div>
 }

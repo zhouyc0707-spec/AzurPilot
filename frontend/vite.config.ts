@@ -11,8 +11,8 @@ export default defineConfig(({mode}) => {
   return {
     // 相对构建：远程访问经前缀式反代（/<peer_id>/）加载时，绝对路径 /assets 会打到
     // 隧道服务端而 404/502；相对路径才能命中反代前缀。
-    // 配套要求：deploy.yaml 的 RemoteAccessMode 必须为 ssh——P2P 模式下 <script src>
-    // 不经过隧道页面的 fetch 接管，静态资源无论如何都拿不到。
+    // SSH、Cloudflare 及公网 HTTP 均按实际入口前缀加载资源。P2P 使用独立数据通道，
+    // 页面入口由远程访问服务选择可用的 HTTP 通道，无需在构建阶段限定访问模式。
     base: './',
     plugins: [react(), tailwindcss()],
     server: {

@@ -1,3 +1,5 @@
+/** @fileoverview 全真模拟实例预览的渲染回归：外壳各区域、材质检视器与初始区域。 */
+
 import { describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { AppContext, type AppContextValue } from '../app/context'
@@ -53,14 +55,14 @@ describe('MockInstancePreview (全真模拟实例页预览)', () => {
     expect(html).toContain('ui-knob-control.alpha')
   })
 
-  it('在旧版主题下正确渲染 legacy 外壳与材质选单', () => {
-    const legacyContext = {...context, theme: 'legacy-light'} as unknown as AppContextValue
+  it('在现代主题下正确渲染 modern 外壳与材质选单', () => {
+    const modernContext = {...context, theme: 'modern-light'} as unknown as AppContextValue
     const html = renderToStaticMarkup(
-      <AppContext.Provider value={legacyContext}>
+      <AppContext.Provider value={modernContext}>
         <MockInstancePreview onClose={vi.fn()} />
       </AppContext.Provider>,
     )
-    expect(html).toContain('legacy-shell-preview')
+    expect(html).toContain('modern-shell-preview')
     expect(html).toContain('settings.regionSurface')
     expect(html).toContain('settings.regionPlate')
     expect(html).toContain('settings.regionInset')

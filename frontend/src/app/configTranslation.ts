@@ -13,7 +13,8 @@ export function translateConfig(translations: unknown, key: string): string {
       value = entries[remaining]
       break
     }
-    value = Object.prototype.hasOwnProperty.call(entries, parts[index]) ? entries[parts[index]] : undefined
+    const part = parts[index]
+    value = part !== undefined && Object.prototype.hasOwnProperty.call(entries, part) ? entries[part] : undefined
   }
   return typeof value === 'string' && value !== key
     ? value

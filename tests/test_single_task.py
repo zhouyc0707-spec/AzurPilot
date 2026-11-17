@@ -59,10 +59,13 @@ class FakeTaskManager:
 class SingleTaskControlTests(unittest.TestCase):
     def setUp(self):
         self.manager = FakeTaskManager()
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
         self.data = {'Main': {'Scheduler': {'Command': 'Main', 'Enable': True,
                                             'NextRun': '2099-01-01 00:00:00'}},
                      'General': {}}
         self.configs = SimpleNamespace(
+            directory=Path(directory.name),
             path=Mock(), read=lambda _: (self.data, 'revision'), template=copy.deepcopy(self.data)
         )
         self.stack = ExitStack()

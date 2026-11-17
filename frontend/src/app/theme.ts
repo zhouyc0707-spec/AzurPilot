@@ -3,6 +3,7 @@
  */
 
 import { palettes, paletteColors, paletteTokens, readCustomPalettes, colorModes, fixedColorModes, type Palette, type ColorMode, type ResolvedMode, type CustomPalette } from './palettes'
+import {syncMotionTheme} from './motionPrefs'
 import { applyColorOverrides } from './colorPalette'
 import { applyFamilyCustom } from './themeCustom'
 export type Theme = 'light' | 'dark' | 'minimal' | 'extreme'
@@ -44,7 +45,7 @@ export const supportsBackground = (theme: Theme) => hasMaterialAxis(theme)
 export const showsWallpaper = (theme: Theme, source: 'off' | 'default' | 'url' | 'upload') =>
   supportsBackground(theme) && source !== 'off'
 
-export const THEME_FAMILY = 'new'
+export const THEME_FAMILY = 'modern'
 export type Material = 'glass' | 'plain'
 export const MATERIALS: readonly Material[] = ['glass', 'plain']
 
@@ -55,9 +56,9 @@ export const defaultMaterial = (theme: Theme): Material => (theme === 'light' ||
 export const usesGlassLayer = (theme: Theme, material: Material) => hasMaterialAxis(theme) && material === 'glass'
 
 /** 一级主题大类。家族内切换材质或明暗不改变已存的其他自定义项。 */
-export type Family = 'new' | 'legacy' | 'minimal' | 'extreme'
+export type Family = 'modern' | 'new' | 'legacy' | 'minimal' | 'extreme'
 export const familyOf = (theme: Theme): Family =>
-  theme === 'light' || theme === 'dark' || theme === 'modern-light' || theme === 'modern-dark' ? 'new'
+  theme === 'modern-light' || theme === 'modern-dark' ? 'modern' : theme === 'light' || theme === 'dark' ? 'new'
     : theme === 'legacy-light' || theme === 'legacy-dark' ? 'legacy'
       : theme === 'extreme' ? 'extreme' : 'minimal'
 
@@ -117,11 +118,16 @@ const modeOfTheme = (theme: Theme): ResolvedMode => theme === 'dark' || theme ==
 export function applyCustomLayer() {
   const root = document.documentElement
   for (const token of customTokens) root.style.removeProperty(token)
-  customTokens = applyFamilyCustom(root, familyOf(preference.theme), modeOfTheme(preference.theme))
+  customTokens = usesPaletteOptions(preference.theme) ? [] : applyFamilyCustom(root, familyOf(preference.theme), modeOfTheme(preference.theme))
   if (!usesLegacyLayout(preference.theme)) customTokens.push(...applyColorOverrides(root, preference.resolvedMode))
 }
 export const getThemePreference = () => preference
-/** 订阅主题变更通知，返回退订函数。 */
+/**
+ * 订阅主题变更通知。
+ *
+ * @param listener 主题变化回调。
+ * @returns 取消订阅函数。
+ */
 export const subscribeTheme = (listener: () => void) => {
   listeners.add(listener)
   return () => { listeners.delete(listener) }
@@ -185,19 +191,14 @@ function applyCompactLayout(root: HTMLElement, next: Preference) {
 /** Vite 要求 import 路径静态可分析，所以用显式映射表而不是变量拼接。 */
 const skinLoaders = {
   minimal: async () => {
-    const [base, scheduler, skin] = await Promise.all([
-      import('../styles/modern.css?inline'), import('../styles/scheduler.css?inline'), import('../styles/minimal.css?inline'),
-    ])
-    return {default: base.default + '\n' + scheduler.default + '\n' + skin.default}
+    const [base, skin] = await Promise.all([import('../styles/modern.css?inline'), import('../styles/minimal.css?inline')])
+    return {default: base.default + '\n' + skin.default}
   },
   legacy: async () => {
     const [skin, scheduler] = await Promise.all([import('../styles/legacy.css?inline'), import('../styles/scheduler.css?inline')])
     return {default: skin.default + '\n' + scheduler.default}
   },
-  modern: async () => {
-    const [skin, scheduler] = await Promise.all([import('../styles/modern.css?inline'), import('../styles/scheduler.css?inline')])
-    return {default: skin.default + '\n' + scheduler.default}
-  },
+  modern: () => import('../styles/modern.css?inline'),
 } as const
 type Skin = keyof typeof skinLoaders
 
@@ -216,7 +217,7 @@ export async function applyTheme(next: Preference) {
   if (activeSkin !== skin) {
     const module = await skinLoaders[skin]()
     css = module.default
-    if (skin === 'modern') css = css.replaceAll('legacy-light', 'modern-light').replaceAll('legacy-dark', 'modern-dark')
+
   }
   // 快速切换时只提交最后一次选择，较早返回的请求不能覆盖新主题。
   if (request !== revision) return
@@ -248,6 +249,7 @@ export async function applyTheme(next: Preference) {
   if (hasMaterialAxis(next.theme)) {
     if (root.dataset.material !== next.material) root.dataset.material = next.material
   } else delete root.dataset.material
+  syncMotionTheme()
   const resolvedMode = applyColorMode(next)
   applyCompactLayout(root, next)
   preference = {...next, resolvedMode}

@@ -134,10 +134,10 @@ export function LegacySelect({children, id, className, style, disabled, autoFocu
       event.preventDefault()
       const available = options.map((option, index) => option.disabled ? -1 : index).filter(index => index >= 0)
       if (!available.length) return
-      if (!open) {show(); if (event.key === 'Home') setActive(available[0]); if (event.key === 'End') setActive(available.at(-1)!); return}
+      if (!open) {show(); if (event.key === 'Home') setActive(available[0] ?? 0); if (event.key === 'End') setActive(available.at(-1)!); return}
       const current = available.indexOf(active)
       const next = event.key === 'Home' ? 0 : event.key === 'End' ? available.length - 1 : (current + (event.key === 'ArrowDown' ? 1 : -1) + available.length) % available.length
-      setActive(available[next])
+      setActive(available[next] ?? 0)
       return
     }
     if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey && !event.nativeEvent.isComposing) {
@@ -145,11 +145,11 @@ export function LegacySelect({children, id, className, style, disabled, autoFocu
       const now = Date.now()
       const text = now - search.current.time > 700 ? event.key : search.current.text + event.key
       search.current = {text, time: now}
-      const prefix = new Set(text.toLowerCase()).size === 1 ? text[0] : text
+      const prefix = new Set(text.toLowerCase()).size === 1 ? (text[0] ?? text) : text
       const start = open ? active : selected
       const index = options.findIndex((_, offset) => {
         const option = options[(start + offset + 1 + options.length) % options.length]
-        return !option.disabled && option.label.toLocaleLowerCase().startsWith(prefix.toLocaleLowerCase())
+        return Boolean(option && !option.disabled && option.label.toLocaleLowerCase().startsWith(prefix.toLocaleLowerCase()))
       })
       if (index >= 0) {
         setActive((start + index + 1 + options.length) % options.length)

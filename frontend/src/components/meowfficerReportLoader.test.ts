@@ -116,8 +116,8 @@ describe('报告内容变化', () => {
   })
 
   it('时间和数量不变的天赋修正、评分与操作说明也属于变化', () => {
-    expect(sameMeowfficerReport(report, {...report, cats: [{...report.cats[0], talents: [{name: '侵略如火', kind: 'special'}]}]})).toBe(false)
-    expect(sameMeowfficerReport(report, {...report, cats: [{...report.cats[0], rubrics: [{label: '潜艇猫', score: 88}]}]})).toBe(false)
+    expect(sameMeowfficerReport(report, {...report, cats: [{...report.cats[0]!, talents: [{name: '侵略如火', kind: 'special'}]}]})).toBe(false)
+    expect(sameMeowfficerReport(report, {...report, cats: [{...report.cats[0]!, rubrics: [{label: '潜艇猫', score: 88}]}]})).toBe(false)
     expect(sameMeowfficerReport(report, {...report, lockActions: [{name: '蓝猫', before: true, after: false, target: false, status: 'changed', reason: '解锁已确认'}]})).toBe(false)
   })
 })

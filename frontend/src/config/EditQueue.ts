@@ -6,6 +6,7 @@ import { ApiError } from '../api/client'
 import type { Value } from '../api/types'
 import { translateCurrentUi } from '../i18n'
 
+/** 单个配置字段的草稿与提交状态。 */
 export interface Edit {
   /** 字段上显示的草稿原文，可能未通过校验。 */
   value: Value
@@ -26,13 +27,22 @@ const SAVED_QUIET_MS = 700
 /** 「已保存」显示后的最短停留。 */
 const SAVED_VISIBLE_MS = 800
 /** useSyncExternalStore 的快照：未结算条目与草稿持久化失败的提示文本。 */
-export interface EditSnapshot { edits: Record<string, Edit>; storageError: string }
+export interface EditSnapshot {
+  /** 按字段路径索引的未结算条目。 */
+  edits: Record<string, Edit>
+  /** 草稿持久化失败时展示给用户的提示文本；读写正常时为空字符串。 */
+  storageError: string
+}
 interface Transport {
   ready: () => boolean
   send: (path: string, value: Value) => Promise<unknown>
 }
 
-/** 页面之外的字段队列：先保留输入，再提交；旧响应只能确认自己的输入版本。 */
+/**
+ * 页面之外的字段编辑队列。
+ *
+ * 队列先保留输入再串行提交，旧响应只能确认自己的输入版本。
+ */
 export class EditQueue {
   private state: EditSnapshot = {edits: {}, storageError: ''}
   private listeners = new Set<() => void>()
@@ -63,20 +73,20 @@ export class EditQueue {
     return () => { this.listeners.delete(listener) }
   }
 
-  /** 已保存条目的 path → sequence 表：外部在发起读取前先快照一份，数据到手后传回 reconcile()，只清这批。 */
+  /** 提交刚成功、还在静默期内：算作未到期。 */
+  private idle(edit: Edit) {
+    return edit.status === 'saved' && Date.now() - (edit.readyAt ?? 0) < SAVED_QUIET_MS
+  }
+
+  /** 读取已保存条目的序号，防止读取回执覆盖更新的编辑。 */
   confirmed() {
     return Object.fromEntries(Object.entries(this.state.edits)
       .filter(([, edit]) => edit.status === 'saved').map(([path, edit]) => [path, edit.sequence]))
   }
 
-  /** 提交刚成功、静默期未满：此刻不呈现保存结果。 */
-  private idle(edit: Edit) {
-    return edit.status === 'saved' && Date.now() - (edit.readyAt ?? 0) < SAVED_QUIET_MS
-  }
-
   /** 静默期内的「已保存」不呈现给用户。 */
-  savedVisible(edit: Edit) {
-    return !this.idle(edit)
+  savedVisible(edit?: Edit) {
+    return Boolean(edit && !this.idle(edit))
   }
 
 

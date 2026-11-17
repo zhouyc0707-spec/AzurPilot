@@ -10,6 +10,7 @@ import type { Overview, ScheduledTask } from '../api/types'
 import { useApp, useConnection } from '../app/context'
 import { usesLegacyLayout } from '../app/theme'
 import { editor } from '../config/editors'
+import {RunNowMenu} from './RunNowMenu'
 import { ContextMenu, type ContextMenuItem } from './ContextMenu'
 
 /** NextRun 的出厂默认值：所有任务共用，落在过去，
@@ -126,7 +127,7 @@ export function TaskQueue({instance, data, onData, onNavigate}: {instance: strin
     const origin = documentBox(container)
     for (const body of container.querySelectorAll<HTMLElement>('.rail-queue-body')) {
       bodies.push(body)
-      const state = body.closest('.rail-queue-group')!.className.split(' ').pop()!
+      const state = body.closest('.rail-queue-group')?.className.split(' ').pop() ?? ''
       for (const element of body.querySelectorAll<HTMLElement>('[data-task]')) {
         // 键带上组名：同一条目换组后是另一个节点，位置按组分别记账。
         const key = `${state}/${element.dataset.task}`
@@ -144,7 +145,7 @@ export function TaskQueue({instance, data, onData, onNavigate}: {instance: strin
       if (!next.has(key)) departed.push({key, box})
     }
     for (const element of container.querySelectorAll<HTMLElement>('[data-task]')) {
-      const state = element.closest('.rail-queue-group')!.className.split(' ').pop()!
+      const state = element.closest('.rail-queue-group')?.className.split(' ').pop() ?? ''
       if (!known.current.has(`${state}/${element.dataset.task}`)) arrived.push(element)
     }
     for (const key of next.keys()) known.current.add(key)
@@ -155,7 +156,7 @@ export function TaskQueue({instance, data, onData, onNavigate}: {instance: strin
     if (fresh || matchMedia('(prefers-reduced-motion: reduce)').matches) return
     // 组的挤压缩放：高度骤变会让下方内容瞬移，补间后容器不再跳。
     for (const body of bodies) {
-      const state = body.closest('.rail-queue-group')!.className.split(' ').pop()!
+      const state = body.closest('.rail-queue-group')?.className.split(' ').pop() ?? ''
       const target = body.offsetHeight
       const seen = heights.current.get(state)
       // 动画中途量到的 offsetHeight 是中间值，取两者较大者当起点。
@@ -181,7 +182,7 @@ export function TaskQueue({instance, data, onData, onNavigate}: {instance: strin
     // 移除：把副本送回原位收缩塌陷；它塌掉的就是腾出的那段高度。
     for (const {key} of departed) {
       const source = snapshots.current.get(key)
-      const state = key.split('/')[0]
+      const state = key.split('/')[0] ?? ''
       const body = container.querySelector<HTMLElement>(`.rail-queue-group.${state} .rail-queue-body`)
       const target = heights.current.get(state)
       if (!source || !body || target === undefined) continue
@@ -246,6 +247,7 @@ export function TaskQueue({instance, data, onData, onNavigate}: {instance: strin
         <div className="rail-task-heading">
           <strong>{ui('scheduler.plan')}</strong>
           <span>{tasks.length}</span>
+          <RunNowMenu instance={instance} tasks={tasks}/>
         </div>
         <section className="rail-queue-group tasks" aria-label={ui('scheduler.plan')}>
           <div className="rail-queue-body">

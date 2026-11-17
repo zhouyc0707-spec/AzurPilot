@@ -1,5 +1,5 @@
 /**
- * @fileoverview TaskNavTree 侧栏导航树的渲染契约：分组归属、常驻子菜单与旧版主题行为；
+ * @fileoverview TaskNavTree 侧栏导航树的渲染契约：分组归属、常驻子菜单与现代主题行为；
  * 末尾附 isDesktopDevice 的设备判定测试。
  */
 import { describe, expect, it } from 'vitest'
@@ -52,10 +52,11 @@ function contextWith(theme: Theme): AppContextValue {
     t: (key: string) => mockTranslations[key] ?? key,
     ui: (key, params) => translateUi('zh-CN', key, params),
     notify: () => {},
-    previewEnabled: false,
-    setPreviewEnabled: () => {},
     devMode: false,
     setDevMode: () => {},
+    previewEnabled: false,
+    setPreviewEnabled: () => {},
+
     theme,
     setTheme: () => {},
     material: 'glass',

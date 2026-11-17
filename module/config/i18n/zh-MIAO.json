@@ -1829,6 +1829,10 @@
       "name": "使用自律寻敌喵",
       "help": ""
     },
+    "MultipleSortiesCount": {
+      "name": "连续作战批次喵",
+      "help": "0 表示使用普通作战；大于 0 时，每批最多执行对应次数。实际批次数受游戏上限、剩余次数和停止条件限制。"
+    },
     "ContinueAfterRestart": {
       "name": "重启后继续战斗喵",
       "help": "主线图和活动图任务可用，包括活动每日、SP、紧急委托和三油低耗，默认关闭喵。需同时启用周回与自律寻敌。异常重启回到原关卡地图后开启自律，后续每场正常计算心情，不接管旧战斗或旧结算。地图上下文只保留在本次调度进程内；配置改变或恢复达到上限时回退原流程喵。"
@@ -1856,11 +1860,23 @@
   "OperationHandover": {
     "_info": {
       "name": "作战委托设定喵",
-      "help": ""
+      "help": "支持主线、当前活动和作战档案。主线关卡填 12-4；活动或档案先选择对应活动，再填 D3、T6、SP3 等关卡。未启用委托时会尝试完成一次连续作战，需已解锁关卡并具备出击条件。"
     },
     "Count": {
-      "name": "委托次数",
-      "help": "这次要打多少把喵\n填 0 就是降到最少：这时候要是没开一键消耗委托书，这个任务就直接被关掉喵 (・_・)"
+      "name": "每批委托次数喵",
+      "help": "每次启动一批委托时包含的关卡次数，实际受游戏上限、剩余时间及下次出击时间限制。0 表示只领奖，不按固定次数启动；定时消耗委托书和维护计划仍可启动。没有待领奖委托且两个定时功能都关闭时，会关闭本任务。"
+    },
+    "DailyRunCount": {
+      "name": "普通委托每日启动批次喵",
+      "help": "普通委托每天最多新开多少批，默认 1 批；0 表示不限。只在确认启动成功后计数，到服务器次日 0 点重置。已有委托仍会领奖。每周消耗委托书及维护计划独立执行。"
+    },
+    "DailyRunCountUsed": {
+      "name": "今日普通委托已启动批次喵",
+      "help": ""
+    },
+    "DailyRunCountRecord": {
+      "name": "普通委托计数记录时间喵",
+      "help": ""
     },
     "AutoSupplementTime": {
       "name": "自动补充时间",
@@ -1868,7 +1884,7 @@
     },
     "UseHandoverBook": {
       "name": "使用作战全权委托书",
-      "help": "开打之前把委托书塞满喵！"
+      "help": "关闭：不消耗石油与委托书，只获得大讲堂熟练度；熟练度已满时没有额外收益。开启：投入可用委托书并支付额外石油，获得对应关卡掉落；没有可投入的委托书时推迟，不自动改为熟练度委托。"
     },
     "ConsumeAllBook": {
       "name": "一键把委托书全烧了喵",
@@ -1899,7 +1915,7 @@
     },
     "OilLimit": {
       "name": "石油低于 X 就歇着喵",
-      "help": "油不够就先别跑，等油攒够了再来喵~ (￣ω￣)"
+      "help": "投入委托书时，石油低于该数值则推迟任务。0 表示不检查此门槛。仅熟练度委托不消耗石油；自动解锁所需的连续作战仍检查石油。"
     },
     "ConsumeAllBookRecord": {
       "name": "上次烧书是啥时候喵",
@@ -4988,6 +5004,10 @@
       "name": "红鲷鱼底线",
       "help": ""
     },
+    "MinBlackPorgy": {
+      "name": "黑鲷鱼底线喵",
+      "help": ""
+    },
     "MinYellowfinTuna": {
       "name": "黄鳍金枪鱼底线喵",
       "help": ""
@@ -5028,6 +5048,7 @@
       "tuna": "金枪鱼",
       "salmon": "三文鱼",
       "red_sea_bream": "红鲷鱼",
+      "black_porgy": "黑鲷鱼喵",
       "yellowfin_tuna": "黄鳍金枪鱼",
       "sea_cucumber": "海参"
     },
@@ -7519,6 +7540,7 @@
       "tuna": "金枪鱼",
       "salmon": "三文鱼",
       "red_sea_bream": "红鲷鱼",
+      "black_porgy": "黑鲷鱼",
       "yellowfin_tuna": "黄鳍金枪鱼",
       "sea_cucumber": "海参"
     },
@@ -8225,8 +8247,12 @@
       "EnableRemoteAccess": "启用远程访问",
       "EnableRemoteAccessHelp": "用选择的模式连接远程 WebUI 喵，公网访问前记得设置密码。",
       "RemoteAccessMode": "远程访问模式喵",
-      "RemoteAccessModeHelp": "cloudflare 用 Quick Tunnel 和固定入口喵；auto 优先 P2P/TURN 并回退 SSH；webrtc 优先 P2P；ssh 仅 SSH。",
+      "RemoteAccessModeHelp": "auto/cloudflare 优先公网 HTTP 直连，失败时使用 Cloudflare；webrtc 使用旧 P2P/TURN；ssh 仅 SSH。",
       "CloudflareRegistry": "固定入口服务器喵",
+      "RemoteAccessPort": "直连监听端口",
+      "RemoteAccessPortHelp": "0 复用 HTTP WebUI 端口；HTTPS WebUI 才另用端口加一。修改后重启。",
+      "RemoteAccessPublicPort": "直连外部端口",
+      "RemoteAccessPublicPortHelp": "0 使用监听端口；路由器端口映射不同时填写公网端口。",
       "CloudflareRegistryHelp": "Quick Tunnel 注册、续约和配对用的 HTTPS 地址喵。",
       "SSHUser": "SSH 用户",
       "SSHUserHelp": "远程访问服务登录用户名，留空时启动时生成喵。",

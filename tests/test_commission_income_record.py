@@ -471,6 +471,7 @@ class TestCommissionIncomeScreenshotInvariant(unittest.TestCase):
                 screenshots=["alas/2026-09/a_0.png", "alas/2026-09/a_1.png"],
             )
             entries = database.get_commission_income("alas")
+            database.store.close_all()
 
         self.assertEqual(1, len(entries))
         self.assertEqual(["alas/2026-09/a_0.png"], entries[0]["screenshots"])

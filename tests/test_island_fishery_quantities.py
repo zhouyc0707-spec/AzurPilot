@@ -23,7 +23,7 @@ class FisheryUI:
             IslandFishery_MinFreshwaterFishMeat=0, IslandFishery_MinSaltwaterFishMeat=0,
         )
         for name in ('Bass', 'YellowfinTuna', 'Shell', 'Shrimp', 'Crab', 'Crayfish', 'Squid', 'SeaCucumber',
-                     'KoiCarp', 'Mackerel', 'Catfish', 'CommonCarp', 'Tuna', 'Salmon', 'RedSeaBream'):
+                     'KoiCarp', 'Mackerel', 'Catfish', 'CommonCarp', 'Tuna', 'Salmon', 'RedSeaBream', 'BlackPorgy'):
             setattr(config, 'IslandFishery_Min' + name, 0)
 
         def init_island(fishery, config):
@@ -172,7 +172,7 @@ class IslandFisheryQuantityTests(unittest.TestCase):
         self.assertEqual([product for product, _ in ui.orders], ['shrimp', 'shrimp'])
 
     def test_unknown_default_fish_falls_back_to_yellowfin_tuna(self):
-        ui = FisheryUI(default_posts=1, positions=1, default_fish='black_porgy')
+        ui = FisheryUI(default_posts=1, positions=1, default_fish='not_a_fish')
         ui.run()
         self.assertEqual([product for product, _ in ui.orders], ['yellowfin_tuna'])
 

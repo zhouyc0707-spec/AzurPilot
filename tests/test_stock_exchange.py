@@ -14,6 +14,7 @@ from module.api.protocol import ApiError
 from module.api.stock_exchange_identity import binding_key
 from module.api.stock_exchange_service import StockExchangeService, exchange_url
 from module.scheduler.store import ProgramStore
+from module.persistence.database import close_all
 
 
 class StockExchangeTests(unittest.TestCase):
@@ -21,6 +22,7 @@ class StockExchangeTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name).resolve()
+        self.addCleanup(close_all, self.root / 'config')
         (self.root / 'config').mkdir()
         self.config = self.root / 'config' / 'test.json'
         self.now = datetime.now()

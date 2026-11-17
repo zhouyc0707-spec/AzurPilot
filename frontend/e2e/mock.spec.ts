@@ -125,7 +125,7 @@ for (const theme of ['modern-light', 'legacy-light']) {
         const request = JSON.parse(String(message))
         if (request.method === 'emulator.status') requests.set(request.id, request.params.instance)
         if (request.method === 'config.get') configs.add(request.id)
-        if (request.method === 'events.subscribe') subscriptions.push(request.params.topics)
+        if (request.method === 'events.subscribe' && socket.channel !== 'data') subscriptions.push(request.params.topics)
         if (request.method === 'config.patch') {
           for (const change of request.params.changes) {
             if (change.path === 'Alas.EmulatorManagement.RestartIntervalHours') interval = change.value
@@ -874,7 +874,7 @@ test('舰队科技完整图鉴区分累计里程碑与当前持有', async ({pag
   )).toBe(true)
 })
 
-for (const theme of ['legacy-light', 'legacy-dark']) {
+for (const theme of ['modern-light', 'modern-dark']) {
   test(`舰船表格 ${theme} 输入框保留组件默认样式`, async ({page}) => {
     await page.addInitScript(theme => {
       localStorage.setItem('azurpilot.language', 'zh-CN')
@@ -913,7 +913,7 @@ test('舰船导入按钮打开对应的多文件选择器', async ({page}) => {
 test('暗色资源统计与舰队科技使用可操作的官方控件', async ({page}) => {
   await page.addInitScript(() => {
     localStorage.setItem('azurpilot.language', 'zh-CN')
-    localStorage.setItem('azurpilot.theme', 'legacy-dark')
+    localStorage.setItem('azurpilot.theme', 'modern-dark')
   })
   await page.goto('/#/i/demo-main/task/FleetAnalysis?tab=technology')
   const filter = page.getByRole('button', {name: '未获得', exact: true})
@@ -1423,7 +1423,7 @@ for (const theme of ['modern-light', 'modern-dark'] as const) {
     await page.setViewportSize({width: 550, height: 1000})
     await page.goto('/#/i/demo-main/overview')
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
-    await expect(page.locator('.resource-card')).toHaveCount(4)
+    await expect(page.locator('.resource-card')).toHaveCount(6)
     await expect.poll(() => page.locator('main').evaluate(element => element.clientHeight)).toBeGreaterThan(500)
     await page.getByRole('button', {name: '启动调度器', exact: true}).click()
     try {
@@ -1448,18 +1448,17 @@ for (const theme of ['modern-light', 'modern-dark'] as const) {
       await page.getByRole('button', {name: '打开导航', exact: true}).click()
       await expect(page.locator('.sidebar')).toBeInViewport({ratio: .95})
       await page.getByRole('button', {name: '关闭导航', exact: true}).click()
-      for (const category of ['资源趋势', '大世界趋势', '短猫掉落']) {
+      for (const category of ['资源趋势', '大世界趋势', '大世界掉落']) {
         const picker = page.getByRole('combobox', {name: '统计分类', exact: true})
-        if (await picker.isVisible()) {
-          await picker.click()
-          await page.getByRole('option', {name: category, exact: true}).click()
-        } else {
-          await page.getByRole('tab', {name: category, exact: true}).click()
-        }
-        const content = page.locator(category === '短猫掉落' ? '.statistics-table' : '.chart-canvas').first()
+        await expect(picker).toBeVisible()
+        await picker.click()
+        await page.getByRole('option', {name: category, exact: true}).click()
+        const content = page.locator(category === '大世界掉落' ? '.statistics-table' : '.chart-canvas').first()
         await expect(content).toBeVisible()
-        await content.scrollIntoViewIfNeeded()
-        await expect(content).toBeInViewport({ratio: .95})
+        // 长明细表允许纵向滚动，验收标题与操作可见，趋势图验收完整画布。
+        const visibleTarget = category === '大世界掉落' ? content.getByRole('heading').first() : content
+        await visibleTarget.scrollIntoViewIfNeeded()
+        await expect(visibleTarget).toBeInViewport({ratio: .95})
         await expect.poll(() => page.locator('.statistics-sections').evaluate(element => element.clientHeight)).toBeGreaterThan(200)
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
       }
@@ -1674,7 +1673,8 @@ test('配置字体、多行输入与 YAML 编辑实时保存及主题颜色', as
   await row.scrollIntoViewIfNeeded()
   await page.screenshot({path: 'test-results/yaml-light.png'})
   await page.goto('/#/interface')
-  await page.getByRole('tablist', {name: '明暗', exact: true}).getByRole('tab', {name: '深色', exact: true}).click()
+  await page.getByRole('combobox', {name: '明暗', exact: true}).click()
+  await page.getByRole('option', {name: '深色', exact: true}).click()
   await page.goto('/#/i/demo-main/task/Alas')
   await expect(editor).toBeVisible()
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'modern-dark')
@@ -1887,7 +1887,7 @@ test('系统设置卡片保存部署字段', async ({page}) => {
   expect(await branch.evaluate(input => getComputedStyle(input).height)).toBe('36px')
   await branch.fill('settings-test')
   await branch.blur()
-  await expect(page.locator('#deploy-Branch-status')).toContainText('已保存')
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem('azurpilot.edits.deploy'))).toBeNull()
   await page.reload()
   await expect(branch).toHaveValue('settings-test')
   await page.setViewportSize({width: 390, height: 844})
@@ -1934,7 +1934,7 @@ test('系统设置开关、选项和数字字段可校验并保存', async ({pag
   await control.focus()
   await page.keyboard.press('Space')
   await expect(control).toHaveAttribute('aria-checked', 'true')
-  await expect(page.locator('#deploy-SSLVerify-status')).toContainText('已保存')
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem('azurpilot.edits.deploy'))).toBeNull()
   expect(enabled).toBe(true)
   const select = page.getByRole('combobox', {name: '更新渠道', exact: true})
   await expect(select).toHaveText('legacy')
@@ -1945,7 +1945,7 @@ test('系统设置开关、选项和数字字段可校验并保存', async ({pag
   await expect(page.getByRole('option', {name: 'preview', exact: true})).toBeFocused()
   await page.keyboard.press('Enter')
   await expect(select).toHaveText('preview')
-  await expect(page.locator('#deploy-UpdateChannel-status')).toContainText('已保存')
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem('azurpilot.edits.deploy'))).toBeNull()
   expect(channel).toBe('preview')
   const number = page.getByRole('textbox', {name: '检查间隔', exact: true})
   await number.fill('--')
@@ -1955,7 +1955,7 @@ test('系统设置开关、选项和数字字段可校验并保存', async ({pag
   expect(interval).toBe(60)
   await number.fill('30')
   await number.blur()
-  await expect(page.locator('#deploy-CheckUpdateInterval-status')).toContainText('已保存')
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem('azurpilot.edits.deploy'))).toBeNull()
   expect(interval).toBe(30)
   await page.reload()
   await expect(control).toHaveAttribute('aria-checked', 'true')
@@ -1986,12 +1986,12 @@ test('启动开关在系统设置页保存，点名称不切换且保存后不�
   await page.locator('.config-groups .field-name').nth(1).click()
   await expect(remember).toHaveAttribute('aria-checked', before!)
   await remember.check()
-  await expect(page.locator('#instance-remember-status')).toHaveText('已保存')
-  // 状态标记消失即队列已丢弃该条目，此后开关仍须显示服务端的值。
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem('azurpilot.edits.startup:demo-main'))).toBeNull()
+  // 草稿清空即队列已丢弃该条目，此后开关仍须显示服务端的值；保存提示已随状态条移除。
   await expect(page.locator('#instance-remember-status')).toHaveCount(0)
   await expect(remember).toHaveAttribute('aria-checked', 'true')
   await autoRun.check()
-  await expect(page.locator('#instance-startup-status')).toHaveText('已保存')
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem('azurpilot.edits.startup:demo-main'))).toBeNull()
 })
 
 test('仪表盘设置只含仪表盘项：无启动开关、无删除实例', async ({page}) => {
@@ -2029,14 +2029,15 @@ test('Logo 旁更新提示、完整提交分页、获取和应用更新', async 
   await expect(page.getByRole('button', {name: '下一页'})).toBeDisabled()
   await page.getByRole('button', {name: '获取更新', exact: true}).click()
   await page.getByRole('button', {name: '更新', exact: true}).click()
-  await expect(page.locator('.primary-nav .tiny-dot')).toHaveCount(0)
+  await expect(page.locator('.primary-nav a[href="#/updater"] .tiny-dot')).toHaveCount(0)
   await expect(page.locator('.update-summary')).toContainText('已是最新')
   await expect(page.locator('.commit-pagination')).toContainText('1–50 / 123')
   await page.setViewportSize({width: 390, height: 844})
   await page.screenshot({path: 'test-results/updater-mobile.png', fullPage: true})
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await page.goto('/#/interface')
-  await page.getByRole('tablist', {name: '明暗', exact: true}).getByRole('tab', {name: '深色', exact: true}).click()
+  await page.getByRole('combobox', {name: '明暗', exact: true}).click()
+  await page.getByRole('option', {name: '深色', exact: true}).click()
   await page.goto('/#/updater')
   await page.screenshot({path: 'test-results/updater-dark.png'})
 })
@@ -2466,7 +2467,7 @@ test('商店配置只显示官源购买设置并保留普通过滤器保存', as
   const filter = page.locator('[id="EventShop.EventShop.CustomFilter"]')
   await filter.fill('Cube > Oil')
   await filter.blur()
-  await expect(page.locator('[id="EventShop.EventShop.CustomFilter-status"]')).toContainText('已保存')
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem('azurpilot.edits.config:demo-main'))).toBeNull()
   await page.reload()
   await expect(filter).toHaveValue('Cube > Oil')
   await page.setViewportSize({width: 390, height: 844})
@@ -2498,7 +2499,7 @@ for (const theme of ['modern-light', 'modern-dark'] as const) {
     await expect(editor).toHaveCSS('border-top-width', '1px')
     await editor.screenshot({path: `test-results/filter-${theme}.png`})
     await filter.blur()
-    await expect(page.locator('[id="EventShop.EventShop.CustomFilter-status"]')).toContainText('已保存')
+    await expect.poll(() => page.evaluate(() => sessionStorage.getItem('azurpilot.edits.config:demo-main'))).toBeNull()
     await page.reload()
     await expect(filter).toHaveText(value)
   })

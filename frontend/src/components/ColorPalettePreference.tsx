@@ -111,7 +111,7 @@ function ColorPaletteModal({mode, onMode, onClose}: {mode: ResolvedMode; onMode:
             key={slot.token}
             slot={slot}
             override={overrides[slot.token]}
-            fallback={fallback[slot.token]}
+            fallback={fallback[slot.token] ?? '#000000'}
             onPick={value => commit(slot.token, value)}
             onReset={() => commit(slot.token, null)}
           />)}

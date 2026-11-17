@@ -10,7 +10,7 @@ import { api } from '../api/client'
 import type { Parameters } from '../api/generated'
 import { useApp, useConnection } from '../app/context'
 import { INSTANCE_NAME_PATTERN } from '../app/instanceName'
-import { motionReducedActive, subscribeMotionPrefs } from '../app/motionPrefs'
+import { motionReducedActive } from '../app/motionPrefs'
 import { Select } from '../components/FormControls'
 import { ProjectLogo } from '../components/ProjectLogo'
 import { useIsDesktop } from '../app/useIsDesktop'
@@ -95,11 +95,7 @@ function WindowsSetupArtwork({name, play, fallback}: {name: string; play: boolea
     else animation.playSegments([0, 120], true)
     const media = window.matchMedia('(prefers-reduced-motion: reduce)')
     media.addEventListener('change', stopIfReduced)
-    const unsubscribe = subscribeMotionPrefs(stopIfReduced)
-    return () => {
-      media.removeEventListener('change', stopIfReduced)
-      unsubscribe()
-    }
+    return () => { media.removeEventListener('change', stopIfReduced) }
   }, [animation, play])
 
   return failed ? fallback : <div className="setup-illustration-art" ref={container}/>
@@ -224,10 +220,10 @@ export function InstanceSetup() {
     }}))
   }
 
-  const current = STEPS[step - 1]
-  const artwork = current.artwork
-  const choosingLanguage = current.title === 'WelcomeSelectLanguage'
-  const importing = current.title === 'ImportTitle'
+  const current = STEPS[Math.max(0, Math.min(step - 1, STEPS.length - 1))]
+  const artwork = current?.artwork ?? 'language'
+  const choosingLanguage = current?.title === 'WelcomeSelectLanguage'
+  const importing = current?.title === 'ImportTitle'
   const packageField = <label>
     {t('Emulator.PackageName.name')}
     <Select value={packageName} onChange={event => choosePackage(event.target.value)}>
@@ -268,8 +264,8 @@ export function InstanceSetup() {
     <form className="setup-form" onSubmit={submit}>
       <div className="setup-step-content form-stack" key={step}>
         <header>
-          <h1 id="instance-setup-title">{label(current.title)}</h1>
-          <p className="muted">{label(current.hint)}</p>
+          <h1 id="instance-setup-title">{label(current?.title ?? 'WelcomeTitle')}</h1>
+          <p className="muted">{label(current?.hint ?? 'WelcomeHint')}</p>
         </header>
         {importing && <div className="setup-import">
           <FileUp size={22} aria-hidden="true"/>

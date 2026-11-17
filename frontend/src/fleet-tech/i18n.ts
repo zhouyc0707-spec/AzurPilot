@@ -1,5 +1,5 @@
 /**
- * @fileoverview 舰队科技页的多语言文案表、四语言字典与 Wiki 阵营顺序常量。
+ * @fileoverview 舰队科技页的多语言文案表、五语言字典与 Wiki 阵营顺序常量。
  */
 
 import type {Language} from '../i18n'
@@ -157,7 +157,11 @@ const messages = {
 } as const
 type Key = keyof typeof messages
 type Dictionary = {[K in Key as `fleetTech.${K}`]: string}
-const dictionary = (index: number) => Object.fromEntries(Object.entries(messages).map(([key, values]) => [`fleetTech.${key}`, values[index] ?? values[0]])) as Dictionary
+const dictionary = (index: number) => Object.fromEntries(Object.entries(messages).flatMap(([key, values]) => {
+  const text = values[index] ?? values[0]
+  return text === undefined ? [] : [[`fleetTech.${key}`, text]]
+})) as Dictionary
+/** 五个语言的文案字典：键带 `fleetTech.` 前缀，由 messages 按语言下标生成。 */
 export const fleetTechZhCN = dictionary(0), fleetTechZhTW = dictionary(1), fleetTechEnUS = dictionary(2), fleetTechJaJP = dictionary(3), fleetTechZhMiao = dictionary(4)
 /** 按语言取一条舰队科技文案；找不到该 key 时原样返回 key。 */
 export function translateFleetTech(language: Language, key: string) {

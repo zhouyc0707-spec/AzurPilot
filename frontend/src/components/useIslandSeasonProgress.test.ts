@@ -16,7 +16,7 @@ it('仅当前页每5秒读取一次，关闭页面停止请求', async () => {
   const {result, rerender, unmount} = renderHook(({enabled}) => useIslandSeasonProgress('demo', 'winter', enabled), {initialProps: {enabled: false}})
   expect(state.request).not.toHaveBeenCalled()
   await act(async () => rerender({enabled: true}))
-  expect(result.current.data?.items[0].stock).toBe(300)
+  expect(result.current.data?.items[0]?.stock).toBe(300)
   expect(state.request).toHaveBeenCalledWith('island.seasonProgress', {instance: 'demo'})
   await act(async () => vi.advanceTimersByTimeAsync(5000))
   expect(state.request).toHaveBeenCalledTimes(2)
@@ -42,7 +42,7 @@ it('季节不一致不显示旧季库存，连接断开不冒充当前记录', a
   state.request.mockResolvedValue(snapshot(300))
   const {result, rerender} = renderHook(({season}) => useIslandSeasonProgress('demo', season, true), {initialProps: {season: 'winter'}})
   await act(async () => {})
-  expect(result.current.data?.items[0].stock).toBe(300)
+  expect(result.current.data?.items[0]?.stock).toBe(300)
   await act(async () => rerender({season: 'spring'}))
   expect(result.current.data).toBeUndefined()
   state.connection = 'offline'

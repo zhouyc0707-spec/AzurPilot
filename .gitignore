@@ -26,6 +26,7 @@ config/*.json
 !config/template*.json
 
 config/scheduler/
+/config/plugins/
 config/stock-exchange/
 # 统计运行环境：描述、冻结标记、救援副本与迁移令牌，设备绑定，不入库
 config/opsi_secure/
@@ -94,6 +95,7 @@ node_modules/
 frontend/test-results/
 frontend/playwright-report/
 frontend/*.tsbuildinfo
+/frontend/plugin-src
 
 .github/scripts/node_modules/
 .github/scripts/package-lock.json
@@ -112,8 +114,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+/lib/
+/lib64/
 parts/
 sdist/
 var/

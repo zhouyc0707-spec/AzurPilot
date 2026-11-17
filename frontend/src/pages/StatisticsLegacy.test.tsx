@@ -37,7 +37,7 @@ function report(): LegacyStatisticsReport {
     meowLoot: {month: '2026-11', isCurrentMonth: true, availableMonths: [], lastRecord: '-', columns: [], rows: []},
     shipExp: {hasData: false, columns: [], rows: []},
     commission: {
-      periods: {day: {...summary, cards: [{...summary.cards[0], total: 30, count: 1}]}, week: summary, month: summary},
+      periods: {day: {...summary, cards: [{...summary.cards[0]!, total: 30, count: 1}]}, week: summary, month: summary},
       gemSuccess: {successes: 13, completed: 20, rate: 65},
       recent: {pageSize: 10, maxPages: 7, limit: null, rows: Array.from({length: 65}, (_, index) => ({
         time: `11-11 12:${String(index).padStart(2, '0')}`,
@@ -105,7 +105,7 @@ describe('旧主题军事委托记录', () => {
 
   it('大量记录保留首尾和附近页码，末页始终可达', async () => {
     const data = report()
-    const firstRow = data.commission.recent.rows[0]
+    const firstRow = data.commission.recent.rows[0]!
     data.commission.recent.rows = Array.from({length: 360}, (_, index) => ({...firstRow, name: `委托${index}`}))
     data.commission.recent.maxPages = 36
     const {container} = openReport(data)
@@ -120,7 +120,7 @@ describe('旧主题军事委托记录', () => {
   it('空分母显示占位符，空钻石筛选可回到全部记录', async () => {
     const data = report()
     data.commission.gemSuccess = {successes: 0, completed: 0, rate: null}
-    data.commission.recent.rows = data.commission.recent.rows.filter(row => row.items[0].name !== 'Gem')
+    data.commission.recent.rows = data.commission.recent.rows.filter(row => row.items[0]!.name !== 'Gem')
     const {container} = openReport(data)
     await screen.findByText('本月委托记录')
     const success = container.querySelector('.legacy-commission-gem-success')!

@@ -30,7 +30,7 @@ export const colorGroupLabels: Record<ColorGroup, UiKey> = {
 export type ColorSlot = {token: `--${string}`; group: ColorGroup; label: UiKey}
 
 /** 挂牌顺序即界面顺序：先面、再字、再强调，其余按使用频率排开。 */
-export const colorSlots: ColorSlot[] = [
+export const colorSlots: readonly ColorSlot[] = [
   {token: '--bg', group: 'surface', label: 'settings.colorSlotBg'},
   {token: '--surface', group: 'surface', label: 'settings.colorSlotSurface'},
   {token: '--surface-muted', group: 'surface', label: 'settings.colorSlotSurfaceMuted'},
@@ -98,7 +98,12 @@ export const isColorToken = (token: string) => slotTokens.has(token)
 /** 只接受实色：`#rgb` 输入时补齐成六位，其余（rgb()/color-mix/named）一律判为无效。 */
 export const colorHex = /^#[\da-f]{6}$/i
 
-/** 计算样式可能给 `rgb(…)`，统一折成六位十六进制；认不出就返回 undefined。 */
+/**
+ * 把浏览器计算色值折算成六位十六进制。
+ *
+ * @param raw 浏览器返回的 CSS 颜色值。
+ * @returns 认可的十六进制颜色，无法解析时返回 undefined。
+ */
 export function toHexColor(raw: string): string | undefined {
   const value = raw.trim()
   if (colorHex.test(value)) return value.toLowerCase()
@@ -140,12 +145,25 @@ function save(overrides: ColorOverrides) {
   } catch { /* 存储不可用时仍允许本次会话内改色。 */ }
 }
 
-/** 读单个槽位在指定明暗下的覆盖值，未覆盖返回 undefined。 */
+/**
+ * 读单个槽位在指定明暗下的覆盖值。
+ *
+ * @param mode 明暗模式。
+ * @param token CSS 变量名。
+ * @returns 覆盖值，未覆盖时返回 undefined。
+ */
 export function readColorOverride(mode: ResolvedMode, token: string): string | undefined {
   return readColorOverrides()[mode]?.[token]
 }
 
-/** 写入或清除单个槽位；value 传 null 表示还原。返回写入后的覆盖表。 */
+/**
+ * 写入或清除单个槽位。
+ *
+ * @param mode 明暗模式。
+ * @param token CSS 变量名。
+ * @param value 覆盖值；传 null 表示还原。
+ * @returns 写入后的覆盖表。
+ */
 export function writeColorOverride(mode: ResolvedMode, token: string, value: string | null): ColorOverrides {
   const overrides = readColorOverrides()
   if (!isColorToken(token)) return overrides
@@ -159,7 +177,12 @@ export function writeColorOverride(mode: ResolvedMode, token: string, value: str
   return next
 }
 
-/** 清空覆盖并返回清空后的覆盖表：不传 mode 清掉全部明暗，传了只清该明暗。 */
+/**
+ * 清空覆盖并返回清空后的覆盖表。
+ *
+ * @param mode 明暗模式；不传时清掉全部明暗。
+ * @returns 清理后的覆盖表。
+ */
 export function clearColorOverrides(mode?: ResolvedMode): ColorOverrides {
   const overrides = readColorOverrides()
   const next: ColorOverrides = {...overrides}
@@ -169,12 +192,23 @@ export function clearColorOverrides(mode?: ResolvedMode): ColorOverrides {
   return next
 }
 
-/** 指定明暗下已覆盖的槽位数：直读存储，需要新鲜值时由调用方用版本号或弹窗开合强制重算。 */
+/**
+ * 统计指定明暗下已覆盖的槽位数。
+ *
+ * @param mode 明暗模式。
+ * @returns 覆盖槽位数量。
+ */
 export function countColorOverrides(mode: ResolvedMode): number {
   return Object.keys(readColorOverrides()[mode] ?? {}).length
 }
 
-/** 把该明暗的覆盖写进根节点，返回写过的令牌名供调用方记账清理。 */
+/**
+ * 把该明暗的覆盖写进根节点。
+ *
+ * @param root 应用主题的根元素。
+ * @param mode 明暗模式。
+ * @returns 实际写过的 CSS 变量名。
+ */
 export function applyColorOverrides(root: HTMLElement, mode: ResolvedMode): string[] {
   const entries = readColorOverrides()[mode] ?? {}
   const written: string[] = []

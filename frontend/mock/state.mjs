@@ -1112,6 +1112,7 @@ export function createMockState({ empty = false } = {}) {
       case 'background.access': return {token: 'mock-background-token'}
       case 'skinCollection.updates':
         return {entries: [], checkedAt: new Date().toISOString(), error: null, pendingNames: [], refreshing: false}
+      case 'plugins.list': return []
       case 'announcement.get':
         return {
           announcementId: 'mock-announcement-v2',
@@ -1167,7 +1168,7 @@ export function createMockState({ empty = false } = {}) {
           url: 'https://github.com/wess09/AzurPilot'
         }
       case 'events.subscribe':
-        if (params.topics.some(topic => !['instances', 'notifications', 'launcher'].includes(topic)) && !name) fail('INVALID_PARAMS', '订阅此主题需要指定实例')
+        if (params.topics.some(topic => !['instances', 'notifications', 'launcher', 'plugins'].includes(topic)) && !name) fail('INVALID_PARAMS', '订阅此主题需要指定实例')
         return { topics: params.topics, instance: name ?? null }
       case 'background.gallery.list': return []
       case 'background.gallery.open': return { path: 'cache/background/library' }

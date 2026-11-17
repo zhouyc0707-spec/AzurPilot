@@ -56,6 +56,7 @@ export function AppProvider({children}: {children: ReactNode}) {
   const [previewEnabled, setPreviewEnabled] = useState(false)
   const [devMode, setDevMode] = useState(readDevMode)
   const {theme, palette, colorMode, resolvedMode, customPalettes, compactRailSide, compactRailWidth, material} = useSyncExternalStore(subscribeTheme, getThemePreference, getThemePreference)
+  useEffect(() => {writeDevMode(devMode)}, [devMode])
   const [language, setLanguage] = useState<Language>(initialLanguage)
   const [toast, setToast] = useState<{message: string; error: boolean}>()
   /* 这八个 setter 只在调用时读 getThemePreference()，不依赖渲染期的值。 */
@@ -76,7 +77,6 @@ export function AppProvider({children}: {children: ReactNode}) {
     void applyTheme({...current, customPalettes: current.customPalettes.filter(item => item.id !== id), palette: current.palette === id ? 'ocean' : current.palette})
       .catch(() => setToast({message: '配色删除失败，请重试。', error: true}))
   }, [])
-  useEffect(() => { writeDevMode(devMode) }, [devMode])
   useEffect(() => {
     document.documentElement.lang = localeForLanguage(language)
     try { localStorage.setItem('azurpilot.language', language) } catch { /* 存储不可用时仅当前会话生效。 */ }

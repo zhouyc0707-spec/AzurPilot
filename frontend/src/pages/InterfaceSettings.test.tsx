@@ -10,7 +10,7 @@ vi.mock('react', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react')>()
   return {
     ...actual,
-    useSyncExternalStore: (_subscribe: any, getSnapshot: any, getServerSnapshot?: any) => {
+    useSyncExternalStore: <T,>(_subscribe: (onStoreChange: () => void) => () => void, getSnapshot: () => T, getServerSnapshot?: () => T): T => {
       return (getServerSnapshot ?? getSnapshot)()
     },
   }
@@ -35,10 +35,11 @@ function createMockContext(theme: AppContextValue['theme']): AppContextValue {
     t: (key: string) => key,
     ui: (key, params) => translateUi('zh-CN', key, params),
     notify: () => {},
-    previewEnabled: false,
-    setPreviewEnabled: () => {},
     devMode: false,
     setDevMode: () => {},
+    previewEnabled: false,
+    setPreviewEnabled: () => {},
+
     theme,
     setTheme: () => {},
     material: 'glass',
@@ -65,22 +66,17 @@ describe('界面设置页外观显示逻辑', () => {
   it('现代主题下显示当前主题，简约主题下显示配色和主题模式', () => {
     expect(render('modern-light')).toContain('现代')
     const minimal = render('minimal')
-    expect(minimal).toContain('简约')
+    expect(minimal).toContain('界面主题')
     expect(minimal).toContain('主题模式')
-    expect(minimal).toContain('配色方案')
     expect(minimal).not.toContain('自定义背景')
-    expect(minimal).not.toContain('材质细节')
   })
 
   it('浅色与深色主题下均渲染材质与明暗分段控件', () => {
     for (const theme of ['modern-light', 'modern-dark'] as const) {
       const html = render(theme)
+      // 材质/明暗改回下拉选择（与配置页同款 Select），选项文案在展开时才挂载，这里断言字段标签。
       expect(html).toContain('材质')
-      expect(html).toContain('玻璃')
-      expect(html).toContain('普通')
       expect(html).toContain('明暗')
-      expect(html).toContain('浅色')
-      expect(html).toContain('深色')
     }
   })
 
@@ -94,21 +90,19 @@ describe('界面设置页外观显示逻辑', () => {
   })
 })
 
-// 自定义外观：一级界面只有主题色与二级菜单入口；七个区域的滑块在二级菜单里。
+// 新版跟随上游精简设置，旧版保留主题色与材质入口。
 describe('自定义外观块', () => {
-  it('玻璃材质下渲染主题色与材质细节入口', () => {
+  it('新版玻璃材质保持上游精简设置', () => {
     for (const theme of ['modern-light', 'modern-dark'] as const) {
       const html = render(theme, 'glass')
-      expect(html, theme).toContain('主题色')
-      expect(html, theme).toContain('材质细节')
-      // 滑块不再摊在一级界面：区域名与滑块都要等二级菜单打开才出现。
-      expect(html, theme).not.toContain('一级面')
+      expect(html, theme).not.toContain('主题色')
+      expect(html, theme).not.toContain('材质细节')
       expect(html, theme).not.toContain('type="range"')
     }
   })
 
-  it('普通材质不给材质细节入口（没有材质层，调了看不见）', () => {
-    const plain = render('modern-light', 'plain')
+  it('旧版普通材质保留主题色且关闭材质细节入口', () => {
+    const plain = render('legacy-light', 'plain')
     expect(plain).not.toContain('材质细节')
     expect(plain).toContain('主题色')
   })

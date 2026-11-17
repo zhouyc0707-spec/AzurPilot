@@ -1,6 +1,5 @@
+/** 通用类名合并与异步等待辅助。 */
 import {clsx, type ClassValue} from 'clsx'
 import {twMerge} from 'tailwind-merge'
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
-}
+export function cn(...inputs: ClassValue[]) {return twMerge(clsx(inputs))}
+export const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))

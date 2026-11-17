@@ -23,7 +23,7 @@ const {state} = vi.hoisted(() => ({
 
 // ui 桩成「键名 + 错误参数」直出：断言直接对键名，不必维护一份翻译表。
 vi.mock('../app/context', () => ({
-  useApp: () => ({t: (key: string) => key, ui: (key: string, params?: {error?: string}) => `${key}${params?.error ?? ''}`}),
+  useApp: () => ({theme: 'legacy-light', t: (key: string) => key, ui: (key: string, params?: {error?: string}) => `${key}${params?.error ?? ''}`}),
 }))
 vi.mock('../app/useDeploySettings', () => ({useDeploySettings: () => state}))
 vi.mock('../components/LauncherCard', () => ({LauncherCard: () => null}))
@@ -67,7 +67,7 @@ describe('系统设置保存状态', () => {
     fireEvent.change(input, {target: {value: '--'}})
     fireEvent.blur(input)
     expect(state.queue.change).toHaveBeenCalledOnce()
-    const [path, text, payload, error] = state.queue.change.mock.calls[0]
+    const [path, text, payload, error] = state.queue.change.mock.calls[0]!
     expect([path, text, payload]).toEqual(['Port', '--', '--'])
     expect(error).toEqual(expect.any(String))
   })

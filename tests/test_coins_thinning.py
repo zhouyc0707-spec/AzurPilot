@@ -1,6 +1,11 @@
 """运行期完整保留凭证点，离线显式抽稀时验证上游边界。"""
 from datetime import datetime, timedelta
 from unittest.mock import patch
+import tempfile
+import unittest
+from pathlib import Path
+
+from module.persistence.database import close_all
 
 import pytest
 
@@ -162,3 +167,89 @@ def test_thin_yellow_coin_snapshots_keeps_recent_hours():
     kept = thin_yellow_coin_snapshots(recent + older)
 
     assert [item['yellow_coin'] for item in kept] == [30, 55, 3, 2, 1]
+
+
+class IncrementalYellowCoinThinningTests(unittest.TestCase):
+    def test_invalid_timestamp_interrupts_hour_group_without_losing_valid_points(self):
+        directory = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(directory.cleanup)
+        db = Cl1Database(Path(directory.name) / 'config' / 'azurpilot.db')
+        self.addCleanup(close_all)
+        now = datetime.now()
+        old = (now - timedelta(hours=8)).replace(minute=0, second=0, microsecond=0)
+        seeded = [
+            {'ts': old.isoformat(), 'yellow_coin': 10, 'source': 't'},
+            {'ts': (old + timedelta(seconds=30)).isoformat() + 'junk', 'yellow_coin': 20, 'source': 't'},
+            {'ts': (old + timedelta(minutes=1)).isoformat(), 'yellow_coin': 30, 'source': 't'},
+        ]
+        month = now.strftime('%Y-%m')
+        db.save_stats('t', month, {'yellow_coin_snapshots': seeded})
+        db.add_yellow_coin_snapshot('t', 40, source='t', observed_at=now)
+        expected = thin_yellow_coin_snapshots(
+            seeded + [{'ts': now.isoformat(), 'yellow_coin': 40, 'source': 't'}])
+        self.assertEqual(db.get_stats('t', month)['yellow_coin_snapshots'], expected)
+        self.assertEqual(len(expected), 4)
+
+    def test_incremental_append_thinning_matches_document_path(self):
+        """增量追加的 SQL 抽稀结果必须与文档路径的 thin_snapshots 一致。"""
+        directory = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(directory.cleanup)
+        db = Cl1Database(Path(directory.name) / 'config' / 'azurpilot.db')
+        self.addCleanup(close_all)
+        now = datetime.now()
+        month = now.strftime('%Y-%m')
+        # 乱序插入跨三个历史小时，覆盖「按时间排序取每小时末条」的等价性。
+        seeded = [
+            {'ts': (now - timedelta(hours=hours, minutes=minute)).isoformat(),
+             'yellow_coin': hours * 100 + minute, 'source': 't'}
+            for hours in (9, 8, 7) for minute in (40, 10, 25)
+        ]
+        db.save_stats('t', month, {'yellow_coin_snapshots': seeded})
+        db.add_yellow_coin_snapshot('t', 99, source='t', observed_at=now)
+        db.add_yellow_coin_snapshot('t', 99, source='t', observed_at=now)
+        expected = thin_yellow_coin_snapshots(
+            seeded + [{'ts': now.isoformat(), 'yellow_coin': 99, 'source': 't'}])
+        # 存活集合必须一致；增量路径保持插入序，不承担文档路径写后的 ts 重排。
+        actual = db.get_stats('t', month)['yellow_coin_snapshots']
+        by_ts = lambda item: item['ts']
+        self.assertEqual(sorted(actual, key=by_ts), sorted(expected, key=by_ts))
+
+    def test_incremental_meow_samples_keep_newest_100(self):
+        directory = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(directory.cleanup)
+        db = Cl1Database(Path(directory.name) / 'config' / 'azurpilot.db')
+        self.addCleanup(close_all)
+        for index in range(105):
+            db.add_meow_round_time('t', float(index), 3)
+        month = datetime.now().strftime('%Y-%m')
+        samples = db.get_stats('t', month)
+        self.assertEqual([item['duration'] for item in samples['meow_round_times']],
+                         [float(index) for index in range(5, 105)])
+        self.assertEqual(samples['meow_hazard_stats']['3']['round_times'],
+                         [float(index) for index in range(5, 105)])
+
+
+class IncrementalCoinsThinningTests(unittest.TestCase):
+    def test_incremental_append_thinning_matches_document_path(self):
+        """凭证快照的 SQL 抽稀结果必须与文档路径的 thin_coins_snapshots 一致。"""
+        directory = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(directory.cleanup)
+        db = Cl1Database(Path(directory.name) / 'config' / 'azurpilot.db')
+        self.addCleanup(close_all)
+        now = datetime.now()
+        month = now.strftime('%Y-%m')
+        # 乱序插入跨三个历史小时，覆盖「按时间排序取每小时末条」的等价性。
+        seeded = [
+            {'ts': (now - timedelta(hours=hours, minutes=minute)).isoformat(),
+             'yellow_coins': hours * 100 + minute, 'purple_coins': hours, 'source': 't'}
+            for hours in (100, 90, 80) for minute in (40, 10, 25)
+        ]
+        db.save_stats('t', month, {'coins_snapshots': seeded})
+        db.add_coins_snapshot('t', 99, 1, source='t', observed_at=now)
+        db.add_coins_snapshot('t', 99, 1, source='t', observed_at=now)
+        expected = thin_coins_snapshots(
+            seeded + [{'ts': now.isoformat(), 'yellow_coins': 99, 'purple_coins': 1, 'source': 't'}])
+        # 存活集合必须一致；增量路径保持插入序，不承担文档路径写后的 ts 重排。
+        actual = db.get_stats('t', month)['coins_snapshots']
+        by_ts = lambda item: item['ts']
+        self.assertEqual(sorted(actual, key=by_ts), sorted(expected, key=by_ts))

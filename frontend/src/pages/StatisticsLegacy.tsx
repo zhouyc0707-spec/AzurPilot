@@ -329,7 +329,7 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
   const cumulativeIndexes = data.meowLoot.columns.flatMap((column, index) =>
     column.key === 'Gui.Stat.HazardLevel' || MEOW_CUMULATIVE_KEYS.has(column.key) ? [index] : [])
   const cumulativeRows = data.meowLoot.cumulativeRows
-    ?? data.meowLoot.rows.map(row => cumulativeIndexes.map(index => row[index]))
+    ?? data.meowLoot.rows.map(row => cumulativeIndexes.map(index => row[index] ?? ''))
 
   return <div className="statistics-legacy legacy-stats">
     <h1 className="legacy-sr-title">{ui('nav.statistics')}</h1>
@@ -363,8 +363,8 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
         <div className="legacy-stat-summary">
           <span className="legacy-summary-item">{text('Gui.Stat.MeowLastRecord', {value: data.meowLoot.lastRecord})}</span>
         </div>
-        <LegacyTable columns={monthlyIndexes.map(index => data.meowLoot.columns[index])}
-          rows={data.meowLoot.rows.map(row => monthlyIndexes.map(index => row[index]))} text={text}
+        <LegacyTable columns={monthlyIndexes.map(index => data.meowLoot.columns[index]!)}
+          rows={data.meowLoot.rows.map(row => monthlyIndexes.map(index => row[index] ?? ''))} text={text}
           renderColumnAction={column => {
             const item = MEOW_SCREENSHOT_ITEMS[column.key as keyof typeof MEOW_SCREENSHOT_ITEMS]
             if (!item) return null
@@ -485,7 +485,7 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
           {recentRows.length > pageSize && <div className="legacy-pagination">
             <button type="button" className="legacy-button" disabled={!currentPage} onClick={() => setRecentPage(Math.max(0, currentPage - 1))}>上一页</button>
             {pageIndexes.map((page, index) => <Fragment key={page}>
-              {index > 0 && page > pageIndexes[index - 1] + 1 && <span aria-hidden="true">…</span>}
+              {index > 0 && page > (pageIndexes[index - 1] ?? -1) + 1 && <span aria-hidden="true">…</span>}
               <button type="button"
                 className={`legacy-button${page === currentPage ? ' is-primary' : ''}`}
                 aria-pressed={page === currentPage}
@@ -514,7 +514,7 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
       <section className="legacy-month-cumulative" aria-label="历月累计收获">
         <h3 className="legacy-month-heading">历月累计收获</h3>
         <p className="legacy-month-note">汇总所有已记录月份，按侵蚀等级分别统计，不随查看月份变化。</p>
-        <LegacyTable columns={cumulativeIndexes.map(index => data.meowLoot.columns[index])}
+        <LegacyTable columns={cumulativeIndexes.map(index => data.meowLoot.columns[index]!)}
           rows={cumulativeRows} text={text}/>
       </section>
     </Modal>}

@@ -38,6 +38,7 @@ Quick Tunnel 配对新增 `remote.pair.create`、`remote.pair.status`、`remote.
 - 配置实例管理：白名单校验、跨进程事务内校验合并、导入/备份（`config_service.py`）。
 - 运行状态适配：实例列表、总览、增量日志、被动截图、资源时间线（`runtime_service.py`）。
 - 分类统计、指挥喵评分报告、更新器接口（`statistics_service.py`、`meowfficer_service.py`、`update_service.py`）。
+- APU 插件包管理、资源与存储能力校验（`plugin_service.py`），以及 manifest 定义与校验（`plugin_manifest.py`）。
 - 共享运行时生命周期：启动更新调度/OCR/远程访问/自动运行实例，退出时逐项回收（`lifecycle.py`）。
 - 前端静态资源服务：MIME 修正、SPA 回退、缓存策略（`static.py`）。
 - 生成前端 API 契约的工具入口在 `dev_tools/export_api_schema.py`（见第 15 节）。
@@ -67,6 +68,8 @@ module/api/
 ├── resource_service.py    资源账本、收支聚合、库存与明细分页的只读查询
 ├── meowfficer_service.py  指挥喵评分报告的只读读取与清理
 ├── update_service.py      Git 快照/提交历史与后台 fetch/apply（模块级单例）
+├── plugin_service.py      APU 安装、启停、移除、资源及受控存储
+├── plugin_manifest.py     插件 manifest、权限与主题组件槽定义
 ├── static.py              FrontendFiles：MIME 修正、SPA 回退、隐藏文件拦截
 └── lifecycle.py           与界面会话无关的启动/清理（startup/clearup）
 ```
@@ -121,7 +124,7 @@ Windows 目录打开需确认对应 Explorer 窗口已前置；已经打开但�
 | --- | --- | --- |
 | `authorized` | bool | 本机直连或密码为空时直接为 True |
 | `queue` | `asyncio.Queue(32)` | 发送队列；慢客户端塞满即以 1013 断开 |
-| `subscription` | SubscribeParams | 当前订阅集合；除 `instances` 外必须带有效 instance |
+| `subscription` | SubscribeParams | 当前订阅集合；`instances`、`notifications`、`launcher`、`plugins` 为全局主题，其余主题须带有效 instance |
 | `sequence` / `cache` | int / dict | 事件 seq 计数器；各 topic 的内容指纹（未变化不推送） |
 | `responses` | OrderedDict(128) | 已用请求 ID 窗口，重复 ID 报 `DUPLICATE_REQUEST` |
 | `log_cursor` | int | 日志增量游标，与 `RuntimeService.logs_cache` 配合 |
@@ -131,6 +134,10 @@ Windows 目录打开需确认对应 Explorer 窗口已前置；已经打开但�
 ### Method 与 Router（router.py）
 
 `Method(params, handler, mutates)` 三元组是注册表的最小单元：`params` 是 pydantic 严格模型，`mutates` 标记写操作。`Router.methods` 是全部方法的**显式白名单**——`dispatch` 只查表，未知方法返回 `METHOD_NOT_FOUND`，从结构上排除了「把 WS 方法名分发成任意 Python 属性调用」的漏洞（有专门回归：`test_unknown_method_does_not_dispatch_python_attributes`）。跨服务协调的写操作（删除实例、设置页）直接作为 Router 方法实现，因为它们要同时动 `ProcessManager`、日志缓存、preview hub 或部署配置，不属于任何单一服务。
+
+### PluginService（plugin_service.py）
+
+`plugins.list` 读取已安装 APU，`plugins` 主题同步全局插件状态，两者均无需实例。`plugins.access` 在已认证 WebSocket 会话中领取独立管理令牌，HTTP 包管理沿用认证及演示模式保护。插件静态资源按启用状态、revision 和组件校验并使用 CSP 隔离；存储接口还校验 manifest 的 `storage` 权限。HTTP 路由与 SDK 入口见 [前端插件 API](../../../frontend/API.md#apu-插件)。
 
 ### ConfigService（config_service.py）
 

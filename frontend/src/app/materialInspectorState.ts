@@ -5,8 +5,11 @@
  */
 
 interface MaterialInspectorState {
+  /** 检视器当前是否打开。 */
   open: boolean
+  /** 检视器是否停靠在主画布旁。 */
   docked: boolean
+   /** 检视器是否只显示标题栏。 */
   minimized: boolean
 }
 
@@ -55,8 +58,6 @@ function publish(patch: Partial<MaterialInspectorState>) {
   listeners.forEach(l => l())
 }
 
-/** 打开检视器；打开时一并退出最小化，保证内容可见。 */
-export const openMaterialInspector = () => publish({ open: true, minimized: false })
 /** 关闭检视器，不影响停靠与最小化状态。 */
 export const closeMaterialInspector = () => publish({ open: false })
 /** 在悬浮与停靠之间切换；停靠选择落盘，刷新后保留。 */
@@ -65,3 +66,6 @@ export const toggleMaterialInspectorDocked = () => publish({ docked: !state.dock
 export const toggleMaterialInspectorMinimized = () => publish({ minimized: !state.minimized })
 /** 直接设置最小化与否。 */
 export const setMaterialInspectorMinimized = (minimized: boolean) => publish({ minimized })
+
+/** 旧版打开材质检视器时恢复完整内容。 */
+export const openMaterialInspector = () => publish({open: true, minimized: false})

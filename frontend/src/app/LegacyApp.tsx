@@ -146,7 +146,7 @@ export function LegacyApp() {
   usePageMotion()
   useSystemNotifications()
   const current = instances.find(item => item.name === instance)
-  const base = instance ? `/i/${instance}` : ''
+  const base = instance ? `/i/${encodeURIComponent(instance)}` : ''
   const taskMatch = location.pathname.match(/\/task\/([^/]+)/)
   const currentTask = taskMatch ? taskMatch[1] : null
   /* 图形调度是系统编辑页，不伪装成可执行的游戏任务。 */

@@ -4,10 +4,10 @@ import {webSocketTransport} from '../src/api/generated'
 const {frameBytes} = webSocketTransport
 type JsonRoute = {
   channel: string | null
-  close: (options?: Parameters<WebSocketRoute['close']>[0]) => void
   connectToServer: () => JsonRoute
   onMessage: (receive: (message: string) => void) => void
   send: (message: string | Buffer) => void
+  close: WebSocketRoute['close']
 }
 
 // 用完整 JSON 编写测试拦截器，测试改写后的消息仍按真实协议收发。
@@ -17,7 +17,7 @@ export function routeRpc(page: Page, handler: (socket: JsonRoute) => void) {
     function wrap(route: WebSocketRoute): JsonRoute {
       return {
         channel,
-        close: options => { void route.close(options) },
+        close: options => route.close(options),
         connectToServer: () => wrap(route.connectToServer()),
         onMessage(receive) {
           let parts: Buffer[] = []

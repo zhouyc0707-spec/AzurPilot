@@ -43,6 +43,13 @@ describe('WebUI i18n', () => {
     expect(translateUi('en-US', 'instance.deletePrompt', {name: 'alas-main'})).toBe('Delete alas-main? Its configuration will remain in backup.')
   })
 
+  it('translates the config page instance count summary', () => {
+    expect(translateUi('zh-CN', 'config.count', {count: 2})).toBe('共 2 个实例')
+    expect(translateUi('zh-TW', 'config.count', {count: 2})).toBe('共 2 個實例')
+    expect(translateUi('en-US', 'config.count', {count: 2})).toBe('Instances: 2')
+    expect(translateUi('ja-JP', 'config.count', {count: 2})).toBe('インスタンス: 2件')
+  })
+
   it('offers a different delete-instance warning at each of the three confirmations', () => {
     const prompts = ['instance.deletePrompt', 'instance.deletePrompt2', 'instance.deletePrompt3'] as const
     for (const language of ['zh-CN', 'zh-TW', 'en-US', 'ja-JP', 'zh-MIAO'] as const) {

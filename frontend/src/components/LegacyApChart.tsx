@@ -96,7 +96,7 @@ export function LegacyApChart({instance, series, onRefresh, refreshing = false}:
     return {
       now: points.at(-1)?.apNow,
       current: points.at(-1)?.value,
-      change: values.length >= 2 ? values[values.length - 1] - values[0] : 0,
+      change: values.length >= 2 ? (values.at(-1) ?? 0) - (values[0] ?? 0) : 0,
       max: values.length ? Math.max(...values) : undefined,
       min: values.length ? Math.min(...values) : undefined,
       avg: values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : undefined,
@@ -154,7 +154,7 @@ export function LegacyApChart({instance, series, onRefresh, refreshing = false}:
       if (index === 0) {
         // 逐段涨跌着色：第三个维度是相对前一点的变化量
         const data = points.map((point, position) => {
-          const previous = position === 0 ? point.value : points[position - 1].value
+          const previous = position === 0 ? point.value : points[position - 1]?.value ?? point.value
           return [point.time, point.value, point.value - previous]
         })
         return {
@@ -223,7 +223,7 @@ export function LegacyApChart({instance, series, onRefresh, refreshing = false}:
     setVisible(current => current.map((value, position) => position === index ? !value : value))
   }
 
-  const rangeLabel = RANGES.find(item => item.value === range)?.key ?? RANGES[1].key
+  const rangeLabel = RANGES.find(item => item.value === range)?.key ?? RANGES[1]!.key
 
   return <div className="legacy-ap-panel">
     <div className="legacy-ap-head">

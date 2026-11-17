@@ -49,7 +49,7 @@ describe('浏览器任务通知', () => {
 
   it('已授权时显示标题正文，点击聚焦页面并关闭通知', () => {
     push()
-    const notification = FakeNotification.instances[0]
+    const notification = FakeNotification.instances[0]!
     expect(notification.title).toBe('任务结束')
     expect(notification.options).toMatchObject({body: '正文', icon: '/azurpilot.webp'})
     expect(FakeNotification.requestPermission).not.toHaveBeenCalled()
@@ -73,7 +73,7 @@ describe('浏览器任务通知', () => {
     page.dispatchEvent(new Event('pointerdown'))
     expect(FakeNotification.requestPermission).toHaveBeenCalledOnce()
     expect(FakeNotification.instances).toHaveLength(1)
-    expect(FakeNotification.instances[0].title).toBe('第一条')
+    expect(FakeNotification.instances[0]!.title).toBe('第一条')
   })
 
   it('已拒绝时既不申请权限也不弹通知', () => {

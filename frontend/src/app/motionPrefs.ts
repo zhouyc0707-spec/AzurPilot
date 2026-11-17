@@ -33,6 +33,7 @@ const browser = typeof window !== 'undefined' && typeof document !== 'undefined'
 function apply(next: MotionPrefs) {
   if (!browser) return
   const root = document.documentElement
+  if (!root.dataset.theme?.startsWith('legacy-')) return
   if (next.speed === 2) root.style.removeProperty('--motion-speed')
   else root.style.setProperty('--motion-speed', String(next.speed))
   if (next.strength === 'strong') root.dataset.motionStrength = 'strong'
@@ -56,11 +57,11 @@ export const readMotionPrefs = () => state
 
 /** 简约主题、系统开关和调试模拟均可关闭装饰动效。 */
 export const motionReducedActive = () =>
-  !browser || state.reduced || document.documentElement.dataset.theme === 'minimal' ||
+  !browser || (document.documentElement.dataset.theme?.startsWith('legacy-') && state.reduced) || document.documentElement.dataset.theme === 'minimal' ||
   (typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches)
 
 /** 当前速度倍率：用于 JS 侧计时（如转场类清除定时器）。 */
-export const motionSpeedValue = () => state.speed
+export const motionSpeedValue = () => browser && document.documentElement.dataset.theme?.startsWith('legacy-') ? state.speed : 2
 
 function commit(next: MotionPrefs) {
   state = next
@@ -78,3 +79,13 @@ export const setMotionStrength = (strength: MotionStrength) => commit({...state,
 export const setMotionReduced = (reduced: boolean) => commit({...state, reduced})
 /** 恢复默认偏好：倍率 2（0.5×）、力度强、关闭减弱模拟。 */
 export const resetMotionPrefs = () => commit({speed: 2, strength: 'strong', reduced: false})
+
+/** 切换新旧界面时，旧版调试偏好只作用于旧版，现代界面使用上游默认动效。 */
+export function syncMotionTheme() {
+  if (!browser) return
+  if (document.documentElement.dataset.theme?.startsWith('legacy-')) {apply(state); return}
+  const root = document.documentElement
+  root.style.removeProperty('--motion-speed')
+  delete root.dataset.motionStrength
+  delete root.dataset.motionReduced
+}

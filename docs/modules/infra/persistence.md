@@ -187,7 +187,9 @@ flowchart TD
 
 ## 12. 并发与线程模型
 
-业务总库使用进程内受控长连接栈：`BusinessDatabase.session()` 按线程借用并复用连接，事务仍在操作边界开启与提交。连接在借用前重置 `query_only` 与 `busy_timeout`，建连时启用外键、WAL、`synchronous=FULL`；普通写操作使用 `BEGIN IMMEDIATE` 串行化整段读改写。借出时校验 `(st_dev, st_ino)`，库文件被替换或删除后自动重建；`close_all()` 统一关闭句柄，替换或删除总库文件前必须调用（Windows 上否则会 `PermissionError`）。`connect()`/`ClosingConnection` 保留为一次性只读或迁移用途。
+业务总库使用进程内受控长连接栈，`BusinessDatabase.session()` 按线程借用并复用连接，事务在操作边界开启与提交。连接在借用前重置 `query_only` 与 `busy_timeout`，建连时启用外键、WAL 和 `synchronous=NORMAL`。WAL 的 NORMAL 同步级别沿用上游，进程崩溃仍保持事务一致性，断电可能丢失最近已提交记录。普通写操作使用 `BEGIN IMMEDIATE` 串行化整段读改写。借出时校验 `(st_dev, st_ino)`，库文件被替换或删除后自动重建。`close_all()` 统一关闭句柄，替换或删除总库文件前必须调用，Windows 上持有句柄会导致 `PermissionError`。`connect()` / `ClosingConnection` 供一次性只读或迁移使用。
+
+2026-11-17用户确认采用上游 NORMAL 同步等级以减少写盘等待。WAL NORMAL 保证事务一致性，断电或操作系统崩溃时可能回退最近已提交的事务。交付前使用 SQLite 在线备份保留升级前记录。[SQLite同步等级说明](https://www.sqlite.org/pragma.html#pragma_synchronous)
 
 观测、资源快照与收支流水走进程内 `WriteQueue`：普通调度当前观测以 `latest` 按配置目录及业务键只保留最新值，资源账本每次库存复核、快照和流水以 `append` 保序提交，保留中间收支与采样时间。确认交易继续使用原 `event_key` 幂等。队列复用 `async_executor` 单线程，攒满窗口或条数后一次事务落库，事务失败后整批重新排队，其他目录独立处理，跨目录键互不覆盖。进程退出和任务边界先等待已有后台任务，再尝试排空写队列；显式刷新只有确认落库成功才返回成功，持续失败明确记录尚待写入条数。强制终止进程可能丢失尚在内存中的待写项。认证历史链、调度文档、迁移、备份与切片恢复仍同步写入。只读查询走延迟事务，不抢写锁；`farming_aggregates` 的重算先在只读事务内聚合，再用短写事务复核明细水位后提交，绝不写入陈旧缓存。
 
