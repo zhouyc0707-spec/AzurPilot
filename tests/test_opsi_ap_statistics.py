@@ -187,5 +187,77 @@ class LegacyActionPointChartTests(unittest.TestCase):
         self.assertEqual(self.rows, self.original)
 
 
+class LegacyCoinsChartTests(unittest.TestCase):
+    def coins_data(self, rows, times):
+        from module.webui.app_stat_action_point import ActionPointStatisticsMixin
+
+        view = ActionPointStatisticsMixin.__new__(ActionPointStatisticsMixin)
+        chart_points = [{'dt': datetime.fromisoformat(stamp)} for stamp in times]
+        return view._build_ap_chart_coins_data(
+            rows, chart_points, 'line', purple_color='#a0a', yellow_color='#aa0',
+        )
+
+    def test_latest_yellow_sample_preserves_independent_purple_observation(self):
+        rows = [
+            {'ts': '2026-11-17T10:08:44', 'yellow_coins': 51656, 'purple_coins': 130, 'source': 'shop'},
+            {'ts': '2026-11-17T10:13:26', 'yellow_coins': 53221, 'source': 'OpsiHazard1Leveling'},
+        ]
+        original = deepcopy(rows)
+        result = self.coins_data(rows, ['2026-11-17T10:13:26'])
+        self.assertEqual(result['yellow_coins_list'], [53221])
+        self.assertEqual(result['purple_coins_list'], [130])
+        self.assertEqual(result['coins_sources_list'], ['OpsiHazard1Leveling'])
+        self.assertIn('53,221', result['stats_html'])
+        self.assertIn('130', result['stats_html'])
+        self.assertEqual(rows, original)
+
+    def test_partial_and_invalid_values_are_skipped_per_currency(self):
+        rows = [
+            {'ts': '2026-11-17T10:00:00', 'yellow_coins': 100, 'purple_coins': 8},
+            {'ts': '2026-11-17T10:01:00', 'yellow_coins': 200, 'purple_coins': None},
+            {'ts': '2026-11-17T10:02:00', 'yellow_coins': None, 'purple_coins': 9},
+            {'ts': '2026-11-17T10:03:00', 'yellow_coins': 'invalid', 'purple_coins': ''},
+            {'ts': '2026-11-17T10:04:00', 'yellow_coins': float('inf'), 'purple_coins': None},
+            {'ts': 'invalid', 'yellow_coins': 999, 'purple_coins': 999},
+        ]
+        result = self.coins_data(rows, ['2026-11-17T10:04:00'])
+        self.assertEqual(result['yellow_coins_list'], [200])
+        self.assertEqual(result['purple_coins_list'], [9])
+
+    def test_yellow_zero_is_measured_and_missing_purple_has_no_curve(self):
+        result = self.coins_data(
+            [{'ts': '2026-11-17T10:00:00', 'yellow_coins': 0, 'source': 'dashboard'}],
+            ['2026-11-17T10:00:00'],
+        )
+        self.assertEqual(result['yellow_coins_list'], [0])
+        self.assertEqual(result['purple_coins_list'], [])
+        self.assertTrue(result['show_coins'])
+        self.assertIn('黄币', result['stats_html'])
+        self.assertNotIn('紫币', result['stats_html'])
+
+    def test_purple_only_observation_does_not_create_zero_yellow(self):
+        result = self.coins_data(
+            [{'ts': '2026-11-17T10:00:00', 'purple_coins': 12, 'source': 'shop'}],
+            ['2026-11-17T10:00:00'],
+        )
+        self.assertEqual(result['yellow_coins_list'], [])
+        self.assertEqual(result['purple_coins_list'], [12])
+        self.assertEqual(result['coins_sources_list'], ['shop'])
+        self.assertNotIn('黄币', result['stats_html'])
+        self.assertIn('紫币', result['stats_html'])
+
+    def test_unsorted_partial_observations_keep_existing_nearest_alignment(self):
+        rows = [
+            {'ts': '2026-11-17T10:02:00', 'yellow_coins': 200},
+            {'ts': '2026-11-17T10:00:00', 'yellow_coins': 100, 'purple_coins': 8},
+            {'ts': '2026-11-17T10:01:00', 'purple_coins': 9},
+        ]
+        original = deepcopy(rows)
+        result = self.coins_data(rows, ['2026-11-17T10:00:00', '2026-11-17T10:01:00', '2026-11-17T10:02:00'])
+        self.assertEqual(result['yellow_coins_list'], [100, 200, 200])
+        self.assertEqual(result['purple_coins_list'], [8, 9, 9])
+        self.assertEqual(rows, original)
+
+
 if __name__ == '__main__':
     unittest.main()

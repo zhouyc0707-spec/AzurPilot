@@ -442,31 +442,33 @@ class ActionPointStatisticsMixin(WebUIMixinBase):
         legend_html = ""
 
         if coins_timeline and chart_points and current_view in ("line", "detail"):
-            coins_raw_points = []
+            yellow_raw_points = []
+            purple_raw_points = []
             for pt in coins_timeline:
                 ts_raw = pt.get("ts", "")
                 try:
                     dt = datetime.fromisoformat(ts_raw)
                 except Exception:
                     continue
-                coins_raw_points.append(
-                    {
-                        "dt": dt,
-                        "yellow_coins": int(pt.get("yellow_coins", 0)),
-                        "purple_coins": int(pt["purple_coins"])
-                        if "purple_coins" in pt
-                        else None,
-                        "source": pt.get("source", "-"),
-                    }
-                )
+                # 黄币独立采样时只参与黄币曲线，紫币沿用自身的实测时间线。
+                for key, points in (("yellow_coins", yellow_raw_points), ("purple_coins", purple_raw_points)):
+                    value = pt.get(key)
+                    if value is None:
+                        continue
+                    try:
+                        value = int(value)
+                    except (TypeError, ValueError, OverflowError):
+                        continue
+                    points.append({"dt": dt, key: value, "source": pt.get("source", "-")})
 
-            if coins_raw_points:
-                for coins_point in self._align_ap_timeline(
-                    coins_raw_points, chart_points
-                ):
-                    yellow_coins_list.append(coins_point["yellow_coins"])
-                    purple_coins_list.append(coins_point["purple_coins"])
-                    coins_sources_list.append(coins_point.get("source", "-"))
+            if yellow_raw_points or purple_raw_points:
+                yellow_points = (self._align_ap_timeline(yellow_raw_points, chart_points)
+                                 if yellow_raw_points else [])
+                purple_points = (self._align_ap_timeline(purple_raw_points, chart_points)
+                                 if purple_raw_points else [])
+                yellow_coins_list = [point["yellow_coins"] for point in yellow_points]
+                purple_coins_list = [point["purple_coins"] for point in purple_points]
+                coins_sources_list = [point.get("source", "-") for point in yellow_points or purple_points]
 
                 valid_yellow_coins = [v for v in yellow_coins_list if v is not None]
                 valid_purple_coins = [

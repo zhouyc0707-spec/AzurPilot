@@ -221,14 +221,36 @@ def get_coins_timeline(
     instance_name = instance_name or "default"
     data = cl1_db.get_stats(instance_name, key_prefix)
 
-    snapshots = data.get("coins_snapshots", [])
-    if not snapshots:
-        return []
+    def time_key(row):
+        try:
+            return datetime.fromisoformat(row.get("ts", "")).isoformat(" ")
+        except (TypeError, ValueError):
+            return ""
 
-    try:
-        return sorted(snapshots, key=lambda e: e.get("ts", ""))
-    except Exception:
-        return snapshots
+    snapshots = list(data.get("coins_snapshots") or [])
+    coin_times = {time_key(row) for row in snapshots} - {""}
+    residue = data.get("coins_month_start_residue", [])
+    has_residue = isinstance(residue, list) and any(
+        isinstance(row, dict) and time_key(row) for row in residue
+    )
+    # 已归档的月初残留继续沿用原凭证序列的显示起点。
+    start = min(coin_times, default=None) if has_residue else ""
+    yellow_points = {}
+    for row in data.get("yellow_coin_snapshots") or []:
+        value = row.get("yellow_coin")
+        stamp = time_key(row)
+        if value is None or not stamp or start is None or stamp < start:
+            continue
+        point = {"ts": row["ts"], "yellow_coins": value}
+        if "source" in row:
+            point["source"] = row["source"]
+        yellow_points[stamp] = point
+    # 同时刻的完整凭证记录优先，黄币补点只提供已有的黄币字段。
+    for row in snapshots:
+        if row.get("yellow_coins") is not None:
+            yellow_points.pop(time_key(row), None)
+    snapshots.extend(yellow_points.values())
+    return sorted(snapshots, key=time_key)
 
 
 __all__ = [
