@@ -70,8 +70,8 @@ export function TaskConfig() {
   const layout = useSyncExternalStore(subscribeLayout, getLayout, getLayout)
   // 窄屏自动折叠：窄视口下固定宽的目录列与调度器列会把参数卡挤到读不了，
   // 分两档收起（目录先收、调度器后收），收起后从边缘浮标唤出抽屉。
-  const directoryFolded = useFoldFlag('(min-width: 951px) and (max-width: 1319px)')
-  const railFolded = useFoldFlag('(min-width: 951px) and (max-width: 1089px)')
+  const directoryFolded = useFoldFlag('(min-width: 951px) and (max-width: 1319px)') && !usesLegacyLayout(theme)
+  const railFolded = useFoldFlag('(min-width: 951px) and (max-width: 1089px)') && !usesLegacyLayout(theme)
   // 抽屉一次只开一个；窗口跨回宽档或用户手动隐藏调度器栏时自动收回。
   const [popout, setPopout] = useState<'directory' | 'rail' | null>(null)
   useEffect(() => {
@@ -483,7 +483,7 @@ export function TaskConfig() {
       className={`${usesLegacyLayout(theme) ? 'task-config-legacy' : 'task-config-page task-config-modern'}${!usesLegacyLayout(theme) && schedulerPosition === 'left' ? ' rail-left' : ''}${railVisibility === 'hidden' ? ' rail-hidden' : ''}${!usesLegacyLayout(theme) && popout ? ` pop-${popout}` : ''}`}
       style={(usesLegacyLayout(theme) ? layout.railWidth ? {'--legacy-rail-width': `${layout.railWidth}px`} : undefined : layout.railWidth ? {'--modern-rail-width': `${layout.railWidth}px`} : undefined) as CSSProperties | undefined}
     >
-      <h1 className="modern-sr-title">{t(`Task.${task}.name`)}</h1>
+      <h1 className={usesLegacyLayout(theme) ? 'legacy-sr-title' : 'modern-sr-title'}>{t(`Task.${task}.name`)}</h1>
       <div className="task-config-settings">
         {/* 换任务时重挂内容列，触发该任务的卡片入场。 */}
         <div className="task-config-settings-inner" key={task}>{head}{groupsSection}{scorePanel}{toolPanel}</div>
