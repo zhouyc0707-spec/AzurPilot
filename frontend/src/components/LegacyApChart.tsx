@@ -96,6 +96,7 @@ export function LegacyApChart({instance, series, onRefresh, refreshing = false}:
     return {
       now: points.at(-1)?.apNow,
       current: points.at(-1)?.value,
+      distanceUpdatedAt: ranged.get('distance')?.at(-1)?.time,
       change: values.length >= 2 ? (values.at(-1) ?? 0) - (values[0] ?? 0) : 0,
       max: values.length ? Math.max(...values) : undefined,
       min: values.length ? Math.min(...values) : undefined,
@@ -238,7 +239,9 @@ export function LegacyApChart({instance, series, onRefresh, refreshing = false}:
       {SERIES_ORDER.map((key, index) => <span className="legacy-ap-series-item" key={key}
         title={index === 0
           ? `变化: ${stats.change >= 0 ? '+' : ''}${Math.round(stats.change).toLocaleString()}\n最高: ${Math.round(stats.max ?? 0).toLocaleString()}\n最低: ${Math.round(stats.min ?? 0).toLocaleString()}\n均值: ${Math.round(stats.avg ?? 0).toLocaleString()}`
-          : undefined}>
+          : key === 'distance' && stats.distanceUpdatedAt
+            ? `上次更新 ${stats.distanceUpdatedAt.replace('T', ' ').slice(0, 19)}`
+            : undefined}>
         {byKey.get(key)?.label ?? key}{' '}
         {index === 0
           ? <b style={{color: colors[0]}}>{stats.now != null ? `(${stats.now.toLocaleString()}) ` : ''}{Math.round(stats.current ?? 0).toLocaleString()}</b>
