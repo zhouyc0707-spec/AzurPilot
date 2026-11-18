@@ -124,6 +124,70 @@ class TestMaintenanceCache(unittest.TestCase):
         self.reconcile.assert_called_once_with(self.directory.resolve(), 'cn', self.capture.return_value,
                                                run_at=stored['lastReconciliation']['wakeAt'])
 
+    def save_cn_notice(self, *, day=14, hour=10, title=None, body=None):
+        folder = self.directory / 'skin-collection'
+        folder.mkdir(parents=True, exist_ok=True)
+        doc = {'title': title or f'「作战档案」更新！11月{day}日{hour}:00港区改建',
+               'body': body or f'各位亲爱的指挥官：<br/>司令部将于11月{day}日{hour}:00~15:00对以下港区进行改造建设。<br/>『改建内容』',
+               'published': int((self.now - timedelta(days=1)).timestamp())}
+        (folder / 'announcements.json').write_text(json.dumps({'version': 1, 'documents': {'1': doc}}), encoding='utf-8')
+
+    def test_cached_official_notice_fills_same_day_empty_result_without_another_request(self):
+        self.now = NOW.replace(day=18, hour=0)
+        self.assertEqual(self.refresh()['state'], 'not_published')
+        self.now = self.now.replace(hour=17)
+        self.save_cn_notice(day=19)
+        self.reconcile.reset_mock()
+        self.assertEqual(maintenance.get_maintenance_snapshot('cn', self.directory)['state'], 'not_published')
+        result = self.refresh()
+        self.assertEqual(result['state'], 'announced')
+        self.assertEqual(result['startsAt'], '2026-11-19T10:00:00+08:00')
+        self.assertEqual(result['startsAt'], maintenance.get_maintenance_start('cn', self.directory).isoformat())
+        self.assertEqual(maintenance.get_maintenance_snapshot('cn', self.directory), result)
+        self.reconcile.assert_called_once()
+        self.get.assert_called_once()
+
+    def test_official_fallback_keeps_service_plan_and_respects_its_withdrawal(self):
+        self.save_cn_notice()
+        self.reply(START)
+        self.assertEqual(self.refresh()['startsAt'], START)
+        self.assertEqual(self.refresh()['startsAt'], START)
+        self.now += timedelta(days=1)
+        self.reply(None)
+        self.assertIsNone(self.refresh()['startsAt'])
+        self.assertIsNone(self.refresh()['startsAt'])
+
+    def test_official_notice_does_not_cross_regions_or_promote_an_online_update(self):
+        self.save_cn_notice()
+        self.reply(None, server='jp')
+        self.assertIsNone(self.refresh('jp')['startsAt'])
+        self.save_cn_notice(title='11月14日在线更新公告')
+        self.reply(None)
+        self.assertIsNone(self.refresh()['startsAt'])
+        self.save_cn_notice(day=12)
+        self.assertIsNone(self.refresh()['startsAt'])
+
+    def test_damaged_archive_and_event_dates_cannot_supply_a_maintenance_time(self):
+        self.save_cn_notice(body='司令部将于近期发布日程。『改建内容』活动开始时间为11月14日10:00。')
+        self.assertIsNone(self.refresh()['startsAt'])
+        self.save_cn_notice(body='维护时间：11月14日10:00，本次更新无需停服。『改建内容』')
+        self.assertIsNone(self.refresh()['startsAt'])
+        path = self.directory / 'skin-collection' / 'announcements.json'
+        path.write_text('{', encoding='utf-8')
+        self.assertEqual(self.refresh()['state'], 'not_published')
+        self.save_cn_notice()
+        self.assertEqual(self.refresh()['startsAt'], '2026-11-14T10:00:00+08:00')
+        self.get.assert_called_once()
+
+    def test_official_notice_on_network_error_preserves_the_error_and_rechecks_revisions(self):
+        self.save_cn_notice()
+        self.get.side_effect = OSError('离线')
+        result = self.refresh()
+        self.assertEqual((result['state'], result['startsAt']), ('error', '2026-11-14T10:00:00+08:00'))
+        self.save_cn_notice(hour=11)
+        self.assertEqual(self.refresh()['startsAt'], '2026-11-14T11:00:00+08:00')
+        self.assertEqual(self.get.call_count, 1)
+
     def test_reschedule_receipt_proves_exact_baseline_and_fixed_wake_time(self):
         self.reply(START)
         self.refresh()

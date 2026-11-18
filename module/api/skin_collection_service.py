@@ -1,20 +1,19 @@
 """从国服官方维护公告增量收集角色与换装，不读取或修改用户收藏。"""
 import copy
-import html
 import json
 import re
 import threading
 import time
 import unicodedata
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from deploy.atomic import atomic_write
 from module.base import http
+from module.maintenance_notice import CN, maintenance_window, plain_text as _plain
 
 
-CN = timezone(timedelta(hours=8))
 SINCE = datetime(2026, 11, 12, tzinfo=CN)
 SEED_ID = '869277954591424622'
 SEED_TOPIC = '55020313'
@@ -31,26 +30,10 @@ def _key(value):
     return re.sub(r'\s+', '', unicodedata.normalize('NFKC', value)).casefold()
 
 
-def _plain(value):
-    value = re.sub(r'<(?:br\b[^>]*|/p|/div)>', '\n', value, flags=re.I)
-    return html.unescape(re.sub(r'<[^>]*>', '', value))
-
-
 def _maintenance_at(title, body, published):
-    """提取维护日期，以限定本次及后续公告，不将普通单品预告当作维护。"""
-    if '改建内容' not in body or not re.search(r'港区改建|维护公告', title):
-        return None
-    match = re.search(r'(\d{1,2})月(\d{1,2})日\s*(\d{1,2})[:：](\d{2})'
-                      r'(?:\s*[~～—-]\s*(\d{1,2})[:：](\d{2}))?', body)
-    if not match:
-        return None
-    month, day, hour, minute, end_hour, end_minute = match.groups()
-    posted = datetime.fromtimestamp(published, CN)
-    year = posted.year + (1 if posted.month == 12 and int(month) == 1 else 0)
-    at = datetime(year, int(month), int(day), int(end_hour or hour), int(end_minute or minute), tzinfo=CN)
-    if end_hour and (int(end_hour), int(end_minute)) < (int(hour), int(minute)):
-        at += timedelta(days=1)
-    return at
+    """换装按维护结束时间开放。"""
+    window = maintenance_window(title, body, published)
+    return window[1] if window else None
 
 
 def _candidates(body):

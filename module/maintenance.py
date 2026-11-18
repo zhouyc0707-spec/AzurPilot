@@ -14,6 +14,7 @@ from module.config.time_source import now as current_time
 from module.config.transaction import config_transaction
 from module.config.utils import SERVER_TO_TIMEZONE
 from module.logger import logger
+from module.maintenance_notice import cached_cn_start
 
 
 DEFAULT_DIRECTORY = Path(__file__).resolve().parents[1] / 'config'
@@ -114,6 +115,20 @@ def _resume_reconciliation(path, server, directory):
         # 并发发布了新记录时继续应用新记录，避免带着迟到重排进入单次任务基线。
 
 
+def _notice_update(data, server, directory, now):
+    if server != 'cn':
+        return None
+    current = _start(data.get('startsAt'), server, now)
+    # 老缓存中已有的时间来自维护接口。记住上次接口计划，避免公告副本重新启用已撤回的计划。
+    service = _start(data.get('lastServiceStart', data.get('startsAt')), server, now)
+    if service and service == current:
+        return None
+    notice = cached_cn_start(directory, now)
+    if notice and notice != current and (not service or notice.date() > service.date()):
+        return notice.isoformat()
+    return None
+
+
 def _refresh(server, directory, path):
     from module.maintenance_schedule import capture_baselines
 
@@ -124,7 +139,7 @@ def _refresh(server, directory, path):
     today = now.date().isoformat()
     needs_request = existing.get('attemptDay') != today
     needs_recovery = existing.get('state') == 'pending' and not needs_request
-    if not needs_request and not needs_recovery:
+    if not needs_request and not needs_recovery and not _notice_update(existing, server, directory, now):
         _resume_reconciliation(path, server, directory)
         return _read(path, server)
     baselines = capture_baselines(directory, server)
@@ -132,24 +147,35 @@ def _refresh(server, directory, path):
         data = _read(path, server)
         now = _clock(server)
         today = now.date().isoformat()
-        if data.get('attemptDay') != today or data.get('state') == 'pending':
-            if data.get('attemptDay') != today:
-                # 请求前登记尝试。进程在请求中退出，也不会让新进程当天再次请求。
-                data.update(server=server, attemptDay=today, state='pending',
-                            checkedAt=now.isoformat(), error=None, baselines=baselines)
-                _write(path, data)
-                try:
-                    data['startsAt'] = _query(server, now)
-                    data['state'] = 'announced' if data['startsAt'] else 'not_published'
-                    data['error'] = None
-                except Exception as error:
-                    data['state'] = 'error'
-                    data['error'] = f'{type(error).__name__}: {error}'
-                    logger.warning('[维护计划] %s 查询失败，当天沿用有效缓存：%s', server, type(error).__name__)
-            else:
-                # 已获得锁而记录仍在查询中，说明上个进程未完成发布。
+        needs_query = data.get('attemptDay') != today
+        recovering = data.get('state') == 'pending'
+        if server == 'cn':
+            data.setdefault('lastServiceStart', data.get('startsAt'))
+        if needs_query:
+            # 请求前登记尝试。进程在请求中退出，也不会让新进程当天再次请求。
+            data.update(server=server, attemptDay=today, state='pending',
+                        checkedAt=now.isoformat(), error=None, baselines=baselines)
+            _write(path, data)
+            try:
+                data['startsAt'] = _query(server, now)
+                if server == 'cn' and data['startsAt']:
+                    data['lastServiceStart'] = data['startsAt']
+                data['state'] = 'announced' if data['startsAt'] else 'not_published'
+                data['error'] = None
+            except Exception as error:
                 data['state'] = 'error'
-                data['error'] = '上次维护查询未完成，等待下一自然日重新查询'
+                data['error'] = f'{type(error).__name__}: {error}'
+                logger.warning('[维护计划] %s 查询失败，当天沿用有效缓存：%s', server, type(error).__name__)
+        elif recovering:
+            # 已获得锁而记录仍在查询中，说明上个进程未完成发布。
+            data['state'] = 'error'
+            data['error'] = '上次维护查询未完成，等待下一自然日重新查询'
+        notice_start = _notice_update(data, server, directory, now)
+        if notice_start:
+            data.update(startsAt=notice_start, checkedAt=now.isoformat())
+            if data.get('state') != 'error':
+                data['state'] = 'announced'
+        if needs_query or recovering or notice_start:
             snapshot = _snapshot(data, server, now)
             data['startsAt'] = snapshot['startsAt']
             pending = data.get('reconciliation')
