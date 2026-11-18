@@ -1,4 +1,5 @@
 """地图导航的实拍误识别回放与有界状态循环回归。"""
+from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
@@ -29,6 +30,7 @@ class MapEntryFlow:
     _island_map_popup_pending = Island._island_map_popup_pending
     _wait_island_map_entry = Island._wait_island_map_entry
     goto_island_map = Island.goto_island_map
+    is_in_friend_island = Island.is_in_friend_island
 
     def __init__(self, device, expect_friend=False):
         self.device = device
@@ -67,7 +69,8 @@ class IslandMapEntryTest(unittest.TestCase):
                  'ISLAND_MANAGEMENT_CHECK', 'ISLAND_WAREHOUSE_CHECK',
                  'POST_MANAGE_PRODUCTION', 'ISLAND_POSTMANAGE_GOTO_MANAGEMENT',
                  'ISLAND_POST_CHECK', 'ISLAND_POST_VACANT_CHECK', 'ISLAND_POST_SELECT',
-                 'ISLAND_WORKING', 'POST_ADD', 'POST_GET')
+                 'ISLAND_WORKING', 'POST_ADD', 'POST_GET', 'ISLAND_MAP_PORT',
+                 'ISLAND_MAP_PORT_ALT', 'ISLAND_MAP_PORT_CHECK', 'ISLAND_MAP_PORT_FRIEND_CHECK')
         self.buttons = {}
         for name in names:
             button = getattr(island_module, name)
@@ -106,6 +109,43 @@ class IslandMapEntryTest(unittest.TestCase):
 
     def names(self, flow):
         return [name for _, name in flow.device.clicks]
+
+    def port_flow(self, *frames, friend=False):
+        flow = self.flow(lambda _: self.empty, expect_friend=friend)
+        flow.device.timeline = lambda _: frames[min(len(flow.device.clicks), len(frames) - 1)]
+        flow.device.sleep = self.clock.advance
+        flow.device.stuck_timeout_override = Mock(return_value=nullcontext())
+        flow.config.UiWait_IslandMapDestinationWait = 10
+        flow.goto_island_map = Mock(return_value=True)
+        return flow
+
+    def test_port_icons_open_the_correct_detail_before_coordinate_fallback(self):
+        for friend in (False, True):
+            for icon in ('ISLAND_MAP_PORT', 'ISLAND_MAP_PORT_ALT'):
+                with self.subTest(friend=friend, icon=icon):
+                    detail = 'ISLAND_MAP_PORT_FRIEND_CHECK' if friend else 'ISLAND_MAP_PORT_CHECK'
+                    flow = self.port_flow(self.frame(icon), self.frame(detail),
+                                          self.friend if friend else self.home, friend=friend)
+                    self.assertTrue(Island.island_map_goto(flow, 'port'))
+                    self.assertEqual(self.names(flow), [icon, 'ISLAND_MAP_CONFIRM'])
+                    self.assertLess(flow.device.clicks[0][0], 3)
+
+    def test_port_retry_can_recognize_the_other_icon_while_waiting_for_detail(self):
+        flow = self.port_flow(self.frame('ISLAND_MAP_PORT'), self.frame('ISLAND_MAP_PORT_ALT'),
+                              self.frame('ISLAND_MAP_PORT_CHECK'), self.home)
+        self.assertTrue(Island.island_map_goto(flow, 'port'))
+        self.assertEqual(self.names(flow), ['ISLAND_MAP_PORT', 'ISLAND_MAP_PORT_ALT', 'ISLAND_MAP_CONFIRM'])
+
+    def test_missing_port_detail_limits_coordinate_fallback_to_one_click(self):
+        flow = self.port_flow(self.empty)
+        self.assertFalse(Island.island_map_goto(flow, 'port'))
+        self.assertEqual(self.names(flow), ['ISLAND_MAP_PORT'])
+        self.assertGreaterEqual(flow.device.clicks[0][0], 3)
+
+    def test_port_confirmation_without_arrival_times_out(self):
+        flow = self.port_flow(self.frame('ISLAND_MAP_PORT_ALT'), self.frame('ISLAND_MAP_PORT_CHECK'), self.empty)
+        self.assertFalse(Island.island_map_goto(flow, 'port'))
+        self.assertEqual(self.names(flow), ['ISLAND_MAP_PORT_ALT', 'ISLAND_MAP_CONFIRM'])
 
     def test_real_postmanage_frame_rejects_color_only_map_entry(self):
         for non_native in (False, True):

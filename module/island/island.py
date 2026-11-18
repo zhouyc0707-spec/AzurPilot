@@ -744,17 +744,20 @@ class Island(SelectCharacter):
         """
         def get_destination_buttons(name):
             if name == 'mine_forest':
-                return ISLAND_MAP_MINE_FOREST, ISLAND_MAP_MINE_FOREST_CHECK
+                return (ISLAND_MAP_MINE_FOREST,), ISLAND_MAP_MINE_FOREST_CHECK
             if name == 'farm':
-                return ISLAND_MAP_FARM, ISLAND_MAP_FARM_CHECK
+                return (ISLAND_MAP_FARM,), ISLAND_MAP_FARM_CHECK
             if name == 'nursery':
-                return ISLAND_MAP_NURSERY, ISLAND_MAP_NURSERY_CHECK
+                return (ISLAND_MAP_NURSERY,), ISLAND_MAP_NURSERY_CHECK
             if name == 'assembly':
-                return ISLAND_MAP_ASSEMBLY, ISLAND_MAP_ASSEMBLY_CHECK
+                return (ISLAND_MAP_ASSEMBLY,), ISLAND_MAP_ASSEMBLY_CHECK
             if name == 'port':
-                return ISLAND_MAP_PORT, ISLAND_MAP_PORT_CHECK
+                return (
+                    ISLAND_MAP_PORT,
+                    ISLAND_MAP_PORT_ALT,
+                ), ISLAND_MAP_PORT_CHECK
             if name == 'port_business':
-                return ISLAND_MAP_PORT_BUSINESS, ISLAND_MAP_PORT_BUSINESS_CHECK
+                return (ISLAND_MAP_PORT_BUSINESS,), ISLAND_MAP_PORT_BUSINESS_CHECK
             raise ValueError(f"未知的岛屿地图目的地: {name}")
 
         def get_friend_destination_check_button(name):
@@ -764,10 +767,17 @@ class Island(SelectCharacter):
                 return ISLAND_MAP_PORT_FRIEND_CHECK
             raise ValueError(f"好友岛地图不支持目的地: {name}")
 
-        destination_button, check_button = get_destination_buttons(destination)
+        destination_buttons, check_button = get_destination_buttons(destination)
         in_friend = bool(getattr(self, "_island_expect_friend", False))
         if in_friend:
             check_button = get_friend_destination_check_button(destination)
+
+        def click_destination(interval=1):
+            for button in destination_buttons:
+                if self.appear_then_click(button, interval=interval):
+                    return True
+            return False
+
         if not self.goto_island_map():
             return False
         destination_clicked = False
@@ -784,7 +794,7 @@ class Island(SelectCharacter):
         with self.device.stuck_timeout_override(image_stuck=max(180, destination_wait + 30)):
             for _ in self.loop(timeout=20, skip_first=False):
                 if not destination_clicked:
-                    if self.appear_then_click(destination_button, interval=1):
+                    if click_destination():
                         logger.info(f"[岛屿] 点击岛屿地图目的地: {destination}")
                         destination_clicked = True
                         continue
@@ -794,7 +804,7 @@ class Island(SelectCharacter):
                             f"[岛屿] 目的地图标未匹配（有任务可提交时会变成问号），"
                             f"改为点击固定坐标: {destination}"
                         )
-                        self.device.click(destination_button)
+                        self.device.click(destination_buttons[0])
                         destination_clicked = True
                     continue
 
@@ -806,7 +816,7 @@ class Island(SelectCharacter):
                     self.device.click(ISLAND_MAP_CONFIRM)
                     confirmed = True
                     break
-                if self.appear_then_click(destination_button, interval=1):
+                if click_destination():
                     continue
 
             if not confirmed:
