@@ -92,7 +92,7 @@ def refresh_resources(config, device, names):
             def read_coins():
                 value = ocr.ocr(device.image)
                 return value if getattr(ocr, 'last_valid', False) else None
-            value = stable_read(ui, lambda: ui.ui_page_appear(page_os), read_coins)
+            value = stable_read(ui, lambda: ui.ui_page_appear(page_os) and not ui.coin_read_overlay(), read_coins)
             if value is not None and log.record(name, int(value), source='scheduler_refresh'):
                 acquired.add(name)
     config.save()

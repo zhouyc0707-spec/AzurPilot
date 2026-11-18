@@ -16,11 +16,13 @@ import numpy as np
 from module.base.utils import load_image
 from module.config.config_updater import ConfigUpdater
 from module.base.async_executor import async_executor
+from module.handler.assets import STORY_SKIP_3
 from module.os.operation_siren import OperationSiren
 from module.os_handler.os_status import OCR_SHOP_YELLOW_COINS
 from module.os_handler.resource_read import BackgroundCoinRead, CoinReading, CoinReplenishRequired, read_coins
 from module.os_handler.resource_state import ActionPointSnapshot, reset_resource_caches
 from module.os_handler.resource_write import record_resources_background
+from module.persistence.write_queue import write_queue
 from module.statistics import resource_flow
 from tests.test_api import fixture
 
@@ -129,7 +131,7 @@ class BackgroundRuntimeTests(unittest.TestCase):
     def setUp(self):
         self.runner = OperationSiren.__new__(OperationSiren)
         self.runner.config = SimpleNamespace(
-            config_name='isolated', task=SimpleNamespace(command='OpsiHazard1Leveling'),
+            config_name='isolated', task=SimpleNamespace(command='OpsiHazard1Leveling'), BUTTON_OFFSET=30,
             OpsiHazard1Leveling_ActionPointCheckInterval=5, OS_ACTION_POINT_BOX_USE=True,
             OpsiHazard1Leveling_OperationCoinsPreserve=50000,
             # 侵袭1每轮开始会读隐藏的续查记录，没有记录就不续查
@@ -197,6 +199,47 @@ class BackgroundRuntimeTests(unittest.TestCase):
         with patch.object(OCR_SHOP_YELLOW_COINS, 'ocr', side_effect=AssertionError('不得同步 OCR')), \
                 patch('module.os_handler.resource_read._executor.submit', return_value=Future()):
             self.assertEqual(self.runner.get_routine_yellow_coins(), 97451)
+
+    def test_story_frames_keep_last_balance_until_a_real_low_balance_is_confirmed(self):
+        self.runner.action_point_check_due = Mock(return_value=False)
+        self.runner._last_yellow_coins = self.runner._shop_yellow_coins = 75688
+        clear = self.runner.device.image
+        story = clear.copy()
+        x1, y1, x2, y2 = STORY_SKIP_3.area
+        story[y1:y2, x1:x2] = load_image(STORY_SKIP_3.file, STORY_SKIP_3.area)
+        state = self.runner._coin_background
+
+        def recognize(_, image, readers, identity, observed_at, ap_epoch, ap_spent, sampled_at):
+            future = Future()
+            future.set_result(CoinReading(identity, observed_at, 827, True, sampled_at=sampled_at))
+            return future
+
+        def poll(image):
+            self.runner.device.image = image.copy()
+            self.runner.poll_background_resources(sample=True)
+
+        with patch('module.os_handler.resource_read._executor.submit', side_effect=recognize) as submit:
+            # 前两张正常帧的第二次识别待验收。剧情帧只变左上角标记，数字区完全相同。
+            poll(clear)
+            poll(clear)
+            self.assertIsNotNone(state.future)
+            self.assertIsNotNone(state.candidate)
+            self.runner.device.image = story
+            self.runner.poll_background_resources()  # 只验收在途结果时也能看到剧情遮挡。
+            for _ in range(3):
+                poll(story)
+            self.assertEqual(submit.call_count, 2)
+            self.writer.assert_not_called()
+            self.assertIsNone(state.accepted)
+            self.assertEqual(self.runner._last_yellow_coins, 75688)
+            poll(clear)
+            poll(clear)
+            self.writer.assert_not_called()
+            poll(clear)
+        self.writer.assert_called_once_with(
+            self.runner.config, {'YellowCoin': 827}, observed_at=state.accepted.observed_at,
+        )
+        self.assertEqual(self.runner._last_yellow_coins, 827)
 
     def test_changed_digits_restart_background_sampling_after_stable_read(self):
         state = self.runner._coin_background
@@ -501,6 +544,7 @@ class ResourcePersistenceTests(unittest.TestCase):
         with resource_flow.task_session('testpilot', 'OpsiHazard1Leveling'):
             future = record_resources_background(self.config, {'YellowCoin': 51000}, observed_at=self.stamp)
         future.result(timeout=15)
+        self.assertTrue(write_queue.flush(timeout=15))
         with resource_flow.connect() as connection:
             balance = connection.execute('SELECT * FROM resource_balances WHERE resource=?', ('YellowCoin',)).fetchone()
         self.assertEqual(balance['ts'], str(self.stamp))

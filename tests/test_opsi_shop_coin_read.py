@@ -9,6 +9,7 @@ from unittest.mock import Mock, call, patch
 
 from module.combat.assets import GET_ITEMS_1, GET_ITEMS_2, GET_SHIP
 from module.exception import GameStuckError
+from module.handler.assets import STORY_SKIP_3
 from module.os_handler.os_status import OSStatus
 from module.os_shop.assets import OS_SHOP_CHECK, PORT_SUPPLY_CHECK
 from module.os_shop.shop import OSShop
@@ -180,21 +181,45 @@ class TestYellowCoinRead(CoinReadFixture):
                 self.yellow_ocr.ocr.assert_not_called()
                 self.timer.reset.assert_not_called()
                 self.reader.device.screenshot.assert_called_once()
-                self.recorder.record.assert_called_once_with('YellowCoin', 54321, observed=False)
+                self.recorder.record.assert_not_called()
+
+    def test_story_options_cannot_confirm_a_balance_or_consume_a_click(self):
+        before, after, confirmed = CoinFrame(827), CoinFrame(827), CoinFrame(827)
+        self.assertEqual(self.read(
+            before, CoinFrame(82, popup=STORY_SKIP_3), CoinFrame(82, popup=STORY_SKIP_3),
+            after, confirmed, fast=True,
+        ), 827)
+        self.assertEqual(self.yellow_ocr.ocr.call_args_list, [call(before), call(after), call(confirmed)])
+        self.reader.appear_then_click.assert_not_called()
+        self.recorder.record.assert_called_once_with('YellowCoin', 827, observed=True)
+
+    def test_manual_refresh_skips_obscured_frames(self):
+        from module.scheduler.resources import refresh_resources
+
+        first, second = CoinFrame(827), CoinFrame(827)
+        self.frames(CoinFrame(82, popup=STORY_SKIP_3), CoinFrame(82, popup=STORY_SKIP_3), first, second)
+        self.reader.ui_ensure = Mock()
+        self.reader.ui_page_appear = Mock(return_value=True)
+        with patch('module.os.operation_siren.OperationSiren', return_value=self.reader), \
+                patch('module.log_res.LogRes', return_value=self.recorder), \
+                patch('module.persistence.write_queue.write_queue.flush', return_value=True):
+            self.assertTrue(refresh_resources(self.reader.config, self.reader.device, ['YellowCoin']))
+        self.assertEqual(self.yellow_ocr.ocr.call_args_list, [call(first), call(second)])
+        self.recorder.record.assert_called_once_with('YellowCoin', 827, source='scheduler_refresh')
 
     def test_timeout_uses_cache_without_recording_a_successful_observation(self):
         self.assertEqual(self.read(CoinFrame(0), CoinFrame(0, timeout=True), fast=True), 54321)
-        self.recorder.record.assert_called_once_with('YellowCoin', 54321, observed=False)
+        self.recorder.record.assert_not_called()
         self.assertEqual(self.reader._last_yellow_coins, 54321)
 
     def test_single_positive_value_before_timeout_is_not_accepted(self):
         self.assertEqual(self.read(CoinFrame(99000), CoinFrame(99000, timeout=True), fast=True), 54321)
-        self.recorder.record.assert_called_once_with('YellowCoin', 54321, observed=False)
+        self.recorder.record.assert_not_called()
 
     def test_timeout_with_no_cache_does_not_claim_zero_was_observed(self):
         self.reader._last_yellow_coins = 0
         self.assertEqual(self.read(CoinFrame(0, timeout=True), fast=True), 0)
-        self.recorder.record.assert_called_once_with('YellowCoin', 0, observed=False)
+        self.recorder.record.assert_not_called()
 
     def test_success_updates_cache_using_actual_ocr_value(self):
         self.assertEqual(self.read(CoinFrame(123456), CoinFrame(123456), fast=True), 123456)
@@ -299,7 +324,7 @@ class TestAkashiShopSession(unittest.TestCase):
         runner.handle_story_skip = Mock(return_value=False)
         runner.appear = Mock(side_effect=lambda button, **kwargs:
                              button is PORT_SUPPLY_CHECK and runner.page == 'shop')
-        runner.ui_click = Mock()
+        runner.ui_click = Mock(side_effect=lambda grid, **kwargs: runner.device.click(grid))
         runner.ui_back = Mock(side_effect=lambda **kwargs: setattr(runner, 'page', 'map'))
         runner.device = Mock()
         runner.device.click.side_effect = lambda button: setattr(runner, 'page', 'shop')

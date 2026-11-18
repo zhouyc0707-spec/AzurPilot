@@ -24,6 +24,7 @@ from module.logger import logger
 from module.map.map_grids import SelectedGrids
 from module.ocr.ocr import Digit, ocr_batch
 from module.combat.assets import GET_ITEMS_1, GET_ITEMS_2, GET_SHIP
+from module.handler.assets import STORY_SKIP_3
 from module.os_shop.assets import OS_SHOP_CHECK, OS_SHOP_PURPLE_COINS, PORT_SUPPLY_CHECK, SHOP_PURPLE_COINS, SHOP_YELLOW_COINS
 from module.os_handler.resource_state import effective_task, resource_fast_path
 from module.os_handler.resource_read import BackgroundCoinRead, CoinReplenishRequired
@@ -50,6 +51,14 @@ class OSStatus(UI):
         return (getattr(self.config, 'config_name', None), server.server,
                 getattr(self.config, '_opsi_coin_revision', 0))
 
+    def coin_read_overlay(self):
+        """返回当前遮挡凭证栏的剧情或奖励标记及其匹配偏移，不受点击冷却影响。"""
+        for button, offset in ((STORY_SKIP_3, (20, 20)), (GET_ITEMS_1, True),
+                               (GET_ITEMS_2, True), (GET_SHIP, (20, 20))):
+            if self.appear(button, offset=offset):
+                return button, offset
+        return None
+
     def poll_background_resources(self, *, sample=False):
         """无等待验收后台结果；只在已确认的地图画面提交下一张截图。"""
         if not resource_fast_path(self.config):
@@ -60,10 +69,12 @@ class OSStatus(UI):
                 return
             state = self._coin_background = BackgroundCoinRead()
         in_map = sample and self.is_in_map()
-        if (in_map and state.frame is not None and not np.array_equal(
-                crop(self.device.image, OCR_SHOP_YELLOW_COINS.buttons[0]),
+        image = self.device.image
+        overlay = (in_map or state.future is not None) and self.coin_read_overlay()
+        if overlay or (in_map and state.frame is not None and not np.array_equal(
+                crop(image, OCR_SHOP_YELLOW_COINS.buttons[0]),
                 crop(state.frame, OCR_SHOP_YELLOW_COINS.buttons[0]))):
-            # 奖励后数字已变化，不能把开工前完成的两次 OCR 当作当前预算。
+            # 遮挡期间可能连续读到相同的假余额，须在验收在途结果前打断双帧确认。
             state.invalidate()
         try:
             reading = state.poll(self._background_coin_identity())
@@ -94,12 +105,12 @@ class OSStatus(UI):
             state.accepted = None
             state.request()
         ap_due = bool(sample and getattr(self, 'action_point_check_due', lambda: False)())
-        if in_map and (state.wanted or ap_due) and not self.handle_map_event():
+        if in_map and (state.wanted or ap_due) and not self.handle_map_event() and not overlay:
             readers = [OCR_SHOP_YELLOW_COINS]
             if ap_due:
                 from module.os_handler.action_point import OCR_ACTION_POINT_REMAIN_OS
                 readers.append(OCR_ACTION_POINT_REMAIN_OS)
-            state.submit(self.device.image, readers, self._background_coin_identity(),
+            state.submit(image, readers, self._background_coin_identity(),
                          ap_epoch=self.__dict__.get('_ap_read_epoch', 0), ap_spent=self.__dict__.get('_ap_spent', 0))
 
     def get_routine_yellow_coins(self):
@@ -248,10 +259,7 @@ class OSStatus(UI):
         image = self.device.image
         cached = self.__dict__.get('_yellow_coin_read')
         if fast and reuse and not with_purple and cached is not None and isinstance(image, np.ndarray):
-            popup_visible = any(self.appear(button, offset=offset) for button, offset in (
-                (GET_ITEMS_1, True), (GET_ITEMS_2, True), (GET_SHIP, (20, 20)),
-            ))
-            if (not popup_visible and cache_key == cached[0]
+            if (cache_key == cached[0] and not self.coin_read_overlay()
                     and np.array_equal(crop(image, OCR_SHOP_YELLOW_COINS.buttons[0]), cached[1])):
                 logger.info('[大世界处理-状态] 复用本轮已确认的黄币读数')
                 return cached[2]
@@ -265,20 +273,18 @@ class OSStatus(UI):
         
         for _ in self.loop():
             # 弹窗可见与实际点击分开判断，冷却期间不能校验遮挡下的余额。
-            popup_visible = False
-            for button, offset in ((GET_ITEMS_1, True), (GET_ITEMS_2, True), (GET_SHIP, (20, 20))):
-                if self.appear(button, offset=offset):
-                    popup_visible = True
-                    last_valid_value = None
-                    purple_region = None
-                    if fast and with_purple:
-                        self._paired_purple_read = (0, False)
-                    if self.appear_then_click(button, offset=offset, interval=1):
-                        timeout.reset()
-                    break
-            if popup_visible:
+            overlay = self.coin_read_overlay()
+            if overlay:
+                button, offset = overlay
+                last_valid_value = None
+                purple_region = None
+                if fast and with_purple:
+                    self._paired_purple_read = (0, False)
+                # 奖励仍可按原流程关闭，剧情选项交由剧情处理器。
+                if button is not STORY_SKIP_3 and self.appear_then_click(button, offset=offset, interval=1):
+                    timeout.reset()
                 if timeout.reached():
-                    logger.warning('[大世界处理-状态] 获取黄币超时，奖励弹窗尚未关闭')
+                    logger.warning('[大世界处理-状态] 获取黄币超时，凭证栏仍被遮挡')
                     break
                 continue
 
@@ -332,11 +338,11 @@ class OSStatus(UI):
             self._last_yellow_coins = yellow_coins
         
         recognized = perf_counter()
-        options = {'defer_history': True} if fast else {}
-        if fast and observed:
-            record_resources_background(self.config, {'YellowCoin': yellow_coins})
-        else:
-            LogRes(self.config).record('YellowCoin', yellow_coins, observed=observed, **options)
+        if observed:
+            if fast:
+                record_resources_background(self.config, {'YellowCoin': yellow_coins})
+            else:
+                LogRes(self.config).record('YellowCoin', yellow_coins, observed=True)
         if fast and observed and isinstance(self.device.image, np.ndarray):
             self._yellow_coin_read = (
                 cache_key, crop(self.device.image, OCR_SHOP_YELLOW_COINS.buttons[0]).copy(), yellow_coins,
