@@ -83,6 +83,31 @@ class SkinCollectionTests(unittest.TestCase):
         self.assertEqual(entries['新角色乙']['skins'], [{'name': '活动礼服', 'acquisition': '活动赠送'}])
         self.assertEqual(entries['新角色丁']['skins'], [{'name': '旧日礼服', 'acquisition': '限时返场'}])
 
+    def test_shop_subheadings_preserve_new_and_returning_listings(self):
+        body = """3.换装商店限时上架以下换装：
+◆全新上架◆
+那不勒斯-「误入纯白迷途」【Live2D】
+新奥尔良-「深夜的亲密触诊」【特殊动态立绘】
+伴尔维-「风中的纯白絮语」【动态立绘】
+◆换装体验◆
+测试舰-「体验换装」
+◆重返上架◆
+猃-「嬉水碧海」【Live2D】
+4.商店限时上架换装体验礼包：
+◆全新上架◆
+测试舰-「体验礼包」
+二、内容调整
+1.换装商店以下内容的上架截止时间延长至11月26日23:59
+测试舰-「仅延长销售时间」"""
+        offerings = {(entry['name'], skin['name']): skin['acquisition']
+                     for entry in _candidates(body) for skin in entry['skins']}
+        self.assertEqual(offerings, {
+            ('那不勒斯', '误入纯白迷途'): '钻石购买',
+            ('新奥尔良', '深夜的亲密触诊'): '钻石购买',
+            ('伴尔维', '风中的纯白絮语'): '钻石购买',
+            ('猃', '嬉水碧海'): '限时返场',
+        })
+
     def test_before_baseline_excluded_but_future_maintenance_collected_on_publication(self):
         self.service._data['documents'] = {
             'old': document(BODY.replace('11月12日', '11月5日')),

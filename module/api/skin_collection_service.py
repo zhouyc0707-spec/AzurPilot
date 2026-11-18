@@ -57,7 +57,7 @@ def _candidates(body):
     """只接受明确的角色获取语句和换装段；编号变化即结束上一段。"""
     result = {}
     section = ''
-    in_skins = False
+    in_skin_shop = False
     rarity_group = None
     collab = False
 
@@ -84,22 +84,22 @@ def _candidates(body):
             section = line
             rarity_group = None
             collab = '联动' in line
-            in_skins = bool('换装' in line and re.search(r'上架|新增|复刻|返场', line)
-                            and not re.search(r'体验|试用|租赁', line))
+            in_skin_shop = bool('换装' in line and re.search(r'上架|新增|复刻|返场', line)
+                                and not re.search(r'体验|试用|租赁|礼包|(?:时间|期限)延长', line))
         elif re.fullmatch(r'◆[^◆]+◆', line):
             section = line
             rarity_group = None
-            in_skins = False
         elif len(line) < 120 and re.search(r'建造.*(?:新增|追加|角色)|(?:新增|追加).*建造', line):
             section = line
             rarity_group = None
-            in_skins = False
-        if in_skins:
+            in_skin_shop = False
+        # 商店编号确定范围，小标题区分新装和返场，其他小标题下的条目沿用各自的解析规则。
+        if in_skin_shop and (not section.startswith('◆') or section in ('◆全新上架◆', '◆重返上架◆')):
             for match in re.finditer(r'(?:^|[、；;])\s*([^「」\n]+?)\s*[-—–－]\s*「([^」]+)」', line):
                 name, skin = match.groups()
                 if not re.search(r'兵装|家具|装备|礼包', name):
                     add(name, acquisition='联动活动' if collab else '',
-                        skin={'name': skin, 'acquisition': '限时返场' if '返场' in section or '复刻' in section
+                        skin={'name': skin, 'acquisition': '限时返场' if re.search(r'返场|复刻|重返上架', section)
                               else '钻石购买'})
             continue
         if re.search(r'兵装|家具|装备|修复|优化|体验|试用', section):
