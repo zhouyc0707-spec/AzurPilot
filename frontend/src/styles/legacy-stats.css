@@ -10,8 +10,7 @@
 }
 
 /* 区域一：资源仪表盘。窄屏时吸顶，与旧界面一致。
-   下内边距比上边小：仪表盘与下面第一个板块（体力图表）之间的空隙原先有 39px，
-   看着太空，收紧到十几像素。 */
+   下内边距比上边小，让仪表盘紧接下方的统计区。 */
 .legacy-stats-dashboard {
   flex: 0 0 auto;
   padding: 8px 0 4px;
@@ -34,7 +33,36 @@
   min-width: 0;
 }
 
-/* 第一个板块（体力图表）紧接仪表盘，不套用板块之间的 24px 间距 */
+.legacy-order-open {align-self: flex-end; flex: none; gap: 6px; margin-top: 6px}
+.modal.legacy-order-modal {max-height: calc(100dvh / var(--ui-scale) - 30px); overflow-y: auto}
+.modal.legacy-order-modal .panel-heading {padding: 0; margin-bottom: 6px}
+.legacy-order-list {list-style: none; margin: 0 0 12px; padding: 0}
+.legacy-order-list li {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.legacy-order-grip {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  gap: 8px;
+  min-width: 0;
+  min-height: 36px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  overflow-wrap: anywhere;
+}
+.legacy-order-grip:active {cursor: grabbing}
+.legacy-order-grip svg {flex: none; color: var(--muted)}
+.legacy-order-list .legacy-button {width: 32px; padding: 0; flex: none}
+
+/* 第一个统计板块紧接排序入口。 */
 .legacy-stats-charts > .legacy-stats-section:first-child {margin-top: 8px}
 
 .legacy-stats-section {

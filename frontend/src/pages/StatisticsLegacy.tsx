@@ -6,6 +6,7 @@ import type { LegacyColumn, LegacyCommissionRecent, LegacyStatisticsReport, Over
 import { useApp, useConnection } from '../app/context'
 import { ErrorBox, Loading, Modal } from '../components/ui'
 import { LegacyApChart } from '../components/LegacyApChart'
+import { LegacyStatisticsSections } from '../components/LegacyStatisticsSections'
 import { ResourceCards } from '../components/ResourceCards'
 import { createLegacyStatisticsRefresh } from './legacyStatisticsRefresh'
 import '../styles/legacy-stats.css'
@@ -340,20 +341,19 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
     </section>}
 
     {/* 区域二：各统计板块，间距由 .legacy-stats-section 统一收口 */}
-    <div className="legacy-stats-charts">
-      <section className="legacy-stats-section legacy-stats-card legacy-ap-card">
+    <LegacyStatisticsSections sections={{
+      ap: <section className="legacy-stats-section legacy-stats-card legacy-ap-card">
         <LegacyApChart key={instance} instance={instance} series={data.apChart.series} onRefresh={() => void load(false)} refreshing={busy}/>
-      </section>
+      </section>,
 
-      {/* 大世界数据收集：只显示本月有记录的侵蚀等级，行序为 1 / 5 / 3。 */}
-      <section className="legacy-stats-section legacy-stats-card">
+      // 大世界数据收集只显示本月有记录的侵蚀等级，行序为 1 / 5 / 3。
+      opsi: <section className="legacy-stats-section legacy-stats-card">
         <LegacySectionTitle title={text('Gui.Stat.OpsiDataCollectionTitle')} onRefresh={() => void load(false)} busy={busy}/>
         <LegacySummary items={data.opsi.summary} text={text}/>
         <LegacyTable columns={data.opsi.columns} rows={data.opsi.rows} text={text}/>
-      </section>
+      </section>,
 
-      {/* 本月 / 历史耄耋相接收获 */}
-      <section className={`legacy-stats-section legacy-stats-card${pending ? ' is-pending' : ''}`}>
+      meow: <section className={`legacy-stats-section legacy-stats-card${pending ? ' is-pending' : ''}`}>
         <LegacySectionTitle title={meowTitle} onRefresh={() => void load(false)} busy={busy}>
           <div className="legacy-stat-title-actions">
             <button type="button" className="legacy-button" disabled={pending} onClick={() => setMonthPickerOpen(true)}>查看历史月份</button>
@@ -376,10 +376,9 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
               <FolderOpen size={14} aria-hidden="true"/>
             </button>
           }}/>
-      </section>
+      </section>,
 
-      {/* 每日经验检测 / 舰船升级进度 */}
-      <section className="legacy-stats-section legacy-stats-card">
+      shipExp: <section className="legacy-stats-section legacy-stats-card">
         <LegacySectionTitle title={text('Gui.Stat.ShipExpProgressTitle')} onRefresh={() => void load(false)} busy={busy}/>
         {data.shipExp.hasData
           ? <>
@@ -395,10 +394,9 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
               <LegacyTable columns={data.shipExp.columns} rows={data.shipExp.rows} text={text}/>
             </>
           : <p className="legacy-muted">{text('Gui.Stat.NoShipExpData')}</p>}
-      </section>
+      </section>,
 
-      {/* 委托收益统计 */}
-      <section className="legacy-stats-section legacy-stats-card legacy-commission">
+      commission: <section className="legacy-stats-section legacy-stats-card legacy-commission">
         <LegacySectionTitle title={text('Gui.Stat.CommissionIncomeTitle')} onRefresh={() => void load(false)} busy={busy}/>
         <div className="legacy-segmented" role="group">
           {(['day', 'week', 'month'] as const).map(period => <button
@@ -496,8 +494,8 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
 
           <p className="legacy-commission-foot">{text('Gui.Stat.CommissionIncomeTotalCommissions', {value: periodSummary?.totalCommissions ?? 0})}</p>
         </div>
-      </section>
-    </div>
+      </section>,
+    }}/>
 
     {monthPickerOpen && <Modal title="历史月份与累计收获" onClose={() => setMonthPickerOpen(false)} className="legacy-month-modal">
       <h3 className="legacy-month-heading">选择查看月份</h3>

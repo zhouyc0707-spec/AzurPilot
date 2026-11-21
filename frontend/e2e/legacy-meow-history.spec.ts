@@ -1,5 +1,6 @@
 import {expect, test, type Locator, type Page} from '@playwright/test'
 import type {LegacyColumn, LegacyStatisticsReport} from '../src/api/types'
+import {routeRpc} from './rpc-route'
 
 type LegacyRequest = {id: string; method: string; params: {instance?: string; month?: string | null; item?: string}}
 type ScreenshotFolderResult = {
@@ -46,7 +47,7 @@ async function isolatedStatistics(page: Page, availableMonths = [HISTORY_MONTH, 
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))
   await page.route('https://**', route => route.abort())
-  await page.routeWebSocket('**/api/v1/ws', socket => {
+  await routeRpc(page, socket => {
     const server = socket.connectToServer()
     socket.onMessage(raw => {
       const request = JSON.parse(String(raw)) as LegacyRequest
