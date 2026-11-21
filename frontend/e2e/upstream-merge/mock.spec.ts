@@ -40,7 +40,7 @@ for (const theme of ['legacy-light', 'legacy-dark', 'modern-light', 'modern-dark
       await expect.poll(async () => (await sidebar.boundingBox())!.width).toBeGreaterThan(before + 40)
       await handle.dblclick()
       await expect.poll(async () => (await sidebar.boundingBox())!.width).toBeCloseTo(before, 0)
-      const rail = page.locator('.legacy-rail-resize-handle')
+      const rail = page.getByRole('separator', {name: /调度器栏宽度/})
       await expect(rail).toBeVisible()
       const previousWidth = Number(await rail.getAttribute('aria-valuenow'))
       await rail.focus()
@@ -55,13 +55,14 @@ for (const theme of ['legacy-light', 'legacy-dark', 'modern-light', 'modern-dark
       await page.keyboard.press('Home')
       await expect(tabs).toHaveAttribute('aria-valuenow', '1')
     }
-    const statisticsLink = page.locator('.primary-nav').getByRole('link', {name: '资源统计', exact: true})
+    const navigation = page.locator('.primary-nav')
+    const statisticsLink = navigation.getByRole('link', {name: '资源统计', exact: true})
     if (theme.startsWith('legacy')) {
-      await expect(statisticsLink).toHaveCount(0)
-      await page.goto('/#/i/demo-main/statistics')
-    } else {
-      await statisticsLink.click()
+      await expect(navigation.getByRole('link')).toHaveText(['运行总览', '资源统计', '茗喵证券交易所', '换装收藏统计'])
     }
+    await statisticsLink.click()
+    await expect(page).toHaveURL(/#\/i\/demo-main\/statistics$/)
+    await expect(statisticsLink).toHaveAttribute('aria-current', 'page')
     await expect(page.locator('main')).toBeVisible()
     if (theme.startsWith('legacy')) await expect(page.locator('.legacy-statistics-navigation')).toBeVisible()
     else await expect(page.locator('.statistics-category-control')).toBeVisible()
