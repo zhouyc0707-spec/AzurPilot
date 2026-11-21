@@ -144,7 +144,7 @@ def _ap_panel(instance):
 def _opsi_panel(instance, record_levels=None):
     """「大世界数据收集」：只展示本月有记录的侵蚀等级及汇总行。"""
     from module.statistics.cl1_database import db as cl1_db
-    from module.statistics.opsi_month import get_opsi_stats, compute_monthly_cl1_akashi_ap
+    from module.statistics.opsi_month import compute_monthly_cl1_akashi_ap, forecast_month_end_distance, get_opsi_stats
     from module.statistics.ship_exp_stats import get_ship_exp_stats
 
     summary = get_opsi_stats(instance_name=instance).summary()
@@ -280,11 +280,14 @@ def _opsi_panel(instance, record_levels=None):
             data.get('avg_round_time', DASH),
         ])
 
+    forecast = forecast_month_end_distance((summary.get('raw') or {}).get('ap_snapshots', []), now)
     summary_items = [
         {'key': 'Gui.Stat.MonthlyPurchasedAP', 'value': ap_bought, 'format': 'int', 'sign': ''},
         {'key': 'Gui.Stat.MonthlySortieCost', 'value': sortie_cost if rounds else DASH, 'format': 'int', 'sign': ''},
         {'key': 'Gui.Stat.MonthlyNetAP', 'value': net_ap, 'format': 'int', 'sign': _sign(net_ap)},
         {'key': 'Gui.Stat.MonthlyLoopEfficiency', 'value': loop_eff, 'format': 'percent', 'sign': _sign(loop_eff)},
+        {'key': 'Gui.Stat.MonthlyDistanceForecast', 'value': forecast if forecast is not None else DASH,
+         'format': 'int', 'sign': ''},
     ]
     return {'summary': summary_items, 'columns': columns, 'rows': rows}
 

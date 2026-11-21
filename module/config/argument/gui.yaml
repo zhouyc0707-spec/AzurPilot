@@ -432,6 +432,7 @@ Stat:
   MonthlySortieCost:
   MonthlyNetAP:
   MonthlyLoopEfficiency:
+  MonthlyDistanceForecast:
   MeowLastRecord:
   MeowEffectiveRounds:
   MeowAvgOperationCoin:

@@ -91,12 +91,14 @@ class OpsiStatisticsMixin(WebUIMixinBase):
         month = summary.get("month", "-")
         meow_by_level = self._build_meow_stats_by_level(cl1_db, instance_name)
         from module.statistics.legacy_display import has_cl1_records
+        from module.statistics.opsi_month import forecast_month_end_distance
 
         labels, rows = self._build_hazard_rows(
             labels, values, meow_by_level, month,
             cl1_has_records=has_cl1_records(summary, getattr(exp_stats, 'data', None)),
         )
-        self._render_opsi_summary(labels, rows, ap_bought, net_ap, loop_eff)
+        forecast = forecast_month_end_distance((summary.get("raw") or {}).get("ap_snapshots", []), current_time())
+        self._render_opsi_summary(labels, rows, ap_bought, net_ap, loop_eff, forecast)
 
     def _load_opsi_stats_dependencies(self):
         try:
@@ -602,7 +604,7 @@ class OpsiStatisticsMixin(WebUIMixinBase):
             "</span>"
         )
 
-    def _render_opsi_summary(self, labels, rows, ap_bought, net_ap, loop_eff):
+    def _render_opsi_summary(self, labels, rows, ap_bought, net_ap, loop_eff, forecast=None):
         with use_scope("opsi_stats", clear=True):
             # 标题行用带图标槽的版本，刷新图标由 PyWebIO 渲染进预留作用域
             put_html(
@@ -617,9 +619,7 @@ class OpsiStatisticsMixin(WebUIMixinBase):
                 scope=_OPSI_REFRESH_SCOPE,
             )
             put_html(refresh_icon_button_css(_OPSI_REFRESH_SCOPE))
-            # 四条汇总并排一行：当月侵蚀一 购买体力 / 出击消耗 / 净赚体力 / 循环效率。
-            # 后三项都是侵蚀1 独有的口径（侵蚀3/5 不按每轮行动力核算），放在表格里
-            # 对 3/5 行只能留空，因此统一搬到这一行。
+            # 侵蚀一收支与本月海里数预测放在汇总行，预测覆盖所有大世界航行。
             # 用 put_html + flex 而不是 put_row：put_row 生成的是 grid，列宽走
             # grid-template-columns，窗口一窄就会把几条挤成多行；flex + wrap +
             # column-gap 的换行行为可预期，间距也不再依赖 None 占位项。
@@ -639,6 +639,7 @@ class OpsiStatisticsMixin(WebUIMixinBase):
                 self._summary_item_html(
                     "Gui.Stat.MonthlyLoopEfficiency", loop_eff, signed=True
                 ),
+                self._summary_item_html("Gui.Stat.MonthlyDistanceForecast", forecast if forecast is not None else "-"),
             ]
             put_html(self.summary_style_html())
             # class="stat-summary" 给出「标题 → 这段文字 → 表格」的间距，

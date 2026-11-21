@@ -131,6 +131,53 @@ def patched(**kwargs):
 
 
 class OpsiPanelTests(unittest.TestCase):
+    def test_distance_forecast_follows_efficiency_even_without_battles(self):
+        # 使用闰年二月，月底还包括最后一次采集之后的半天。
+        as_of = datetime(2028, 2, 29, 13)
+        rows = [
+            {'ts': '2028-02-29 12:00', 'distance': 2850},
+            {'ts': '2028-02-01 12:00', 'distance': '50'},
+            {'ts': '2028-02-01 08:00', 'distance': 10},
+            {'ts': '2028-02-08 12:00', 'distance': 750},
+            {'ts': '2028-01-31 23:59', 'distance': 90000},
+            {'ts': '2028-02-29 18:00', 'distance': 99999},
+            {'ts': '2028-02-28 12:00', 'ap_total': 1500},
+        ]
+        summary = {'month': '2028-02', 'raw': {'ap_snapshots': rows}}
+        with patched(summary=summary), patch('module.api.legacy_stats_service.datetime', wraps=datetime) as clock:
+            clock.now.return_value = as_of
+            panel = _opsi_panel('alas')
+        self.assertEqual(panel['summary'][-2]['key'], 'Gui.Stat.MonthlyLoopEfficiency')
+        self.assertEqual(panel['summary'][-1], {
+            'key': 'Gui.Stat.MonthlyDistanceForecast', 'value': 2900,
+            'format': 'int', 'sign': ''})
+        self.assertEqual(panel['rows'], [])
+
+    def test_forecast_uses_daily_trend_and_projects_from_latest_reading_across_year_end(self):
+        from module.statistics.opsi_month import forecast_month_end_distance
+
+        rows = [{'ts': f'2026-12-{day:02d} 00:00', 'distance': value}
+                for day, value in enumerate([0, 10, 20, 30, 40, 100], 1)]
+        # 各日之间的典型增速为每天 10 海里，从 6 日的实测 100 再推 26 天。
+        self.assertEqual(forecast_month_end_distance(rows, datetime(2026, 12, 6)), 360)
+        self.assertEqual(forecast_month_end_distance(rows, datetime(2026, 12, 15)), 360)
+        self.assertIsNone(forecast_month_end_distance(rows, datetime(2027, 1, 1)))
+
+    def test_forecast_skips_inconsistent_ocr_and_distinguishes_zero_from_missing(self):
+        from module.statistics.opsi_month import forecast_month_end_distance
+
+        at = datetime(2026, 11, 20)
+        rows = [{'ts': f'2026-11-{day:02d} 12:00', 'distance': value}
+                for day, value in enumerate([50, 150, 999999, 350, 450, 5], 1)]
+        self.assertEqual(forecast_month_end_distance(rows, at), 3000)
+        self.assertEqual(forecast_month_end_distance(rows[:4], at), 3000)
+        rows = [{'ts': '2026-11-01 23:59', 'distance': 0},
+                {'ts': '2026-11-02 00:01', 'distance': 0},
+                {'ts': 'invalid', 'distance': 900}, {'ts': '2026-11-09', 'distance': -1}, None]
+        self.assertIsNone(forecast_month_end_distance(rows, at))
+        rows.append({'ts': '2026-11-03 11:00', 'distance': 0})
+        self.assertEqual(forecast_month_end_distance(rows, at), 0)
+
     def test_rows_are_ordered_one_five_three_and_derivations_match_old_panel(self):
         summary = {'month': '2026-09', 'total_battles': 101, 'akashi_encounters': 10,
                    'siren_research_devices': 5}
@@ -475,6 +522,8 @@ class LegacyMeowLootViewTests(unittest.TestCase):
             view._render_opsi_summary(labels, [['2026-10', 5, 99]], 0, DASH, DASH)
         self.assertEqual(view._summary_item_html.call_args_list[1].args,
                          ('Gui.Stat.MonthlySortieCost', DASH))
+        self.assertEqual(view._summary_item_html.call_args_list[-1].args,
+                         ('Gui.Stat.MonthlyDistanceForecast', DASH))
 
     def test_raw_month_read_failure_keeps_readable_hazard_activity(self):
         from module.webui.app_stat_opsi import OpsiStatisticsMixin

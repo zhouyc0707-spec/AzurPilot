@@ -8379,6 +8379,7 @@
       "MonthlySortieCost": "Hazard-1 sortie cost: {value}",
       "MonthlyNetAP": "Hazard-1 net AP: {value}",
       "MonthlyLoopEfficiency": "Hazard-1 loop efficiency: {value}",
+      "MonthlyDistanceForecast": "Projected month-end nautical miles: {value}",
       "MeowLastRecord": "Last recorded: {value}",
       "MeowEffectiveRounds": "Total effective rounds",
       "MeowAvgOperationCoin": "Avg coins/round",

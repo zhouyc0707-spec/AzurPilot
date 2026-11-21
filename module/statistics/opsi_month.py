@@ -6,8 +6,11 @@
 # 负责从加密 SQLite 数据库中读取统计数据，并具备计算概况与详细指标的功能。
 from __future__ import annotations
 
+from calendar import monthrange
+from datetime import datetime, timedelta
+from itertools import combinations
 from pathlib import Path
-from datetime import datetime
+from statistics import median
 from typing import Dict, Any, Optional
 
 from module.logger import logger
@@ -191,6 +194,49 @@ def get_ap_timeline(
     return snapshots_sorted
 
 
+def forecast_month_end_distance(snapshots: list, now: datetime) -> int | None:
+    """按本月逐日实测的典型增速，从最近有效读数推算到月底。"""
+    if not isinstance(snapshots, (list, tuple)):
+        return None
+    as_of = now.replace(tzinfo=None)
+    start = as_of.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    daily = {}
+    for row in snapshots:
+        raw = row.get("distance") if isinstance(row, dict) else None
+        if raw is None or isinstance(raw, bool):
+            continue
+        try:
+            miles = int(raw)
+            stamp = datetime.fromisoformat(row["ts"])
+            if stamp.tzinfo is not None:
+                stamp = stamp.astimezone(now.tzinfo).replace(tzinfo=None)
+        except (KeyError, TypeError, ValueError, OverflowError, OSError):
+            continue
+        if miles < 0 or (isinstance(raw, float) and miles != raw) or not start <= stamp <= as_of:
+            continue
+        day = stamp.date()
+        if day not in daily or stamp >= daily[day][0]:
+            daily[day] = (stamp, miles)
+
+    # 同月海里数只能持平或增加。最多 31 个日样本，取最长非递减序列，
+    # 让单次 OCR 跳高或回落都能在后续正常读数出现后恢复。
+    sequences = []
+    for stamp, miles in sorted(daily.values()):
+        prefix = max((seq for seq in sequences if seq[-1][1] <= miles), key=len, default=[])
+        sequences.append([*prefix, (stamp, miles)])
+    # 支持天数相同则选择尾值较低的序列，避免一次跳高后的首个正常读数仍被排除。
+    samples = max(sequences, key=lambda seq: (len(seq), -seq[-1][1]), default=[])
+    if len(samples) < 2 or samples[-1][0] - samples[0][0] < timedelta(days=1):
+        return None
+
+    # 各对观测按实际间隔折算增速，取中位数可减小单日停玩或集中刷图的影响。
+    rate = median((miles_b - miles_a) / (time_b - time_a).total_seconds()
+                  for (time_a, miles_a), (time_b, miles_b) in combinations(samples, 2))
+    last_time, last_miles = samples[-1]
+    end = start + timedelta(days=monthrange(start.year, start.month)[1])
+    return round(last_miles + rate * (end - last_time).total_seconds())
+
+
 def get_coins_timeline(
     year: int | None = None, month: int | None = None, instance_name: str | None = None
 ) -> list:
@@ -257,6 +303,7 @@ __all__ = [
     "get_opsi_stats",
     "OpsiMonthStats",
     "compute_monthly_cl1_akashi_ap",
+    "forecast_month_end_distance",
     "get_ap_timeline",
     "get_coins_timeline",
     "get_asset_timeline",

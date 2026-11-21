@@ -8379,6 +8379,7 @@
       "MonthlySortieCost": "侵蚀一出击消耗: {value}",
       "MonthlyNetAP": "侵蚀一净赚体力: {value}",
       "MonthlyLoopEfficiency": "侵蚀一循环效率: {value}",
+      "MonthlyDistanceForecast": "本月最终海里数预测: {value}",
       "MeowLastRecord": "上次记录时间: {value}",
       "MeowEffectiveRounds": "历月有效战斗轮数总和",
       "MeowAvgOperationCoin": "平均黄币/轮",
