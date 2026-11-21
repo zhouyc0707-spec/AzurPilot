@@ -12,10 +12,11 @@ test('旧主题委托显示全月记录、钻石截图筛选及月成功率', as
   page.on('pageerror', error => errors.push(error.message))
   await page.addInitScript(() => {
     localStorage.setItem('azurpilot.theme', 'legacy-light')
+    localStorage.setItem('azurpilot.overview-panel', 'stats')
     localStorage.setItem('azurpilot.language', 'zh-CN')
     localStorage.setItem('azurpilot.background', JSON.stringify({source: 'off'}))
   })
-  await page.goto('/#/i/demo-main/statistics')
+  await page.goto('/#/i/demo-main/overview')
   const panel = page.locator('.legacy-commission')
   await expect(panel.getByText('本月钻石委托成功率')).toBeVisible()
   await expect(panel.locator('.legacy-commission-gem-success')).toContainText('65.00%')
@@ -87,9 +88,10 @@ test('旧主题委托显示全月记录、钻石截图筛选及月成功率', as
 test('旧主题零完成钻石委托显示空成功率', async ({page}) => {
   await page.addInitScript(() => {
     localStorage.setItem('azurpilot.theme', 'legacy-light')
+    localStorage.setItem('azurpilot.overview-panel', 'stats')
     localStorage.setItem('azurpilot.language', 'zh-CN')
   })
-  await page.goto('/#/i/demo-alt/statistics')
+  await page.goto('/#/i/demo-alt/overview')
   const panel = page.locator('.legacy-commission')
   await expect(panel.locator('.legacy-commission-gem-success')).toContainText('成功 0 / 已完成 0')
   await expect(panel.locator('.legacy-commission-gem-success .legacy-commission-total')).toHaveText('-')

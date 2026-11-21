@@ -27,7 +27,7 @@ async function center(handle: Locator) {
   return {x: box.x + box.width / 2, y: box.y + box.height / 2}
 }
 
-test('在总览直接拖动板块，停在边缘时跨屏滚动，刷新和独立统计页沿用顺序', async ({page}) => {
+test('在总览直接拖动板块，停在边缘时跨屏滚动，刷新及离开后返回仍沿用顺序', async ({page}) => {
   await page.setViewportSize({width: 1260, height: 790})
   const headings = await openOverview(page)
   await expect(headings).toHaveText([chart, opsi, meow, ships, commissions])
@@ -48,7 +48,10 @@ test('在总览直接拖动板块，停在边缘时跨屏滚动，刷新和独�
 
   await page.reload()
   await expect(headings).toHaveText([commissions, chart, opsi, meow, ships], {timeout: 15000})
-  await page.goto('/#/i/testpilot/statistics')
+  await page.locator('.primary-nav').getByRole('link', {name: '资源统计', exact: true}).click()
+  await expect(page.getByRole('tab', {name: '舰船经验', exact: true})).toBeVisible()
+  await expect(page.locator('.legacy-section-grip:visible')).toHaveCount(0)
+  await page.locator('.primary-nav').getByRole('link', {name: '运行总览', exact: true}).click()
   await expect(headings).toHaveText([commissions, chart, opsi, meow, ships])
 
   const grip = page.getByRole('button', {name: '拖动调整「大世界数据收集」的位置'})

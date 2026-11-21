@@ -301,7 +301,7 @@
 
 @media(max-width:950px) {
   /* 分类文字完整收在下拉菜单里，不再露出被切断的半个标签。 */
-  .statistics-toolbar-row:not(.legacy-statistics-navigation) .statistics-category-control {display:none}
+  .statistics-toolbar-row .statistics-category-control {display:none}
   .statistics-toolbar-row .statistics-category-picker {display:flex; width:100%}
 }
 

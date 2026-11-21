@@ -121,14 +121,15 @@ async function isolatedStatistics(page: Page, availableMonths = [HISTORY_MONTH, 
   }}
 }
 
-async function openStatistics(page: Page, theme = 'legacy-light') {
+async function openOverviewStatistics(page: Page, theme = 'legacy-light') {
   await page.emulateMedia({reducedMotion: 'reduce'})
   await page.addInitScript(value => {
     localStorage.setItem('azurpilot.theme', value)
+    localStorage.setItem('azurpilot.overview-panel', 'stats')
     localStorage.setItem('azurpilot.language', 'zh-CN')
     localStorage.setItem('azurpilot.background', JSON.stringify({source: 'off'}))
   }, theme)
-  await page.goto('/#/i/testpilot/statistics')
+  await page.goto('/#/i/testpilot/overview')
   const section = page.locator('.legacy-stats-section').filter({has: page.getByRole('button', {name: '查看历史月份', exact: true})})
   await expect(section.getByRole('heading', {name: '本月耄耋相接收获', exact: true})).toBeVisible({timeout: 15000})
   return section
@@ -146,7 +147,7 @@ async function expectCumulativeRows(dialog: Locator, expectedRows = CUMULATIVE_R
 
 test('旧版累计收获移入历史弹窗，月度跳转保持侵蚀 3/5 和历月均值', async ({page}, testInfo) => {
   const fixture = await isolatedStatistics(page)
-  const section = await openStatistics(page)
+  const section = await openOverviewStatistics(page)
   await expect(section.locator('thead th')).toHaveCount(9)
   await expect(section.locator('tbody tr').first().locator('td')).toHaveText([CURRENT_MONTH, '3', '31', '11', '12', '13', '14', '15', '16'])
   for (const header of CUMULATIVE_HEADERS) await expect(section.getByRole('columnheader', {name: header, exact: true})).toHaveCount(0)
@@ -187,7 +188,7 @@ test('旧版累计收获移入历史弹窗，月度跳转保持侵蚀 3/5 和历
 
 test('没有历史月份时仍能打开弹窗并查看分侵蚀等级的累计数据', async ({page}) => {
   const fixture = await isolatedStatistics(page, [])
-  const section = await openStatistics(page)
+  const section = await openOverviewStatistics(page)
   await expect(section.getByRole('button', {name: '查看历史月份', exact: true})).toBeEnabled()
   await section.getByRole('button', {name: '查看历史月份', exact: true}).click()
   const dialog = page.getByRole('dialog')
@@ -202,7 +203,7 @@ test('没有历史月份时仍能打开弹窗并查看分侵蚀等级的累计�
 test('旧版深色窄屏累计表在弹窗内横向滚动，不撑宽页面', async ({page}, testInfo) => {
   const fixture = await isolatedStatistics(page)
   await page.setViewportSize({width: 390, height: 844})
-  const section = await openStatistics(page, 'legacy-dark')
+  const section = await openOverviewStatistics(page, 'legacy-dark')
   await section.getByRole('button', {name: '查看历史月份', exact: true}).click()
   const dialog = page.getByRole('dialog')
   const cumulative = await expectCumulativeRows(dialog)
@@ -233,7 +234,7 @@ test('旧版未识别掉落归入侵蚀 5，保留侵蚀 6 且不改变轮次和
     [6, 6, 0, 2, 0, 0, 0, 0, '-', '-', '-', '-', '-'],
   ]
   const fixture = await isolatedStatistics(page, [HISTORY_MONTH], extraRows, true)
-  const section = await openStatistics(page)
+  const section = await openOverviewStatistics(page)
   await expect(section.locator('thead th')).toHaveCount(9)
   await expect(section.locator('tbody tr')).toHaveCount(3)
   await expect(section.locator('tbody tr').nth(1).locator('td')).toHaveText([
@@ -273,7 +274,7 @@ test('旧版仅显示有记录的侵蚀等级，切换月份和新增记录刷�
     hazardsByMonth: {[CURRENT_MONTH]: [5], [HISTORY_MONTH]: [3]},
     cumulativeRows: CUMULATIVE_ROWS,
   })
-  const section = await openStatistics(page)
+  const section = await openOverviewStatistics(page)
   const opsi = page.locator('.legacy-stats-section').filter({has: page.getByRole('heading', {name: '大世界数据收集', exact: true})})
   await expect(opsi).toBeVisible()
   await expect(page.getByRole('heading', {name: '雪风大人的大世界数据收集', exact: true})).toHaveCount(0)
@@ -321,7 +322,7 @@ test('旧版本月无记录时两张月度表不补零行，历史弹窗仍显�
     hazardsByMonth: {[CURRENT_MONTH]: [], [HISTORY_MONTH]: [3, 5]},
     cumulativeRows: CUMULATIVE_ROWS,
   })
-  const section = await openStatistics(page)
+  const section = await openOverviewStatistics(page)
   const opsi = page.locator('.legacy-stats-section').filter({has: page.getByRole('heading', {name: '大世界数据收集', exact: true})})
   await expect(opsi).toBeVisible()
   await expect(opsi.locator('tbody tr')).toHaveCount(0)
@@ -343,7 +344,7 @@ test('旧版本月无记录时两张月度表不补零行，历史弹窗仍显�
 
 test('旧版六类高价值物品文字后提供截图目录按钮，当前和历史月份均传所选月份', async ({page}, testInfo) => {
   const fixture = await isolatedStatistics(page)
-  const section = await openStatistics(page)
+  const section = await openOverviewStatistics(page)
   const statisticsRequests = fixture.requests.length
   for (const [label, item] of SCREENSHOT_ITEMS) {
     const button = section.getByRole('button', {name: `打开${label}截图文件夹`, exact: true})
@@ -395,7 +396,7 @@ test('旧版六类高价值物品文字后提供截图目录按钮，当前和�
 
 test('截图目录请求等待时禁用六个打开按钮，不重复打开或阻塞统计操作', async ({page}) => {
   const fixture = await isolatedStatistics(page)
-  const section = await openStatistics(page)
+  const section = await openOverviewStatistics(page)
   fixture.holdFolderResponses()
   const button = section.getByRole('button', {name: '打开金菜截图文件夹', exact: true})
   await button.click()
@@ -422,7 +423,7 @@ test('截图目录请求等待时禁用六个打开按钮，不重复打开或�
 
 test('截图目录缺失给出提示，打开失败可以重试且不影响月度统计和历史累计', async ({page}) => {
   const fixture = await isolatedStatistics(page)
-  const section = await openStatistics(page)
+  const section = await openOverviewStatistics(page)
   fixture.holdFolderResponses()
   const missingButton = section.getByRole('button', {name: '打开金菜截图文件夹', exact: true})
   await missingButton.click()
@@ -472,7 +473,7 @@ test('截图目录缺失给出提示，打开失败可以重试且不影响月�
 test('旧版深色窄屏截图目录按钮留在收获表内，表格横向滚动不撑宽页面', async ({page}, testInfo) => {
   const fixture = await isolatedStatistics(page)
   await page.setViewportSize({width: 390, height: 844})
-  const section = await openStatistics(page, 'legacy-dark')
+  const section = await openOverviewStatistics(page, 'legacy-dark')
   const width = await page.evaluate(() => ({viewport: innerWidth, page: document.documentElement.scrollWidth}))
   expect(width.page).toBeLessThanOrEqual(width.viewport + 1)
   const wrapper = section.locator('.legacy-table-wrap')
@@ -490,13 +491,11 @@ test('旧版深色窄屏截图目录按钮留在收获表内，表格横向滚�
 })
 
 for (const theme of ['legacy-light', 'legacy-dark']) {
-  test(`${theme} 窄屏保留整页统计与资源管理入口，不套用新版分类下拉`, async ({page}) => {
+  test(`${theme} 窄屏总览保留五个旧版板块和猫王入口`, async ({page}) => {
     await isolatedStatistics(page)
     await page.setViewportSize({width: 390, height: 844})
-    await openStatistics(page, theme)
-    const navigation = page.locator('.legacy-statistics-navigation')
-    await expect(navigation.getByRole('tab', {name: '资源趋势', exact: true})).toBeVisible()
-    await expect(navigation.getByRole('tab', {name: '资源管理', exact: true})).toBeVisible()
+    await openOverviewStatistics(page, theme)
+    await expect(page.locator('.instance-panel-stats .legacy-section-grip')).toHaveCount(5)
     await expect(page.locator('.statistics-category-picker')).toHaveCount(0)
     await expect(page.locator('.legacy-ap-card')).toBeVisible()
     await expect(page.getByRole('heading', {name: '大世界数据收集', exact: true})).toBeVisible()

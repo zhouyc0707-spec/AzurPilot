@@ -440,7 +440,7 @@ button:disabled, input:disabled, textarea:disabled, select:disabled, .select-tri
 /* 旧版顶栏的第三列是居中的页面名。 */
 .legacy-topbar-title {flex: 1; min-width: 0; text-align: center; font-size: 1.2rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap}
 /* 旧版实例页的页名由顶栏居中显示，内容区只留一个给读屏的标题。 */
-.legacy-sr-title {position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; opacity: 1 !important; z-index: 4}
+.legacy-sr-title, .statistics-modern > .modern-sr-title {position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; opacity: 1 !important; z-index: 4}
 /* 旧版标签栏：槽是一级面加磨砂；内容盒 = 标签高 + 上缝 + 下边框——
    上面那条缝是标签上边框与栏上边框之间的间距，下面 1px 是栏自己的下边框。标签贴底，底边因此落在栏的下边框上。
    标签的形状、竖线、加号与状态色由 theme-primitives 统一给出，这里只给皮相。 */
@@ -564,7 +564,7 @@ button:disabled, input:disabled, textarea:disabled, select:disabled, .select-tri
   /* 搜索框与参数卡同宽，「任务设置和搜索对齐」；下方间距交给 --config-card-gap，与卡片之间保持一致。 */
   .task-config-settings .config-toolbar .input-icon {max-width: none}
   /* 资源统计在旧版下没有左列，整页一条内容带；和 .instance-page-grid 一样撑满 main 的剩余高度。 */
-  .statistics-legacy {
+  .statistics-legacy, .statistics-modern {
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -575,9 +575,9 @@ button:disabled, input:disabled, textarea:disabled, select:disabled, .select-tri
     min-height: 0;
     overflow-y: auto;
   }
-  .statistics-legacy .statistics-toolbar-row {display: flex; align-items: center; gap: 12px; flex-wrap: wrap}
+  :is(.statistics-legacy, .statistics-modern) .statistics-toolbar-row {display: flex; align-items: center; gap: 12px; flex-wrap: wrap}
   /* 分段控件按内容自然宽度排，不拉伸：upstream 的紧凑版式靠 offsetWidth 量它的自然宽度。 */
-  .statistics-legacy .statistics-toolbar-row .statistics-category-control {margin-bottom: 0; flex: 0 0 auto; width: max-content}
+  :is(.statistics-legacy, .statistics-modern) .statistics-toolbar-row .statistics-category-control {margin-bottom: 0; flex: 0 0 auto; width: max-content}
 /* 旧版统计页的内容容器没有内边距，切换入口的衬底外扩 6px 会被容器边缘裁掉；
    工具栏行让出 6px，使衬底外缘正好落在内容边界上。 */
 .statistics-legacy .statistics-toolbar-row {padding: 6px 0 0 6px}

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
-import type { AkashiShopRecordResult, LegacyStatisticsReport } from '../src/api/types'
+import {routeRpc} from '../rpc-route'
+import type { AkashiShopRecordResult, LegacyStatisticsReport } from '../../src/api/types'
 
 const MONTH = '2026-10'
 type Request = {id: string; method: string; params: {instance: string; scope: 'monthly' | 'history'}}
@@ -14,7 +15,7 @@ async function fixture(page: Page) {
   let imageMissing = false
   page.on('pageerror', error => errors.push(error.message))
   await page.route('https://**', route => route.abort())
-  await page.routeWebSocket('**/api/v1/ws', socket => {
+  await routeRpc(page, socket => {
     const server = socket.connectToServer()
     socket.onMessage(raw => {
       const request = JSON.parse(String(raw)) as Request
@@ -53,13 +54,13 @@ async function fixture(page: Page) {
     }}
 }
 
-async function open(page: Page, theme = 'legacy-light', route = 'statistics') {
+async function open(page: Page, theme = 'legacy-light', route = 'overview') {
   await page.emulateMedia({reducedMotion: 'reduce'})
   await page.addInitScript(value => {
     localStorage.setItem('azurpilot.theme', value)
     localStorage.setItem('azurpilot.language', 'zh-CN')
     localStorage.setItem('azurpilot.background', JSON.stringify({source: 'off'}))
-    localStorage.setItem('azurpilot.legacy-overview-panel', 'stats')
+    localStorage.setItem('azurpilot.overview-panel', 'stats')
   }, theme)
   await page.goto(`/#/i/demo-main/${route}`)
 }
@@ -117,7 +118,7 @@ test('切实例清除打开的弹窗，迟到响应不串图，无纪录明确�
   await open(page)
   await page.getByRole('button', {name: '本月猫王', exact: true}).click()
   await expect.poll(() => state.requests.length).toBe(1)
-  await page.evaluate(() => {location.hash = '#/i/demo-alt/statistics'})
+  await page.evaluate(() => {location.hash = '#/i/demo-alt/overview'})
   await expect(page.getByRole('dialog')).toHaveCount(0)
   state.reply(); state.hold(false)
   await page.getByRole('button', {name: '历史猫王', exact: true}).click()
@@ -126,10 +127,10 @@ test('切实例清除打开的弹窗，迟到响应不串图，无纪录明确�
   expect(state.errors).toEqual([])
 })
 
-test('旧版深色窄屏按钮换行，截图完整缩放，嵌入总览同样可用', async ({page}, info) => {
+test('旧版总览深色窄屏按钮换行，截图完整缩放', async ({page}, info) => {
   const state = await fixture(page)
   await page.setViewportSize({width: 390, height: 844})
-  await open(page, 'legacy-dark', 'overview')
+  await open(page, 'legacy-dark')
   await page.getByRole('button', {name: '本月猫王', exact: true}).click()
   const dialog = page.getByRole('dialog')
   await expect(dialog.getByRole('img')).toBeVisible()
@@ -145,7 +146,7 @@ test('旧版深色窄屏按钮换行，截图完整缩放，嵌入总览同样�
 
 test('新版主题不增加猫王入口或自动读取截图', async ({page}) => {
   const state = await fixture(page)
-  await open(page, 'light')
+  await open(page, 'light', 'statistics')
   await expect(page.getByRole('heading', {name: '资源统计', exact: true})).toBeVisible()
   await expect(page.getByRole('button', {name: '本月猫王', exact: true})).toHaveCount(0)
   await expect(page.getByRole('button', {name: '历史猫王', exact: true})).toHaveCount(0)

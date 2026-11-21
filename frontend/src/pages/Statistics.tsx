@@ -1,9 +1,7 @@
-import {SegmentedControl} from '../components/SegmentedControl'
-import {usesLegacyLayout} from '../app/theme'
 /**
  * @fileoverview 数据统计与图表分析页面。
  *
- * 现代统计主体按上游拆分至 statistics-ui/，旧版统计继续使用独立视图：
+ * 独立统计页共用 statistics-ui/，旧版总览保留内嵌统计：
  * shared / metric-icon / table-utils / use-statistics-prefs / use-statistics-data /
  * use-statistics-edit / card-model / card-render / toolbar。
  */
@@ -11,6 +9,7 @@ import {Button} from '../components/ui/button'
 import {Fragment, lazy, Suspense, useEffect, useState} from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { useApp, useConnection } from '../app/context'
+import {usesLegacyLayout} from '../app/theme'
 import { ActionGroup, ErrorBox, Loading } from '../components/ui'
 import { applySlots, isPageEnabled, movePageBeside, orderCards, orderPages, pageNeedsSeries, setPageEnabled } from '../app/statisticsLayout'
 import type { UiKey } from '../i18n'
@@ -223,20 +222,11 @@ function ModernStatistics() {
 }
 
 const StatisticsLegacy = lazy(() => import('./StatisticsLegacy').then(module => ({default: module.StatisticsLegacy})))
-/** 旧版整页统计和上游现代统计共享路由，各自保留页面契约。 */
+/** 所有主题的独立统计页共用分类、数据和布局偏好。 */
 export function Statistics({embedded = false}: {embedded?: boolean} = {}) {
-  const {theme, ui} = useApp()
-  const {instance = ''} = useParams()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const management = !embedded && searchParams.get('view') === 'management'
-  if (!usesLegacyLayout(theme)) return <ModernStatistics/>
-  return <>
-    {!embedded && <div className="statistics-toolbar-row legacy-statistics-navigation">
-      <SegmentedControl<'resources' | 'management'> className="statistics-category-control" label={ui('stats.categoryLabel')}
-        value={management ? 'management' : 'resources'}
-        onChange={view => setSearchParams(view === 'management' ? {view: 'management'} : {})}
-        options={[{value: 'resources', label: ui('stats.category.resources')}, {value: 'management', label: ui('nav.resources')}]}/>
-    </div>}
-    <Suspense fallback={<Loading/>}>{management ? <ResourceManagement key={instance}/> : <StatisticsLegacy embedded={embedded}/>}</Suspense>
-  </>
+  const {theme} = useApp()
+  if (embedded && usesLegacyLayout(theme)) {
+    return <Suspense fallback={<Loading/>}><StatisticsLegacy embedded/></Suspense>
+  }
+  return <ModernStatistics/>
 }

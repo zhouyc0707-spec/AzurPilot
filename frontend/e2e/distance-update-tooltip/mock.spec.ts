@@ -32,10 +32,11 @@ async function fixture(page: Page, theme: string) {
   })
   await page.addInitScript(value => {
     localStorage.setItem('azurpilot.theme', value)
+    localStorage.setItem('azurpilot.overview-panel', 'stats')
     localStorage.setItem('azurpilot.language', 'zh-CN')
     localStorage.setItem('azurpilot.background', JSON.stringify({source: 'off'}))
   }, theme)
-  await page.goto('/#/i/demo-main/statistics')
+  await page.goto('/#/i/demo-main/overview')
   return {errors, setDistance: (points: typeof distance) => {distance = points}}
 }
 
