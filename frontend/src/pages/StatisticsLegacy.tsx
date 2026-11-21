@@ -342,18 +342,17 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
 
     {/* 区域二：各统计板块，间距由 .legacy-stats-section 统一收口 */}
     <LegacyStatisticsSections sections={{
-      ap: <section className="legacy-stats-section legacy-stats-card legacy-ap-card">
-        <LegacyApChart key={instance} instance={instance} series={data.apChart.series} onRefresh={() => void load(false)} refreshing={busy}/>
-      </section>,
+      ap: {className: 'legacy-ap-card', children:
+        <LegacyApChart key={instance} instance={instance} series={data.apChart.series} onRefresh={() => void load(false)} refreshing={busy}/>},
 
       // 大世界数据收集只显示本月有记录的侵蚀等级，行序为 1 / 5 / 3。
-      opsi: <section className="legacy-stats-section legacy-stats-card">
+      opsi: {children: <>
         <LegacySectionTitle title={text('Gui.Stat.OpsiDataCollectionTitle')} onRefresh={() => void load(false)} busy={busy}/>
         <LegacySummary items={data.opsi.summary} text={text}/>
         <LegacyTable columns={data.opsi.columns} rows={data.opsi.rows} text={text}/>
-      </section>,
+      </>},
 
-      meow: <section className={`legacy-stats-section legacy-stats-card${pending ? ' is-pending' : ''}`}>
+      meow: {className: pending ? 'is-pending' : '', children: <>
         <LegacySectionTitle title={meowTitle} onRefresh={() => void load(false)} busy={busy}>
           <div className="legacy-stat-title-actions">
             <button type="button" className="legacy-button" disabled={pending} onClick={() => setMonthPickerOpen(true)}>查看历史月份</button>
@@ -376,9 +375,9 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
               <FolderOpen size={14} aria-hidden="true"/>
             </button>
           }}/>
-      </section>,
+      </>},
 
-      shipExp: <section className="legacy-stats-section legacy-stats-card">
+      shipExp: {children: <>
         <LegacySectionTitle title={text('Gui.Stat.ShipExpProgressTitle')} onRefresh={() => void load(false)} busy={busy}/>
         {data.shipExp.hasData
           ? <>
@@ -394,9 +393,9 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
               <LegacyTable columns={data.shipExp.columns} rows={data.shipExp.rows} text={text}/>
             </>
           : <p className="legacy-muted">{text('Gui.Stat.NoShipExpData')}</p>}
-      </section>,
+      </>},
 
-      commission: <section className="legacy-stats-section legacy-stats-card legacy-commission">
+      commission: {className: 'legacy-commission', children: <>
         <LegacySectionTitle title={text('Gui.Stat.CommissionIncomeTitle')} onRefresh={() => void load(false)} busy={busy}/>
         <div className="legacy-segmented" role="group">
           {(['day', 'week', 'month'] as const).map(period => <button
@@ -494,7 +493,7 @@ export function StatisticsLegacy({embedded = false}: {embedded?: boolean} = {}) 
 
           <p className="legacy-commission-foot">{text('Gui.Stat.CommissionIncomeTotalCommissions', {value: periodSummary?.totalCommissions ?? 0})}</p>
         </div>
-      </section>,
+      </>},
     }}/>
 
     {monthPickerOpen && <Modal title="历史月份与累计收获" onClose={() => setMonthPickerOpen(false)} className="legacy-month-modal">

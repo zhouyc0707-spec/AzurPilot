@@ -1,8 +1,8 @@
-import { Fragment, useState, type ReactNode } from 'react'
-import { ArrowDown, ArrowUp, ArrowUpDown, GripVertical } from 'lucide-react'
-import { Reorder, useDragControls } from 'motion/react'
+import { useState, type ReactNode } from 'react'
+import { DndContext, PointerSensor, useSensor, useSensors, type CollisionDetection, type UniqueIdentifier } from '@dnd-kit/core'
+import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { GripVertical } from 'lucide-react'
 import { useApp } from '../app/context'
-import { Modal } from './ui'
 
 const defaultOrder = ['ap', 'opsi', 'meow', 'shipExp', 'commission'] as const
 type Section = typeof defaultOrder[number]
@@ -21,33 +21,61 @@ function readOrder(): Section[] {
   return [...defaultOrder]
 }
 
-function OrderRow({id, label, first, last, move}: {
-  id: Section; label: string; first: boolean; last: boolean; move: (step: number) => void
-}) {
-  const {ui} = useApp()
-  const drag = useDragControls()
-  return <Reorder.Item value={id} dragControls={drag} dragListener={false} dragMomentum={false}>
-    <span className="legacy-order-grip" title={ui('stats.orderHandle')} onPointerDown={event => drag.start(event)}>
-      <GripVertical size={16} aria-hidden="true"/>{label}
-    </span>
-    <button type="button" className="legacy-button" disabled={first} aria-label={ui('stats.moveEarlier', {label})}
-      title={ui('stats.orderUp')} onClick={() => move(-1)}><ArrowUp size={16}/></button>
-    <button type="button" className="legacy-button" disabled={last} aria-label={ui('stats.moveLater', {label})}
-      title={ui('stats.orderDown')} onClick={() => move(1)}><ArrowDown size={16}/></button>
-  </Reorder.Item>
+// 表格和图表高度不同，按指针所在板块判断。指针在卡片间隙时取最近的边。
+const sectionAtPointer: CollisionDetection = args => {
+  if (!args.pointerCoordinates) return []
+  const {y} = args.pointerCoordinates
+  let distance = Infinity
+  let nearest: UniqueIdentifier | undefined
+  for (const [id, rect] of args.droppableRects) {
+    const gap = Math.max(rect.top - y, y - rect.bottom, 0)
+    if (gap < distance) {
+      distance = gap
+      nearest = id
+    }
+  }
+  return nearest === undefined ? [] : [{id: nearest}]
 }
 
-export function LegacyStatisticsSections({sections}: {sections: Record<Section, ReactNode>}) {
+type Panel = {className?: string; children: ReactNode}
+
+function SortableSection({id, label, moveBy, className = '', children}: Panel & {
+  id: Section; label: string; moveBy: (step: -1 | 1) => void
+}) {
+  const {attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging} = useSortable({id})
+  return <section ref={setNodeRef} className={`legacy-stats-section legacy-stats-card ${className}`}
+    data-dragging={isDragging || undefined} style={{transform: transform ? `translateY(${transform.y}px)` : undefined, transition}}>
+    <button type="button" ref={setActivatorNodeRef} {...attributes} {...listeners}
+      className="legacy-section-grip" aria-label={label} title={label} aria-keyshortcuts="ArrowUp ArrowDown"
+      onKeyDown={event => {
+        if (isDragging || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return
+        event.preventDefault()
+        moveBy(event.key === 'ArrowUp' ? -1 : 1)
+        const grip = event.currentTarget
+        requestAnimationFrame(() => {
+          grip.focus({preventScroll: true})
+          grip.scrollIntoView({block: 'nearest'})
+        })
+      }}>
+      <GripVertical size={20} fill="currentColor" aria-hidden="true"/>
+    </button>
+    {children}
+  </section>
+}
+
+export function LegacyStatisticsSections({sections}: {sections: Record<Section, Panel>}) {
   const {ui, t} = useApp()
   const [order, setOrder] = useState(readOrder)
-  const [editing, setEditing] = useState(false)
+  const sensors = useSensors(useSensor(PointerSensor, {activationConstraint: {distance: 4}}))
   const labels = {
     ap: ui('legacyStats.apTrend'), opsi: t('Gui.Stat.OpsiDataCollectionTitle'),
     meow: t('Gui.Stat.MeowLootTitle'), shipExp: t('Gui.Stat.ShipExpProgressTitle'),
     commission: t('Gui.Stat.CommissionIncomeTitle'),
   }
 
-  function saveOrder(next: Section[]) {
+  function move(from: number, to: number) {
+    if (from < 0 || to < 0 || to >= order.length || from === to) return
+    const next = arrayMove(order, from, to)
     setOrder(next)
     try {
       localStorage.setItem(storageKey, JSON.stringify(next))
@@ -56,26 +84,16 @@ export function LegacyStatisticsSections({sections}: {sections: Record<Section, 
     }
   }
 
-  function move(id: Section, index: number) {
-    const next = order.filter(value => value !== id)
-    next.splice(index, 0, id)
-    saveOrder(next)
-  }
-
-  return <>
-    <button type="button" className="legacy-button legacy-order-open" aria-haspopup="dialog" onClick={() => setEditing(true)}>
-      <ArrowUpDown size={15} aria-hidden="true"/>{ui('legacyStats.sectionOrder')}
-    </button>
-    <div className="legacy-stats-charts">
-      {order.map(id => <Fragment key={id}>{sections[id]}</Fragment>)}
-    </div>
-    {editing && <Modal title={ui('legacyStats.sectionOrder')} className="legacy-order-modal" onClose={() => setEditing(false)}>
-      <Reorder.Group as="ol" axis="y" values={order} onReorder={saveOrder} className="legacy-order-list" aria-label={ui('legacyStats.sectionOrder')}>
-        {order.map((id, index) => <OrderRow key={id} id={id} label={labels[id]}
-          first={index === 0} last={index === order.length - 1} move={step => move(id, index + step)}/>)}
-      </Reorder.Group>
-      <button type="button" className="legacy-button" disabled={order.every((id, index) => id === defaultOrder[index])}
-        onClick={() => saveOrder([...defaultOrder])}>{ui('resource.restoreDefault')}</button>
-    </Modal>}
-  </>
+  return <DndContext sensors={sensors} collisionDetection={sectionAtPointer}
+    accessibility={{screenReaderInstructions: {draggable: ui('legacyStats.sortKeys')}}}
+    onDragEnd={({active, over}) => {
+      if (over) move(order.findIndex(id => id === active.id), order.findIndex(id => id === over.id))
+    }}>
+    <SortableContext items={order} strategy={verticalListSortingStrategy}>
+      <div className="legacy-stats-charts">
+        {order.map((id, index) => <SortableSection key={id} id={id} {...sections[id]}
+          label={ui('legacyStats.dragSection', {label: labels[id]})} moveBy={step => move(index, index + step)}/>)}
+      </div>
+    </SortableContext>
+  </DndContext>
 }

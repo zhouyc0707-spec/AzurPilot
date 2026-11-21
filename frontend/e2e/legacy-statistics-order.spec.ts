@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 
 const chart = /^体力变化/
 const opsi = '大世界数据收集'
@@ -13,57 +13,97 @@ async function openOverview(page: Page, theme = 'legacy-light', saved?: string) 
     localStorage.setItem('azurpilot.language', 'zh-CN')
     localStorage.setItem('azurpilot.overview-panel', 'stats')
     localStorage.setItem('azurpilot.background', JSON.stringify({source: 'off'}))
-    if (saved) localStorage.setItem('azurpilot.legacy-statistics.section-order', saved)
+    if (saved && localStorage.getItem('azurpilot.legacy-statistics.section-order') === null) {
+      localStorage.setItem('azurpilot.legacy-statistics.section-order', saved)
+    }
   }, {theme, saved})
   await page.goto('/#/i/testpilot/overview')
-  await expect(page.getByRole('button', {name: '板块排序'})).toBeVisible({timeout: 15000})
+  await expect(page.locator('.legacy-section-grip')).toHaveCount(5, {timeout: 15000})
   return page.locator('.legacy-stats-charts > section .legacy-stat-heading')
 }
 
-test('总览支持从末尾拖到首位和键盘微调，保留图表状态，刷新和独立统计页沿用顺序', async ({page}) => {
+async function center(handle: Locator) {
+  const box = (await handle.boundingBox())!
+  return {x: box.x + box.width / 2, y: box.y + box.height / 2}
+}
+
+test('在总览直接拖动板块，停在边缘时跨屏滚动，刷新和独立统计页沿用顺序', async ({page}) => {
+  await page.setViewportSize({width: 1260, height: 790})
   const headings = await openOverview(page)
   await expect(headings).toHaveText([chart, opsi, meow, ships, commissions])
+  await expect(page.getByRole('button', {name: '板块排序', exact: true})).toHaveCount(0)
   const ap = page.locator('.legacy-ap-card')
   await ap.getByRole('button', {name: '近24小时', exact: true}).click()
-  const open = page.getByRole('button', {name: '板块排序', exact: true})
-  await open.click()
-  const dialog = page.getByRole('dialog')
-  const grips = dialog.locator('.legacy-order-grip')
-  const from = (await grips.last().boundingBox())!
-  const to = (await grips.first().boundingBox())!
-  const x = from.x + 12
-  await page.mouse.move(x, from.y + from.height / 2)
+  const handle = page.getByRole('button', {name: '拖动调整「委托收益统计」的位置'})
+  await handle.scrollIntoViewIfNeeded()
+  const area = page.locator('.statistics-legacy')
+  const viewport = (await area.boundingBox())!
+  const start = await center(handle)
+  await page.mouse.move(start.x, start.y)
   await page.mouse.down()
-  await page.mouse.move(x, to.y + to.height / 2, {steps: 32})
+  await page.mouse.move(start.x, viewport.y + 10, {steps: 16})
+  await expect.poll(() => area.evaluate(el => el.scrollTop)).toBe(0)
   await page.mouse.up()
-  await expect(grips.first()).toHaveText(commissions)
-  await dialog.getByRole('button', {name: opsi + ' 前移'}).press('Enter')
-  await page.keyboard.press('Escape')
-  await expect(headings).toHaveText([commissions, opsi, /体力变化.*近24小时/, meow, ships])
+  await expect(headings).toHaveText([commissions, /体力变化.*近24小时/, opsi, meow, ships])
 
   await page.reload()
-  await expect(headings).toHaveText([commissions, opsi, chart, meow, ships])
+  await expect(headings).toHaveText([commissions, chart, opsi, meow, ships], {timeout: 15000})
   await page.goto('/#/i/testpilot/statistics')
-  await expect(headings).toHaveText([commissions, opsi, chart, meow, ships])
-  await open.click()
-  await dialog.getByRole('button', {name: '恢复默认'}).click()
-  await dialog.getByRole('button', {name: '关闭'}).click()
-  await page.reload()
-  await expect(headings).toHaveText([chart, opsi, meow, ships, commissions])
+  await expect(headings).toHaveText([commissions, chart, opsi, meow, ships])
+
+  const grip = page.getByRole('button', {name: '拖动调整「大世界数据收集」的位置'})
+  await grip.press('ArrowDown')
+  await expect(headings).toHaveText([commissions, chart, meow, opsi, ships])
+  await expect(grip).toBeFocused()
+  await page.keyboard.press('ArrowUp')
+  await expect(headings).toHaveText([commissions, chart, opsi, meow, ships])
+})
+
+test('从第一张图表向下拖到末尾，停在下边缘时滚动范围有界', async ({page}) => {
+  await page.setViewportSize({width: 1260, height: 790})
+  const headings = await openOverview(page)
+  const area = page.locator('.statistics-legacy')
+  const limit = await area.evaluate(el => el.scrollHeight - el.clientHeight)
+  const bounds = (await area.boundingBox())!
+  const start = await center(page.locator('.legacy-ap-card .legacy-section-grip'))
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  await page.mouse.move(start.x, start.y + 18, {steps: 4})
+  await expect(area.locator('[data-dragging]')).toHaveCount(1)
+  await page.keyboard.press('Escape')
+  await page.mouse.up()
+  await expect(area.locator('[data-dragging]')).toHaveCount(0)
+  expect(await page.evaluate(() => localStorage.getItem('azurpilot.legacy-statistics.section-order'))).toBeNull()
+
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  await page.mouse.move(start.x, bounds.y + bounds.height - 8, {steps: 16})
+  await expect.poll(() => area.evaluate(el => el.scrollTop)).toBeGreaterThanOrEqual(limit - 1)
+  expect(await area.evaluate(el => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(limit + 1)
+  await page.mouse.up()
+  await expect(headings).toHaveText([opsi, meow, ships, commissions, chart])
 })
 
 test.describe('旧版深色窄屏', () => {
   test.use({viewport: {width: 390, height: 750}, hasTouch: true})
-  test('旧偏好中重复、未知和缺少的板块都能处理，触屏可点按箭头', async ({page}) => {
-    const headings = await openOverview(page, 'legacy-dark', '["commission","missing","commission"]')
-    await expect(headings).toHaveText([commissions, chart, opsi, meow, ships])
-    await page.getByRole('button', {name: '板块排序'}).tap()
-    const dialog = page.getByRole('dialog')
-    await expect(dialog.getByRole('button', {name: commissions + ' 前移'})).toBeDisabled()
-    await expect(dialog.getByRole('button', {name: /每日经验检测.*后移/})).toBeDisabled()
-    expect(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
-    await dialog.getByRole('button', {name: commissions + ' 后移'}).tap()
-    await dialog.getByRole('button', {name: '关闭'}).tap()
-    await expect(headings).toHaveText([chart, commissions, opsi, meow, ships])
+  test('沿用旧顺序，手指可直接拖动，历史月份等操作仍可点按', async ({page}) => {
+    const headings = await openOverview(page, 'legacy-dark', '["opsi","missing","opsi","meow"]')
+    await expect(headings).toHaveText([opsi, meow, chart, ships, commissions])
+    const grip = page.getByRole('button', {name: '拖动调整「耄耋相接收获」的位置'})
+    await grip.scrollIntoViewIfNeeded()
+    const from = await center(grip)
+    const to = await center(page.getByRole('button', {name: '拖动调整「大世界数据收集」的位置'}))
+    const touch = await page.context().newCDPSession(page)
+    await touch.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [from]})
+    for (let step = 1; step <= 8; step++) {
+      const y = from.y + (to.y - from.y) * step / 8
+      await touch.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: [{x: from.x, y}]})
+    }
+    await touch.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []})
+    await expect(headings).toHaveText([meow, opsi, chart, ships, commissions])
+    await page.reload()
+    await expect(headings).toHaveText([meow, opsi, chart, ships, commissions], {timeout: 15000})
+    await page.getByRole('button', {name: '查看历史月份'}).tap()
+    await expect(page.getByRole('dialog')).toBeVisible()
   })
 })

@@ -33,36 +33,34 @@
   min-width: 0;
 }
 
-.legacy-order-open {align-self: flex-end; flex: none; gap: 6px; margin-top: 6px}
-.modal.legacy-order-modal {max-height: calc(100dvh / var(--ui-scale) - 30px); overflow-y: auto}
-.modal.legacy-order-modal .panel-heading {padding: 0; margin-bottom: 6px}
-.legacy-order-list {list-style: none; margin: 0 0 12px; padding: 0}
-.legacy-order-list li {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 6px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
-}
-.legacy-order-grip {
-  display: flex;
-  align-items: center;
-  flex: 1;
-  gap: 8px;
-  min-width: 0;
-  min-height: 36px;
+.legacy-section-grip {
+  position: absolute;
+  inset-block-start: 16px;
+  inset-inline-end: 18px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted, var(--theme-muted));
   cursor: grab;
   touch-action: none;
   user-select: none;
-  overflow-wrap: anywhere;
 }
-.legacy-order-grip:active {cursor: grabbing}
-.legacy-order-grip svg {flex: none; color: var(--muted)}
-.legacy-order-list .legacy-button {width: 32px; padding: 0; flex: none}
+.legacy-section-grip:is(:hover, :focus-visible) {color: var(--text); background: var(--surface-muted)}
+.legacy-section-grip:active {cursor: grabbing}
+/* 拖到底部时，移动中的卡片不能反过来撑大可滚动范围。 */
+.legacy-stats-charts:has(> [data-dragging]) {overflow: clip; overflow-anchor: none}
+.legacy-stats-card[data-dragging] {z-index: 2; outline: 1px solid var(--accent)}
+.legacy-stats-card :is(.legacy-ap-head, .legacy-stat-title-row) {padding-inline-end: 40px}
+@media (pointer: coarse) {
+  .legacy-section-grip {width: 44px; height: 44px; inset-block-start: 9px; inset-inline-end: 12px}
+}
 
-/* 第一个统计板块紧接排序入口。 */
+/* 第一个统计板块紧接资源仪表盘。 */
 .legacy-stats-charts > .legacy-stats-section:first-child {margin-top: 8px}
 
 .legacy-stats-section {
@@ -74,6 +72,7 @@
 /* 五个统计区域各自一张底纹卡片，标题、控件与内容统一收进卡片内。
    底色取主题 surface（旧版浅色主题即白色），边框与圆角跟页面其它卡片一致。 */
 .legacy-stats-card {
+  position: relative;
   margin-top: 16px;
   padding: 16px 18px;
   border: 1px solid var(--border, var(--theme-border));

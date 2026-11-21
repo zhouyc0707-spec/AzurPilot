@@ -1,6 +1,7 @@
 /** 旧版统计页的操作文案。 */
 export const legacyStatsZhCN = {
-  'legacyStats.sectionOrder': '板块排序',
+  'legacyStats.dragSection': '拖动调整「{label}」的位置',
+  'legacyStats.sortKeys': '聚焦把手后，按上下方向键移动板块。',
   'legacyStats.apTrend': '体力变化',
   'legacyStats.openScreenshotFolder': '打开{item}截图文件夹',
   'legacyStats.openScreenshotFolderHint': '在脚本所在电脑打开 {month} 的{item}截图文件夹',
@@ -11,7 +12,8 @@ export const legacyStatsZhCN = {
 type LegacyStatsKeys = keyof typeof legacyStatsZhCN
 
 export const legacyStatsEnUS: Record<LegacyStatsKeys, string> = {
-  'legacyStats.sectionOrder': 'Reorder sections',
+  'legacyStats.dragSection': 'Drag to move {label}',
+  'legacyStats.sortKeys': 'With the handle focused, press the up or down arrow to move the section.',
   'legacyStats.apTrend': 'Action point trend',
   'legacyStats.openScreenshotFolder': 'Open {item} screenshot folder',
   'legacyStats.openScreenshotFolderHint': 'Open {item} screenshots for {month} on the computer running the script',
@@ -20,7 +22,8 @@ export const legacyStatsEnUS: Record<LegacyStatsKeys, string> = {
 }
 
 export const legacyStatsJaJP: Record<LegacyStatsKeys, string> = {
-  'legacyStats.sectionOrder': 'セクションの並べ替え',
+  'legacyStats.dragSection': 'ドラッグして「{label}」を移動',
+  'legacyStats.sortKeys': 'ハンドルにフォーカスし、上下の矢印キーでセクションを移動できます。',
   'legacyStats.apTrend': '行動力の推移',
   'legacyStats.openScreenshotFolder': '{item}のスクリーンショットフォルダーを開く',
   'legacyStats.openScreenshotFolderHint': 'スクリプトを実行しているパソコンで {month} の{item}スクリーンショットフォルダーを開く',
@@ -29,7 +32,8 @@ export const legacyStatsJaJP: Record<LegacyStatsKeys, string> = {
 }
 
 export const legacyStatsZhTW: Record<LegacyStatsKeys, string> = {
-  'legacyStats.sectionOrder': '調整區塊順序',
+  'legacyStats.dragSection': '拖曳調整「{label}」的位置',
+  'legacyStats.sortKeys': '聚焦把手後，按上下方向鍵移動區塊。',
   'legacyStats.apTrend': '體力變化',
   'legacyStats.openScreenshotFolder': '開啟{item}截圖資料夾',
   'legacyStats.openScreenshotFolderHint': '在執行腳本的電腦上開啟 {month} 的{item}截圖資料夾',
@@ -39,7 +43,7 @@ export const legacyStatsZhTW: Record<LegacyStatsKeys, string> = {
 
 export const legacyStatsZhMiao: Record<LegacyStatsKeys, string> = {
   ...legacyStatsZhCN,
-  'legacyStats.sectionOrder': '板块排序喵',
+  'legacyStats.dragSection': '拖动调整「{label}」的位置喵',
   'legacyStats.openScreenshotFolder': '打开{item}截图文件夹喵',
   'legacyStats.openScreenshotFolderHint': '在脚本所在电脑打开 {month} 的{item}截图文件夹喵',
 }
