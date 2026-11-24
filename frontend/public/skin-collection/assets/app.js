@@ -2835,11 +2835,12 @@
             return structuredClone(value);
         }
 
-        // 重绘保留可见记录的位置；新条目排在上方时仍让当前正在看的角色停在原处。
+        // 最近更新停在顶部时直接显示新条目，向下浏览时保留正在看的行。
         function renderAnnouncementChanges() {
             const list = document.getElementById('character-list');
             const listTop = list.getBoundingClientRect().top;
-            const anchor = [...list.querySelectorAll('.character-row')].find(row => row.getBoundingClientRect().bottom > listTop);
+            const atRecentTop = list.scrollTop === 0 && document.getElementById('sort-select').value === 'updated';
+            const anchor = atRecentTop ? null : [...list.querySelectorAll('.character-row')].find(row => row.getBoundingClientRect().bottom > listTop);
             const anchorId = anchor?.dataset.id;
             const anchorTop = anchor?.getBoundingClientRect().top;
             const elements = [list, document.querySelector('.detail-panel'), document.getElementById('acquisition-filter'), document.getElementById('detail-drawer-body')];

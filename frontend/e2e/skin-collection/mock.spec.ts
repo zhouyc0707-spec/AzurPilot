@@ -215,9 +215,9 @@ async function settleCollectionLayout(page: Page) {
   })
 }
 
-async function scrollArchive(page: Page) {
+async function scrollArchive(page: Page, sort = 'name') {
   const frame = tracker(page)
-  await frame.locator('#sort-select').selectOption('name')
+  await frame.locator('#sort-select').selectOption(sort)
   await frame.locator('#character-list [data-id="scroll_character_20"]').click()
   await expect(frame.locator('#detail-name')).toHaveText('滚动测试角色20')
   await settleCollectionLayout(page)
@@ -425,19 +425,93 @@ test('公告同步事务失败不污染记录与撤销，恢复后可重试', as
   expect(errors).toEqual([])
 })
 
-test('公告追加新角色和换装时保留正在查看的角色、列表与页面位置', async ({page}) => {
+for (const sort of ['name', 'updated']) {
+  test(`公告追加新角色和换装时保留正在查看的角色、列表与页面位置（${sort}）`, async ({page}) => {
+    let updates: typeof announcementEntries = []
+    await mockAnnouncements(page, () => updates)
+    const errors = await prepareScrollCollection(page, 'light')
+    const before = await scrollArchive(page, sort)
+    const recipient = sort === 'name' ? scrollCharacters[20] : scrollCharacters[42]
+    updates = [{...announcementEntries[0], skins: []}, {...announcementEntries[1], name: recipient.name, aliases: [], skins: [{name: '公告追加测试装', acquisition: '活动'}]}]
+    await revisitCollection(page)
+    await expect(page.getByTestId('collection-sync-status')).toContainText('新增')
+    // 新角色插在当前行之前；最近更新下，原有角色收到新装也会移到顶部。
+    const after = await readScrollPosition(page)
+    expect(after.listY).toBeGreaterThan(before.listY)
+    await expectScrollRestored(page, {...before, listY: after.listY})
+    expect((await readCollection(page)).characters).toHaveLength(scrollCharacters.length + 1)
+    expect(errors).toEqual([])
+  })
+}
+
+test('最近更新把本次公告新增换装的角色排在顶部，数量编辑与重复同步保留顺序', async ({page}) => {
   let updates: typeof announcementEntries = []
   await mockAnnouncements(page, () => updates)
-  const errors = await prepareScrollCollection(page, 'light')
-  const before = await scrollArchive(page)
-  updates = [{...announcementEntries[0], skins: []}, {...announcementEntries[1], name: '滚动测试角色20', aliases: [], skins: [{name: '公告追加测试装', acquisition: '活动'}]}]
+  const errors = await prepareScrollCollection(page, 'legacy-light')
+  const frame = tracker(page)
+  const names = frame.locator('#character-list .character-name')
+  const before = await names.allTextContents()
+  await frame.locator('#character-list [data-id="scroll_character_3"]').click()
+  const count = frame.locator('#collection-progress-container input')
+  await count.fill('2')
+  await count.dispatchEvent('change')
+  await page.reload()
+  await expect(names).toHaveText(before)
+  await expect(count).toHaveValue('2')
+  await frame.locator('#character-list').evaluate(el => { el.scrollTop = 0 })
+  await settleCollectionLayout(page)
+
+  const promoted = [scrollCharacters[32].name, scrollCharacters[39].name]
+  updates = promoted.map(name => ({...announcementEntries[0], name, aliases: []}))
   await revisitCollection(page)
-  await expect(page.getByTestId('collection-sync-status')).toContainText('新增')
-  // 名称排序下新角色插在当前行之前，scrollTop 需增加；核对的是原行的实际像素位置。
-  const after = await readScrollPosition(page)
-  expect(after.listY).toBeGreaterThan(before.listY)
-  await expectScrollRestored(page, {...before, listY: after.listY})
-  expect((await readCollection(page)).characters).toHaveLength(scrollCharacters.length + 1)
+  await expect(page.getByTestId('collection-sync-status')).toContainText('2 件换装')
+  const after = [...promoted, ...before.filter(name => !promoted.includes(name))]
+  await expect(names).toHaveText(after)
+  expect(await frame.locator('#character-list').evaluate(el => el.scrollTop)).toBe(0)
+  await expect(frame.locator('#detail-name')).toHaveText(scrollCharacters[3].name)
+  await revisitCollection(page)
+  await expect(names).toHaveText(after)
+  await page.reload()
+  await expect(names).toHaveText(after)
+  expect(errors).toEqual([])
+})
+
+test('最近更新兼容已同步换装和旧会话顺序，手工及批量新增都按录入时间排序', async ({page}) => {
+  const errors = await prepare(page, 'light')
+  await mockAnnouncements(page, () => [])
+  const characters = ['甲', '乙', '丙'].map((name, index) => ({
+    id: String(index), name, rarity: 'common', acquisition: '', collected: '0',
+    updatedAt: '2026-01-0' + (index + 1) + 'T00:00:00Z',
+  }))
+  const skins = [
+    {id: 'old', characterId: '0', name: '原有换装', acquisition: '', owned: true, updatedAt: '2026-06-15T00:00:00Z'},
+    {id: 'synced', characterId: '1', name: '此前的公告换装', acquisition: '', owned: false, createdAt: '2026-05-15T00:00:00Z'},
+  ]
+  await page.addInitScript(({characters, skins}) => {
+    if (localStorage.getItem('azurLaneCharacters') !== null) return
+    localStorage.setItem('azurLaneCharacters', JSON.stringify(characters))
+    localStorage.setItem('azurLaneSkins', JSON.stringify(skins))
+    sessionStorage.setItem('azurLaneWorkspaceState:v1:/skin-collection/index.html', JSON.stringify({
+      version: 1, view: 'collection', archive: {sort: 'updated', order: ['2', '0', '1']},
+    }))
+  }, {characters, skins})
+  await page.goto('/#/i/demo-main/skin-collection')
+  const frame = tracker(page)
+  const names = frame.locator('#character-list .character-name')
+  await expect(names).toHaveText(['乙', '丙', '甲'])
+  expect((await readCollection(page)).characters).toEqual(characters)
+  expect((await readCollection(page)).skins).toEqual(skins)
+
+  await frame.locator('#character-list [data-id="0"]').click()
+  await frame.locator('#add-skin-btn').click()
+  await frame.locator('#skin-name').fill('手动录入的新换装')
+  await frame.locator('#save-skin-btn').click()
+  await expect(names).toHaveText(['甲', '乙', '丙'])
+  await frame.locator('#quick-add-btn').click()
+  await frame.locator('.quick-name').first().fill('丙')
+  await frame.locator('.quick-skin').first().fill('批量录入的新换装')
+  await frame.locator('#confirm-quick-add-btn').click()
+  await expect(names).toHaveText(['丙', '甲', '乙'])
   expect(errors).toEqual([])
 })
 
@@ -534,6 +608,7 @@ test('公告和谐名映射原名后保留云仙记录，新建使用新泽西�
   expect(newJersey).toMatchObject({collected: '0', shareableSkinCount: '0', customTargetCount: null})
   expect(state.skins.find((item: {name: string}) => item.name === '测试新增新泽西换装')).toMatchObject({characterId: newJersey.id, owned: false})
   await revisitCollection(page)
+  await expect(page.getByTestId('collection-sync-status')).toContainText('已同步')
   expect(await readCollection(page)).toEqual(state)
 
   // 基础舰与 II 是不同角色；只归一化 Ⅱ/II 表现形式，不删除变体后缀。

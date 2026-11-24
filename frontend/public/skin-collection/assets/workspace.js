@@ -21,7 +21,7 @@
   let viewStateReady = false;
   let viewStateTimer;
   let hostHidden = false;
-  let cancelScrollRestore = null;
+  let finishScrollRestore = null;
 
   function archiveQueryContext(query) {
     return JSON.stringify([query, currentCharacterAcquisitionFilter, ui.status, ui.rarity, ui.sort]);
@@ -34,13 +34,25 @@
     archiveOrderContext = null;
     archiveProgress.clear();
   }
-  function syncArchiveOrder(orderContext) {
+  function syncArchiveOrder(orderContext, records = characters.filter(c => archiveProgress.has(c.id))) {
     if (archiveOrderContext !== null && archiveOrderContext !== orderContext) resetArchiveOrder();
-    // Capture before rerender or pagehide so an immediate reload retains the
-    // visible order even when a quantity update's animation frame is pending.
-    if (archiveOrderContext === orderContext && characters.some(c => archiveProgress.has(c.id) && archiveProgress.get(c.id) !== archiveProgressValue(c))) {
+    let quantityChanged = false;
+    const next = new Map();
+    for (const c of records) {
+      const progress = archiveProgressValue(c);
+      const updated = Date.parse(c.updatedAt) || Date.parse(c.createdAt) || 0;
+      const previous = archiveProgress.get(c.id);
+      const edited = previous && previous.progress !== progress;
+      // 数量编辑只沿用这一行原先的角色时间，新换装仍按自己的录入时间参与排序。
+      const sortTime = previous && (edited || previous.updated === updated) ? previous.sortTime : updated;
+      next.set(c.id, {progress, updated, sortTime});
+      if (edited) quantityChanged = true;
+    }
+    if (ui.sort !== 'updated' && quantityChanged) {
       preservedArchiveOrder = [...characterList.querySelectorAll('.character-row')].map(row => row.dataset.id);
     }
+    archiveProgress = next;
+    archiveOrderContext = orderContext;
   }
   function rememberScrollPositions() {
     // 宿主的 Activity 隐藏不属于子文档 .hidden；此时浏览器可能返回零坐标。
@@ -58,7 +70,8 @@
     rememberScrollPositions();
     const state = {
       version: 1, view: ui.view,
-      archive: { search: searchInput.value, status: ui.status, rarity: ui.rarity, sort: ui.sort, acquisition: currentCharacterAcquisitionFilter, order: preservedArchiveOrder },
+      archive: { search: searchInput.value, status: ui.status, rarity: ui.rarity, sort: ui.sort, acquisition: currentCharacterAcquisitionFilter, order: preservedArchiveOrder,
+        recentProgress: ui.sort === 'updated' ? Object.fromEntries([...archiveProgress].filter(([, row]) => row.sortTime !== row.updated)) : {} },
       pending: { search: $('incomplete-search').value, rarity: currentRarityFilter, acquisition: currentAcquisitionFilter, hideUnavailable },
       selectedCharacterId: currentCharacterId, drawerOpen,
       scroll: scrollPositions
@@ -86,7 +99,8 @@
       };
       return {
         view: state.view,
-        archive: { search: text(archive.search), status: choice(archive.status, ['all','pending','completed','shared'], 'all'), rarity: choice(archive.rarity, rarities, ''), sort: choice(archive.sort, ['updated','name','remaining'], 'updated'), acquisition: text(archive.acquisition), order: Array.isArray(archive.order) ? [...new Set(archive.order.filter(id => typeof id === 'string'))] : null },
+        archive: { search: text(archive.search), status: choice(archive.status, ['all','pending','completed','shared'], 'all'), rarity: choice(archive.rarity, rarities, ''), sort: choice(archive.sort, ['updated','name','remaining'], 'updated'), acquisition: text(archive.acquisition), order: Array.isArray(archive.order) ? [...new Set(archive.order.filter(id => typeof id === 'string'))] : null,
+          recentProgress: Object.entries(object(archive.recentProgress)).filter(([, row]) => typeof row?.progress === 'string' && Number.isFinite(row.updated) && Number.isFinite(row.sortTime)) },
         pending: { search: text(pending.search), rarity: choice(pending.rarity, rarities, ''), acquisition: text(pending.acquisition), hideUnavailable: pending.hideUnavailable === true },
         selectedCharacterId: text(state.selectedCharacterId), drawerOpen: state.drawerOpen === true,
         scroll: Object.fromEntries(['page', ...Object.keys(scrollContainers)].map(name => [name, point(scroll[name])]))
@@ -219,7 +233,14 @@
       scores.set(c.id, score); return score >= 0;
     });
     const orderContext = archiveQueryContext(query);
-    syncArchiveOrder(orderContext);
+    syncArchiveOrder(orderContext, results);
+    const sortTimes = new Map(results.map(c => {
+      const {updated, sortTime} = archiveProgress.get(c.id);
+      const time = ui.sort === 'updated'
+        ? getSkinsByCharacter(c.id).reduce((latest, skin) => Math.max(latest, Date.parse(skin.createdAt) || 0), sortTime)
+        : updated;
+      return [c.id, time];
+    }));
     results.sort((a,b) => {
       const relevance = (scores.get(b.id) || 0) - (scores.get(a.id) || 0);
       if (query && relevance) return relevance;
@@ -228,15 +249,13 @@
         const remaining = Math.max(0, getTargetCount(b) - (parseInt(b.collected,10)||0)) - Math.max(0, getTargetCount(a) - (parseInt(a.collected,10)||0));
         if (remaining) return remaining;
       }
-      return (Date.parse(b.updatedAt || b.createdAt) || 0) - (Date.parse(a.updatedAt || a.createdAt) || 0) || a.name.localeCompare(b.name, 'zh-CN');
+      return sortTimes.get(b.id) - sortTimes.get(a.id) || a.name.localeCompare(b.name, 'zh-CN');
     });
     if (preservedArchiveOrder) {
       const ranks = new Map(preservedArchiveOrder.map((id, index) => [id, index]));
       results.sort((a,b) => (ranks.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (ranks.get(b.id) ?? Number.MAX_SAFE_INTEGER));
       preservedArchiveOrder = results.map(c => c.id);
     }
-    archiveOrderContext = orderContext;
-    archiveProgress = new Map(results.map(c => [c.id, archiveProgressValue(c)]));
     $('result-count').textContent = `${results.length} / ${characters.length} 位`;
     const conditions = [];
     if(currentCharacterAcquisitionFilter) conditions.push(currentCharacterAcquisitionFilter);
@@ -313,6 +332,12 @@
     $('detail-empty').classList.toggle('hidden', !characterDetail.classList.contains('hidden'));
     if (closedMissingDrawer && !activeModal) $('tab-incomplete').focus({preventScroll:true});
     scheduleViewStateSave();
+  };
+  const redrawAnnouncement = renderAnnouncementChanges;
+  renderAnnouncementChanges = function() {
+    // 返回页面的同时收到公告时，先恢复原坐标，再按可见行定位新列表。
+    finishScrollRestore?.(true);
+    redrawAnnouncement();
   };
   function setView(view) {
     rememberScrollPositions();
@@ -411,7 +436,9 @@
     // Take ownership before the browser's load-time scroll restoration runs.
     if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
     Object.assign(ui, { view: saved.view, status: saved.archive.status, rarity: saved.archive.rarity, sort: saved.archive.sort });
-    preservedArchiveOrder = saved.archive.order;
+    // 旧版的最近更新行序没有换装时间，首次打开时按现有收藏重新计算。
+    if (ui.sort === 'updated') archiveProgress = new Map(saved.archive.recentProgress);
+    else preservedArchiveOrder = saved.archive.order;
     searchInput.value = saved.archive.search;
     $('status-select').value = ui.status;
     $('archive-rarity').value = ui.rarity;
@@ -437,7 +464,7 @@
   }
 
   function restoreScrollPositions() {
-    cancelScrollRestore?.();
+    finishScrollRestore?.(false);
     // 恢复期间冻结采样，避免隐藏后的滚动事件覆盖离开前的坐标。
     viewStateReady = false;
     const savedScroll = scrollPositions;
@@ -450,7 +477,7 @@
       if (finished) return;
       finished = true;
       cancelAnimationFrame(frame);
-      cancelScrollRestore = null;
+      finishScrollRestore = null;
       for (const event of interactionEvents) window.removeEventListener(event, cancelRestore, true);
       if (restoreScroll && !hostHidden) {
         for (const [name, element] of Object.entries(scrollContainers)) {
@@ -465,7 +492,7 @@
       scheduleViewStateSave();
     }
     const cancelRestore = () => finish(false);
-    cancelScrollRestore = cancelRestore;
+    finishScrollRestore = finish;
     for (const event of interactionEvents) window.addEventListener(event, cancelRestore, { capture: true, passive: true });
     const loaded = document.readyState === 'complete' ? Promise.resolve() : new Promise(resolve => window.addEventListener('load', resolve, { once: true }));
     Promise.all([loaded, document.fonts?.ready]).then(() => {
@@ -485,7 +512,7 @@
   window.addEventListener('azurpilot:collection-save', () => {
     flushPendingSaves(); saveViewState();
     hostHidden = true;
-    cancelScrollRestore?.();
+    finishScrollRestore?.(false);
     clearTimeout(viewStateTimer);
   });
   window.addEventListener('azurpilot:collection-restore', () => {
